@@ -111,6 +111,12 @@ export const api = {
     unfollow: (token: string, slug: string) =>
       request<void>(`/api/v1/blogs/${slug}/follow`, { method: "DELETE", token }),
     followers: (slug: string) => request<{ username: string }[]>(`/api/v1/blogs/${slug}/followers`),
+    /** Immagine da incorporare nel contenuto o da usare come cover di un post. */
+    uploadMedia: (token: string, slug: string, file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return request<{ url: string }>(`/api/v1/blogs/${slug}/media`, { method: "POST", token, formData });
+    },
   },
 
   posts: {
@@ -121,10 +127,20 @@ export const api = {
     create: (
       token: string,
       blogSlug: string,
-      payload: { slug: string; title: string; content: string; author_display_name?: string; locale?: string }
+      payload: {
+        slug: string;
+        title: string;
+        content: string;
+        author_display_name?: string;
+        locale?: string;
+        cover_image_url?: string | null;
+      }
     ) => request<Post>(`/api/v1/blogs/${blogSlug}/posts`, { method: "POST", token, body: payload }),
-    update: (token: string, postId: string, payload: { title?: string; content?: string }) =>
-      request<Post>(`/api/v1/posts/${postId}`, { method: "PATCH", token, body: payload }),
+    update: (
+      token: string,
+      postId: string,
+      payload: { title?: string; content?: string; cover_image_url?: string | null }
+    ) => request<Post>(`/api/v1/posts/${postId}`, { method: "PATCH", token, body: payload }),
     publish: (token: string, postId: string) =>
       request<Post>(`/api/v1/posts/${postId}/publish`, { method: "POST", token }),
     translations: (postId: string) =>
@@ -132,7 +148,14 @@ export const api = {
     addTranslation: (
       token: string,
       postId: string,
-      payload: { slug: string; locale: string; title: string; content: string; author_display_name?: string }
+      payload: {
+        slug: string;
+        locale: string;
+        title: string;
+        content: string;
+        author_display_name?: string;
+        cover_image_url?: string | null;
+      }
     ) => request<Post>(`/api/v1/posts/${postId}/translations`, { method: "POST", token, body: payload }),
   },
 

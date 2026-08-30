@@ -124,6 +124,46 @@ async def test_update_post(client: AsyncClient, make_user: Callable) -> None:
     assert update_res.json()["content"] == "B"
 
 
+async def test_post_cover_image_url(client: AsyncClient, make_user: Callable) -> None:
+    owner: AuthedUser = await make_user("owner-cover")
+    slug = await _create_blog(client, owner, "blog-cover-test")
+
+    create_res = await client.post(
+        f"/api/v1/blogs/{slug}/posts",
+        json={"slug": "post-cover", "title": "A", "content": "B", "cover_image_url": "https://x/1.png"},
+        headers=owner.headers,
+    )
+    assert create_res.status_code == 201
+    post_id = create_res.json()["id"]
+    assert create_res.json()["cover_image_url"] == "https://x/1.png"
+
+    # omesso: la cover resta invariata
+    no_touch_res = await client.patch(
+        f"/api/v1/posts/{post_id}", json={"title": "C"}, headers=owner.headers
+    )
+    assert no_touch_res.json()["cover_image_url"] == "https://x/1.png"
+
+    # nuovo URL: la sostituisce
+    replace_res = await client.patch(
+        f"/api/v1/posts/{post_id}", json={"cover_image_url": "https://x/2.png"}, headers=owner.headers
+    )
+    assert replace_res.json()["cover_image_url"] == "https://x/2.png"
+
+    # stringa vuota: la rimuove
+    remove_res = await client.patch(
+        f"/api/v1/posts/{post_id}", json={"cover_image_url": ""}, headers=owner.headers
+    )
+    assert remove_res.json()["cover_image_url"] is None
+
+    # creazione senza cover_image_url: resta null
+    no_cover_res = await client.post(
+        f"/api/v1/blogs/{slug}/posts",
+        json={"slug": "post-senza-cover", "title": "A", "content": "B"},
+        headers=owner.headers,
+    )
+    assert no_cover_res.json()["cover_image_url"] is None
+
+
 async def test_post_translations(client: AsyncClient, make_user: Callable) -> None:
     owner: AuthedUser = await make_user("owner6")
     slug = await _create_blog(client, owner, "blog-i18n-test")

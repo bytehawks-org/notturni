@@ -265,14 +265,17 @@ nuova "famiglia" di traduzioni (`translation_group_id` = un nuovo UUID).
 Accoda anche un backup su S3 (vedi sezione "Media e backup" più sotto).
 
 ```json
-{"slug": "primo-post", "title": "...", "content": "# Markdown...", "author_display_name": null, "locale": null}
+{"slug": "primo-post", "title": "...", "content": "# Markdown...", "author_display_name": null, "locale": null, "cover_image_url": null}
 ```
 
 `author_display_name` è opzionale: se omesso usa lo username, ma può essere
 diverso — il nome pubblico dell'autore può non coincidere con l'utente reale
 (vedi [ROADMAP.md](../ROADMAP.md#1-prodotto-e-regole-di-dominio)). `locale`
 è opzionale: se omesso usa il `default_locale` del
-blog. `409` se lo slug è già in uso su quel blog per quella lingua.
+blog. `cover_image_url` è opzionale: l'URL ritornato da un precedente upload
+su `POST /blogs/{slug}/media` (vedi sotto) — il campo accetta qualsiasi
+stringa, non verifica che punti davvero a un media caricato su questo blog.
+`409` se lo slug è già in uso su quel blog per quella lingua.
 
 **`POST /api/v1/posts/{post_id}/translations`** — stessa autorizzazione della
 creazione. Aggiunge una traduzione alla stessa famiglia del post indicato
@@ -305,8 +308,10 @@ della creazione); `404` (non `403`, per non rivelarne l'esistenza) se non
 autorizzato.
 
 **`PATCH /api/v1/posts/{post_id}`** — stessa autorizzazione della creazione.
-Aggiorna `title`/`content` (entrambi opzionali). Se `content` cambia, accoda
-di nuovo il backup su S3.
+Aggiorna `title`/`content`/`cover_image_url` (tutti opzionali). Se `content`
+cambia, accoda di nuovo il backup su S3. Per `cover_image_url`: valore
+assente (`null`/campo omesso) lascia la cover invariata, stringa vuota
+`""` la rimuove, qualsiasi altro valore la sostituisce.
 
 **`POST /api/v1/posts/{post_id}/submit-for-review`** — proprietario/autore/
 co-autore. Sposta un post da `draft` a `pending_review` (`400` se non era in
@@ -342,9 +347,14 @@ condividere lo stesso bucket fisico tra più installazioni/scopi senza
 collisioni.
 
 - **`.../media/{uuid}.{ext}`** — immagini caricate via `POST
-  /blogs/{slug}/media` (sezione Blog sopra). **Pubblico in lettura**: sono
-  pensate per essere incorporate nei post e servite ai visitatori. Bucket
-  policy scoped solo a questo prefisso (`.../media/*`), non all'intero bucket.
+  /blogs/{slug}/media` (sezione Blog sopra). Stesso endpoint sia per le
+  immagini incorporate nel Markdown del contenuto (`![alt](url)`) sia per
+  l'immagine di copertina di un post (`Post.cover_image_url`, impostata poi
+  separatamente con `PATCH /posts/{post_id}`): l'upload non distingue i due
+  usi, è il chiamante a decidere dove usare l'URL ritornato. **Pubblico in
+  lettura**: sono pensate per essere incorporate nei post e servite ai
+  visitatori. Bucket policy scoped solo a questo prefisso (`.../media/*`),
+  non all'intero bucket.
 - **`.../posts/{post_uuid}.md`** — copia di backup/fallback del Markdown di
   ogni post, scritta da `app/workers/post_backup_consumer.py` (consumer reale
   e funzionante, non un placeholder) ogni volta che un post viene creato o il

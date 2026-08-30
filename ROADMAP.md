@@ -29,7 +29,7 @@ Legenda stato:
 | 4 ruoli blog: Autore (default), Co-Autore, Revisore, Mediatore | ✅ | Enum `BlogRole` (`backend/app/models/blog.py`), tutti e quattro collegati a capacità reali (`backend/app/domain/authorization.py`): scrittura, revisione (`pending_review`→`published`), moderazione commenti. |
 | Dashboard utente user-friendly, moderna, responsiva | 🟡 | Prima versione costruita (Next.js + Tailwind, dashboard blog/post/profilo). Da raffinare con uso reale; nessun audit di accessibilità/responsività fatto oltre al testing manuale. |
 | Dashboard di amministrazione con tutte le funzionalità di moderazione | 🟡 | Gestione utenti e pagine statiche implementate. **Manca un pannello di moderazione trasversale** (commenti su tutti i blog, segnalazioni, sospensione contenuti) — oggi la moderazione commenti è solo per-blog, ad opera del Mediatore di quel blog. |
-| Editor pulito, focalizzato sui contenuti (rif. fika.bar) | ✅ | Editor Markdown con traduzioni, senza rendering lato backend. |
+| Editor pulito, focalizzato sui contenuti (rif. fika.bar) | ✅ | Editor WYSIWYG (Tiptap) con salvataggio in Markdown, traduzioni, immagine di copertina e immagini incorporabili nel contenuto. |
 | Personalizzazione colori/tipografia/presentazione per blog | ✅ | Tabella `blog_configs`, JSON libero con i vincoli della sezione [2](#2-estetica). |
 | Sistema di commenti con moderazione dell'autore | ✅ | Aperti di default solo a utenti registrati; il proprietario del blog può aprirli anche a non registrati con moderazione pre-pubblicazione obbligatoria. |
 | Multilingua per post e pagine statiche | ✅ | Schema "famiglia di traduzioni" (`translation_group_id` + `locale` + slug per lingua). Il routing `/it/`, `/en/`, ... è lasciato al frontend: **il frontend pubblico multilingua/i18n-routing non è ancora costruito**, oggi si seleziona la lingua via parametro. |
@@ -38,7 +38,7 @@ Legenda stato:
 | Profilo utente: bio, avatar, link social | ✅ | Avatar su MinIO/S3. |
 | Gestione contenuti in Markdown, nessun rendering lato backend | ✅ | |
 | UUID come chiave primaria per ogni entità | ✅ | |
-| Media su S3 in `.../userdata/{user_uuid}/{blog_uuid}/media/...` | ✅ | Bucket con policy pubblica scoped al solo prefisso `media/*`. |
+| Media su S3 in `.../userdata/{user_uuid}/{blog_uuid}/media/...` | ✅ | Bucket con policy pubblica scoped al solo prefisso `media/*`; stesso endpoint di upload usato sia per le immagini incorporate nel contenuto sia per la cover del post (`Post.cover_image_url`). |
 | Backup/fallback Markdown dei post su S3 ad ogni salvataggio | ✅ | Privato, via coda RabbitMQ + worker dedicato (`worker-post-backup`). |
 | Stato post: draft → pending_review → published, con `published_at` per pianificazione | ✅ | Ruolo Revisore collegato alla transizione `pending_review`→`published`. |
 | Hostname/FQDN e modalità di installazione via env | ✅ | `NOCT_INSTANCE_FQDN`, `NOCT_DEPLOYMENT_MODE=solo\|platform`. |

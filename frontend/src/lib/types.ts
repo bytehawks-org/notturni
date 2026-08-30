@@ -59,6 +59,7 @@ export interface Post {
   title: string;
   slug: string;
   content: string;
+  cover_image_url: string | null;
   status: PostStatus;
   published_at: string | null;
   created_at: string;

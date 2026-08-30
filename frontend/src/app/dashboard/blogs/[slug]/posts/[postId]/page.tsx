@@ -7,7 +7,9 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card, CardTitle } from "@/components/ui/Card";
-import { FieldGroup, Input, Label, TextArea } from "@/components/ui/Field";
+import { FieldGroup, Input, Label } from "@/components/ui/Field";
+import { CoverImageUpload } from "@/components/editor/CoverImageUpload";
+import { RichTextEditor } from "@/components/editor/RichTextEditor";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import type { Post, PostTranslationSummary } from "@/lib/types";
@@ -24,6 +26,7 @@ export default function PostEditorPage() {
   const [post, setPost] = useState<Post | null>(null);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -43,6 +46,7 @@ export default function PostEditorPage() {
         setPost(p);
         setTitle(p.title);
         setContent(p.content);
+        setCoverImageUrl(p.cover_image_url);
       })
       .catch((err) => setError(errorMessage(err)));
     api.posts.translations(params.postId).then(setTranslations).catch(() => undefined);
@@ -55,7 +59,9 @@ export default function PostEditorPage() {
     setSaving(true);
     setError(null);
     try {
-      const updated = await authFetch((token) => api.posts.update(token, params.postId, { title, content }));
+      const updated = await authFetch((token) =>
+        api.posts.update(token, params.postId, { title, content, cover_image_url: coverImageUrl ?? "" })
+      );
       setPost(updated);
       setSaved(true);
     } catch (err) {
@@ -111,19 +117,32 @@ export default function PostEditorPage() {
           <span className="text-sm text-muted">{post.status === "published" ? "Pubblicato" : "Bozza"}</span>
         </div>
         <form onSubmit={handleSave}>
-          <FieldGroup>
-            <Label htmlFor="edit-title">Titolo</Label>
-            <Input id="edit-title" value={title} onChange={(e) => setTitle(e.target.value)} />
-          </FieldGroup>
-          <FieldGroup>
-            <Label htmlFor="edit-content">Contenuto</Label>
-            <TextArea
-              id="edit-content"
-              className="min-h-64"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
+          <input
+            id="edit-title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            required
+            className="mb-4 w-full border-0 bg-transparent font-serif text-3xl font-semibold text-foreground placeholder:text-muted focus:outline-none"
+          />
+
+          <div className="mb-4">
+            <CoverImageUpload
+              value={coverImageUrl}
+              onChange={setCoverImageUrl}
+              blogSlug={params.slug}
+              authFetch={authFetch}
             />
-          </FieldGroup>
+          </div>
+
+          <div className="mb-4">
+            <RichTextEditor
+              value={content}
+              onChange={setContent}
+              blogSlug={params.slug}
+              authFetch={authFetch}
+            />
+          </div>
+
           {error && (
             <div className="mb-4">
               <Alert kind="error">{error}</Alert>
@@ -192,11 +211,11 @@ export default function PostEditorPage() {
             </FieldGroup>
             <FieldGroup>
               <Label htmlFor="tr-content">Contenuto</Label>
-              <TextArea
-                id="tr-content"
-                required
+              <RichTextEditor
                 value={trContent}
-                onChange={(e) => setTrContent(e.target.value)}
+                onChange={setTrContent}
+                blogSlug={params.slug}
+                authFetch={authFetch}
               />
             </FieldGroup>
             {trError && (

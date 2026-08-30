@@ -26,6 +26,7 @@ class PostCreateRequest(BaseModel):
     content: str
     author_display_name: str | None = None
     locale: str | None = None  # default: la lingua di default del blog
+    cover_image_url: str | None = None
 
 
 class PostTranslationRequest(BaseModel):
@@ -34,11 +35,17 @@ class PostTranslationRequest(BaseModel):
     title: str
     content: str
     author_display_name: str | None = None
+    cover_image_url: str | None = None
 
 
 class PostUpdateRequest(BaseModel):
     title: str | None = None
     content: str | None = None
+    # stringa vuota per rimuovere la cover impostata in precedenza; assente
+    # (None) per non toccarla — stesso schema di "campo opzionale" degli
+    # altri, ma qui None ha un significato ambiguo (rimuovi vs non toccare)
+    # che risolviamo trattando "" come "rimuovi" in update_post.
+    cover_image_url: str | None = None
 
 
 class PublishRequest(BaseModel):
@@ -56,6 +63,7 @@ class PostOut(BaseModel):
     title: str
     slug: str
     content: str
+    cover_image_url: str | None
     status: PostStatus
     published_at: datetime | None
     created_at: datetime
@@ -142,6 +150,7 @@ async def create_post(
         title=payload.title,
         slug=payload.slug,
         content=payload.content,
+        cover_image_url=payload.cover_image_url,
     )
     session.add(post)
     await session.commit()
@@ -194,6 +203,7 @@ async def add_post_translation(
         title=payload.title,
         slug=payload.slug,
         content=payload.content,
+        cover_image_url=payload.cover_image_url,
     )
     session.add(translation)
     await session.commit()
@@ -275,6 +285,8 @@ async def update_post(
         post.title = payload.title
     if payload.content is not None:
         post.content = payload.content
+    if payload.cover_image_url is not None:
+        post.cover_image_url = payload.cover_image_url or None
 
     await session.commit()
     await session.refresh(post)

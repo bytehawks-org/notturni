@@ -285,4 +285,10 @@ ALTER TYPE post_status ADD VALUE IF NOT EXISTS 'pending_review';
 
 UPDATE alembic_version SET version_num='2807a24ea58f' WHERE alembic_version.version_num = 'a7bbd274e2af';
 
+-- Running upgrade 2807a24ea58f -> e416be915439
+
+ALTER TABLE posts ADD COLUMN cover_image_url VARCHAR(2048);
+
+UPDATE alembic_version SET version_num='e416be915439' WHERE alembic_version.version_num = '2807a24ea58f';
+
 COMMIT;
