@@ -1,0 +1,127 @@
+services:
+  postgres:
+    image: docker.io/library/postgres:16-alpine
+    restart: on-failure
+    environment:
+      POSTGRES_USER: ${NOCT_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${NOCT_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${NOCT_POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${NOCT_POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: docker.io/library/redis:7-alpine
+    restart: on-failure
+    ports:
+      - "6379:6379"
+
+  rabbitmq:
+    image: docker.io/library/rabbitmq:3-management-alpine
+    # su Podman rootless questa immagine a volte fallisce il primissimo avvio
+    # con un errore di permessi sul cookie Erlang (namespace utente) — auto-si
+    # risolve al restart, da qui la restart policy invece di un fix più fragile
+    restart: on-failure:5
+    environment:
+      RABBITMQ_DEFAULT_USER: ${NOCT_RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${NOCT_RABBITMQ_PASSWORD}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      # "service_started" (usato più sotto) non basta: il container parte
+      # molto prima che RabbitMQ accetti connessioni AMQP — senza questo
+      # healthcheck i worker si avviano troppo presto e vanno in crash
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  minio:
+    image: docker.io/minio/minio:latest
+    restart: on-failure
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${NOCT_MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${NOCT_MINIO_ROOT_PASSWORD}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  backend:
+    build:
+      context: ./backend
+    restart: on-failure
+    env_file: .env
+    environment:
+      # in rete di compose i servizi si raggiungono per nome, non per localhost
+      NOCT_POSTGRES_HOST: postgres
+      NOCT_RABBITMQ_HOST: rabbitmq
+      # endpoint interno (il backend gira nella rete di compose) diverso
+      # dall'URL pubblico (il browser risolve solo l'host esposto)
+      NOCT_MINIO_ENDPOINT_URL: http://minio:9000
+      NOCT_MINIO_PUBLIC_URL: http://localhost:9000
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  worker-post-backup:
+    build:
+      context: ./backend
+    restart: on-failure
+    env_file: .env
+    environment:
+      NOCT_POSTGRES_HOST: postgres
+      NOCT_RABBITMQ_HOST: rabbitmq
+      NOCT_MINIO_ENDPOINT_URL: http://minio:9000
+      NOCT_MINIO_PUBLIC_URL: http://localhost:9000
+    command: ["python", "-m", "app.workers.post_backup_consumer"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  worker-email-otp:
+    build:
+      context: ./backend
+    restart: on-failure
+    env_file: .env
+    environment:
+      NOCT_RABBITMQ_HOST: rabbitmq
+    command: ["python", "-m", "app.workers.email_otp_consumer"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # il browser gira sull'host, non nella rete di compose: deve
+        # raggiungere il backend sulla porta pubblicata, non per nome servizio
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    restart: on-failure
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  minio_data:

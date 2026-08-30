@@ -1,0 +1,35 @@
+# Primo draft: un solo host, routing path-based verso frontend/backend.
+# Il routing per sottodominio-per-blog (nomeutente.notturni.eu) e per dominio
+# custom dell'utente (CLAUDE.md #2) richiede un IngressRoute Traefik dinamico
+# con TLS wildcard/cert-manager per dominio: non ancora implementato qui.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: notturni
+  namespace: notturni
+  annotations:
+    # richiede un ClusterIssuer cert-manager già installato nel cluster
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: ["notturni.eu"]
+      secretName: notturni-eu-tls
+  rules:
+    - host: notturni.eu
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 3000

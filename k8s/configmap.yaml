@@ -1,0 +1,34 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notturni-config
+  namespace: notturni
+data:
+  NOCT_APP_ENV: "production"
+
+  # nomi dei servizi Kubernetes: risolvibili via DNS interno del cluster
+  NOCT_POSTGRES_HOST: "postgres"
+  NOCT_POSTGRES_PORT: "5432"
+  NOCT_POSTGRES_USER: "admin"
+  NOCT_POSTGRES_DB: "notturni"
+
+  NOCT_RABBITMQ_USER: "admin"
+  NOCT_RABBITMQ_HOST: "rabbitmq"
+  NOCT_RABBITMQ_PORT: "5672"
+
+  NOCT_MINIO_ROOT_USER: "admin"
+  # endpoint interno al cluster, usato dal backend per le chiamate S3
+  NOCT_MINIO_ENDPOINT_URL: "http://minio:9000"
+  # placeholder: MinIO non è ancora esposto pubblicamente da questi manifest
+  # (nessuna regola Ingress dedicata) — da sostituire con un dominio/CDN reale
+  # prima che gli avatar siano visibili dall'esterno del cluster
+  NOCT_MINIO_PUBLIC_URL: "https://storage.notturni.eu"
+  NOCT_MINIO_BUCKET_AVATARS: "avatars"
+
+  # SSO: valorizzare (qui o in secret.yaml) solo i provider da abilitare
+  NOCT_OAUTH_REDIRECT_BASE_URL: "https://notturni.eu"
+
+  # placeholder: CORS ad origine esatta non copre i sottodomini per-blog
+  # (nomeutente.notturni.eu) — da rivedere con un match a wildcard quando le
+  # pagine pubbliche dei blog chiameranno l'API dal browser
+  NOCT_CORS_ORIGINS: "https://notturni.eu"

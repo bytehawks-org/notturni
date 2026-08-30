@@ -1,0 +1,124 @@
+export type PlatformRole = "super_admin" | "amministratore" | "moderatore" | "utente";
+export type MfaMethod = "totp" | "email";
+
+export interface CurrentUser {
+  id: string;
+  username: string;
+  email: string;
+  mfa_enabled: boolean;
+  platform_role: PlatformRole;
+}
+
+export const PLATFORM_ADMIN_ROLES: PlatformRole[] = ["super_admin", "amministratore"];
+
+export interface SessionResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+}
+
+export interface MfaRequiredResponse {
+  mfa_required: true;
+  method: MfaMethod;
+  challenge: string;
+}
+
+export type LoginResponse = SessionResponse | MfaRequiredResponse;
+
+export function isMfaRequired(res: LoginResponse): res is MfaRequiredResponse {
+  return (res as MfaRequiredResponse).mfa_required === true;
+}
+
+export interface Blog {
+  id: string;
+  slug: string;
+  title: string;
+  custom_domain: string | null;
+  allow_anonymous_comments: boolean;
+  default_locale: string;
+  owner_id: string;
+  created_at: string;
+}
+
+export interface BlogConfig {
+  palette?: Record<string, string>;
+  typography?: Record<string, string>;
+  layout?: string;
+  [key: string]: unknown;
+}
+
+export type PostStatus = "draft" | "published";
+
+export interface Post {
+  id: string;
+  blog_id: string;
+  author_id: string;
+  author_display_name: string;
+  locale: string;
+  translation_group_id: string;
+  title: string;
+  slug: string;
+  content: string;
+  status: PostStatus;
+  published_at: string | null;
+  created_at: string;
+}
+
+export interface PostTranslationSummary {
+  id: string;
+  locale: string;
+  slug: string;
+  status: PostStatus;
+}
+
+export type CommentStatus = "pending" | "approved" | "rejected";
+
+export interface Comment {
+  id: string;
+  post_id: string;
+  author_id: string | null;
+  author_display_name: string;
+  status: CommentStatus;
+  content: string;
+  created_at: string;
+}
+
+export interface Page {
+  id: string;
+  slug: string;
+  locale: string;
+  translation_group_id: string;
+  title: string;
+  content: string;
+  is_published: boolean;
+  created_at: string;
+}
+
+export interface SocialLink {
+  id: string;
+  label: string;
+  url: string;
+  position: number;
+}
+
+export interface Profile {
+  username: string;
+  bio: string | null;
+  avatar_url: string | null;
+  social_links: SocialLink[];
+  created_at: string;
+}
+
+export interface AdminUser {
+  id: string;
+  username: string;
+  email: string;
+  platform_role: PlatformRole;
+  is_active: boolean;
+  mfa_enabled: boolean;
+  created_at: string;
+}
+
+export interface ApiError {
+  detail: string;
+}

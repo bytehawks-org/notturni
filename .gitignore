@@ -1,0 +1,55 @@
+# Environment: .env.example e .env.test sono voluti nel repo (valori
+# fittizi/non sensibili), solo i file con segreti reali sono esclusi.
+.env
+.env.local
+.env.*.local
+
+# Segreti/certificati sciolti, ovunque si trovino
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Kubernetes: secret reale, mai committare (vedi k8s/secret.example.yaml)
+k8s/secret.yaml
+kubeconfig
+.kube/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# Node / Next.js (frontend/ ha anche un proprio .gitignore più specifico)
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# Log
+*.log
+npm-debug.log*
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Podman/Docker volumes locali (se montati come bind mount)
+infra-data/
