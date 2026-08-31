@@ -137,12 +137,13 @@ export const api = {
         author_display_name?: string;
         locale?: string;
         cover_image_url?: string | null;
+        tags?: string[];
       }
     ) => request<Post>(`/api/v1/blogs/${blogSlug}/posts`, { method: "POST", token, body: payload }),
     update: (
       token: string,
       postId: string,
-      payload: { title?: string; content?: string; cover_image_url?: string | null }
+      payload: { title?: string; content?: string; cover_image_url?: string | null; tags?: string[] }
     ) => request<Post>(`/api/v1/posts/${postId}`, { method: "PATCH", token, body: payload }),
     publish: (token: string, postId: string) =>
       request<Post>(`/api/v1/posts/${postId}/publish`, { method: "POST", token }),
@@ -158,6 +159,7 @@ export const api = {
         content: string;
         author_display_name?: string;
         cover_image_url?: string | null;
+        tags?: string[];
       }
     ) => request<Post>(`/api/v1/posts/${postId}/translations`, { method: "POST", token, body: payload }),
   },

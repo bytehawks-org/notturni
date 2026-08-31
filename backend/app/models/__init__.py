@@ -9,6 +9,7 @@ from app.models.page import Page
 from app.models.post import Post, PostStatus
 from app.models.social_link import SocialLink
 from app.models.sso_identity import SsoIdentity, SsoProvider
+from app.models.tag import Tag
 from app.models.user import MfaMethod, PlatformRole, User
 from app.models.user_session import UserSession
 
@@ -35,4 +36,5 @@ __all__ = [
     "UserFollow",
     "BlogFollow",
     "SocialLink",
+    "Tag",
 ]

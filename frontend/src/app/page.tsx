@@ -1,9 +1,19 @@
+import Link from "next/link";
+
 import { FeedPostCard } from "@/components/FeedPostCard";
 import { SiteHeader } from "@/components/SiteHeader";
-import { getPublicFeed } from "@/lib/server-api";
+import { getPublicFeed, getTrendingTags } from "@/lib/server-api";
 
-export default async function Home() {
-  const posts = await getPublicFeed({ limit: 20 }).catch(() => []);
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ tag?: string }>;
+}) {
+  const { tag } = await searchParams;
+  const [posts, trending] = await Promise.all([
+    getPublicFeed({ limit: 20, tag }).catch(() => []),
+    getTrendingTags({ days: 7, limit: 8 }).catch(() => []),
+  ]);
 
   return (
     <>
@@ -17,9 +27,42 @@ export default async function Home() {
           </p>
         </div>
 
+        {trending.length > 0 && (
+          <div className="mx-auto mt-12 max-w-2xl">
+            <p className="mb-3 text-xs uppercase tracking-wide text-muted">Di tendenza questa settimana</p>
+            <div className="flex flex-wrap gap-2">
+              {trending.map((t) => (
+                <Link
+                  key={t.tag}
+                  href={`/?tag=${encodeURIComponent(t.tag)}`}
+                  className={`rounded-full px-3 py-1 text-sm transition ${
+                    tag === t.tag
+                      ? "bg-primary text-background"
+                      : "bg-primary/10 text-primary hover:bg-primary/20"
+                  }`}
+                >
+                  #{t.tag} <span className="opacity-70">· {t.post_count}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="mx-auto mt-16 max-w-2xl">
+          {tag && (
+            <div className="mb-6 flex items-center gap-2 text-sm text-muted">
+              <span>
+                Post con il tag <span className="text-foreground">#{tag}</span>
+              </span>
+              <Link href="/" className="text-primary hover:underline">
+                Rimuovi filtro
+              </Link>
+            </div>
+          )}
           {posts.length === 0 ? (
-            <p className="text-center text-sm text-muted">Ancora nessun post pubblicato.</p>
+            <p className="text-center text-sm text-muted">
+              {tag ? "Nessun post con questo tag." : "Ancora nessun post pubblicato."}
+            </p>
           ) : (
             <div>
               {posts.map((post) => (

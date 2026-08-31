@@ -66,6 +66,17 @@ export interface Post {
   /** Permalink leggibile /{blog_slug}/{YYYYMMDD}/{slug}, senza UUID. */
   blog_slug: string;
   permalink: string;
+  /** Solo i tag del campo dedicato (per ripresentarli in modifica). */
+  manual_tags: string[];
+  /** Insieme effettivo: manual_tags + hashtag nel testo. Massimo 5 in tutto. */
+  tags: string[];
+}
+
+export const MAX_TAGS_PER_POST = 5;
+
+export interface TrendingTag {
+  tag: string;
+  post_count: number;
 }
 
 export interface PostTranslationSummary {

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_optional_current_user
@@ -13,8 +13,10 @@ from app.core.database import get_session
 from app.domain.authorization import can_review_posts, can_write_posts, is_publicly_visible
 from app.domain.i18n import validate_locale
 from app.domain.permalinks import build_permalink, is_valid_permalink_date, permalink_date
+from app.domain.tags import resolve_tags
 from app.models.blog import Blog
 from app.models.post import Post, PostStatus
+from app.models.tag import Tag, post_tags
 from app.models.user import User
 
 router = APIRouter()
@@ -28,6 +30,9 @@ class PostCreateRequest(BaseModel):
     author_display_name: str | None = None
     locale: str | None = None  # default: la lingua di default del blog
     cover_image_url: str | None = None
+    # Tag del campo dedicato (vedi app/domain/tags.py); si sommano agli
+    # eventuali #hashtag scritti nel testo, massimo 5 in tutto.
+    tags: list[str] | None = None
 
 
 class PostTranslationRequest(BaseModel):
@@ -37,6 +42,7 @@ class PostTranslationRequest(BaseModel):
     content: str
     author_display_name: str | None = None
     cover_image_url: str | None = None
+    tags: list[str] | None = None
 
 
 class PostUpdateRequest(BaseModel):
@@ -47,6 +53,10 @@ class PostUpdateRequest(BaseModel):
     # altri, ma qui None ha un significato ambiguo (rimuovi vs non toccare)
     # che risolviamo trattando "" come "rimuovi" in update_post.
     cover_image_url: str | None = None
+    # assente: lascia invariati i tag del campo dedicato; lista (anche vuota
+    # []): la sostituisce. Gli #hashtag nel testo sono comunque ricalcolati
+    # ad ogni modifica del contenuto, a prescindere da questo campo.
+    tags: list[str] | None = None
 
 
 class PublishRequest(BaseModel):
@@ -73,6 +83,11 @@ class PostOut(BaseModel):
     # _post_out() ad ogni risposta, serve perciò anche blog_slug qui.
     blog_slug: str
     permalink: str
+    # manual_tags: solo quelli del campo dedicato (per ripresentarli in
+    # modifica). tags: l'insieme effettivo (manual_tags + hashtag nel testo),
+    # per la visualizzazione pubblica e le pagine/tendenze per tag.
+    manual_tags: list[str]
+    tags: list[str]
 
     model_config = {"from_attributes": True}
 
@@ -110,6 +125,11 @@ async def _require_write_access(session: AsyncSession, user: User, blog: Blog) -
 
 
 def _post_out(post: Post, blog: Blog) -> PostOut:
+    # ricalcolato da colonne scalari già in memoria (manual_tags, content),
+    # non dalla relazione ORM `tags` — che richiederebbe un lazy load async
+    # non sempre già eseguito da chi chiama (vedi _sync_post_tags per dove
+    # quella relazione viene invece scritta).
+    _, effective_tags = resolve_tags(post.manual_tags, post.content)
     return PostOut(
         id=post.id,
         blog_id=post.blog_id,
@@ -126,7 +146,41 @@ def _post_out(post: Post, blog: Blog) -> PostOut:
         created_at=post.created_at,
         blog_slug=blog.slug,
         permalink=build_permalink(blog.slug, post),
+        manual_tags=post.manual_tags,
+        tags=effective_tags,
     )
+
+
+async def _sync_post_tags(session: AsyncSession, post: Post, effective_tags: list[str]) -> None:
+    """Materializza l'insieme effettivo di tag nella tabella d'associazione
+    post_tags — non serve per PostOut (vedi sopra), solo per le query di
+    aggregazione tra post (tendenze). Get-or-create per ogni tag.
+
+    Passa deliberatamente dalla tabella `post_tags` (Core), non dalla
+    relazione ORM `Post.tags`: assegnarla direttamente (`post.tags = ...`)
+    fa scattare, per via del back_populates bidirezionale, un flush
+    implicito nella semplice istruzione di assegnazione — che essendo
+    sincrona (non awaited) non ha il contesto async necessario e fallisce.
+    session.execute()/flush() qui sono invece sempre esplicitamente awaited."""
+    tag_ids = []
+    for name in effective_tags:
+        result = await session.execute(select(Tag).where(Tag.name == name))
+        tag = result.scalar_one_or_none()
+        if tag is None:
+            tag = Tag(name=name)
+            session.add(tag)
+            await session.flush()  # serve l'id del nuovo tag per l'insert sotto
+        tag_ids.append(tag.id)
+
+    # il post deve già esistere in DB perché post_tags referenzia posts.id
+    # con FK: per un post appena creato lo garantisce l'autoflush dei
+    # session.execute(select(...)) sopra (flushano anche il Post pending).
+    await session.execute(delete(post_tags).where(post_tags.c.post_id == post.id))
+    if tag_ids:
+        await session.execute(
+            insert(post_tags),
+            [{"post_id": post.id, "tag_id": tag_id} for tag_id in tag_ids],
+        )
 
 
 def _backup_to_s3(blog: Blog, post: Post) -> None:
@@ -168,6 +222,11 @@ async def create_post(
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Slug già in uso su questo blog per questa lingua.")
 
+    try:
+        manual_tags, effective_tags = resolve_tags(payload.tags or [], payload.content)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
     post = Post(
         blog_id=blog.id,
         author_id=current_user.id,
@@ -177,10 +236,12 @@ async def create_post(
         slug=payload.slug,
         content=payload.content,
         cover_image_url=payload.cover_image_url,
+        manual_tags=manual_tags,
     )
     session.add(post)
+    await _sync_post_tags(session, post, effective_tags)
     await session.commit()
-    await session.refresh(post)
+    await session.refresh(post, attribute_names=["created_at", "updated_at"])
     _backup_to_s3(blog, post)
     return _post_out(post, blog)
 
@@ -220,6 +281,11 @@ async def add_post_translation(
     if existing_slug.scalar_one_or_none() is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Slug già in uso su questo blog per questa lingua.")
 
+    try:
+        manual_tags, effective_tags = resolve_tags(payload.tags or [], payload.content)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
     translation = Post(
         blog_id=blog.id,
         author_id=current_user.id,
@@ -230,10 +296,12 @@ async def add_post_translation(
         slug=payload.slug,
         content=payload.content,
         cover_image_url=payload.cover_image_url,
+        manual_tags=manual_tags,
     )
     session.add(translation)
+    await _sync_post_tags(session, translation, effective_tags)
     await session.commit()
-    await session.refresh(translation)
+    await session.refresh(translation, attribute_names=["created_at", "updated_at"])
     _backup_to_s3(blog, translation)
     return _post_out(translation, blog)
 
@@ -348,8 +416,20 @@ async def update_post(
     if payload.cover_image_url is not None:
         post.cover_image_url = payload.cover_image_url or None
 
+    # i tag vanno ricalcolati se è cambiato il contenuto (gli #hashtag nel
+    # testo potrebbero essere cambiati) o se il campo dedicato è stato
+    # esplicitamente passato — altrimenti restano quelli già salvati.
+    if payload.content is not None or payload.tags is not None:
+        new_manual = payload.tags if payload.tags is not None else post.manual_tags
+        try:
+            manual_tags, effective_tags = resolve_tags(new_manual, post.content)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        post.manual_tags = manual_tags
+        await _sync_post_tags(session, post, effective_tags)
+
     await session.commit()
-    await session.refresh(post)
+    await session.refresh(post, attribute_names=["created_at", "updated_at"])
     _backup_to_s3(blog, post)
     return _post_out(post, blog)
 

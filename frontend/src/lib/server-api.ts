@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { Post } from "./types";
+import type { Post, TrendingTag } from "./types";
 
 // Le pagine renderizzate lato server (Server Component) girano nel processo
 // Node.js del container: a differenza del browser, non raggiungono il
@@ -29,9 +29,12 @@ export async function getPublicPostByPermalink(
 }
 
 /** Feed multi-blog per la homepage: post pubblicati di tutti i blog, dal più recente. */
-export async function getPublicFeed(options: { locale?: string; limit?: number } = {}): Promise<Post[]> {
+export async function getPublicFeed(
+  options: { locale?: string; tag?: string; limit?: number } = {}
+): Promise<Post[]> {
   const params = new URLSearchParams();
   if (options.locale) params.set("locale", options.locale);
+  if (options.tag) params.set("tag", options.tag);
   if (options.limit) params.set("limit", String(options.limit));
   const qs = params.toString();
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/feed/posts${qs ? `?${qs}` : ""}`, {
@@ -39,4 +42,19 @@ export async function getPublicFeed(options: { locale?: string; limit?: number }
   });
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero del feed.`);
   return (await res.json()) as Post[];
+}
+
+/** Tag più usati tra i post pubblicati di recente, per la sezione "di tendenza" della homepage. */
+export async function getTrendingTags(
+  options: { days?: number; limit?: number } = {}
+): Promise<TrendingTag[]> {
+  const params = new URLSearchParams();
+  if (options.days) params.set("days", String(options.days));
+  if (options.limit) params.set("limit", String(options.limit));
+  const qs = params.toString();
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/feed/trending${qs ? `?${qs}` : ""}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero delle tendenze.`);
+  return (await res.json()) as TrendingTag[];
 }

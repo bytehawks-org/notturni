@@ -291,4 +291,28 @@ ALTER TABLE posts ADD COLUMN cover_image_url VARCHAR(2048);
 
 UPDATE alembic_version SET version_num='e416be915439' WHERE alembic_version.version_num = '2807a24ea58f';
 
+-- Running upgrade e416be915439 -> bd9a65e7bdd4
+
+CREATE TABLE tags (
+    name VARCHAR(30) NOT NULL,
+    id UUID NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    PRIMARY KEY (id)
+);
+
+CREATE UNIQUE INDEX ix_tags_name ON tags (name);
+
+CREATE TABLE post_tags (
+    post_id UUID NOT NULL,
+    tag_id UUID NOT NULL,
+    FOREIGN KEY(post_id) REFERENCES posts (id) ON DELETE CASCADE,
+    FOREIGN KEY(tag_id) REFERENCES tags (id) ON DELETE CASCADE,
+    PRIMARY KEY (post_id, tag_id)
+);
+
+ALTER TABLE posts ADD COLUMN manual_tags VARCHAR(30)[] DEFAULT '{}' NOT NULL;
+
+UPDATE alembic_version SET version_num='bd9a65e7bdd4' WHERE alembic_version.version_num = 'e416be915439';
+
 COMMIT;

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { TagPills } from "@/components/TagPills";
 import { excerpt } from "@/lib/markdown";
 import type { Post } from "@/lib/types";
 
@@ -29,6 +30,11 @@ export function FeedPostCard({ post }: { post: Post }) {
           {post.published_at && <> · {formatDate(post.published_at)}</>}
         </p>
         <p className="mt-2 text-sm leading-relaxed text-foreground/80">{excerpt(post.content, 180)}</p>
+        {post.tags.length > 0 && (
+          <div className="mt-2">
+            <TagPills tags={post.tags} />
+          </div>
+        )}
       </div>
     </article>
   );

@@ -8,6 +8,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { CoverImageUpload } from "@/components/editor/CoverImageUpload";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
+import { TagInput } from "@/components/editor/TagInput";
 import { TranslationsBar } from "@/components/editor/TranslationsBar";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -28,6 +29,7 @@ export default function PostEditorPage() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
+  const [tags, setTags] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -42,6 +44,7 @@ export default function PostEditorPage() {
         setTitle(p.title);
         setContent(p.content);
         setCoverImageUrl(p.cover_image_url);
+        setTags(p.manual_tags);
       })
       .catch((err) => setError(errorMessage(err)));
     api.posts.translations(params.postId).then(setTranslations).catch(() => undefined);
@@ -55,7 +58,12 @@ export default function PostEditorPage() {
     setError(null);
     try {
       const updated = await authFetch((token) =>
-        api.posts.update(token, params.postId, { title, content, cover_image_url: coverImageUrl ?? "" })
+        api.posts.update(token, params.postId, {
+          title,
+          content,
+          cover_image_url: coverImageUrl ?? "",
+          tags,
+        })
       );
       setPost(updated);
       setSaved(true);
@@ -118,6 +126,10 @@ export default function PostEditorPage() {
           required
           className="mb-8 w-full border-0 bg-transparent font-serif text-5xl font-semibold leading-tight text-foreground placeholder:text-muted/70 focus:outline-none"
         />
+
+        <div className="mb-8">
+          <TagInput value={tags} onChange={setTags} />
+        </div>
 
         <div className="mb-8">
           <CoverImageUpload

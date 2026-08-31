@@ -82,3 +82,55 @@ async def test_feed_filters_by_locale_and_paginates(client: AsyncClient, make_us
 
     limited_res = await client.get("/api/v1/feed/posts?limit=1")
     assert len(limited_res.json()) == 1
+
+
+async def test_feed_filters_by_tag(client: AsyncClient, make_user: Callable) -> None:
+    owner: AuthedUser = await make_user("feed-owner-tag")
+    await client.post("/api/v1/blogs", json={"slug": "feed-blog-tag", "title": "x"}, headers=owner.headers)
+
+    tagged_res = await client.post(
+        "/api/v1/blogs/feed-blog-tag/posts",
+        json={"slug": "con-tag", "title": "x", "content": "y", "tags": ["cucina"]},
+        headers=owner.headers,
+    )
+    tagged_id = tagged_res.json()["id"]
+    await client.post(f"/api/v1/posts/{tagged_id}/publish", headers=owner.headers)
+
+    untagged = await _create_and_publish(client, owner, "feed-blog-tag", "senza-tag")
+
+    res = await client.get("/api/v1/feed/posts?tag=cucina")
+    ids = [p["id"] for p in res.json()]
+    assert tagged_id in ids
+    assert untagged["id"] not in ids
+
+
+async def test_trending_tags_counts_recent_published_posts(
+    client: AsyncClient, make_user: Callable
+) -> None:
+    owner: AuthedUser = await make_user("feed-owner-trending")
+    await client.post(
+        "/api/v1/blogs", json={"slug": "feed-blog-trending", "title": "x"}, headers=owner.headers
+    )
+
+    for i in range(3):
+        res = await client.post(
+            "/api/v1/blogs/feed-blog-trending/posts",
+            json={"slug": f"trend-{i}", "title": "x", "content": "y", "tags": ["montagna"]},
+            headers=owner.headers,
+        )
+        await client.post(f"/api/v1/posts/{res.json()['id']}/publish", headers=owner.headers)
+
+    other_res = await client.post(
+        "/api/v1/blogs/feed-blog-trending/posts",
+        json={"slug": "trend-other", "title": "x", "content": "y", "tags": ["mare"]},
+        headers=owner.headers,
+    )
+    await client.post(f"/api/v1/posts/{other_res.json()['id']}/publish", headers=owner.headers)
+
+    res = await client.get("/api/v1/feed/trending?days=7&limit=5")
+    assert res.status_code == 200
+    by_tag = {row["tag"]: row["post_count"] for row in res.json()}
+    assert by_tag["montagna"] == 3
+    assert by_tag["mare"] == 1
+    # dal più frequente
+    assert res.json()[0]["tag"] == "montagna"

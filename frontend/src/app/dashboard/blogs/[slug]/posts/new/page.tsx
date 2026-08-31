@@ -8,6 +8,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { CoverImageUpload } from "@/components/editor/CoverImageUpload";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
+import { TagInput } from "@/components/editor/TagInput";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
@@ -22,6 +23,7 @@ export default function NewPostPage() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
+  const [tags, setTags] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -36,6 +38,7 @@ export default function NewPostPage() {
           title,
           content,
           cover_image_url: coverImageUrl,
+          tags,
         })
       );
       router.push(`/dashboard/blogs/${params.slug}/posts/${post.id}`);
@@ -76,6 +79,10 @@ export default function NewPostPage() {
             className="border-0 bg-transparent p-0 text-foreground/70 placeholder:text-muted focus:text-foreground focus:outline-none"
             style={{ width: `${Math.max(slug.length, 14) + 1}ch` }}
           />
+        </div>
+
+        <div className="mb-8">
+          <TagInput value={tags} onChange={setTags} />
         </div>
 
         <div className="mb-8">

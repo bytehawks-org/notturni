@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { SiteHeader } from "@/components/SiteHeader";
+import { TagPills } from "@/components/TagPills";
 import { excerpt, renderMarkdown } from "@/lib/markdown";
 import { getPublicPostByPermalink } from "@/lib/server-api";
 
@@ -57,6 +58,12 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
         )}
 
         <div className="notturni-prose mt-10 text-lg leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />
+
+        {post.tags.length > 0 && (
+          <div className="mt-10">
+            <TagPills tags={post.tags} />
+          </div>
+        )}
       </main>
     </div>
   );

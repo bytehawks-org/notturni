@@ -2,12 +2,13 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import ARRAY, DateTime, Enum, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.domain.i18n import DEFAULT_LOCALE
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
+from app.models.tag import Tag, post_tags
 
 
 class PostStatus(str, enum.Enum):
@@ -40,6 +41,22 @@ class Post(Base, UUIDPKMixin, TimestampMixin):
     # Immagine di copertina (URL pubblico su MinIO/S3, stesso bucket/prefisso
     # dei media incorporati nel contenuto — vedi POST /blogs/{slug}/media).
     cover_image_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+
+    # Tag inseriti esplicitamente nel campo dedicato (vedi app/domain/tags.py):
+    # SOLO quelli, non gli hashtag nel testo — serve a poterli ripresentare
+    # in modifica senza perderli quando cambia solo il contenuto. L'insieme
+    # effettivo (questi + gli hashtag estratti dal testo, max 5 in tutto) è
+    # materializzato nella relazione `tags` sotto, per le query di tendenza.
+    #
+    # ATTENZIONE: non assegnare `post.tags = [...]` in un endpoint — il
+    # back_populates bidirezionale fa scattare un flush implicito in
+    # quell'istruzione sincrona, che fuori da un contesto async awaited fa
+    # fallire la request (MissingGreenlet). Per scrivere l'associazione usa
+    # la tabella `post_tags` (Core) direttamente — vedi
+    # app/api/v1/posts.py:_sync_post_tags. La relazione resta comunque utile
+    # in lettura, con un eager load esplicito (es. selectinload(Post.tags)).
+    manual_tags: Mapped[list[str]] = mapped_column(ARRAY(String(30)), default=list, nullable=False)
+    tags: Mapped[list[Tag]] = relationship(secondary=post_tags, back_populates="posts")
 
     status: Mapped[PostStatus] = mapped_column(
         Enum(

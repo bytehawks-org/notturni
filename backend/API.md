@@ -280,7 +280,7 @@ nuova "famiglia" di traduzioni (`translation_group_id` = un nuovo UUID).
 Accoda anche un backup su S3 (vedi sezione "Media e backup" più sotto).
 
 ```json
-{"slug": "primo-post", "title": "...", "content": "# Markdown...", "author_display_name": null, "locale": null, "cover_image_url": null}
+{"slug": "primo-post", "title": "...", "content": "# Markdown...", "author_display_name": null, "locale": null, "cover_image_url": null, "tags": null}
 ```
 
 `author_display_name` è opzionale: se omesso usa lo username, ma può essere
@@ -290,7 +290,34 @@ diverso — il nome pubblico dell'autore può non coincidere con l'utente reale
 blog. `cover_image_url` è opzionale: l'URL ritornato da un precedente upload
 su `POST /blogs/{slug}/media` (vedi sotto) — il campo accetta qualsiasi
 stringa, non verifica che punti davvero a un media caricato su questo blog.
-`409` se lo slug è già in uso su quel blog per quella lingua.
+`tags` è opzionale (vedi sezione "Tag" sotto). `409` se lo slug è già in uso
+su quel blog per quella lingua.
+
+### Tag
+
+Massimo **5 tag per post**, che vengano dal campo dedicato (`tags` nel
+payload di create/update) o da `#hashtag` scritti nel testo del post — i due
+canali si sommano nello stesso insieme, deduplicati. Un tag è normalizzato
+(minuscolo, senza `#`, solo lettere/cifre/trattini singoli, max 30
+caratteri): `"#Poesia"` e `" poesia "` diventano entrambi `"poesia"`. Un tag
+malformato nel campo dedicato è un errore esplicito (`400`); un hashtag
+malformato nel testo libero viene semplicemente ignorato, non fa fallire il
+salvataggio. Superare il limite di 5 (dedicato + testo insieme) è sempre un
+errore esplicito (`400`) — mai un troncamento silenzioso. Vedi
+`app/domain/tags.py`.
+
+Ogni `PostOut` espone due campi:
+
+- `manual_tags` — solo quelli inseriti nel campo dedicato (per
+  ripresentarli in un form di modifica).
+- `tags` — l'insieme effettivo (`manual_tags` + hashtag nel testo), quello
+  da mostrare in lettura e usato per il filtro `?tag=` del feed e per la
+  sezione di tendenza (vedi sezione "Feed" più sotto).
+
+In `PATCH /posts/{post_id}` (vedi sotto): `tags` assente lascia invariati i
+tag del campo dedicato; una lista (anche vuota, `[]`) li sostituisce. Gli
+hashtag nel testo vengono invece ricalcolati **ad ogni modifica del
+contenuto**, a prescindere da questo campo.
 
 **`POST /api/v1/posts/{post_id}/translations`** — stessa autorizzazione della
 creazione. Aggiunge una traduzione alla stessa famiglia del post indicato
@@ -333,10 +360,11 @@ mai esporre l'UUID nell'URL. `400` se la data non è nel formato `YYYYMMDD`,
 visibile per il chiamante).
 
 **`PATCH /api/v1/posts/{post_id}`** — stessa autorizzazione della creazione.
-Aggiorna `title`/`content`/`cover_image_url` (tutti opzionali). Se `content`
-cambia, accoda di nuovo il backup su S3. Per `cover_image_url`: valore
-assente (`null`/campo omesso) lascia la cover invariata, stringa vuota
-`""` la rimuove, qualsiasi altro valore la sostituisce.
+Aggiorna `title`/`content`/`cover_image_url`/`tags` (tutti opzionali). Se
+`content` cambia, accoda di nuovo il backup su S3. Per `cover_image_url`:
+valore assente (`null`/campo omesso) lascia la cover invariata, stringa
+vuota `""` la rimuove, qualsiasi altro valore la sostituisce. Per `tags`,
+vedi sezione "Tag" sopra.
 
 **`POST /api/v1/posts/{post_id}/submit-for-review`** — proprietario/autore/
 co-autore. Sposta un post da `draft` a `pending_review` (`400` se non era in
@@ -568,9 +596,18 @@ recente — pensato per la homepage della piattaforma (CLAUDE.md #2:
 "raccolta degli articoli nella lingua dell'utente, stile dev.to").
 
 Query param opzionali: `locale` (filtra una lingua, altrimenti tutte
-insieme), `limit` (default 20, massimo 50), `offset` (paginazione, default
-0). Router separato da `/blogs/{slug}/posts` apposta: qui i post
-attraversano blog diversi, non sono scoped a uno slug/id specifico.
+insieme), `tag` (filtra per tag normalizzato, es. `poesia` non `#Poesia` —
+vedi sezione "Tag" sopra), `limit` (default 20, massimo 50), `offset`
+(paginazione, default 0). Router separato da `/blogs/{slug}/posts` apposta:
+qui i post attraversano blog diversi, non sono scoped a uno slug/id
+specifico.
+
+**`GET /api/v1/feed/trending`** — pubblico, nessuna autenticazione. Tag più
+usati tra i post pubblicati negli ultimi `days` giorni (default 7, massimo
+90), dal più frequente: `[{"tag": "poesia", "post_count": 12}, ...]`. Query
+param opzionali: `days`, `limit` (default 10, massimo 30). Non esistono
+ancora contatori di like/condivisioni in piattaforma (vedi ROADMAP.md): è
+l'unica base disponibile oggi per una sezione "di tendenza".
 
 ## CORS
 
