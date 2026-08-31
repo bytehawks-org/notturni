@@ -2,6 +2,7 @@ from app.models.api_token import ApiToken, ApiTokenOwnerType
 from app.models.base import Base
 from app.models.blog import Blog, BlogMembership, BlogRole
 from app.models.blog_config import BlogConfig
+from app.models.category import Category
 from app.models.comment import Comment, CommentStatus
 from app.models.follow import BlogFollow, UserFollow
 from app.models.mfa_email_code import MfaEmailCode
@@ -22,6 +23,7 @@ __all__ = [
     "BlogMembership",
     "BlogRole",
     "BlogConfig",
+    "Category",
     "Post",
     "PostStatus",
     "Comment",

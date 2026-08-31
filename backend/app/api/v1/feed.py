@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.posts import PostOut, _post_out
 from app.core.database import get_session
 from app.models.blog import Blog
+from app.models.category import Category
 from app.models.post import Post, PostStatus
 from app.models.tag import Tag, post_tags
 
@@ -33,6 +34,7 @@ MAX_TRENDING_DAYS = 90
 async def list_feed(
     locale: str | None = None,
     tag: str | None = None,
+    category: str | None = None,
     limit: int = DEFAULT_FEED_LIMIT,
     offset: int = 0,
     session: AsyncSession = Depends(get_session),
@@ -40,7 +42,9 @@ async def list_feed(
     """Pubblico, nessuna autenticazione: solo post effettivamente pubblicati
     (pubblicati e con `published_at` raggiunto), dal più recente. `locale`
     filtra per lingua; `tag` filtra per tag (nome normalizzato, es. "poesia"
-    non "#Poesia"); omessi, nessun filtro."""
+    non "#Poesia"); `category` filtra per slug di categoria (la categoria è
+    per-blog, quindi blog diversi con una categoria omonima compaiono
+    insieme, come già avviene per i tag); omessi, nessun filtro."""
     limit = min(max(limit, 1), MAX_FEED_LIMIT)
     offset = max(offset, 0)
 
@@ -58,9 +62,11 @@ async def list_feed(
         stmt = stmt.join(post_tags, Post.id == post_tags.c.post_id).join(
             Tag, Tag.id == post_tags.c.tag_id
         ).where(Tag.name == tag)
+    if category is not None:
+        stmt = stmt.join(Category, Category.id == Post.category_id).where(Category.slug == category)
 
     result = await session.execute(stmt)
-    return [_post_out(post, blog) for post, blog in result.all()]
+    return [await _post_out(session, post, blog) for post, blog in result.all()]
 
 
 class TrendingTagOut(BaseModel):

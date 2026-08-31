@@ -2,6 +2,7 @@ import type {
   AdminUser,
   Blog,
   BlogConfig,
+  Category,
   Comment,
   CurrentUser,
   LoginResponse,
@@ -101,7 +102,12 @@ export const api = {
     update: (
       token: string,
       slug: string,
-      payload: { title?: string; allow_anonymous_comments?: boolean }
+      payload: {
+        title?: string;
+        allow_anonymous_comments?: boolean;
+        /** "" azzera (torna allo username di chi scrive); assente non tocca. */
+        default_author_display_name?: string;
+      }
     ) => request<Blog>(`/api/v1/blogs/${slug}`, { method: "PATCH", token, body: payload }),
     getConfig: (slug: string) => request<BlogConfig>(`/api/v1/blogs/${slug}/config`),
     updateConfig: (token: string, slug: string, config: BlogConfig) =>
@@ -123,6 +129,22 @@ export const api = {
         formData,
       });
     },
+    listCategories: (slug: string) => request<Category[]>(`/api/v1/blogs/${slug}/categories`),
+    createCategory: (token: string, slug: string, payload: { name: string; slug: string }) =>
+      request<Category>(`/api/v1/blogs/${slug}/categories`, { method: "POST", token, body: payload }),
+    updateCategory: (
+      token: string,
+      slug: string,
+      categoryId: string,
+      payload: { name?: string; slug?: string }
+    ) =>
+      request<Category>(`/api/v1/blogs/${slug}/categories/${categoryId}`, {
+        method: "PATCH",
+        token,
+        body: payload,
+      }),
+    deleteCategory: (token: string, slug: string, categoryId: string) =>
+      request<void>(`/api/v1/blogs/${slug}/categories/${categoryId}`, { method: "DELETE", token }),
   },
 
   posts: {
@@ -145,6 +167,7 @@ export const api = {
         cover_image_url?: string | null;
         cover_image_is_sensitive?: boolean;
         tags?: string[];
+        category_id?: string | null;
       }
     ) => request<Post>(`/api/v1/blogs/${blogSlug}/posts`, { method: "POST", token, body: payload }),
     update: (
@@ -156,6 +179,8 @@ export const api = {
         cover_image_url?: string | null;
         cover_image_is_sensitive?: boolean;
         tags?: string[];
+        /** assente: non tocca la categoria; null: la rimuove; id: la imposta. */
+        category_id?: string | null;
       }
     ) => request<Post>(`/api/v1/posts/${postId}`, { method: "PATCH", token, body: payload }),
     publish: (token: string, postId: string) =>
@@ -173,6 +198,7 @@ export const api = {
         author_display_name?: string;
         cover_image_url?: string | null;
         tags?: string[];
+        category_id?: string | null;
       }
     ) => request<Post>(`/api/v1/posts/${postId}/translations`, { method: "POST", token, body: payload }),
   },

@@ -15,6 +15,7 @@ from app.domain.i18n import validate_locale
 from app.domain.permalinks import build_permalink, is_valid_permalink_date, permalink_date
 from app.domain.tags import resolve_tags
 from app.models.blog import Blog
+from app.models.category import Category
 from app.models.post import Post, PostStatus
 from app.models.tag import Tag, post_tags
 from app.models.user import User
@@ -36,6 +37,9 @@ class PostCreateRequest(BaseModel):
     # Tag del campo dedicato (vedi app/domain/tags.py); si sommano agli
     # eventuali #hashtag scritti nel testo, massimo 5 in tutto.
     tags: list[str] | None = None
+    # Categoria (vedi app/domain/categories.py) — al più una, deve
+    # appartenere allo stesso blog.
+    category_id: uuid.UUID | None = None
 
 
 class PostTranslationRequest(BaseModel):
@@ -47,6 +51,7 @@ class PostTranslationRequest(BaseModel):
     cover_image_url: str | None = None
     cover_image_is_sensitive: bool = False
     tags: list[str] | None = None
+    category_id: uuid.UUID | None = None
 
 
 class PostUpdateRequest(BaseModel):
@@ -63,11 +68,23 @@ class PostUpdateRequest(BaseModel):
     # []): la sostituisce. Gli #hashtag nel testo sono comunque ricalcolati
     # ad ogni modifica del contenuto, a prescindere da questo campo.
     tags: list[str] | None = None
+    # qui `null` è un valore significativo (rimuove la categoria), diverso da
+    # "campo assente" (non toccarla) — servirsi di model_fields_set in
+    # update_post, non di un semplice "is not None".
+    category_id: uuid.UUID | None = None
 
 
 class PublishRequest(BaseModel):
     # se futuro: pianifica la pubblicazione invece di renderla effettiva subito
     published_at: datetime | None = None
+
+
+class CategorySummaryOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    slug: str
+
+    model_config = {"from_attributes": True}
 
 
 class PostOut(BaseModel):
@@ -95,6 +112,7 @@ class PostOut(BaseModel):
     # per la visualizzazione pubblica e le pagine/tendenze per tag.
     manual_tags: list[str]
     tags: list[str]
+    category: CategorySummaryOut | None
 
     model_config = {"from_attributes": True}
 
@@ -131,12 +149,22 @@ async def _require_write_access(session: AsyncSession, user: User, blog: Blog) -
         )
 
 
-def _post_out(post: Post, blog: Blog) -> PostOut:
+async def _validate_category(session: AsyncSession, blog: Blog, category_id: uuid.UUID | None) -> None:
+    if category_id is None:
+        return
+    category = await session.get(Category, category_id)
+    if category is None or category.blog_id != blog.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Categoria non valida per questo blog.")
+
+
+async def _post_out(session: AsyncSession, post: Post, blog: Blog) -> PostOut:
     # ricalcolato da colonne scalari già in memoria (manual_tags, content),
     # non dalla relazione ORM `tags` — che richiederebbe un lazy load async
     # non sempre già eseguito da chi chiama (vedi _sync_post_tags per dove
-    # quella relazione viene invece scritta).
+    # quella relazione viene invece scritta). Stesso motivo per `category`:
+    # un session.get() esplicito qui, non la relazione ORM su Post.
     _, effective_tags = resolve_tags(post.manual_tags, post.content)
+    category = await session.get(Category, post.category_id) if post.category_id else None
     return PostOut(
         id=post.id,
         blog_id=post.blog_id,
@@ -156,6 +184,7 @@ def _post_out(post: Post, blog: Blog) -> PostOut:
         permalink=build_permalink(blog.slug, post),
         manual_tags=post.manual_tags,
         tags=effective_tags,
+        category=CategorySummaryOut.model_validate(category) if category else None,
     )
 
 
@@ -235,6 +264,8 @@ async def create_post(
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
+    await _validate_category(session, blog, payload.category_id)
+
     post = Post(
         blog_id=blog.id,
         author_id=current_user.id,
@@ -246,13 +277,14 @@ async def create_post(
         cover_image_url=payload.cover_image_url,
         cover_image_is_sensitive=payload.cover_image_is_sensitive,
         manual_tags=manual_tags,
+        category_id=payload.category_id,
     )
     session.add(post)
     await _sync_post_tags(session, post, effective_tags)
     await session.commit()
     await session.refresh(post, attribute_names=["created_at", "updated_at"])
     _backup_to_s3(blog, post)
-    return _post_out(post, blog)
+    return await _post_out(session, post, blog)
 
 
 @router.post(
@@ -295,6 +327,13 @@ async def add_post_translation(
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
+    # se non specificata esplicitamente, la traduzione eredita la categoria
+    # dell'originale (stesso contenuto, presumibilmente stessa categoria)
+    category_id = (
+        payload.category_id if "category_id" in payload.model_fields_set else original.category_id
+    )
+    await _validate_category(session, blog, category_id)
+
     translation = Post(
         blog_id=blog.id,
         author_id=current_user.id,
@@ -307,13 +346,14 @@ async def add_post_translation(
         cover_image_url=payload.cover_image_url,
         cover_image_is_sensitive=payload.cover_image_is_sensitive,
         manual_tags=manual_tags,
+        category_id=category_id,
     )
     session.add(translation)
     await _sync_post_tags(session, translation, effective_tags)
     await session.commit()
     await session.refresh(translation, attribute_names=["created_at", "updated_at"])
     _backup_to_s3(blog, translation)
-    return _post_out(translation, blog)
+    return await _post_out(session, translation, blog)
 
 
 @router.get("/posts/{post_id}/translations", response_model=list[TranslationSummaryOut])
@@ -351,7 +391,7 @@ async def list_posts(
     )
     if not has_write_access:
         posts = [p for p in posts if is_publicly_visible(p)]
-    return [_post_out(p, blog) for p in posts]
+    return [await _post_out(session, p, blog) for p in posts]
 
 
 @router.get("/posts/{post_id}", response_model=PostOut)
@@ -364,13 +404,13 @@ async def get_post(
     blog = await session.get(Blog, post.blog_id)
     assert blog is not None
     if is_publicly_visible(post):
-        return _post_out(post, blog)
+        return await _post_out(session, post, blog)
 
     # bozza/in revisione/pianificato: visibile solo a chi ha accesso in
     # scrittura al blog (non un 403 esplicito, per non rivelarne l'esistenza)
     if current_user is None or not await can_write_posts(session, user_id=current_user.id, blog=blog):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Post non trovato.")
-    return _post_out(post, blog)
+    return await _post_out(session, post, blog)
 
 
 @router.get("/blogs/{blog_slug}/posts/{permalink_date_str}/{post_slug}", response_model=PostOut)
@@ -404,7 +444,7 @@ async def get_post_by_permalink(
     if not is_publicly_visible(post):
         if current_user is None or not await can_write_posts(session, user_id=current_user.id, blog=blog):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Post non trovato.")
-    return _post_out(post, blog)
+    return await _post_out(session, post, blog)
 
 
 @router.patch("/posts/{post_id}", response_model=PostOut)
@@ -442,10 +482,14 @@ async def update_post(
         post.manual_tags = manual_tags
         await _sync_post_tags(session, post, effective_tags)
 
+    if "category_id" in payload.model_fields_set:
+        await _validate_category(session, blog, payload.category_id)
+        post.category_id = payload.category_id
+
     await session.commit()
     await session.refresh(post, attribute_names=["created_at", "updated_at"])
     _backup_to_s3(blog, post)
-    return _post_out(post, blog)
+    return await _post_out(session, post, blog)
 
 
 @router.post("/posts/{post_id}/submit-for-review", response_model=PostOut)
@@ -466,7 +510,7 @@ async def submit_for_review(
     post.status = PostStatus.PENDING_REVIEW
     await session.commit()
     await session.refresh(post)
-    return _post_out(post, blog)
+    return await _post_out(session, post, blog)
 
 
 @router.post("/posts/{post_id}/return-to-draft", response_model=PostOut)
@@ -489,7 +533,7 @@ async def return_to_draft(
     post.status = PostStatus.DRAFT
     await session.commit()
     await session.refresh(post)
-    return _post_out(post, blog)
+    return await _post_out(session, post, blog)
 
 
 @router.post("/posts/{post_id}/publish", response_model=PostOut)
@@ -521,10 +565,10 @@ async def publish_post(
     if post.status == PostStatus.PUBLISHED and scheduled_at is None:
         # già pubblicato e nessun nuovo orario esplicito: no-op idempotente,
         # non tocca published_at
-        return _post_out(post, blog)
+        return await _post_out(session, post, blog)
 
     post.status = PostStatus.PUBLISHED
     post.published_at = scheduled_at or datetime.now(timezone.utc)
     await session.commit()
     await session.refresh(post)
-    return _post_out(post, blog)
+    return await _post_out(session, post, blog)

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { CategorySelect } from "@/components/editor/CategorySelect";
 import { CoverImageUpload } from "@/components/editor/CoverImageUpload";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
 import { TagInput } from "@/components/editor/TagInput";
@@ -31,6 +32,7 @@ export default function PostEditorPage() {
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
   const [coverImageIsSensitive, setCoverImageIsSensitive] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
+  const [categoryId, setCategoryId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -48,6 +50,7 @@ export default function PostEditorPage() {
         setCoverImageUrl(p.cover_image_url);
         setCoverImageIsSensitive(p.cover_image_is_sensitive);
         setTags(p.manual_tags);
+        setCategoryId(p.category?.id ?? null);
       })
       .catch((err) => setError(errorMessage(err)));
     api.posts.translations(params.postId).then(setTranslations).catch(() => undefined);
@@ -77,6 +80,7 @@ export default function PostEditorPage() {
           cover_image_url: coverImageUrl ?? "",
           cover_image_is_sensitive: coverImageIsSensitive,
           tags,
+          category_id: categoryId,
         })
       );
       setPost(updated);
@@ -140,6 +144,10 @@ export default function PostEditorPage() {
           required
           className="mb-8 w-full border-0 bg-transparent font-serif text-5xl font-semibold leading-tight text-foreground placeholder:text-muted/70 focus:outline-none"
         />
+
+        <div className="mb-4">
+          <CategorySelect blogSlug={params.slug} value={categoryId} onChange={setCategoryId} />
+        </div>
 
         <div className="mb-8">
           <TagInput value={tags} onChange={setTags} />

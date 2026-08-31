@@ -30,11 +30,12 @@ export async function getPublicPostByPermalink(
 
 /** Feed multi-blog per la homepage: post pubblicati di tutti i blog, dal più recente. */
 export async function getPublicFeed(
-  options: { locale?: string; tag?: string; limit?: number } = {}
+  options: { locale?: string; tag?: string; category?: string; limit?: number } = {}
 ): Promise<Post[]> {
   const params = new URLSearchParams();
   if (options.locale) params.set("locale", options.locale);
   if (options.tag) params.set("tag", options.tag);
+  if (options.category) params.set("category", options.category);
   if (options.limit) params.set("limit", String(options.limit));
   const qs = params.toString();
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/feed/posts${qs ? `?${qs}` : ""}`, {

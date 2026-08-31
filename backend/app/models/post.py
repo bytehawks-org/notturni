@@ -22,6 +22,15 @@ class Post(Base, UUIDPKMixin, TimestampMixin):
 
     blog_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("blogs.id"), nullable=False)
     author_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    # Categoria (tassonomia del blog, vedi app/models/category.py): al più
+    # una per post, a differenza dei tag. Colonna semplice, non una
+    # relationship — stesso motivo di `tags` sotto: evitare assegnazioni
+    # ORM che possano innescare un lazy-load/flush sincrono in un contesto
+    # async non awaited. ondelete SET NULL: cancellare la categoria non
+    # cancella i post, li lascia solo senza categoria.
+    category_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("categories.id", ondelete="SET NULL"), nullable=True
+    )
     # nome pubblico dell'autore per questo post, può differire da User.username (CLAUDE.md #1)
     author_display_name: Mapped[str] = mapped_column(String(255))
 

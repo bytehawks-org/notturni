@@ -45,6 +45,7 @@ class Blog(Base, UUIDPKMixin, TimestampMixin):
         back_populates="blog", cascade="all, delete-orphan"
     )
     posts: Mapped[list["Post"]] = relationship(back_populates="blog", cascade="all, delete-orphan")
+    categories: Mapped[list["Category"]] = relationship(back_populates="blog", cascade="all, delete-orphan")
     follows: Mapped[list["BlogFollow"]] = relationship(back_populates="blog", cascade="all, delete-orphan")
     config: Mapped["BlogConfig | None"] = relationship(
         back_populates="blog", uselist=False, cascade="all, delete-orphan"

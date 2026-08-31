@@ -36,6 +36,8 @@ export interface Blog {
   custom_domain: string | null;
   allow_anonymous_comments: boolean;
   default_locale: string;
+  /** Nome pubblico predefinito per i testi scritti su questo blog — vedi Post.author_display_name. */
+  default_author_display_name: string | null;
   owner_id: string;
   created_at: string;
 }
@@ -72,6 +74,14 @@ export interface Post {
   manual_tags: string[];
   /** Insieme effettivo: manual_tags + hashtag nel testo. Massimo 5 in tutto. */
   tags: string[];
+  /** Tassonomia del blog: al più una per post, a differenza dei tag. */
+  category: Category | null;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  slug: string;
 }
 
 export const MAX_TAGS_PER_POST = 5;

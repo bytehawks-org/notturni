@@ -7,11 +7,11 @@ import { getPublicFeed, getTrendingTags } from "@/lib/server-api";
 export default async function Home({
   searchParams,
 }: {
-  searchParams: Promise<{ tag?: string }>;
+  searchParams: Promise<{ tag?: string; category?: string }>;
 }) {
-  const { tag } = await searchParams;
+  const { tag, category } = await searchParams;
   const [posts, trending] = await Promise.all([
-    getPublicFeed({ limit: 20, tag }).catch(() => []),
+    getPublicFeed({ limit: 20, tag, category }).catch(() => []),
     getTrendingTags({ days: 7, limit: 8 }).catch(() => []),
   ]);
 
@@ -49,10 +49,19 @@ export default async function Home({
         )}
 
         <div className="mx-auto mt-16 max-w-2xl">
-          {tag && (
+          {(tag || category) && (
             <div className="mb-6 flex items-center gap-2 text-sm text-muted">
               <span>
-                Post con il tag <span className="text-foreground">#{tag}</span>
+                {tag && (
+                  <>
+                    Post con il tag <span className="text-foreground">#{tag}</span>
+                  </>
+                )}
+                {category && (
+                  <>
+                    Post nella categoria <span className="text-foreground">{category}</span>
+                  </>
+                )}
               </span>
               <Link href="/" className="text-primary hover:underline">
                 Rimuovi filtro
@@ -61,7 +70,7 @@ export default async function Home({
           )}
           {posts.length === 0 ? (
             <p className="text-center text-sm text-muted">
-              {tag ? "Nessun post con questo tag." : "Ancora nessun post pubblicato."}
+              {tag || category ? "Nessun post trovato." : "Ancora nessun post pubblicato."}
             </p>
           ) : (
             <div>

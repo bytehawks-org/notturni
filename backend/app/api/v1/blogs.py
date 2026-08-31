@@ -14,10 +14,12 @@ from app.core.storage import content_public_url, upload_media
 from app.domain.authorization import can_write_posts
 from app.domain.blog_config import DEFAULT_BLOG_CONFIG, validate_blog_config
 from app.domain.blog_rules import assert_can_create_blog, validate_blog_slug
-from app.domain.moderation import classify_image
+from app.domain.categories import validate_category_name, validate_category_slug
 from app.domain.i18n import DEFAULT_LOCALE, validate_locale
+from app.domain.moderation import classify_image
 from app.models.blog import Blog
 from app.models.blog_config import BlogConfig
+from app.models.category import Category
 from app.models.follow import BlogFollow
 from app.models.user import User
 
@@ -65,6 +67,14 @@ async def _get_blog_or_404(session: AsyncSession, slug: str) -> Blog:
     if blog is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Blog non trovato.")
     return blog
+
+
+async def _require_blog_write_access(session: AsyncSession, user: User, blog: Blog) -> None:
+    if not await can_write_posts(session, user_id=user.id, blog=blog):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Serve essere proprietario del blog o avere ruolo autore/co-autore.",
+        )
 
 
 @router.post("", response_model=BlogOut, status_code=status.HTTP_201_CREATED)
@@ -242,11 +252,7 @@ async def upload_blog_media(
     s3://{bucket}/{site_slug}/userdata/{user}/{blog}/media/...). Richiede
     accesso in scrittura al blog (proprietario/autore/co-autore)."""
     blog = await _get_blog_or_404(session, slug)
-    if not await can_write_posts(session, user_id=current_user.id, blog=blog):
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            "Serve essere proprietario del blog o avere ruolo autore/co-autore.",
-        )
+    await _require_blog_write_access(session, current_user, blog)
 
     content = await file.read()
     try:
@@ -261,3 +267,121 @@ async def upload_blog_media(
 
     is_sensitive = await classify_image(content, file.filename or "image", file.content_type or "")
     return MediaOut(url=content_public_url(object_key), is_sensitive=is_sensitive)
+
+
+class CategoryCreateRequest(BaseModel):
+    name: str
+    slug: str
+
+
+class CategoryUpdateRequest(BaseModel):
+    name: str | None = None
+    slug: str | None = None
+
+
+class CategoryOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    slug: str
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/{slug}/categories", response_model=list[CategoryOut])
+async def list_categories(slug: str, session: AsyncSession = Depends(get_session)) -> list[Category]:
+    """Pubblico: la tassonomia di un blog è visibile a chiunque, serve a
+    orientarsi tra i contenuti (CLAUDE.md)."""
+    blog = await _get_blog_or_404(session, slug)
+    result = await session.execute(
+        select(Category).where(Category.blog_id == blog.id).order_by(Category.name)
+    )
+    return list(result.scalars().all())
+
+
+@router.post("/{slug}/categories", response_model=CategoryOut, status_code=status.HTTP_201_CREATED)
+async def create_category(
+    slug: str,
+    payload: CategoryCreateRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> Category:
+    blog = await _get_blog_or_404(session, slug)
+    await _require_blog_write_access(session, current_user, blog)
+
+    try:
+        validate_category_name(payload.name)
+        validate_category_slug(payload.slug)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    existing = await session.execute(
+        select(Category).where(Category.blog_id == blog.id, Category.slug == payload.slug)
+    )
+    if existing.scalar_one_or_none() is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Esiste già una categoria con questo slug.")
+
+    category = Category(blog_id=blog.id, name=payload.name, slug=payload.slug)
+    session.add(category)
+    await session.commit()
+    await session.refresh(category)
+    return category
+
+
+async def _get_category_or_404(session: AsyncSession, blog_id: uuid.UUID, category_id: uuid.UUID) -> Category:
+    category = await session.get(Category, category_id)
+    if category is None or category.blog_id != blog_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Categoria non trovata.")
+    return category
+
+
+@router.patch("/{slug}/categories/{category_id}", response_model=CategoryOut)
+async def update_category(
+    slug: str,
+    category_id: uuid.UUID,
+    payload: CategoryUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> Category:
+    blog = await _get_blog_or_404(session, slug)
+    await _require_blog_write_access(session, current_user, blog)
+    category = await _get_category_or_404(session, blog.id, category_id)
+
+    try:
+        if payload.name is not None:
+            validate_category_name(payload.name)
+        if payload.slug is not None:
+            validate_category_slug(payload.slug)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    if payload.slug is not None and payload.slug != category.slug:
+        existing = await session.execute(
+            select(Category).where(Category.blog_id == blog.id, Category.slug == payload.slug)
+        )
+        if existing.scalar_one_or_none() is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "Esiste già una categoria con questo slug.")
+        category.slug = payload.slug
+
+    if payload.name is not None:
+        category.name = payload.name
+
+    await session.commit()
+    await session.refresh(category)
+    return category
+
+
+@router.delete("/{slug}/categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_category(
+    slug: str,
+    category_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """I post con questa categoria non vengono cancellati, restano solo
+    senza categoria (FK ondelete SET NULL, vedi app/models/post.py)."""
+    blog = await _get_blog_or_404(session, slug)
+    await _require_blog_write_access(session, current_user, blog)
+    category = await _get_category_or_404(session, blog.id, category_id)
+
+    await session.delete(category)
+    await session.commit()

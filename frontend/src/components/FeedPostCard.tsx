@@ -28,6 +28,7 @@ export function FeedPostCard({ post }: { post: Post }) {
         <p className="mt-1 text-sm text-muted">
           {post.author_display_name} · {post.blog_slug}
           {post.published_at && <> · {formatDate(post.published_at)}</>}
+          {post.category && <> · {post.category.name}</>}
         </p>
         <p className="mt-2 text-sm leading-relaxed text-foreground/80">{excerpt(post.content, 180)}</p>
         {post.tags.length > 0 && (

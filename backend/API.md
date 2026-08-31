@@ -252,6 +252,28 @@ altrimenti). Immagine da incorporare nel Markdown di un post (es.
 {"url": "https://.../notturni/userdata/{user_uuid}/{blog_uuid}/media/{uuid}.png"}
 ```
 
+### Categorie
+
+Tassonomia del blog (CLAUDE.md): a differenza dei tag (liberi, fino a 5 per
+post — vedi sezione "Tag"), le categorie sono definite in anticipo dal
+proprietario/autori e un post ne ha **al più una**.
+
+**`GET /api/v1/blogs/{slug}/categories`** — pubblico. Elenco, ordinato per
+nome.
+
+**`POST /api/v1/blogs/{slug}/categories`** — richiede sessione e accesso in
+scrittura al blog. `{"name": "Viaggi", "slug": "viaggi"}` → `201`. `slug`:
+minuscolo, lettere/cifre/trattini singoli, max 60 caratteri. `400` se il
+formato non è valido, `409` se lo slug è già in uso su quel blog.
+
+**`PATCH /api/v1/blogs/{slug}/categories/{category_id}`** — stessa
+autorizzazione. Aggiorna `name`/`slug` (entrambi opzionali); stesse regole
+di validazione/unicità della creazione.
+
+**`DELETE /api/v1/blogs/{slug}/categories/{category_id}`** — stessa
+autorizzazione. I post con questa categoria non vengono cancellati, restano
+solo senza categoria.
+
 ## Post
 
 Il contenuto (`content`) è **Markdown**: nessun rendering lato backend, la
@@ -285,7 +307,7 @@ nuova "famiglia" di traduzioni (`translation_group_id` = un nuovo UUID).
 Accoda anche un backup su S3 (vedi sezione "Media e backup" più sotto).
 
 ```json
-{"slug": "primo-post", "title": "...", "content": "# Markdown...", "author_display_name": null, "locale": null, "cover_image_url": null, "tags": null}
+{"slug": "primo-post", "title": "...", "content": "# Markdown...", "author_display_name": null, "locale": null, "cover_image_url": null, "tags": null, "category_id": null}
 ```
 
 `author_display_name` è opzionale: se omesso usa lo username, ma può essere
@@ -298,8 +320,10 @@ stringa, non verifica che punti davvero a un media caricato su questo blog.
 `cover_image_is_sensitive` (default `false`) riprende l'esito della
 moderazione automatica ricevuto in quella stessa risposta di upload — vedi
 sezione "Moderazione automatica delle immagini" più sotto; non viene
-ricalcolato qui. `tags` è opzionale (vedi sezione "Tag" sotto). `409` se lo
-slug è già in uso su quel blog per quella lingua.
+ricalcolato qui. `tags` è opzionale (vedi sezione "Tag" sotto).
+`category_id` è opzionale: l'UUID di una categoria esistente del blog (vedi
+sezione "Categorie" sopra) — `404` se non appartiene a questo blog. `409` se
+lo slug è già in uso su quel blog per quella lingua.
 
 ### Tag
 
@@ -322,6 +346,11 @@ Ogni `PostOut` espone due campi:
   da mostrare in lettura e usato per il filtro `?tag=` del feed e per la
   sezione di tendenza (vedi sezione "Feed" più sotto).
 
+Ogni `PostOut` espone anche `category`: `null`, oppure
+`{"id", "name", "slug"}` della categoria del blog assegnata al post (vedi
+sezione "Categorie" sopra) — a differenza dei tag, un post ha al più una
+categoria.
+
 In `PATCH /posts/{post_id}` (vedi sotto): `tags` assente lascia invariati i
 tag del campo dedicato; una lista (anche vuota, `[]`) li sostituisce. Gli
 hashtag nel testo vengono invece ricalcolati **ad ogni modifica del
@@ -333,11 +362,14 @@ creazione. Aggiunge una traduzione alla stessa famiglia del post indicato
 proprio slug:
 
 ```json
-{"slug": "my-post", "locale": "en", "title": "...", "content": "...", "author_display_name": null}
+{"slug": "my-post", "locale": "en", "title": "...", "content": "...", "author_display_name": null, "category_id": null}
 ```
 
 `409` se esiste già una traduzione per quella lingua nella famiglia, o se lo
-slug è già in uso su quel blog per quella lingua.
+slug è già in uso su quel blog per quella lingua. `category_id` è opzionale:
+se omesso la traduzione eredita la categoria del post originale; se passato
+esplicitamente (anche `null`, per non assegnarne una) sovrascrive
+l'eredità.
 
 **`GET /api/v1/posts/{post_id}/translations`** — pubblico. Lista
 `{id, locale, slug, status}` di tutte le traduzioni **pubblicamente visibili**
@@ -368,13 +400,18 @@ mai esporre l'UUID nell'URL. `400` se la data non è nel formato `YYYYMMDD`,
 visibile per il chiamante).
 
 **`PATCH /api/v1/posts/{post_id}`** — stessa autorizzazione della creazione.
-Aggiorna `title`/`content`/`cover_image_url`/`cover_image_is_sensitive`/`tags`
+Aggiorna
+`title`/`content`/`cover_image_url`/`cover_image_is_sensitive`/`tags`/`category_id`
 (tutti opzionali). Se `content` cambia, accoda di nuovo il backup su S3. Per
 `cover_image_url`: valore assente (`null`/campo omesso) lascia la cover
 invariata, stringa vuota `""` la rimuove (azzerando anche
 `cover_image_is_sensitive`, indipendentemente da cosa viene passato per
-quel campo), qualsiasi altro valore la sostituisce. Per `tags`, vedi
-sezione "Tag" sopra.
+quel campo), qualsiasi altro valore la sostituisce. Per `tags`, vedi sezione
+"Tag" sopra. Per `category_id`: campo assente lascia la categoria invariata,
+`null` esplicito la rimuove, un UUID valido la sostituisce (`404` se non
+appartiene a questo blog) — a differenza di `cover_image_url` non esiste un
+valore "vuoto" per un UUID, da cui la distinzione esplicita
+assente/`null`/valore.
 
 **`POST /api/v1/posts/{post_id}/submit-for-review`** — proprietario/autore/
 co-autore. Sposta un post da `draft` a `pending_review` (`400` se non era in
@@ -661,10 +698,12 @@ recente — pensato per la homepage della piattaforma (CLAUDE.md #2:
 
 Query param opzionali: `locale` (filtra una lingua, altrimenti tutte
 insieme), `tag` (filtra per tag normalizzato, es. `poesia` non `#Poesia` —
-vedi sezione "Tag" sopra), `limit` (default 20, massimo 50), `offset`
-(paginazione, default 0). Router separato da `/blogs/{slug}/posts` apposta:
-qui i post attraversano blog diversi, non sono scoped a uno slug/id
-specifico.
+vedi sezione "Tag" sopra), `category` (filtra per slug di categoria — vedi
+sezione "Categorie" sopra; essendo la categoria per-blog, blog diversi con
+una categoria omonima compaiono insieme, come già avviene per i tag),
+`limit` (default 20, massimo 50), `offset` (paginazione, default 0). Router
+separato da `/blogs/{slug}/posts` apposta: qui i post attraversano blog
+diversi, non sono scoped a uno slug/id specifico.
 
 **`GET /api/v1/feed/trending`** — pubblico, nessuna autenticazione. Tag più
 usati tra i post pubblicati negli ultimi `days` giorni (default 7, massimo

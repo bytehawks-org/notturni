@@ -337,4 +337,24 @@ ALTER TABLE posts ADD COLUMN cover_image_is_sensitive BOOLEAN DEFAULT false NOT 
 
 UPDATE alembic_version SET version_num='d5dbeeb3f79f' WHERE alembic_version.version_num = 'f3ed30401d5f';
 
+-- Running upgrade d5dbeeb3f79f -> b16963e9cdcb
+
+CREATE TABLE categories (
+    blog_id UUID NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    slug VARCHAR(60) NOT NULL,
+    id UUID NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    FOREIGN KEY(blog_id) REFERENCES blogs (id),
+    PRIMARY KEY (id),
+    CONSTRAINT uq_category_blog_slug UNIQUE (blog_id, slug)
+);
+
+ALTER TABLE posts ADD COLUMN category_id UUID;
+
+ALTER TABLE posts ADD CONSTRAINT fk_posts_category_id_categories FOREIGN KEY(category_id) REFERENCES categories (id) ON DELETE SET NULL;
+
+UPDATE alembic_version SET version_num='b16963e9cdcb' WHERE alembic_version.version_num = 'd5dbeeb3f79f';
+
 COMMIT;

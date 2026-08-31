@@ -6,6 +6,7 @@ import { useState, type FormEvent } from "react";
 
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { CategorySelect } from "@/components/editor/CategorySelect";
 import { CoverImageUpload } from "@/components/editor/CoverImageUpload";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
 import { TagInput } from "@/components/editor/TagInput";
@@ -25,6 +26,7 @@ export default function NewPostPage() {
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
   const [coverImageIsSensitive, setCoverImageIsSensitive] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
+  const [categoryId, setCategoryId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -41,6 +43,7 @@ export default function NewPostPage() {
           cover_image_url: coverImageUrl,
           cover_image_is_sensitive: coverImageIsSensitive,
           tags,
+          category_id: categoryId,
         })
       );
       router.push(`/dashboard/blogs/${params.slug}/posts/${post.id}`);
@@ -81,6 +84,10 @@ export default function NewPostPage() {
             className="border-0 bg-transparent p-0 text-foreground/70 placeholder:text-muted focus:text-foreground focus:outline-none"
             style={{ width: `${Math.max(slug.length, 14) + 1}ch` }}
           />
+        </div>
+
+        <div className="mb-4">
+          <CategorySelect blogSlug={params.slug} value={categoryId} onChange={setCategoryId} />
         </div>
 
         <div className="mb-8">

@@ -46,9 +46,25 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
         <p className="mt-4 text-sm text-muted">
           {post.author_display_name}
           {post.published_at && <> · {formatDate(post.published_at)}</>}
+          {post.category && (
+            <>
+              {" · "}
+              <Link href={`/?category=${encodeURIComponent(post.category.slug)}`} className="hover:text-primary">
+                {post.category.name}
+              </Link>
+            </>
+          )}
         </p>
 
-        {post.cover_image_url && (
+        {post.cover_image_url && post.cover_image_is_sensitive && (
+          <div className="sensitive-image-wrapper mt-8 aspect-[16/9] w-full overflow-hidden rounded-xl">
+            <input type="checkbox" className="sensitive-image-toggle" aria-label="Rivela l'immagine di copertina" />
+            {/* eslint-disable-next-line @next/next/no-img-element -- URL S3/MinIO esterno */}
+            <img src={post.cover_image_url} alt="" className="h-full w-full object-cover" />
+            <span className="sensitive-image-overlay">Contenuto sensibile — clicca per vedere</span>
+          </div>
+        )}
+        {post.cover_image_url && !post.cover_image_is_sensitive && (
           // eslint-disable-next-line @next/next/no-img-element -- URL S3/MinIO esterno
           <img
             src={post.cover_image_url}

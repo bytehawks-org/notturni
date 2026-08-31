@@ -104,6 +104,34 @@ async def test_feed_filters_by_tag(client: AsyncClient, make_user: Callable) -> 
     assert untagged["id"] not in ids
 
 
+async def test_feed_filters_by_category(client: AsyncClient, make_user: Callable) -> None:
+    owner: AuthedUser = await make_user("feed-owner-category")
+    await client.post("/api/v1/blogs", json={"slug": "feed-blog-category", "title": "x"}, headers=owner.headers)
+
+    cat_res = await client.post(
+        "/api/v1/blogs/feed-blog-category/categories",
+        json={"name": "Cucina", "slug": "cucina"},
+        headers=owner.headers,
+    )
+    assert cat_res.status_code == 201
+    category_id = cat_res.json()["id"]
+
+    categorized_res = await client.post(
+        "/api/v1/blogs/feed-blog-category/posts",
+        json={"slug": "con-categoria", "title": "x", "content": "y", "category_id": category_id},
+        headers=owner.headers,
+    )
+    categorized_id = categorized_res.json()["id"]
+    await client.post(f"/api/v1/posts/{categorized_id}/publish", headers=owner.headers)
+
+    uncategorized = await _create_and_publish(client, owner, "feed-blog-category", "senza-categoria")
+
+    res = await client.get("/api/v1/feed/posts?category=cucina")
+    ids = [p["id"] for p in res.json()]
+    assert categorized_id in ids
+    assert uncategorized["id"] not in ids
+
+
 async def test_trending_tags_counts_recent_published_posts(
     client: AsyncClient, make_user: Callable
 ) -> None:
