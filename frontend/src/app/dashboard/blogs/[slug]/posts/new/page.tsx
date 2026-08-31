@@ -23,6 +23,7 @@ export default function NewPostPage() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
+  const [coverImageIsSensitive, setCoverImageIsSensitive] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -38,6 +39,7 @@ export default function NewPostPage() {
           title,
           content,
           cover_image_url: coverImageUrl,
+          cover_image_is_sensitive: coverImageIsSensitive,
           tags,
         })
       );
@@ -88,7 +90,11 @@ export default function NewPostPage() {
         <div className="mb-8">
           <CoverImageUpload
             value={coverImageUrl}
-            onChange={setCoverImageUrl}
+            isSensitive={coverImageIsSensitive}
+            onChange={(url, sensitive) => {
+              setCoverImageUrl(url);
+              setCoverImageIsSensitive(sensitive);
+            }}
             blogSlug={params.slug}
             authFetch={authFetch}
           />

@@ -92,3 +92,12 @@ export function RedoIcon() {
     </Icon>
   );
 }
+
+export function TableIcon() {
+  return (
+    <Icon>
+      <rect x="2.5" y="3.5" width="13" height="11" rx="1.2" />
+      <path d="M2.5 7.5h13M2.5 11.5h13M7 3.5v11" />
+    </Icon>
+  );
+}

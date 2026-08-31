@@ -1,6 +1,7 @@
 import "server-only";
 
 import DOMPurify from "isomorphic-dompurify";
+import { JSDOM } from "jsdom";
 import MarkdownIt from "markdown-it";
 
 // Il backend salva Markdown grezzo, non fidato (può arrivare anche da
@@ -12,9 +13,34 @@ import MarkdownIt from "markdown-it";
 // immagini/link), difesa in profondità più che ridondanza.
 const renderer = new MarkdownIt({ html: false, linkify: true, breaks: false });
 
+/** Un'immagine segnalata sensibile dalla moderazione automatica (vedi
+ * API.md) viene inserita dall'editor come `![alt](url "sensitive")`: il
+ * title "sensitive" è la convenzione con cui il Markdown porta con sé
+ * l'informazione, senza bisogno di una tabella dedicata. Qui la trasformiamo
+ * in un blocco sfocato, cliccabile per rivelarla — un puro trucco CSS
+ * (checkbox nascosto + selettore ~), niente JavaScript lato client. */
+function wrapSensitiveImages(html: string): string {
+  const dom = new JSDOM(`<body>${html}</body>`);
+  const document = dom.window.document;
+  document.querySelectorAll('img[title="sensitive"]').forEach((img) => {
+    const wrapper = document.createElement("label");
+    wrapper.className = "sensitive-image-wrapper";
+    const toggle = document.createElement("input");
+    toggle.type = "checkbox";
+    toggle.className = "sensitive-image-toggle";
+    const overlay = document.createElement("span");
+    overlay.className = "sensitive-image-overlay";
+    overlay.textContent = "Contenuto sensibile — clicca per vedere";
+    img.replaceWith(wrapper);
+    wrapper.append(toggle, img, overlay);
+  });
+  return document.body.innerHTML;
+}
+
 export function renderMarkdown(markdown: string): string {
   const rawHtml = renderer.render(markdown);
-  return DOMPurify.sanitize(rawHtml);
+  const cleanHtml = DOMPurify.sanitize(rawHtml);
+  return wrapSensitiveImages(cleanHtml);
 }
 
 /** Estratto in solo testo per anteprime (card del feed, meta description):

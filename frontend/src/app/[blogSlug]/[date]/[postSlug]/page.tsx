@@ -61,7 +61,7 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
 
         {post.tags.length > 0 && (
           <div className="mt-10">
-            <TagPills tags={post.tags} />
+            <TagPills tags={post.tags} label="Tag:" />
           </div>
         )}
       </main>

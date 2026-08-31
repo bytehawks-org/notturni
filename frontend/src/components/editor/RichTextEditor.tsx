@@ -3,6 +3,10 @@
 import ImageExtension from "@tiptap/extension-image";
 import LinkExtension from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
+import { Table } from "@tiptap/extension-table";
+import TableCell from "@tiptap/extension-table-cell";
+import TableHeader from "@tiptap/extension-table-header";
+import TableRow from "@tiptap/extension-table-row";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useRef, useState } from "react";
@@ -16,6 +20,7 @@ import {
   OrderedListIcon,
   QuoteIcon,
   RedoIcon,
+  TableIcon,
   UndoIcon,
 } from "./icons";
 
@@ -69,9 +74,13 @@ const DEFAULT_TOOLBAR_STATE = {
   strike: false,
   code: false,
   link: false,
+  heading1: false,
+  heading2: false,
+  heading3: false,
   blockquote: false,
   bulletList: false,
   orderedList: false,
+  inTable: false,
   canUndo: false,
   canRedo: false,
 };
@@ -93,6 +102,14 @@ export function RichTextEditor({ value, onChange, blogSlug, authFetch, placehold
       LinkExtension.configure({ openOnClick: false, autolink: true }),
       ImageExtension,
       Placeholder.configure({ placeholder: placeholder ?? "Scrivi qualcosa..." }),
+      // resizable:false — una larghezza di colonna persistita non è
+      // rappresentabile in una tabella Markdown a pipe, che non la prevede.
+      // Table.addExtensions() dovrebbe includere già Row/Cell/Header da sé,
+      // ma nella pratica lo schema non li registra — aggiunti esplicitamente.
+      Table.configure({ resizable: false }),
+      TableRow,
+      TableHeader,
+      TableCell,
       Markdown.configure({ html: false, linkify: true, tightLists: true }),
     ],
     content: initialValue,
@@ -133,9 +150,13 @@ export function RichTextEditor({ value, onChange, blogSlug, authFetch, placehold
             strike: ctx.editor.isActive("strike"),
             code: ctx.editor.isActive("code"),
             link: ctx.editor.isActive("link"),
+            heading1: ctx.editor.isActive("heading", { level: 1 }),
+            heading2: ctx.editor.isActive("heading", { level: 2 }),
+            heading3: ctx.editor.isActive("heading", { level: 3 }),
             blockquote: ctx.editor.isActive("blockquote"),
             bulletList: ctx.editor.isActive("bulletList"),
             orderedList: ctx.editor.isActive("orderedList"),
+            inTable: ctx.editor.isActive("table"),
             canUndo: ctx.editor.can().undo(),
             canRedo: ctx.editor.can().redo(),
           }
@@ -158,8 +179,18 @@ export function RichTextEditor({ value, onChange, blogSlug, authFetch, placehold
   async function handleImagePicked(file: File) {
     setUploadError(null);
     try {
-      const { url } = await authFetch((token) => api.blogs.uploadMedia(token, blogSlug, file));
-      editor!.chain().focus().setImage({ src: url }).run();
+      const media = await authFetch((token) => api.blogs.uploadMedia(token, blogSlug, file));
+      const alt = window.prompt("Testo alternativo dell'immagine (per l'accessibilità)", "") ?? "";
+      editor!
+        .chain()
+        .focus()
+        .setImage({ src: media.url, alt: alt || undefined, title: media.is_sensitive ? "sensitive" : undefined })
+        .run();
+      if (media.is_sensitive) {
+        setUploadError(
+          "L'immagine è stata segnalata come possibile contenuto sensibile: verrà mostrata sfocata ai lettori, cliccabile per rivelarla."
+        );
+      }
     } catch (err) {
       setUploadError(err instanceof ApiClientError ? err.message : "Caricamento immagine non riuscito.");
     }
@@ -170,6 +201,30 @@ export function RichTextEditor({ value, onChange, blogSlug, authFetch, placehold
       {/* Barra flottante, senza contenitore: solo un filo di spazio la separa
           dal testo, niente riquadro o bordo a delimitarla. */}
       <div className="mb-3 flex flex-wrap items-center gap-1 text-foreground/70">
+        <ToolbarButton
+          title="Titolo 1"
+          active={state.heading1}
+          onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+        >
+          <span className="font-bold">H1</span>
+        </ToolbarButton>
+        <ToolbarButton
+          title="Titolo 2"
+          active={state.heading2}
+          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+        >
+          <span className="font-bold">H2</span>
+        </ToolbarButton>
+        <ToolbarButton
+          title="Titolo 3"
+          active={state.heading3}
+          onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+        >
+          <span className="font-bold">H3</span>
+        </ToolbarButton>
+
+        <ToolbarDivider />
+
         <ToolbarButton title="Grassetto" active={state.bold} onClick={() => editor.chain().focus().toggleBold().run()}>
           <span className="font-bold">B</span>
         </ToolbarButton>
@@ -216,6 +271,28 @@ export function RichTextEditor({ value, onChange, blogSlug, authFetch, placehold
         <ToolbarButton title="Immagine" onClick={() => fileInputRef.current?.click()}>
           <ImageIcon />
         </ToolbarButton>
+        <ToolbarButton
+          title="Tabella"
+          active={state.inTable}
+          onClick={() =>
+            editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
+          }
+        >
+          <TableIcon />
+        </ToolbarButton>
+        {state.inTable && (
+          <>
+            <ToolbarButton title="Aggiungi colonna" onClick={() => editor.chain().focus().addColumnAfter().run()}>
+              <span className="text-xs">+col</span>
+            </ToolbarButton>
+            <ToolbarButton title="Aggiungi riga" onClick={() => editor.chain().focus().addRowAfter().run()}>
+              <span className="text-xs">+riga</span>
+            </ToolbarButton>
+            <ToolbarButton title="Elimina tabella" onClick={() => editor.chain().focus().deleteTable().run()}>
+              <span className="text-xs text-red-700">✕tab</span>
+            </ToolbarButton>
+          </>
+        )}
 
         <ToolbarDivider />
 

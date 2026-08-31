@@ -23,18 +23,20 @@ function errorMessage(err: unknown): string {
 export default function PostEditorPage() {
   const params = useParams<{ slug: string; postId: string }>();
   const router = useRouter();
-  const { accessToken, authFetch } = useAuth();
+  const { user, accessToken, authFetch } = useAuth();
 
   const [post, setPost] = useState<Post | null>(null);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
+  const [coverImageIsSensitive, setCoverImageIsSensitive] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   const [translations, setTranslations] = useState<PostTranslationSummary[]>([]);
+  const [fallbackLanguages, setFallbackLanguages] = useState<string[]>([]);
 
   const load = useCallback(() => {
     api.posts
@@ -44,11 +46,22 @@ export default function PostEditorPage() {
         setTitle(p.title);
         setContent(p.content);
         setCoverImageUrl(p.cover_image_url);
+        setCoverImageIsSensitive(p.cover_image_is_sensitive);
         setTags(p.manual_tags);
       })
       .catch((err) => setError(errorMessage(err)));
     api.posts.translations(params.postId).then(setTranslations).catch(() => undefined);
   }, [params.postId, accessToken]);
+
+  // Le lingue di fallback del profilo (vedi dashboard/profile) popolano il
+  // selettore lingua in "Aggiungi traduzione", invece di dover scrivere la sigla.
+  useEffect(() => {
+    if (!user) return;
+    api.users
+      .profile(user.username)
+      .then((p) => setFallbackLanguages(p.fallback_languages))
+      .catch(() => undefined);
+  }, [user]);
 
   useEffect(load, [load]);
 
@@ -62,6 +75,7 @@ export default function PostEditorPage() {
           title,
           content,
           cover_image_url: coverImageUrl ?? "",
+          cover_image_is_sensitive: coverImageIsSensitive,
           tags,
         })
       );
@@ -134,7 +148,11 @@ export default function PostEditorPage() {
         <div className="mb-8">
           <CoverImageUpload
             value={coverImageUrl}
-            onChange={setCoverImageUrl}
+            isSensitive={coverImageIsSensitive}
+            onChange={(url, sensitive) => {
+              setCoverImageUrl(url);
+              setCoverImageIsSensitive(sensitive);
+            }}
             blogSlug={params.slug}
             authFetch={authFetch}
           />
@@ -159,6 +177,7 @@ export default function PostEditorPage() {
         currentLocale={post.locale}
         blogSlug={params.slug}
         translations={translations}
+        suggestedLocales={fallbackLanguages}
         authFetch={authFetch}
         onAddTranslation={handleAddTranslation}
       />

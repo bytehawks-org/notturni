@@ -110,3 +110,56 @@ body {
   border-radius: 0.5em;
   margin: 0.75em 0;
 }
+.notturni-prose table {
+  width: 100%;
+  margin: 1em 0;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+.notturni-prose th,
+.notturni-prose td {
+  border: 1px solid var(--border-color);
+  padding: 0.5em 0.75em;
+  text-align: left;
+}
+.notturni-prose th {
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+  font-weight: 600;
+}
+
+/* Immagine segnalata come possibile contenuto sensibile dalla moderazione
+   automatica (vedi lib/markdown.ts e API.md) — sfocata finché non ci si
+   clicca sopra. Puro CSS (checkbox nascosto + selettore ~), non serve JS
+   lato client: la pagina pubblica del post resta un Server Component. */
+.sensitive-image-wrapper {
+  position: relative;
+  display: block;
+  cursor: pointer;
+}
+.sensitive-image-toggle {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.sensitive-image-wrapper img {
+  filter: blur(28px);
+  transition: filter 0.2s;
+}
+.sensitive-image-toggle:checked ~ img {
+  filter: none;
+}
+.sensitive-image-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 1em;
+  background: rgb(0 0 0 / 25%);
+  color: #fff;
+  font-size: 0.875rem;
+}
+.sensitive-image-toggle:checked ~ .sensitive-image-overlay {
+  display: none;
+}

@@ -60,6 +60,8 @@ export interface Post {
   slug: string;
   content: string;
   cover_image_url: string | null;
+  /** Risultato della moderazione automatica al momento dell'upload — vedi API.md. */
+  cover_image_is_sensitive: boolean;
   status: PostStatus;
   published_at: string | null;
   created_at: string;

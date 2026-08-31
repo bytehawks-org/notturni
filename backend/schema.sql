@@ -331,4 +331,10 @@ ALTER TABLE users ADD COLUMN fallback_languages VARCHAR(2)[] DEFAULT '{}' NOT NU
 
 UPDATE alembic_version SET version_num='f3ed30401d5f' WHERE alembic_version.version_num = 'bd9a65e7bdd4';
 
+-- Running upgrade f3ed30401d5f -> d5dbeeb3f79f
+
+ALTER TABLE posts ADD COLUMN cover_image_is_sensitive BOOLEAN DEFAULT false NOT NULL;
+
+UPDATE alembic_version SET version_num='d5dbeeb3f79f' WHERE alembic_version.version_num = 'f3ed30401d5f';
+
 COMMIT;

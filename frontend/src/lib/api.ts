@@ -111,11 +111,17 @@ export const api = {
     unfollow: (token: string, slug: string) =>
       request<void>(`/api/v1/blogs/${slug}/follow`, { method: "DELETE", token }),
     followers: (slug: string) => request<{ username: string }[]>(`/api/v1/blogs/${slug}/followers`),
-    /** Immagine da incorporare nel contenuto o da usare come cover di un post. */
+    /** Immagine da incorporare nel contenuto o da usare come cover di un post.
+     * `is_sensitive`: risultato della moderazione automatica (nudità/contenuti
+     * sensibili) fatta lato backend al momento dell'upload — vedi API.md. */
     uploadMedia: (token: string, slug: string, file: File) => {
       const formData = new FormData();
       formData.append("file", file);
-      return request<{ url: string }>(`/api/v1/blogs/${slug}/media`, { method: "POST", token, formData });
+      return request<{ url: string; is_sensitive: boolean }>(`/api/v1/blogs/${slug}/media`, {
+        method: "POST",
+        token,
+        formData,
+      });
     },
   },
 
@@ -137,13 +143,20 @@ export const api = {
         author_display_name?: string;
         locale?: string;
         cover_image_url?: string | null;
+        cover_image_is_sensitive?: boolean;
         tags?: string[];
       }
     ) => request<Post>(`/api/v1/blogs/${blogSlug}/posts`, { method: "POST", token, body: payload }),
     update: (
       token: string,
       postId: string,
-      payload: { title?: string; content?: string; cover_image_url?: string | null; tags?: string[] }
+      payload: {
+        title?: string;
+        content?: string;
+        cover_image_url?: string | null;
+        cover_image_is_sensitive?: boolean;
+        tags?: string[];
+      }
     ) => request<Post>(`/api/v1/posts/${postId}`, { method: "PATCH", token, body: payload }),
     publish: (token: string, postId: string) =>
       request<Post>(`/api/v1/posts/${postId}/publish`, { method: "POST", token }),

@@ -27,6 +27,9 @@ interface TranslationsBarProps {
    * per questo il post corrente va sempre mostrato a parte: se è una bozza
    * non compare in questa lista, nemmeno se stesso. */
   translations: PostTranslationSummary[];
+  /** Lingue di fallback del profilo (dashboard/profilo): popolano il
+   * selettore lingua qui sotto invece di dover scrivere la sigla a mano. */
+  suggestedLocales: string[];
   authFetch: <T>(fn: (token: string) => Promise<T>) => Promise<T>;
   onAddTranslation: (payload: { slug: string; locale: string; title: string; content: string }) => Promise<void>;
 }
@@ -39,10 +42,13 @@ export function TranslationsBar({
   currentLocale,
   blogSlug,
   translations,
+  suggestedLocales,
   authFetch,
   onAddTranslation,
 }: TranslationsBarProps) {
   const otherTranslations = translations.filter((t) => t.id !== currentPostId);
+  const alreadyUsed = new Set([currentLocale, ...otherTranslations.map((t) => t.locale)]);
+  const availableSuggestions = suggestedLocales.filter((l) => !alreadyUsed.has(l));
   const [adding, setAdding] = useState(false);
   const [trLocale, setTrLocale] = useState("");
   const [trSlug, setTrSlug] = useState("");
@@ -94,15 +100,35 @@ export function TranslationsBar({
       {adding && (
         <form onSubmit={handleAdd} className="mt-6">
           <div className="mb-4 flex flex-wrap items-center gap-4">
-            <input
-              required
-              maxLength={2}
-              minLength={2}
-              placeholder="Lingua (es. en)"
-              value={trLocale}
-              onChange={(e) => setTrLocale(e.target.value.toLowerCase())}
-              className="w-32 border-0 border-b border-border bg-transparent py-1 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
-            />
+            {availableSuggestions.length > 0 ? (
+              <select
+                required
+                value={trLocale}
+                onChange={(e) => setTrLocale(e.target.value)}
+                className="rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+              >
+                <option value="" disabled>
+                  Lingua…
+                </option>
+                {availableSuggestions.map((code) => (
+                  <option key={code} value={code}>
+                    {localeName(code)}
+                  </option>
+                ))}
+                <option value="__other__">Un&apos;altra lingua…</option>
+              </select>
+            ) : null}
+            {(availableSuggestions.length === 0 || trLocale === "__other__") && (
+              <input
+                required
+                maxLength={2}
+                minLength={2}
+                placeholder="Lingua (es. en)"
+                value={trLocale === "__other__" ? "" : trLocale}
+                onChange={(e) => setTrLocale(e.target.value.toLowerCase())}
+                className="w-32 border-0 border-b border-border bg-transparent py-1 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
+              />
+            )}
             <input
               required
               placeholder="Slug"

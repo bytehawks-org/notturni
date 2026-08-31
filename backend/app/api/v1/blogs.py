@@ -14,6 +14,7 @@ from app.core.storage import content_public_url, upload_media
 from app.domain.authorization import can_write_posts
 from app.domain.blog_config import DEFAULT_BLOG_CONFIG, validate_blog_config
 from app.domain.blog_rules import assert_can_create_blog, validate_blog_slug
+from app.domain.moderation import classify_image
 from app.domain.i18n import DEFAULT_LOCALE, validate_locale
 from app.models.blog import Blog
 from app.models.blog_config import BlogConfig
@@ -225,6 +226,9 @@ async def update_blog_config(
 
 class MediaOut(BaseModel):
     url: str
+    # Risultato della moderazione automatica (app/domain/moderation.py):
+    # False anche se il servizio è disattivato/irraggiungibile — mai bloccante.
+    is_sensitive: bool
 
 
 @router.post("/{slug}/media", response_model=MediaOut, status_code=status.HTTP_201_CREATED)
@@ -255,4 +259,5 @@ async def upload_blog_media(
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
-    return MediaOut(url=content_public_url(object_key))
+    is_sensitive = await classify_image(content, file.filename or "image", file.content_type or "")
+    return MediaOut(url=content_public_url(object_key), is_sensitive=is_sensitive)

@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ARRAY, DateTime, Enum, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import ARRAY, Boolean, DateTime, Enum, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -41,6 +41,12 @@ class Post(Base, UUIDPKMixin, TimestampMixin):
     # Immagine di copertina (URL pubblico su MinIO/S3, stesso bucket/prefisso
     # dei media incorporati nel contenuto — vedi POST /blogs/{slug}/media).
     cover_image_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    # Risultato della moderazione automatica (app/domain/moderation.py) al
+    # momento dell'upload della cover — il client lo riceve già nella
+    # risposta di POST /blogs/{slug}/media e lo ripropone qui, non viene
+    # ricalcolato lato server (stesso principio di fiducia già in atto per
+    # cover_image_url stesso: non verificato contro un media reale).
+    cover_image_is_sensitive: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Tag inseriti esplicitamente nel campo dedicato (vedi app/domain/tags.py):
     # SOLO quelli, non gli hashtag nel testo — serve a poterli ripresentare

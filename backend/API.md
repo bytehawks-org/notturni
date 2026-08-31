@@ -295,8 +295,11 @@ diverso — il nome pubblico dell'autore può non coincidere con l'utente reale
 blog. `cover_image_url` è opzionale: l'URL ritornato da un precedente upload
 su `POST /blogs/{slug}/media` (vedi sotto) — il campo accetta qualsiasi
 stringa, non verifica che punti davvero a un media caricato su questo blog.
-`tags` è opzionale (vedi sezione "Tag" sotto). `409` se lo slug è già in uso
-su quel blog per quella lingua.
+`cover_image_is_sensitive` (default `false`) riprende l'esito della
+moderazione automatica ricevuto in quella stessa risposta di upload — vedi
+sezione "Moderazione automatica delle immagini" più sotto; non viene
+ricalcolato qui. `tags` è opzionale (vedi sezione "Tag" sotto). `409` se lo
+slug è già in uso su quel blog per quella lingua.
 
 ### Tag
 
@@ -365,11 +368,13 @@ mai esporre l'UUID nell'URL. `400` se la data non è nel formato `YYYYMMDD`,
 visibile per il chiamante).
 
 **`PATCH /api/v1/posts/{post_id}`** — stessa autorizzazione della creazione.
-Aggiorna `title`/`content`/`cover_image_url`/`tags` (tutti opzionali). Se
-`content` cambia, accoda di nuovo il backup su S3. Per `cover_image_url`:
-valore assente (`null`/campo omesso) lascia la cover invariata, stringa
-vuota `""` la rimuove, qualsiasi altro valore la sostituisce. Per `tags`,
-vedi sezione "Tag" sopra.
+Aggiorna `title`/`content`/`cover_image_url`/`cover_image_is_sensitive`/`tags`
+(tutti opzionali). Se `content` cambia, accoda di nuovo il backup su S3. Per
+`cover_image_url`: valore assente (`null`/campo omesso) lascia la cover
+invariata, stringa vuota `""` la rimuove (azzerando anche
+`cover_image_is_sensitive`, indipendentemente da cosa viene passato per
+quel campo), qualsiasi altro valore la sostituisce. Per `tags`, vedi
+sezione "Tag" sopra.
 
 **`POST /api/v1/posts/{post_id}/submit-for-review`** — proprietario/autore/
 co-autore. Sposta un post da `draft` a `pending_review` (`400` se non era in
@@ -425,6 +430,35 @@ Il worker va avviato separatamente (`python -m
 app.workers.post_backup_consumer`, già presente in `compose.yaml` come
 servizio `worker-post-backup`); senza, i messaggi restano semplicemente in
 coda finché il worker non viene avviato.
+
+### Moderazione automatica delle immagini
+
+Ogni upload via `POST /blogs/{slug}/media` passa (in modo sincrono, prima
+della risposta) per un classificatore NSFW self-hosted — servizio separato
+containerizzato in `moderation/` (nessuna immagine lascia mai
+l'infrastruttura: coerente con l'impostazione EU-centrica/GDPR, vedi
+CLAUDE.md), chiamato internamente via `NOCT_MODERATION_SERVICE_URL`
+(impostato automaticamente da `compose.yaml`). La risposta include
+`is_sensitive: bool`:
+
+```json
+{"url": "https://.../media/{uuid}.png", "is_sensitive": false}
+```
+
+Il chiamante decide cosa farne — per un'immagine nel contenuto, l'editor la
+inserisce come `![alt](url "sensitive")` (il `title` è la convenzione con
+cui l'informazione viaggia nel Markdown stesso, senza bisogno di una
+tabella dedicata: vedi `frontend/src/lib/markdown.ts`, che la rende sfocata
+e cliccabile per rivelarla); per la cover di un post, il flag va passato
+esplicitamente come `cover_image_is_sensitive` in creazione/modifica (vedi
+sezione Post) — non viene ricalcolato lato server in quel momento.
+
+**Fail open**: se il servizio di moderazione non è raggiungibile, non
+risponde in tempo, o `NOCT_MODERATION_SERVICE_URL` non è impostato,
+`is_sensitive` è sempre `false` — un problema di questo servizio ausiliario
+non deve mai far fallire un upload altrimenti riuscito (stesso principio
+già in atto per il backup dei post su S3). Non è pensato come barriera di
+sicurezza legale, solo come aiuto automatico all'autore.
 
 ## Commenti
 

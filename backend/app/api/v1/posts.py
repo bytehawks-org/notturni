@@ -30,6 +30,9 @@ class PostCreateRequest(BaseModel):
     author_display_name: str | None = None
     locale: str | None = None  # default: la lingua di default del blog
     cover_image_url: str | None = None
+    # Esito della moderazione automatica ricevuto da POST /blogs/{slug}/media
+    # al momento dell'upload (vedi app/domain/moderation.py) — non ricalcolato qui.
+    cover_image_is_sensitive: bool = False
     # Tag del campo dedicato (vedi app/domain/tags.py); si sommano agli
     # eventuali #hashtag scritti nel testo, massimo 5 in tutto.
     tags: list[str] | None = None
@@ -42,6 +45,7 @@ class PostTranslationRequest(BaseModel):
     content: str
     author_display_name: str | None = None
     cover_image_url: str | None = None
+    cover_image_is_sensitive: bool = False
     tags: list[str] | None = None
 
 
@@ -53,6 +57,8 @@ class PostUpdateRequest(BaseModel):
     # altri, ma qui None ha un significato ambiguo (rimuovi vs non toccare)
     # che risolviamo trattando "" come "rimuovi" in update_post.
     cover_image_url: str | None = None
+    # assente: lascia invariato; ha senso solo insieme a un nuovo cover_image_url.
+    cover_image_is_sensitive: bool | None = None
     # assente: lascia invariati i tag del campo dedicato; lista (anche vuota
     # []): la sostituisce. Gli #hashtag nel testo sono comunque ricalcolati
     # ad ogni modifica del contenuto, a prescindere da questo campo.
@@ -75,6 +81,7 @@ class PostOut(BaseModel):
     slug: str
     content: str
     cover_image_url: str | None
+    cover_image_is_sensitive: bool
     status: PostStatus
     published_at: datetime | None
     created_at: datetime
@@ -141,6 +148,7 @@ def _post_out(post: Post, blog: Blog) -> PostOut:
         slug=post.slug,
         content=post.content,
         cover_image_url=post.cover_image_url,
+        cover_image_is_sensitive=post.cover_image_is_sensitive,
         status=post.status,
         published_at=post.published_at,
         created_at=post.created_at,
@@ -236,6 +244,7 @@ async def create_post(
         slug=payload.slug,
         content=payload.content,
         cover_image_url=payload.cover_image_url,
+        cover_image_is_sensitive=payload.cover_image_is_sensitive,
         manual_tags=manual_tags,
     )
     session.add(post)
@@ -296,6 +305,7 @@ async def add_post_translation(
         slug=payload.slug,
         content=payload.content,
         cover_image_url=payload.cover_image_url,
+        cover_image_is_sensitive=payload.cover_image_is_sensitive,
         manual_tags=manual_tags,
     )
     session.add(translation)
@@ -415,6 +425,10 @@ async def update_post(
         post.content = payload.content
     if payload.cover_image_url is not None:
         post.cover_image_url = payload.cover_image_url or None
+        # nessuna nuova cover (rimossa): non ha senso restare "sensibile".
+        post.cover_image_is_sensitive = bool(post.cover_image_url) and (
+            payload.cover_image_is_sensitive or False
+        )
 
     # i tag vanno ricalcolati se è cambiato il contenuto (gli #hashtag nel
     # testo potrebbero essere cambiati) o se il campo dedicato è stato
