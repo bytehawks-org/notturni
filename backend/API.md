@@ -208,7 +208,12 @@ sotto).
 **`PATCH /api/v1/blogs/{slug}`** — richiede sessione, solo il proprietario
 (`403` altrimenti). Campi aggiornabili: `title`, `allow_anonymous_comments`
 (quest'ultimo governa se i commenti sono aperti anche a chi non è registrato,
-vedi sezione Commenti).
+vedi sezione Commenti), `default_author_display_name` — nome pubblico
+predefinito per i testi scritti su questo blog (CLAUDE.md #1: il nome
+dell'autore può differire dal nome utente reale), usato come default di
+`Post.author_display_name` quando non specificato esplicitamente in
+creazione (vedi sezione Post): stringa vuota `""` lo azzera (si torna al
+fallback sullo username), assente lo lascia invariato.
 
 **`POST /api/v1/blogs/{slug}/follow`** / **`DELETE .../follow`** — richiede
 sessione. Segui/smetti di seguire un blog; idempotenti (`204` anche se già
@@ -487,10 +492,30 @@ opzionali).
 **`GET /api/v1/users/{username}`** — pubblico. Profilo pubblico:
 
 ```json
-{"username": "...", "bio": "...", "avatar_url": "...", "social_links": [...], "created_at": "..."}
+{
+  "username": "...", "bio": "...",
+  "first_name": "...", "last_name": "...",
+  "country": "IT", "native_language": "it", "fallback_languages": ["en", "fr"],
+  "avatar_url": "...", "social_links": [...], "created_at": "..."
+}
 ```
 
-**`PATCH /api/v1/users/me`** — richiede sessione. Aggiorna `bio`.
+`first_name`/`last_name`/`country`/`native_language` sono liberi/opzionali.
+`country` è solo controllato nel formato (ISO 3166-1 alpha-2, es. `IT`, non
+verificato contro un elenco ufficiale dei paesi — vedi
+`app/domain/profile.py`). `native_language`/`fallback_languages` sono codici
+ISO 639-1 di 2 lettere, stesso formato del `locale` di post/pagine (vedi
+sezione Multilingua). `fallback_languages` sono pensate anche come le lingue
+verso cui l'utente potrà eventualmente tradurre i propri contenuti; massimo
+5.
+
+**`PATCH /api/v1/users/me`** — richiede sessione. Aggiorna `bio`,
+`first_name`, `last_name`, `country`, `native_language`,
+`fallback_languages` (tutti opzionali). Per `country`/`native_language`:
+stringa vuota `""` azzera il campo, assente lo lascia invariato, qualsiasi
+altro valore lo sostituisce (`400` se il formato non è valido). Per
+`fallback_languages`: assente lascia invariata la lista, una lista (anche
+vuota) la sostituisce (`400` se oltre 5 o un codice non valido).
 
 **`POST /api/v1/users/me/avatar`** — richiede sessione, `multipart/form-data`
 con campo `file`. Formati ammessi: PNG, JPEG, WEBP; max 2 MiB (`400`
@@ -502,8 +527,13 @@ avatar precedente. Ritorna `{"avatar_url": "..."}`.
 corrente (idempotente).
 
 **`POST /api/v1/users/me/social-links`** — richiede sessione.
-`{"label": "Mastodon", "url": "https://..."}` → `201`. Massimo 5 link per
-profilo (`400` oltre il limite).
+`{"label": "mastodon", "url": "https://..."}` → `201`. Massimo 5 link per
+profilo (`400` oltre il limite). `label` non è più pensato come etichetta
+libera ma come chiave di piattaforma (es. `mastodon`, `bluesky`, `github`,
+`website`) — l'elenco delle piattaforme note, con relativa icona
+monocromatica, è solo lato frontend (`frontend/src/lib/social-platforms.tsx`,
+facilmente estendibile): il backend continua a non validare il valore
+contro un elenco chiuso, resta una stringa libera.
 
 **`DELETE /api/v1/users/me/social-links/{link_id}`** — richiede sessione,
 solo un link proprio (`404` altrimenti, per non rivelarne l'esistenza).

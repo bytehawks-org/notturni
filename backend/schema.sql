@@ -315,4 +315,20 @@ ALTER TABLE posts ADD COLUMN manual_tags VARCHAR(30)[] DEFAULT '{}' NOT NULL;
 
 UPDATE alembic_version SET version_num='bd9a65e7bdd4' WHERE alembic_version.version_num = 'e416be915439';
 
+-- Running upgrade bd9a65e7bdd4 -> f3ed30401d5f
+
+ALTER TABLE blogs ADD COLUMN default_author_display_name VARCHAR(255);
+
+ALTER TABLE users ADD COLUMN first_name VARCHAR(100);
+
+ALTER TABLE users ADD COLUMN last_name VARCHAR(100);
+
+ALTER TABLE users ADD COLUMN country VARCHAR(2);
+
+ALTER TABLE users ADD COLUMN native_language VARCHAR(2);
+
+ALTER TABLE users ADD COLUMN fallback_languages VARCHAR(2)[] DEFAULT '{}' NOT NULL;
+
+UPDATE alembic_version SET version_num='f3ed30401d5f' WHERE alembic_version.version_num = 'bd9a65e7bdd4';
+
 COMMIT;

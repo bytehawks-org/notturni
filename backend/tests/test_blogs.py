@@ -85,6 +85,51 @@ async def test_update_blog_owner_only(client: AsyncClient, make_user: Callable) 
     assert ok_res.json()["allow_anonymous_comments"] is True
 
 
+async def test_default_author_display_name_used_when_post_omits_it(
+    client: AsyncClient, make_user: Callable
+) -> None:
+    owner: AuthedUser = await make_user("owner-pen-name")
+    await client.post(
+        "/api/v1/blogs", json={"slug": "blog-pen-name", "title": "x"}, headers=owner.headers
+    )
+
+    set_res = await client.patch(
+        "/api/v1/blogs/blog-pen-name",
+        json={"default_author_display_name": "Nome di Penna"},
+        headers=owner.headers,
+    )
+    assert set_res.json()["default_author_display_name"] == "Nome di Penna"
+
+    post_res = await client.post(
+        "/api/v1/blogs/blog-pen-name/posts",
+        json={"slug": "post-anonimo", "title": "x", "content": "y"},
+        headers=owner.headers,
+    )
+    assert post_res.json()["author_display_name"] == "Nome di Penna"
+
+    # un autore che specifica esplicitamente il proprio nome per il singolo
+    # post continua a poterlo fare, sovrascrivendo il default del blog
+    override_res = await client.post(
+        "/api/v1/blogs/blog-pen-name/posts",
+        json={
+            "slug": "post-con-nome",
+            "title": "x",
+            "content": "y",
+            "author_display_name": "Altro Nome",
+        },
+        headers=owner.headers,
+    )
+    assert override_res.json()["author_display_name"] == "Altro Nome"
+
+    # rimozione con stringa vuota: torna al fallback sullo username
+    clear_res = await client.patch(
+        "/api/v1/blogs/blog-pen-name",
+        json={"default_author_display_name": ""},
+        headers=owner.headers,
+    )
+    assert clear_res.json()["default_author_display_name"] is None
+
+
 async def test_blog_follow_unfollow(client: AsyncClient, make_user: Callable) -> None:
     owner: AuthedUser = await make_user("owner2")
     follower: AuthedUser = await make_user("follower2")

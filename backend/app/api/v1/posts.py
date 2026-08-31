@@ -230,7 +230,7 @@ async def create_post(
     post = Post(
         blog_id=blog.id,
         author_id=current_user.id,
-        author_display_name=payload.author_display_name or current_user.username,
+        author_display_name=payload.author_display_name or blog.default_author_display_name or current_user.username,
         locale=locale,
         title=payload.title,
         slug=payload.slug,
@@ -289,7 +289,7 @@ async def add_post_translation(
     translation = Post(
         blog_id=blog.id,
         author_id=current_user.id,
-        author_display_name=payload.author_display_name or current_user.username,
+        author_display_name=payload.author_display_name or blog.default_author_display_name or current_user.username,
         translation_group_id=original.translation_group_id,
         locale=payload.locale,
         title=payload.title,

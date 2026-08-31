@@ -203,8 +203,17 @@ export const api = {
 
   users: {
     profile: (username: string) => request<Profile>(`/api/v1/users/${username}`),
-    updateMe: (token: string, payload: { bio?: string }) =>
-      request<Profile>("/api/v1/users/me", { method: "PATCH", token, body: payload }),
+    updateMe: (
+      token: string,
+      payload: {
+        bio?: string;
+        first_name?: string;
+        last_name?: string;
+        country?: string;
+        native_language?: string;
+        fallback_languages?: string[];
+      }
+    ) => request<Profile>("/api/v1/users/me", { method: "PATCH", token, body: payload }),
     uploadAvatar: (token: string, file: File) => {
       const formData = new FormData();
       formData.append("file", file);

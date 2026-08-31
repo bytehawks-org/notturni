@@ -35,7 +35,8 @@ Legenda stato:
 | Multilingua per post e pagine statiche | ✅ | Schema "famiglia di traduzioni" (`translation_group_id` + `locale` + slug per lingua). Il routing `/it/`, `/en/`, ... è lasciato al frontend: **il frontend pubblico multilingua/i18n-routing non è ancora costruito**, oggi si seleziona la lingua via parametro. |
 | Pagine statiche del sito principale (Chi siamo, Contatti, Privacy) | ✅ | CRUD gestito da Amministratore/Super Admin. |
 | Follow tra utenti e verso i blog | ✅ | |
-| Profilo utente: bio, avatar, link social | ✅ | Avatar su MinIO/S3. |
+| Profilo utente: bio, avatar, link social | ✅ | Avatar su MinIO/S3. Bio estesa con nome, cognome, paese, lingua madre e lingue di fallback (queste ultime anche come lingue verso cui l'utente potrà eventualmente tradurre i propri contenuti — stile fika.bar). Link social: elenco piattaforme con icona monocromatica in un file di configurazione lato frontend (`frontend/src/lib/social-platforms.tsx`), facilmente editabile; il backend resta agnostico (stringa libera). |
+| Nome pubblico predefinito per gli autori/co-autori di un blog | ✅ | `Blog.default_author_display_name`: usato come default di `Post.author_display_name` quando non specificato esplicitamente in creazione — resta comunque sovrascrivibile per singolo post/autore. |
 | Gestione contenuti in Markdown, nessun rendering lato backend | ✅ | Rendering a HTML e sanificazione lato frontend (Server Component + `markdown-it`/DOMPurify) sulla pagina pubblica del post — vedi permalink più sotto. |
 | UUID come chiave primaria per ogni entità | ✅ | |
 | Media su S3 in `.../userdata/{user_uuid}/{blog_uuid}/media/...` | ✅ | Bucket con policy pubblica scoped al solo prefisso `media/*`; stesso endpoint di upload usato sia per le immagini incorporate nel contenuto sia per la cover del post (`Post.cover_image_url`). |

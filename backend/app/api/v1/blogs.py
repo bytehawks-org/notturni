@@ -32,6 +32,10 @@ class BlogCreateRequest(BaseModel):
 class BlogUpdateRequest(BaseModel):
     title: str | None = None
     allow_anonymous_comments: bool | None = None
+    # "" per tornare al default (username di chi scrive), qualsiasi altro
+    # valore lo imposta; assente lascia invariato — stesso schema di
+    # Post.cover_image_url in PATCH /posts/{id}.
+    default_author_display_name: str | None = None
 
 
 class BlogOut(BaseModel):
@@ -41,6 +45,7 @@ class BlogOut(BaseModel):
     custom_domain: str | None
     allow_anonymous_comments: bool
     default_locale: str
+    default_author_display_name: str | None
     owner_id: uuid.UUID
     created_at: datetime
 
@@ -121,6 +126,8 @@ async def update_blog(
         blog.title = payload.title
     if payload.allow_anonymous_comments is not None:
         blog.allow_anonymous_comments = payload.allow_anonymous_comments
+    if payload.default_author_display_name is not None:
+        blog.default_author_display_name = payload.default_author_display_name or None
 
     await session.commit()
     await session.refresh(blog)

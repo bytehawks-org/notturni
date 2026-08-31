@@ -31,6 +31,12 @@ class Blog(Base, UUIDPKMixin, TimestampMixin):
     # i18n (CLAUDE.md #1/#2): lingua di default del blog; i singoli post
     # possono avere traduzioni in altre lingue, vedi app/models/post.py
     default_locale: Mapped[str] = mapped_column(String(2), default=DEFAULT_LOCALE, nullable=False)
+    # Nome pubblico predefinito per i testi scritti su questo blog (CLAUDE.md
+    # #1: il nome dell'autore può differire dal nome utente reale) — usato
+    # come default di Post.author_display_name quando non specificato
+    # esplicitamente in creazione, non un vincolo: resta sempre modificabile
+    # per singolo post/autore.
+    default_author_display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
 

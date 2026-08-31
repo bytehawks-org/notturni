@@ -73,6 +73,7 @@ export interface Post {
 }
 
 export const MAX_TAGS_PER_POST = 5;
+export const MAX_FALLBACK_LANGUAGES = 5;
 
 export interface TrendingTag {
   tag: string;
@@ -111,6 +112,7 @@ export interface Page {
 
 export interface SocialLink {
   id: string;
+  /** Chiave di piattaforma (vedi lib/social-platforms.tsx), non più un'etichetta libera. */
   label: string;
   url: string;
   position: number;
@@ -119,6 +121,11 @@ export interface SocialLink {
 export interface Profile {
   username: string;
   bio: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  country: string | null;
+  native_language: string | null;
+  fallback_languages: string[];
   avatar_url: string | null;
   social_links: SocialLink[];
   created_at: string;
