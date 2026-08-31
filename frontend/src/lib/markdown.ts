@@ -16,3 +16,13 @@ export function renderMarkdown(markdown: string): string {
   const rawHtml = renderer.render(markdown);
   return DOMPurify.sanitize(rawHtml);
 }
+
+/** Estratto in solo testo per anteprime (card del feed, meta description):
+ * rende a HTML, sanifica, poi butta via anche i tag rimasti. */
+export function excerpt(markdown: string, maxLength = 160): string {
+  const text = DOMPurify.sanitize(renderer.render(markdown), { ALLOWED_TAGS: [] })
+    .replace(/\s+/g, " ")
+    .trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength).trimEnd()}…`;
+}

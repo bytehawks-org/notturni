@@ -560,6 +560,18 @@ manualmente sul database dopo la registrazione — task aperto, vedi
 env/secret al momento della creazione delle risorse, non ancora
 automatizzato in questi script).
 
+## Feed (homepage multi-blog)
+
+**`GET /api/v1/feed/posts`** — pubblico, nessuna autenticazione. Post
+pubblicati (e con `published_at` raggiunto) di **tutti i blog**, dal più
+recente — pensato per la homepage della piattaforma (CLAUDE.md #2:
+"raccolta degli articoli nella lingua dell'utente, stile dev.to").
+
+Query param opzionali: `locale` (filtra una lingua, altrimenti tutte
+insieme), `limit` (default 20, massimo 50), `offset` (paginazione, default
+0). Router separato da `/blogs/{slug}/posts` apposta: qui i post
+attraversano blog diversi, non sono scoped a uno slug/id specifico.
+
 ## CORS
 
 Il backend accetta chiamate dal browser solo dalle origini in

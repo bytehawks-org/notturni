@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { SiteHeader } from "@/components/SiteHeader";
-import { renderMarkdown } from "@/lib/markdown";
+import { excerpt, renderMarkdown } from "@/lib/markdown";
 import { getPublicPostByPermalink } from "@/lib/server-api";
 
 interface PageParams {
@@ -22,7 +22,7 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
   if (!post) return {};
   return {
     title: post.title,
-    description: post.content.slice(0, 160).replace(/\n+/g, " "),
+    description: excerpt(post.content),
   };
 }
 
