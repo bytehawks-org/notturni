@@ -132,11 +132,18 @@ function PostsTab({ blogSlug, canWrite }: { blogSlug: string; canWrite: boolean 
                 {post.locale} · {post.status === "published" ? "pubblicato" : "bozza"}
               </p>
             </div>
-            {canWrite && post.status === "draft" && (
-              <Button variant="secondary" onClick={() => handlePublish(post.id)}>
-                Pubblica
-              </Button>
-            )}
+            <div className="flex items-center gap-3">
+              {post.status === "published" && (
+                <Link href={post.permalink} className="text-sm text-primary hover:underline">
+                  Vedi
+                </Link>
+              )}
+              {canWrite && post.status === "draft" && (
+                <Button variant="secondary" onClick={() => handlePublish(post.id)}>
+                  Pubblica
+                </Button>
+              )}
+            </div>
           </Card>
         ))}
       </div>

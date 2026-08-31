@@ -1,0 +1,29 @@
+import "server-only";
+
+import type { Post } from "./types";
+
+// Le pagine renderizzate lato server (Server Component) girano nel processo
+// Node.js del container: a differenza del browser, non raggiungono il
+// backend sulla porta pubblicata ma per nome servizio nella rete di compose
+// (vedi NOCT_BACKEND_INTERNAL_URL in compose.yaml). NEXT_PUBLIC_API_URL resta
+// per il codice lato client (lib/api.ts) — i due URL non sono la stessa cosa.
+const BACKEND_INTERNAL_URL =
+  process.env.NOCT_BACKEND_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+/** Recupera un post pubblico dal suo permalink /{blogSlug}/{date}/{postSlug}.
+ * Ritorna null se non trovato/non pubblicamente visibile (404 dal backend) —
+ * qualsiasi altro errore viene propagato. */
+export async function getPublicPostByPermalink(
+  blogSlug: string,
+  date: string,
+  postSlug: string
+): Promise<Post | null> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${blogSlug}/posts/${date}/${postSlug}`, {
+    // niente cache tra una request e l'altra: un post appena pubblicato deve
+    // essere visibile subito, non serve una strategia di revalidate qui.
+    cache: "no-store",
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero del post.`);
+  return (await res.json()) as Post;
+}

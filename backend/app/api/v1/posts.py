@@ -12,6 +12,7 @@ from app.core.broker import publish_post_backup
 from app.core.database import get_session
 from app.domain.authorization import can_review_posts, can_write_posts, is_publicly_visible
 from app.domain.i18n import validate_locale
+from app.domain.permalinks import build_permalink, is_valid_permalink_date, permalink_date
 from app.models.blog import Blog
 from app.models.post import Post, PostStatus
 from app.models.user import User
@@ -67,6 +68,11 @@ class PostOut(BaseModel):
     status: PostStatus
     published_at: datetime | None
     created_at: datetime
+    # permalink leggibile /{blog_slug}/{YYYYMMDD}/{slug} (CLAUDE.md #2: niente
+    # UUID negli URL pubblici) — non colonne del modello, calcolati da
+    # _post_out() ad ogni risposta, serve perciò anche blog_slug qui.
+    blog_slug: str
+    permalink: str
 
     model_config = {"from_attributes": True}
 
@@ -103,6 +109,26 @@ async def _require_write_access(session: AsyncSession, user: User, blog: Blog) -
         )
 
 
+def _post_out(post: Post, blog: Blog) -> PostOut:
+    return PostOut(
+        id=post.id,
+        blog_id=post.blog_id,
+        author_id=post.author_id,
+        author_display_name=post.author_display_name,
+        locale=post.locale,
+        translation_group_id=post.translation_group_id,
+        title=post.title,
+        slug=post.slug,
+        content=post.content,
+        cover_image_url=post.cover_image_url,
+        status=post.status,
+        published_at=post.published_at,
+        created_at=post.created_at,
+        blog_slug=blog.slug,
+        permalink=build_permalink(blog.slug, post),
+    )
+
+
 def _backup_to_s3(blog: Blog, post: Post) -> None:
     """Fire-and-forget: accoda il backup su S3. Il database resta la fonte di
     verità del post, quindi un problema di RabbitMQ/S3 qui non deve mai far
@@ -126,7 +152,7 @@ async def create_post(
     payload: PostCreateRequest,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-) -> Post:
+) -> PostOut:
     blog = await _get_blog_or_404(session, blog_slug)
     await _require_write_access(session, current_user, blog)
 
@@ -156,7 +182,7 @@ async def create_post(
     await session.commit()
     await session.refresh(post)
     _backup_to_s3(blog, post)
-    return post
+    return _post_out(post, blog)
 
 
 @router.post(
@@ -167,7 +193,7 @@ async def add_post_translation(
     payload: PostTranslationRequest,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-) -> Post:
+) -> PostOut:
     original = await _get_post_or_404(session, post_id)
     blog = await session.get(Blog, original.blog_id)
     assert blog is not None
@@ -209,7 +235,7 @@ async def add_post_translation(
     await session.commit()
     await session.refresh(translation)
     _backup_to_s3(blog, translation)
-    return translation
+    return _post_out(translation, blog)
 
 
 @router.get("/posts/{post_id}/translations", response_model=list[TranslationSummaryOut])
@@ -230,7 +256,7 @@ async def list_posts(
     locale: str | None = None,
     current_user: User | None = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
-) -> list[Post]:
+) -> list[PostOut]:
     """Pubblico: solo i post effettivamente pubblicati (pubblicati e, se
     pianificati, con data raggiunta). Chi ha accesso in scrittura al blog
     (proprietario/autore/co-autore) vede anche bozze/in revisione/pianificati."""
@@ -245,9 +271,9 @@ async def list_posts(
     has_write_access = current_user is not None and await can_write_posts(
         session, user_id=current_user.id, blog=blog
     )
-    if has_write_access:
-        return posts
-    return [p for p in posts if is_publicly_visible(p)]
+    if not has_write_access:
+        posts = [p for p in posts if is_publicly_visible(p)]
+    return [_post_out(p, blog) for p in posts]
 
 
 @router.get("/posts/{post_id}", response_model=PostOut)
@@ -255,18 +281,52 @@ async def get_post(
     post_id: uuid.UUID,
     current_user: User | None = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
-) -> Post:
+) -> PostOut:
     post = await _get_post_or_404(session, post_id)
+    blog = await session.get(Blog, post.blog_id)
+    assert blog is not None
     if is_publicly_visible(post):
-        return post
+        return _post_out(post, blog)
 
     # bozza/in revisione/pianificato: visibile solo a chi ha accesso in
     # scrittura al blog (non un 403 esplicito, per non rivelarne l'esistenza)
-    blog = await session.get(Blog, post.blog_id)
-    assert blog is not None
     if current_user is None or not await can_write_posts(session, user_id=current_user.id, blog=blog):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Post non trovato.")
-    return post
+    return _post_out(post, blog)
+
+
+@router.get("/blogs/{blog_slug}/posts/{permalink_date_str}/{post_slug}", response_model=PostOut)
+async def get_post_by_permalink(
+    blog_slug: str,
+    permalink_date_str: str,
+    post_slug: str,
+    current_user: User | None = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> PostOut:
+    """Risoluzione del permalink pubblico /{blog_slug}/{YYYYMMDD}/{post_slug}
+    (CLAUDE.md #2): nessun UUID nell'URL. La data è quella di pubblicazione,
+    o di creazione per l'anteprima di una bozza (vedi domain/permalinks.py)."""
+    if not is_valid_permalink_date(permalink_date_str):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Formato data non valido, atteso YYYYMMDD.")
+
+    blog = await _get_blog_or_404(session, blog_slug)
+    result = await session.execute(
+        select(Post).where(Post.blog_id == blog.id, Post.slug == post_slug)
+    )
+    candidates = [
+        p for p in result.scalars().all() if permalink_date(p).strftime("%Y%m%d") == permalink_date_str
+    ]
+    if not candidates:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Post non trovato.")
+    # Lo slug è unico solo per (blog, locale): due traduzioni diverse
+    # potrebbero in teoria condividere slug+data. Caso raro, non impedito a
+    # livello di vincolo DB — si preferisce la lingua di default del blog.
+    post = next((p for p in candidates if p.locale == blog.default_locale), candidates[0])
+
+    if not is_publicly_visible(post):
+        if current_user is None or not await can_write_posts(session, user_id=current_user.id, blog=blog):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Post non trovato.")
+    return _post_out(post, blog)
 
 
 @router.patch("/posts/{post_id}", response_model=PostOut)
@@ -275,7 +335,7 @@ async def update_post(
     payload: PostUpdateRequest,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-) -> Post:
+) -> PostOut:
     post = await _get_post_or_404(session, post_id)
     blog = await session.get(Blog, post.blog_id)
     assert blog is not None
@@ -291,7 +351,7 @@ async def update_post(
     await session.commit()
     await session.refresh(post)
     _backup_to_s3(blog, post)
-    return post
+    return _post_out(post, blog)
 
 
 @router.post("/posts/{post_id}/submit-for-review", response_model=PostOut)
@@ -299,7 +359,7 @@ async def submit_for_review(
     post_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-) -> Post:
+) -> PostOut:
     """Ruolo Revisore (CLAUDE.md #1): un autore manda il proprio draft in
     revisione invece di pubblicarlo direttamente."""
     post = await _get_post_or_404(session, post_id)
@@ -312,7 +372,7 @@ async def submit_for_review(
     post.status = PostStatus.PENDING_REVIEW
     await session.commit()
     await session.refresh(post)
-    return post
+    return _post_out(post, blog)
 
 
 @router.post("/posts/{post_id}/return-to-draft", response_model=PostOut)
@@ -320,7 +380,7 @@ async def return_to_draft(
     post_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-) -> Post:
+) -> PostOut:
     """Il Revisore (o il proprietario) rimanda un post in pending_review
     all'autore per ulteriori modifiche, invece di approvarlo."""
     post = await _get_post_or_404(session, post_id)
@@ -335,7 +395,7 @@ async def return_to_draft(
     post.status = PostStatus.DRAFT
     await session.commit()
     await session.refresh(post)
-    return post
+    return _post_out(post, blog)
 
 
 @router.post("/posts/{post_id}/publish", response_model=PostOut)
@@ -344,7 +404,7 @@ async def publish_post(
     payload: PublishRequest | None = None,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-) -> Post:
+) -> PostOut:
     """Pubblica (subito o pianificato via `published_at` futuro). Consentito
     a proprietario/autore/co-autore da qualsiasi stato; un Revisore può
     approvare solo da pending_review (vedi return-to-draft per il rifiuto)."""
@@ -367,10 +427,10 @@ async def publish_post(
     if post.status == PostStatus.PUBLISHED and scheduled_at is None:
         # già pubblicato e nessun nuovo orario esplicito: no-op idempotente,
         # non tocca published_at
-        return post
+        return _post_out(post, blog)
 
     post.status = PostStatus.PUBLISHED
     post.published_at = scheduled_at or datetime.now(timezone.utc)
     await session.commit()
     await session.refresh(post)
-    return post
+    return _post_out(post, blog)

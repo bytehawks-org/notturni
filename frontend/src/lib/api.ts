@@ -124,6 +124,9 @@ export const api = {
     list: (token: string | null, blogSlug: string, locale?: string) =>
       request<Post[]>(`/api/v1/blogs/${blogSlug}/posts${locale ? `?locale=${locale}` : ""}`, { token }),
     get: (token: string | null, postId: string) => request<Post>(`/api/v1/posts/${postId}`, { token }),
+    /** Risolve il permalink pubblico /{blogSlug}/{date}/{postSlug} (niente UUID nell'URL). */
+    getByPermalink: (token: string | null, blogSlug: string, date: string, postSlug: string) =>
+      request<Post>(`/api/v1/blogs/${blogSlug}/posts/${date}/${postSlug}`, { token }),
     create: (
       token: string,
       blogSlug: string,

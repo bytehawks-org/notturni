@@ -45,65 +45,67 @@ body {
   color: var(--foreground);
 }
 
-/* Contenuto dell'editor WYSIWYG (RichTextEditor / Tiptap), pensato per
-   restare visivamente vicino a com'è reso il Markdown salvato. */
-.prose-editor h1,
-.prose-editor h2,
-.prose-editor h3 {
+/* Tipografia condivisa per il contenuto Markdown dei post: sia nell'editor
+   WYSIWYG (RichTextEditor / Tiptap) sia nella pagina pubblica del post
+   (Markdown renderizzato a HTML lato server, vedi lib/markdown.ts) — le due
+   viste restano visivamente vicine di proposito. */
+.notturni-prose h1,
+.notturni-prose h2,
+.notturni-prose h3 {
   font-family: var(--font-serif);
   font-weight: 600;
   line-height: 1.25;
   margin: 1.2em 0 0.5em;
 }
-.prose-editor h1 {
+.notturni-prose h1 {
   font-size: 1.75em;
 }
-.prose-editor h2 {
+.notturni-prose h2 {
   font-size: 1.4em;
 }
-.prose-editor h3 {
+.notturni-prose h3 {
   font-size: 1.15em;
 }
-.prose-editor p {
+.notturni-prose p {
   margin: 0.75em 0;
 }
-.prose-editor p.is-editor-empty:first-child::before {
+.notturni-prose p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   float: left;
   height: 0;
   color: var(--muted);
   pointer-events: none;
 }
-.prose-editor a {
+.notturni-prose a {
   color: var(--primary);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-.prose-editor blockquote {
+.notturni-prose blockquote {
   margin: 1em 0;
   padding-left: 1em;
   border-left: 3px solid var(--border-color);
   color: var(--muted);
   font-style: italic;
 }
-.prose-editor code {
+.notturni-prose code {
   background: color-mix(in srgb, var(--foreground) 8%, transparent);
   border-radius: 0.25em;
   padding: 0.1em 0.35em;
   font-size: 0.9em;
 }
-.prose-editor ul,
-.prose-editor ol {
+.notturni-prose ul,
+.notturni-prose ol {
   margin: 0.75em 0;
   padding-left: 1.4em;
 }
-.prose-editor ul {
+.notturni-prose ul {
   list-style: disc;
 }
-.prose-editor ol {
+.notturni-prose ol {
   list-style: decimal;
 }
-.prose-editor img {
+.notturni-prose img {
   max-width: 100%;
   border-radius: 0.5em;
   margin: 0.75em 0;

@@ -116,6 +116,13 @@ services:
         # il browser gira sull'host, non nella rete di compose: deve
         # raggiungere il backend sulla porta pubblicata, non per nome servizio
         NEXT_PUBLIC_API_URL: http://localhost:8000
+    environment:
+      # le pagine renderizzate lato server (Server Component, es. la pagina
+      # pubblica del post) girano nel processo Node.js del container: a
+      # differenza del browser raggiungono il backend per nome servizio.
+      # Variabile normale, non build-arg: letta a runtime, non inglobata nel
+      # bundle — non richiede un rebuild dell'immagine per essere cambiata.
+      NOCT_BACKEND_INTERNAL_URL: http://backend:8000
     restart: on-failure
     ports:
       - "3000:3000"

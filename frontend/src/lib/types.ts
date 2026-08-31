@@ -63,6 +63,9 @@ export interface Post {
   status: PostStatus;
   published_at: string | null;
   created_at: string;
+  /** Permalink leggibile /{blog_slug}/{YYYYMMDD}/{slug}, senza UUID. */
+  blog_slug: string;
+  permalink: string;
 }
 
 export interface PostTranslationSummary {

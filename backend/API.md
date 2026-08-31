@@ -258,6 +258,21 @@ serve anche per la pianificazione: un post con `status=published` e
 `published_at` nel futuro non è ancora pubblicamente visibile — vedi
 `is_publicly_visible` più sotto.
 
+Ogni post ha un **permalink leggibile**, senza UUID: `blog_slug` e
+`permalink` sono calcolati ad ogni risposta (non colonne del modello) e
+inclusi in ogni `PostOut`:
+
+```text
+permalink = /{blog_slug}/{YYYYMMDD}/{slug}
+```
+
+La data è quella di pubblicazione (`published_at`) se il post è pubblicato,
+altrimenti quella di creazione (`created_at`) — permette comunque un link di
+anteprima per una bozza, risolvibile solo da chi ha accesso in scrittura al
+blog. La data non serve a garantire l'unicità (già data da `blog_id` +
+`slug` + `locale`, vedi sopra): è solo una convenzione di leggibilità, in
+stile WordPress. Vedi `app/domain/permalinks.py`.
+
 **`POST /api/v1/blogs/{blog_slug}/posts`** — richiede sessione ed essere
 proprietario del blog oppure avere membership con ruolo `autore` o
 `co_autore` (`403` altrimenti). Crea un post in stato `draft`, radice di una
@@ -305,7 +320,17 @@ tutte le lingue.
 **`GET /api/v1/posts/{post_id}`** — se pubblicamente visibile, pubblico.
 Altrimenti richiede di avere accesso in scrittura al blog (stessa regola
 della creazione); `404` (non `403`, per non rivelarne l'esistenza) se non
-autorizzato.
+autorizzato. Uso interno (dashboard/editor): identifica il post per UUID,
+non per il permalink pubblico.
+
+**`GET /api/v1/blogs/{blog_slug}/posts/{YYYYMMDD}/{post_slug}`** — pubblico
+(token opzionale), stesse regole di visibilità di `GET /posts/{post_id}`
+sopra. Risolve il permalink leggibile (vedi sopra) verso il post: è
+l'endpoint pensato per la pagina pubblica del post (es.
+`https://notturni.eu/{blog_slug}/{YYYYMMDD}/{post_slug}`), che così non deve
+mai esporre l'UUID nell'URL. `400` se la data non è nel formato `YYYYMMDD`,
+`404` se blog/slug/data non corrispondono a nessun post (o a un post non
+visibile per il chiamante).
 
 **`PATCH /api/v1/posts/{post_id}`** — stessa autorizzazione della creazione.
 Aggiorna `title`/`content`/`cover_image_url` (tutti opzionali). Se `content`

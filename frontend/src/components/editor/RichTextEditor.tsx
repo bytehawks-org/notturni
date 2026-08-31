@@ -98,7 +98,7 @@ export function RichTextEditor({ value, onChange, blogSlug, authFetch, placehold
     content: initialValue,
     editorProps: {
       attributes: {
-        class: "prose-editor min-h-64 max-w-none text-lg leading-relaxed text-foreground focus:outline-none",
+        class: "notturni-prose min-h-64 max-w-none text-lg leading-relaxed text-foreground focus:outline-none",
       },
     },
     onUpdate: ({ editor }) => {

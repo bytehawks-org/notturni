@@ -94,6 +94,11 @@ export default function PostEditorPage() {
           ← Torna al blog
         </Link>
         <div className="flex items-center gap-4">
+          {post.status === "published" && (
+            <Link href={post.permalink} className="text-sm text-primary hover:underline">
+              Vedi
+            </Link>
+          )}
           <span className="text-sm text-muted">{post.status === "published" ? "Pubblicato" : "Bozza"}</span>
           <Button type="submit" form={FORM_ID} variant="secondary" disabled={saving}>
             {saving ? "Salvataggio…" : "Salva"}

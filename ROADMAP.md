@@ -36,7 +36,7 @@ Legenda stato:
 | Pagine statiche del sito principale (Chi siamo, Contatti, Privacy) | ✅ | CRUD gestito da Amministratore/Super Admin. |
 | Follow tra utenti e verso i blog | ✅ | |
 | Profilo utente: bio, avatar, link social | ✅ | Avatar su MinIO/S3. |
-| Gestione contenuti in Markdown, nessun rendering lato backend | ✅ | |
+| Gestione contenuti in Markdown, nessun rendering lato backend | ✅ | Rendering a HTML e sanificazione lato frontend (Server Component + `markdown-it`/DOMPurify) sulla pagina pubblica del post — vedi permalink più sotto. |
 | UUID come chiave primaria per ogni entità | ✅ | |
 | Media su S3 in `.../userdata/{user_uuid}/{blog_uuid}/media/...` | ✅ | Bucket con policy pubblica scoped al solo prefisso `media/*`; stesso endpoint di upload usato sia per le immagini incorporate nel contenuto sia per la cover del post (`Post.cover_image_url`). |
 | Backup/fallback Markdown dei post su S3 ad ogni salvataggio | ✅ | Privato, via coda RabbitMQ + worker dedicato (`worker-post-backup`). |
@@ -65,7 +65,8 @@ Legenda stato:
 | Traefik come ingress | 🟡 | `k8s/ingress.yaml` usa `ingressClassName: traefik`, ma è **routing path-based su un solo host** — manca l'`IngressRoute` dinamico per sottodominio-per-utente. |
 | Longhorn come storage class | ✅ | Usato in `k8s/postgres.yaml` e `k8s/minio.yaml` (draft). |
 | Backup su S3 esterno di database e MinIO | ⚪ | Non implementato: esiste solo il backup applicativo dei singoli post (`worker-post-backup`), non un backup infrastrutturale di Postgres/MinIO nel loro complesso. |
-| Blog utente su `https://nomeutente.notturni.eu` | ⚪ | Non implementato: oggi i blog sono referenziati per slug via path/API, non c'è routing per sottodominio né nel backend né nel frontend né nei manifest K8s (annotato come lavoro futuro in `k8s/ingress.yaml`). |
+| Blog utente su `https://nomeutente.notturni.eu` | ⚪ | Non implementato: routing per sottodominio ancora assente (backend, frontend, manifest K8s). Un post è però già raggiungibile **senza sottodominio**, via `https://notturni.eu/{blog_slug}/{post_slug}` — vedi riga dedicata sotto. |
+| Permalink leggibili per i post, senza UUID nell'URL | ✅ | `/{blog_slug}/{YYYYMMDD}/{post_slug}` (stile WordPress; la data è solo leggibilità/disambiguazione, l'unicità reale resta su blog+slug+locale) — `backend/app/domain/permalinks.py`, endpoint pubblico `GET /blogs/{slug}/posts/{date}/{slug}`. Pagina pubblica del post lato frontend (Server Component, Markdown renderizzato a HTML e sanificato — vedi `frontend/src/lib/markdown.ts`) su `/{blog_slug}/{YYYYMMDD}/{post_slug}`, raggiungibile senza passare dal sottodominio del blog. |
 | `notturni.eu`: raccolta articoli nella lingua dell'utente (stile dev.to) | ⚪ | Non implementato. |
 | `blog.notturni.eu`: blog ufficiale della piattaforma | ⚪ | Non implementato (nessuna distinzione oggi tra blog "di piattaforma" e blog utente). |
 | Blocco nome blog: minimo 4 caratteri alfanumerici (`-` ammesso) | ✅ | `backend/app/domain/blog_rules.py`. |
