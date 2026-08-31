@@ -53,7 +53,7 @@ export function CoverImageUpload({ value, onChange, blogSlug, authFetch }: Cover
         type="button"
         disabled={uploading}
         onClick={() => fileInputRef.current?.click()}
-        className="flex aspect-[16/9] w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-primary/5 text-sm text-primary transition hover:bg-primary/10 disabled:opacity-60"
+        className="flex aspect-[16/9] w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border/70 text-sm text-muted transition hover:border-primary/50 hover:text-primary disabled:opacity-60"
       >
         <ImageIcon />
         <span>{uploading ? "Caricamento…" : "Carica immagine di copertina (16:9, 800 × 450 px)"}</span>

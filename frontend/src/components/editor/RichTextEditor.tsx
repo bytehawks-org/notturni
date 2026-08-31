@@ -50,8 +50,8 @@ function ToolbarButton({
       disabled={disabled}
       onMouseDown={(e) => e.preventDefault()} // non rubare il focus all'editor
       onClick={onClick}
-      className={`inline-flex h-8 w-8 items-center justify-center rounded-md text-sm transition disabled:opacity-30 disabled:cursor-not-allowed ${
-        active ? "bg-primary/10 text-primary" : "text-foreground/80 hover:bg-foreground/5"
+      className={`inline-flex h-9 w-9 items-center justify-center rounded-full text-base transition disabled:opacity-30 disabled:cursor-not-allowed ${
+        active ? "bg-primary/10 text-primary" : "text-foreground/70 hover:bg-foreground/5 hover:text-foreground"
       }`}
     >
       {children}
@@ -60,7 +60,7 @@ function ToolbarButton({
 }
 
 function ToolbarDivider() {
-  return <span className="mx-1 h-5 w-px bg-border" />;
+  return <span className="mx-1.5 h-6 w-px bg-border" />;
 }
 
 const DEFAULT_TOOLBAR_STATE = {
@@ -98,8 +98,7 @@ export function RichTextEditor({ value, onChange, blogSlug, authFetch, placehold
     content: initialValue,
     editorProps: {
       attributes: {
-        class:
-          "prose-editor min-h-64 max-w-none px-1 py-2 text-[15px] leading-relaxed text-foreground focus:outline-none",
+        class: "prose-editor min-h-64 max-w-none text-lg leading-relaxed text-foreground focus:outline-none",
       },
     },
     onUpdate: ({ editor }) => {
@@ -167,8 +166,10 @@ export function RichTextEditor({ value, onChange, blogSlug, authFetch, placehold
   }
 
   return (
-    <div className="rounded-md border border-border bg-background">
-      <div className="flex flex-wrap items-center gap-0.5 border-b border-border px-2 py-1.5">
+    <div>
+      {/* Barra flottante, senza contenitore: solo un filo di spazio la separa
+          dal testo, niente riquadro o bordo a delimitarla. */}
+      <div className="mb-3 flex flex-wrap items-center gap-1 text-foreground/70">
         <ToolbarButton title="Grassetto" active={state.bold} onClick={() => editor.chain().focus().toggleBold().run()}>
           <span className="font-bold">B</span>
         </ToolbarButton>
@@ -238,9 +239,9 @@ export function RichTextEditor({ value, onChange, blogSlug, authFetch, placehold
         }}
       />
 
-      {uploadError && <p className="border-b border-border px-3 py-1.5 text-xs text-red-700">{uploadError}</p>}
+      {uploadError && <p className="mb-2 text-xs text-red-700">{uploadError}</p>}
 
-      <EditorContent editor={editor} className="px-3" />
+      <EditorContent editor={editor} />
     </div>
   );
 }

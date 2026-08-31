@@ -6,13 +6,14 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { Card, CardTitle } from "@/components/ui/Card";
-import { FieldGroup, Input, Label } from "@/components/ui/Field";
 import { CoverImageUpload } from "@/components/editor/CoverImageUpload";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
+import { TranslationsBar } from "@/components/editor/TranslationsBar";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import type { Post, PostTranslationSummary } from "@/lib/types";
+
+const FORM_ID = "edit-post-form";
 
 function errorMessage(err: unknown): string {
   return err instanceof ApiClientError ? err.message : "Errore imprevisto.";
@@ -32,12 +33,6 @@ export default function PostEditorPage() {
   const [saved, setSaved] = useState(false);
 
   const [translations, setTranslations] = useState<PostTranslationSummary[]>([]);
-  const [showTranslate, setShowTranslate] = useState(false);
-  const [trLocale, setTrLocale] = useState("");
-  const [trSlug, setTrSlug] = useState("");
-  const [trTitle, setTrTitle] = useState("");
-  const [trContent, setTrContent] = useState("");
-  const [trError, setTrError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     api.posts
@@ -80,158 +75,76 @@ export default function PostEditorPage() {
     }
   }
 
-  async function handleAddTranslation(event: FormEvent) {
-    event.preventDefault();
-    setTrError(null);
-    try {
-      const translated = await authFetch((token) =>
-        api.posts.addTranslation(token, params.postId, {
-          slug: trSlug,
-          locale: trLocale,
-          title: trTitle,
-          content: trContent,
-        })
-      );
-      setShowTranslate(false);
-      setTrLocale("");
-      setTrSlug("");
-      setTrTitle("");
-      setTrContent("");
-      router.push(`/dashboard/blogs/${params.slug}/posts/${translated.id}`);
-    } catch (err) {
-      setTrError(errorMessage(err));
-    }
+  async function handleAddTranslation(payload: {
+    slug: string;
+    locale: string;
+    title: string;
+    content: string;
+  }) {
+    const translated = await authFetch((token) => api.posts.addTranslation(token, params.postId, payload));
+    router.push(`/dashboard/blogs/${params.slug}/posts/${translated.id}`);
   }
 
   if (!post) return error ? <Alert kind="error">{error}</Alert> : <p className="text-sm text-muted">Caricamento…</p>;
 
   return (
     <div className="mx-auto max-w-2xl">
-      <Link href={`/dashboard/blogs/${params.slug}`} className="text-sm text-muted hover:text-foreground">
-        ← Torna al blog
-      </Link>
-
-      <Card className="mt-4">
-        <div className="mb-4 flex items-center justify-between">
-          <CardTitle>Modifica post ({post.locale})</CardTitle>
+      <div className="mb-10 flex items-center justify-between">
+        <Link href={`/dashboard/blogs/${params.slug}`} className="text-sm text-muted hover:text-foreground">
+          ← Torna al blog
+        </Link>
+        <div className="flex items-center gap-4">
           <span className="text-sm text-muted">{post.status === "published" ? "Pubblicato" : "Bozza"}</span>
-        </div>
-        <form onSubmit={handleSave}>
-          <input
-            id="edit-title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required
-            className="mb-4 w-full border-0 bg-transparent font-serif text-3xl font-semibold text-foreground placeholder:text-muted focus:outline-none"
-          />
-
-          <div className="mb-4">
-            <CoverImageUpload
-              value={coverImageUrl}
-              onChange={setCoverImageUrl}
-              blogSlug={params.slug}
-              authFetch={authFetch}
-            />
-          </div>
-
-          <div className="mb-4">
-            <RichTextEditor
-              value={content}
-              onChange={setContent}
-              blogSlug={params.slug}
-              authFetch={authFetch}
-            />
-          </div>
-
-          {error && (
-            <div className="mb-4">
-              <Alert kind="error">{error}</Alert>
-            </div>
-          )}
-          {saved && (
-            <div className="mb-4">
-              <Alert kind="success">Salvato.</Alert>
-            </div>
-          )}
-          <div className="flex gap-2">
-            <Button type="submit" disabled={saving}>
-              {saving ? "Salvataggio…" : "Salva"}
-            </Button>
-            {post.status === "draft" && (
-              <Button type="button" variant="secondary" onClick={handlePublish}>
-                Pubblica
-              </Button>
-            )}
-          </div>
-        </form>
-      </Card>
-
-      <Card className="mt-6">
-        <CardTitle>Traduzioni</CardTitle>
-        <ul className="mb-4 space-y-1">
-          {translations.map((t) => (
-            <li key={t.id} className="text-sm">
-              {t.id === post.id ? (
-                <span className="text-foreground">{t.locale} (questa) — {t.status}</span>
-              ) : (
-                <Link
-                  href={`/dashboard/blogs/${params.slug}/posts/${t.id}`}
-                  className="text-primary underline underline-offset-4"
-                >
-                  {t.locale} — {t.status}
-                </Link>
-              )}
-            </li>
-          ))}
-        </ul>
-        {!showTranslate ? (
-          <Button variant="secondary" onClick={() => setShowTranslate(true)}>
-            Aggiungi traduzione
+          <Button type="submit" form={FORM_ID} variant="secondary" disabled={saving}>
+            {saving ? "Salvataggio…" : "Salva"}
           </Button>
-        ) : (
-          <form onSubmit={handleAddTranslation}>
-            <FieldGroup>
-              <Label htmlFor="tr-locale">Lingua (es. en, de)</Label>
-              <Input
-                id="tr-locale"
-                required
-                maxLength={2}
-                minLength={2}
-                value={trLocale}
-                onChange={(e) => setTrLocale(e.target.value.toLowerCase())}
-              />
-            </FieldGroup>
-            <FieldGroup>
-              <Label htmlFor="tr-slug">Slug</Label>
-              <Input id="tr-slug" required value={trSlug} onChange={(e) => setTrSlug(e.target.value)} />
-            </FieldGroup>
-            <FieldGroup>
-              <Label htmlFor="tr-title">Titolo</Label>
-              <Input id="tr-title" required value={trTitle} onChange={(e) => setTrTitle(e.target.value)} />
-            </FieldGroup>
-            <FieldGroup>
-              <Label htmlFor="tr-content">Contenuto</Label>
-              <RichTextEditor
-                value={trContent}
-                onChange={setTrContent}
-                blogSlug={params.slug}
-                authFetch={authFetch}
-              />
-            </FieldGroup>
-            {trError && (
-              <div className="mb-4">
-                <Alert kind="error">{trError}</Alert>
-              </div>
-            )}
-            <div className="flex gap-2">
-              <Button type="submit">Crea traduzione</Button>
-              <Button type="button" variant="secondary" onClick={() => setShowTranslate(false)}>
-                Annulla
-              </Button>
-            </div>
-          </form>
+          {post.status === "draft" && (
+            <Button type="button" onClick={handlePublish}>
+              Pubblica
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <form id={FORM_ID} onSubmit={handleSave}>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          required
+          className="mb-8 w-full border-0 bg-transparent font-serif text-5xl font-semibold leading-tight text-foreground placeholder:text-muted/70 focus:outline-none"
+        />
+
+        <div className="mb-8">
+          <CoverImageUpload
+            value={coverImageUrl}
+            onChange={setCoverImageUrl}
+            blogSlug={params.slug}
+            authFetch={authFetch}
+          />
+        </div>
+
+        <RichTextEditor value={content} onChange={setContent} blogSlug={params.slug} authFetch={authFetch} />
+
+        {error && (
+          <div className="mt-6">
+            <Alert kind="error">{error}</Alert>
+          </div>
         )}
-      </Card>
+        {saved && (
+          <div className="mt-6">
+            <Alert kind="success">Salvato.</Alert>
+          </div>
+        )}
+      </form>
+
+      <TranslationsBar
+        currentPostId={post.id}
+        currentLocale={post.locale}
+        blogSlug={params.slug}
+        translations={translations}
+        authFetch={authFetch}
+        onAddTranslation={handleAddTranslation}
+      />
     </div>
   );
 }
