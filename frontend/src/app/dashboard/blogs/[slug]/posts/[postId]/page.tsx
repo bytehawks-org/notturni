@@ -13,7 +13,7 @@ import { TagInput } from "@/components/editor/TagInput";
 import { TranslationsBar } from "@/components/editor/TranslationsBar";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import type { Post, PostTranslationSummary } from "@/lib/types";
+import type { Post, PostNote, PostTranslationSummary } from "@/lib/types";
 
 const FORM_ID = "edit-post-form";
 
@@ -33,6 +33,7 @@ export default function PostEditorPage() {
   const [coverImageIsSensitive, setCoverImageIsSensitive] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [notes, setNotes] = useState<PostNote[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -51,6 +52,7 @@ export default function PostEditorPage() {
         setCoverImageIsSensitive(p.cover_image_is_sensitive);
         setTags(p.manual_tags);
         setCategoryId(p.category?.id ?? null);
+        setNotes(p.notes);
       })
       .catch((err) => setError(errorMessage(err)));
     api.posts.translations(params.postId).then(setTranslations).catch(() => undefined);
@@ -81,9 +83,11 @@ export default function PostEditorPage() {
           cover_image_is_sensitive: coverImageIsSensitive,
           tags,
           category_id: categoryId,
+          notes,
         })
       );
       setPost(updated);
+      setNotes(updated.notes);
       setSaved(true);
     } catch (err) {
       setError(errorMessage(err));
@@ -106,6 +110,7 @@ export default function PostEditorPage() {
     locale: string;
     title: string;
     content: string;
+    notes: PostNote[];
   }) {
     const translated = await authFetch((token) => api.posts.addTranslation(token, params.postId, payload));
     router.push(`/dashboard/blogs/${params.slug}/posts/${translated.id}`);
@@ -166,7 +171,14 @@ export default function PostEditorPage() {
           />
         </div>
 
-        <RichTextEditor value={content} onChange={setContent} blogSlug={params.slug} authFetch={authFetch} />
+        <RichTextEditor
+          value={content}
+          onChange={setContent}
+          blogSlug={params.slug}
+          authFetch={authFetch}
+          notes={notes}
+          onNotesChange={setNotes}
+        />
 
         {error && (
           <div className="mt-6">

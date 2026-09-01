@@ -6,7 +6,7 @@ import { useState, type FormEvent } from "react";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
-import type { PostTranslationSummary } from "@/lib/types";
+import type { PostNote, PostTranslationSummary } from "@/lib/types";
 
 const languageNames = new Intl.DisplayNames(["it"], { type: "language" });
 
@@ -31,7 +31,13 @@ interface TranslationsBarProps {
    * selettore lingua qui sotto invece di dover scrivere la sigla a mano. */
   suggestedLocales: string[];
   authFetch: <T>(fn: (token: string) => Promise<T>) => Promise<T>;
-  onAddTranslation: (payload: { slug: string; locale: string; title: string; content: string }) => Promise<void>;
+  onAddTranslation: (payload: {
+    slug: string;
+    locale: string;
+    title: string;
+    content: string;
+    notes: PostNote[];
+  }) => Promise<void>;
 }
 
 /** Riga leggera, senza riquadro: le lingue già tradotte come pillole, più
@@ -54,6 +60,7 @@ export function TranslationsBar({
   const [trSlug, setTrSlug] = useState("");
   const [trTitle, setTrTitle] = useState("");
   const [trContent, setTrContent] = useState("");
+  const [trNotes, setTrNotes] = useState<PostNote[]>([]);
   const [trError, setTrError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -62,7 +69,13 @@ export function TranslationsBar({
     setTrError(null);
     setSubmitting(true);
     try {
-      await onAddTranslation({ slug: trSlug, locale: trLocale, title: trTitle, content: trContent });
+      await onAddTranslation({
+        slug: trSlug,
+        locale: trLocale,
+        title: trTitle,
+        content: trContent,
+        notes: trNotes,
+      });
     } catch (err) {
       setTrError(err instanceof Error ? err.message : "Errore imprevisto.");
     } finally {
@@ -144,7 +157,14 @@ export function TranslationsBar({
             onChange={(e) => setTrTitle(e.target.value)}
             className="mb-4 w-full border-0 bg-transparent font-serif text-2xl font-semibold text-foreground placeholder:text-muted focus:outline-none"
           />
-          <RichTextEditor value={trContent} onChange={setTrContent} blogSlug={blogSlug} authFetch={authFetch} />
+          <RichTextEditor
+            value={trContent}
+            onChange={setTrContent}
+            blogSlug={blogSlug}
+            authFetch={authFetch}
+            notes={trNotes}
+            onNotesChange={setTrNotes}
+          />
           {trError && (
             <div className="mt-4">
               <Alert kind="error">{trError}</Alert>

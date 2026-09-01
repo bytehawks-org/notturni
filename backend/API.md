@@ -63,6 +63,10 @@ versione precedente).
 
 → `201`, utente creato (`platform_role=utente`, MFA disattiva). Nessun login
 automatico: va fatto separatamente. `409` se username o email già in uso.
+`400` se lo username non rispetta il formato (todo/USERS.md #1): minuscole,
+cifre, `-` e `_` come separatori interni (mai a inizio/fine né ripetuti),
+3–32 caratteri, e non in blacklist (`app/domain/usernames.py`). Lo username è
+l'identificatore citabile come `@username` nei contenuti.
 
 Se `NOCT_DEPLOYMENT_MODE=solo` (installazione a singolo proprietario, es.
 blog personale — vedi `.env.example`): il **primo** utente registrato diventa
@@ -189,31 +193,60 @@ email in produzione.
 **`POST /api/v1/blogs`** — richiede sessione.
 
 ```json
-{"slug": "il-mio-blog", "title": "Il mio blog", "default_locale": "it"}
+{
+  "slug": "il-mio-blog",
+  "title": "Il mio blog",
+  "default_locale": "it",
+  "subtitle": "Appunti sparsi",
+  "description": "Descrizione breve del blog, max 256 caratteri.",
+  "visibility": "public"
+}
 ```
 
 → `201`. Applica le regole di dominio (vedi
 [ROADMAP.md](../ROADMAP.md#1-prodotto-e-regole-di-dominio)): slug di almeno 4
 caratteri alfanumerici/trattino, non in blacklist (vedi
 `app/domain/blog_rules.py`), massimo 5 blog per utente. `default_locale` è
-opzionale (default `it`).
+opzionale (default `it`). `subtitle` (max 64) e `description` (max 256) sono
+opzionali. `visibility` è opzionale (default `public`), valori:
+
+- `public` — raggiungibile da chiunque, compare nel feed della homepage;
+- `members` — pagine pubbliche del blog leggibili solo da un utente
+  autenticato sulla piattaforma; escluso dal feed;
+- `private` — diario: leggibile solo dal proprietario e dai collaboratori,
+  **scrivibile dal solo proprietario** a prescindere dalle membership.
+
 `400` se una regola non è rispettata, `409` se lo slug è già in uso.
 
-**`GET /api/v1/blogs/mine`** — richiede sessione. Lista i blog di proprietà
-dell'utente (non ancora quelli su cui ha solo una membership — vedi nota
-sotto).
+`BlogOut` (risposta di tutti gli endpoint blog) include anche
+`mentions_enabled` (bool, default `true`): se attivo, il frontend trasforma
+le `@username` nel contenuto dei post in link al profilo citato — vedi
+"Menzioni `@username`" nella sezione Post.
 
-**`GET /api/v1/blogs/{slug}`** — pubblico. Dettaglio del blog.
+**`GET /api/v1/blogs/mine`** — richiede sessione. Lista i blog di proprietà
+dell'utente.
+
+**`GET /api/v1/blogs/member-of`** — richiede sessione. Blog altrui su cui
+l'utente ha una membership attiva (dopo aver accettato un invito). Ogni voce:
+`{"blog": <BlogOut>, "role": "co_autore"|"mediatore"|..., "author_display_name": str|null}`.
+
+**`GET /api/v1/blogs/{slug}`** — token opzionale. Dettaglio del blog. Segue
+la `visibility`: un blog `members`/`private` non visibile all'utente
+corrente (o anonimo) risponde `404` come se non esistesse. Lo stesso vale per
+`GET .../config`, `GET .../categories` e per gli endpoint di lettura dei post
+del blog (vedi sezione Post).
 
 **`PATCH /api/v1/blogs/{slug}`** — richiede sessione, solo il proprietario
-(`403` altrimenti). Campi aggiornabili: `title`, `allow_anonymous_comments`
-(quest'ultimo governa se i commenti sono aperti anche a chi non è registrato,
-vedi sezione Commenti), `default_author_display_name` — nome pubblico
-predefinito per i testi scritti su questo blog (CLAUDE.md #1: il nome
-dell'autore può differire dal nome utente reale), usato come default di
-`Post.author_display_name` quando non specificato esplicitamente in
-creazione (vedi sezione Post): stringa vuota `""` lo azzera (si torna al
-fallback sullo username), assente lo lascia invariato.
+(`403` altrimenti). Campi aggiornabili: `title`, `subtitle` / `description`
+(`""` azzera, assente lascia invariato; `400` se oltre 64 / 256 caratteri),
+`visibility` (`public` | `members` | `private`), `allow_anonymous_comments`
+(governa se i commenti sono aperti anche a chi non è registrato, vedi sezione
+Commenti), `mentions_enabled` (bool — trasforma le `@username` nei post in
+link, vedi sezione Post), `default_author_display_name` — nome pubblico
+degli autori sui post di questo blog. Se valorizzato è **imposto** (nessun
+override per singolo autore o post — todo/USERS.md #2), a meno che il
+collaboratore non abbia un proprio alias di membership, che ha la precedenza.
+Stringa vuota `""` lo azzera, assente lo lascia invariato.
 
 **`POST /api/v1/blogs/{slug}/follow`** / **`DELETE .../follow`** — richiede
 sessione. Segui/smetti di seguire un blog; idempotenti (`204` anche se già
@@ -252,6 +285,31 @@ altrimenti). Immagine da incorporare nel Markdown di un post (es.
 {"url": "https://.../notturni/userdata/{user_uuid}/{blog_uuid}/media/{uuid}.png"}
 ```
 
+**`GET /api/v1/blogs/{slug}/mentionable-users?q=<prefisso>&limit=8`** —
+richiede sessione e accesso in scrittura al blog. Suggerimenti per
+l'autocomplete delle `@menzioni` nell'editor: proprietario, collaboratori e
+follower del blog il cui username inizia con `q` o il cui nome pubblico lo
+contiene (`q` vuoto → primi risultati per username). `limit` 1–25 (default
+8). Ritorna `[{"username": "...", "display_name": str|null}]`. Se il blog ha
+`mentions_enabled=false`, ritorna sempre `[]`.
+
+**`GET /api/v1/blogs/{slug}/bibliography`** — token opzionale, segue la
+`visibility` del blog (`404` se non visibile). Bibliografia automatica
+(todo/EDITOR.md): tutte le note a piè di pagina dei post **pubblicati**,
+raggruppate per testo identico (confronto senza distinzione di
+maiuscole/spaziatura) e ordinate per recency del primo post che le cita:
+
+```json
+[
+  {
+    "content": "Testo della nota, Markdown inline.",
+    "citations": [
+      {"post_title": "...", "post_slug": "...", "permalink": "/{blog}/{YYYYMMDD}/{slug}", "locale": "it", "idx": 1}
+    ]
+  }
+]
+```
+
 ### Categorie
 
 Tassonomia del blog (CLAUDE.md): a differenza dei tag (liberi, fino a 5 per
@@ -274,11 +332,73 @@ di validazione/unicità della creazione.
 autorizzazione. I post con questa categoria non vengono cancellati, restano
 solo senza categoria.
 
+### Collaboratori e inviti
+
+Il proprietario può invitare altri utenti registrati come **co-autore** o
+**mediatore** (todo/BLOG.md #3). L'invito resta `pending` finché l'invitato
+non lo accetta dalla propria dashboard; solo all'accettazione nasce la
+`BlogMembership`. Una sola riga di invito per (blog, utente): un nuovo invito
+dopo un rifiuto/revoca riusa la stessa riga.
+
+Lato proprietario (tutti `403` se non sei il proprietario del blog):
+
+- **`GET /api/v1/blogs/{slug}/members`** — collaboratori del blog:
+  `[{user_id, username, role, author_display_name, created_at}]`.
+- **`PATCH /api/v1/blogs/{slug}/members/{user_id}`** — `{"role": "co_autore"|"mediatore"}`
+  (`400` per altri ruoli). `404` se non è un collaboratore.
+- **`DELETE /api/v1/blogs/{slug}/members/{user_id}`** — rimuove la membership
+  (`204`, idempotente).
+- **`GET /api/v1/blogs/{slug}/invitations`** — tutti gli inviti del blog
+  (qualsiasi stato).
+- **`POST /api/v1/blogs/{slug}/invitations`** — `{"username": "...", "role": "co_autore"|"mediatore"}`
+  → `201`. `400` ruolo non ammesso / si invita il proprietario stesso; `404`
+  utente inesistente; `409` è già collaboratore o ha già un invito `pending`.
+- **`DELETE /api/v1/blogs/{slug}/invitations/{invitation_id}`** — revoca un
+  invito `pending` (`204`).
+
+Lato collaboratore:
+
+- **`PATCH /api/v1/blogs/{slug}/my-membership`** — `{"author_display_name": "..."}`
+  (`""` azzera): l'alias con cui il collaboratore firma i post su questo blog
+  (todo/BLOG.md #4). `404` se non sei un collaboratore.
+
+Lato invitato (sull'utente corrente, path senza slug per non collidere con
+`GET /blogs/{slug}`):
+
+- **`GET /api/v1/blogs/received-invitations`** — inviti ricevuti ancora
+  `pending`: `[{id, blog_slug, blog_title, role, status, invited_username,
+  invited_by_username, created_at, responded_at}]`.
+- **`POST /api/v1/blogs/received-invitations/{invitation_id}/accept`** — crea
+  la membership col ruolo dell'invito, segna `accepted`. `404` se non è tuo,
+  `409` se non è più `pending`.
+- **`POST /api/v1/blogs/received-invitations/{invitation_id}/decline`** —
+  segna `declined`.
+
 ## Post
 
 Il contenuto (`content`) è **Markdown**: nessun rendering lato backend, la
 conversione a HTML (con sanificazione) è responsabilità del frontend al
 momento della lettura.
+
+**Menzioni `@username`** (todo/USERS.md #1): nel testo, una `@` a inizio riga
+o preceduta da spazio seguita da uno username valido (minuscole/cifre,
+`-`/`_` interni) è una menzione. Il backend non la elabora — resta `@username`
+nel Markdown; è il frontend a trasformarla in link al profilo `/u/{username}`
+al rendering, **solo se** il blog ha `mentions_enabled=true` (default; vedi
+sezione Blog). `PostOut` riporta `mentions_enabled` del blog per comodità del
+client. L'endpoint `GET /blogs/{slug}/mentionable-users` alimenta
+l'autocomplete dell'editor.
+
+**Note a piè di pagina** (todo/EDITOR.md): sono un elenco strutturato del
+post (`notes`: `[{"idx": 1, "content": "testo Markdown inline"}]`), **non nel
+corpo**. `idx` è il numero (1–999) della nota; nel `content` del post il
+riferimento è il marcatore link `[idx](#nota-idx)` (l'editor lo inserisce
+come vero nodo link, così sopravvive al round-trip del suo serializzatore) —
+è accettata anche la forma testuale `[^idx]` per chi scrive via API. `idx`
+duplicati, note vuote o oltre 2000 caratteri → `400`. `PostOut.notes` le
+riporta ordinate per `idx`. La resa (elenco numerato a piè di pagina +
+tooltip sul marcatore) è del frontend; l'aggregato del blog è
+`GET /blogs/{slug}/bibliography` (vedi sezione Blog).
 
 Stati: `draft` → (opzionale) `pending_review` → `published`. `published_at`
 serve anche per la pianificazione: un post con `status=published` e
@@ -307,14 +427,25 @@ nuova "famiglia" di traduzioni (`translation_group_id` = un nuovo UUID).
 Accoda anche un backup su S3 (vedi sezione "Media e backup" più sotto).
 
 ```json
-{"slug": "primo-post", "title": "...", "content": "# Markdown...", "author_display_name": null, "locale": null, "cover_image_url": null, "tags": null, "category_id": null}
+{"slug": "primo-post", "title": "...", "content": "# Markdown...", "locale": null, "cover_image_url": null, "tags": null, "category_id": null, "notes": null}
 ```
 
-`author_display_name` è opzionale: se omesso usa lo username, ma può essere
-diverso — il nome pubblico dell'autore può non coincidere con l'utente reale
-(vedi [ROADMAP.md](../ROADMAP.md#1-prodotto-e-regole-di-dominio)). `locale`
-è opzionale: se omesso usa il `default_locale` del
-blog. `cover_image_url` è opzionale: l'URL ritornato da un precedente upload
+Il nome pubblico dell'autore **non** è indicato dal client (todo/USERS.md #2):
+è calcolato alla scrittura del post e salvato in `PostOut.author_display_name`,
+come primo valore applicabile in questo ordine:
+
+1. alias del collaboratore su *questo* blog (`PATCH /blogs/{slug}/my-membership`);
+2. `default_author_display_name` del blog.
+   Se uno di questi due esiste è **imposto**, senza possibilità di override;
+3. altrimenti la preferenza del profilo `post_author_name_style` (vedi sezione
+   Utenti): `full_name` (nome e cognome), `display_name` (alias globale) o
+   `username` (default).
+
+Risalvando il post (`PATCH /posts/{id}`) **l'autore stesso** riallinea il
+proprio nome pubblico a queste regole; un altro utente che modifica il post
+(es. un revisore) non lo tocca.
+
+`locale` è opzionale: se omesso usa il `default_locale` del blog. `cover_image_url` è opzionale: l'URL ritornato da un precedente upload
 su `POST /blogs/{slug}/media` (vedi sotto) — il campo accetta qualsiasi
 stringa, non verifica che punti davvero a un media caricato su questo blog.
 `cover_image_is_sensitive` (default `false`) riprende l'esito della
@@ -323,7 +454,8 @@ sezione "Moderazione automatica delle immagini" più sotto; non viene
 ricalcolato qui. `tags` è opzionale (vedi sezione "Tag" sotto).
 `category_id` è opzionale: l'UUID di una categoria esistente del blog (vedi
 sezione "Categorie" sopra) — `404` se non appartiene a questo blog. `409` se
-lo slug è già in uso su quel blog per quella lingua.
+lo slug è già in uso su quel blog per quella lingua. `notes` è opzionale
+(vedi "Note a piè di pagina" sopra).
 
 ### Tag
 
@@ -362,14 +494,15 @@ creazione. Aggiunge una traduzione alla stessa famiglia del post indicato
 proprio slug:
 
 ```json
-{"slug": "my-post", "locale": "en", "title": "...", "content": "...", "author_display_name": null, "category_id": null}
+{"slug": "my-post", "locale": "en", "title": "...", "content": "...", "category_id": null, "notes": null}
 ```
 
 `409` se esiste già una traduzione per quella lingua nella famiglia, o se lo
 slug è già in uso su quel blog per quella lingua. `category_id` è opzionale:
 se omesso la traduzione eredita la categoria del post originale; se passato
 esplicitamente (anche `null`, per non assegnarne una) sovrascrive
-l'eredità.
+l'eredità. `notes` è opzionale e **non** viene ereditato dall'originale: una
+traduzione ha le proprie note.
 
 **`GET /api/v1/posts/{post_id}/translations`** — pubblico. Lista
 `{id, locale, slug, status}` di tutte le traduzioni **pubblicamente visibili**
@@ -382,7 +515,9 @@ visibili (pubblicati e non pianificati nel futuro). Con sessione e accesso in
 scrittura (proprietario/autore/co-autore), tutti i post — bozze, in
 revisione, pianificati inclusi — necessario per la dashboard autore. Query
 param opzionale `?locale=it` per filtrare una sola lingua; omesso, ritorna
-tutte le lingue.
+tutte le lingue. Segue anche la `visibility` del blog: `404` se il chiamante
+non può vedere un blog `members`/`private` (vedi sezione Blog). Stessa regola
+per `GET /posts/{post_id}` e per il permalink qui sotto.
 
 **`GET /api/v1/posts/{post_id}`** — se pubblicamente visibile, pubblico.
 Altrimenti richiede di avere accesso in scrittura al blog (stessa regola
@@ -401,8 +536,10 @@ visibile per il chiamante).
 
 **`PATCH /api/v1/posts/{post_id}`** — stessa autorizzazione della creazione.
 Aggiorna
-`title`/`content`/`cover_image_url`/`cover_image_is_sensitive`/`tags`/`category_id`
-(tutti opzionali). Se `content` cambia, accoda di nuovo il backup su S3. Per
+`title`/`content`/`cover_image_url`/`cover_image_is_sensitive`/`tags`/`category_id`/`notes`
+(tutti opzionali). Se `content` cambia, accoda di nuovo il backup su S3.
+Per `notes`: campo assente lascia le note invariate, una lista (anche vuota
+`[]`) le sostituisce. Per
 `cover_image_url`: valore assente (`null`/campo omesso) lascia la cover
 invariata, stringa vuota `""` la rimuove (azzerando anche
 `cover_image_is_sensitive`, indipendentemente da cosa viene passato per
@@ -565,12 +702,20 @@ opzionali).
 ```json
 {
   "username": "...", "bio": "...",
-  "first_name": "...", "last_name": "...",
+  "first_name": "...", "last_name": "...", "display_name": "...",
+  "post_author_name_style": "username",
   "country": "IT", "native_language": "it", "fallback_languages": ["en", "fr"],
   "avatar_url": "...", "social_links": [...], "created_at": "..."
 }
 ```
 
+`display_name` è un alias pubblico globale (todo/BLOG.md #4): quando
+valorizzato, è l'intestazione del profilo pubblico al posto di username /
+nome e cognome.
+`post_author_name_style` (todo/USERS.md #2) è la preferenza dell'utente su
+cosa mostrare come nome autore sui propri post — `username` (default),
+`full_name` (nome e cognome) o `display_name` (alias globale) — applicata
+solo quando il blog non impone un nome pubblico (vedi sezione Post).
 `first_name`/`last_name`/`country`/`native_language` sono liberi/opzionali.
 `country` è solo controllato nel formato (ISO 3166-1 alpha-2, es. `IT`, non
 verificato contro un elenco ufficiale dei paesi — vedi
@@ -581,10 +726,13 @@ verso cui l'utente potrà eventualmente tradurre i propri contenuti; massimo
 5.
 
 **`PATCH /api/v1/users/me`** — richiede sessione. Aggiorna `bio`,
-`first_name`, `last_name`, `country`, `native_language`,
-`fallback_languages` (tutti opzionali). Per `country`/`native_language`:
-stringa vuota `""` azzera il campo, assente lo lascia invariato, qualsiasi
-altro valore lo sostituisce (`400` se il formato non è valido). Per
+`first_name`, `last_name`, `display_name`, `post_author_name_style`,
+`country`, `native_language`, `fallback_languages` (tutti opzionali). Per
+`first_name`/`last_name`/`display_name`/`country`/`native_language`: stringa
+vuota `""` azzera il campo, assente lo lascia invariato, qualsiasi altro
+valore lo sostituisce (`400` se il formato di `country`/`native_language` non
+è valido). `post_author_name_style`: uno tra `username` | `full_name` |
+`display_name` (`422` altrimenti), assente lo lascia invariato. Per
 `fallback_languages`: assente lascia invariata la lista, una lista (anche
 vuota) la sostituisce (`400` se oltre 5 o un codice non valido).
 
@@ -692,9 +840,11 @@ automatizzato in questi script).
 ## Feed (homepage multi-blog)
 
 **`GET /api/v1/feed/posts`** — pubblico, nessuna autenticazione. Post
-pubblicati (e con `published_at` raggiunto) di **tutti i blog**, dal più
-recente — pensato per la homepage della piattaforma (CLAUDE.md #2:
-"raccolta degli articoli nella lingua dell'utente, stile dev.to").
+pubblicati (e con `published_at` raggiunto) dei soli blog **`public`** (i
+blog `members`/`private` sono esclusi — vedi `visibility` nella sezione
+Blog), dal più recente — pensato per la homepage della piattaforma
+(CLAUDE.md #2: "raccolta degli articoli nella lingua dell'utente, stile
+dev.to").
 
 Query param opzionali: `locale` (filtra una lingua, altrimenti tutte
 insieme), `tag` (filtra per tag normalizzato, es. `poesia` non `#Poesia` —
@@ -706,8 +856,9 @@ separato da `/blogs/{slug}/posts` apposta: qui i post attraversano blog
 diversi, non sono scoped a uno slug/id specifico.
 
 **`GET /api/v1/feed/trending`** — pubblico, nessuna autenticazione. Tag più
-usati tra i post pubblicati negli ultimi `days` giorni (default 7, massimo
-90), dal più frequente: `[{"tag": "poesia", "post_count": 12}, ...]`. Query
+usati tra i post pubblicati (dei soli blog `public`) negli ultimi `days`
+giorni (default 7, massimo 90), dal più frequente:
+`[{"tag": "poesia", "post_count": 12}, ...]`. Query
 param opzionali: `days`, `limit` (default 10, massimo 30). Non esistono
 ancora contatori di like/condivisioni in piattaforma (vedi ROADMAP.md): è
 l'unica base disponibile oggi per una sezione "di tendenza".

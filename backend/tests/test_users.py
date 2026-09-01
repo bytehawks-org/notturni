@@ -15,6 +15,8 @@ async def test_public_profile(client: AsyncClient, make_user: Callable) -> None:
         "bio": None,
         "first_name": None,
         "last_name": None,
+        "display_name": None,
+        "post_author_name_style": "username",
         "country": None,
         "native_language": None,
         "fallback_languages": [],
@@ -193,6 +195,115 @@ async def test_update_profile_bio_fields(client: AsyncClient, make_user: Callabl
     assert clear_res.json()["country"] is None
     # gli altri campi restano quelli già salvati
     assert clear_res.json()["first_name"] == "Ada"
+
+
+async def test_update_profile_display_name(client: AsyncClient, make_user: Callable) -> None:
+    user: AuthedUser = await make_user("profilo-alias")
+
+    set_res = await client.patch(
+        "/api/v1/users/me", json={"display_name": "  Gatto Nero  "}, headers=user.headers
+    )
+    assert set_res.status_code == 200
+    assert set_res.json()["display_name"] == "Gatto Nero"
+
+    public = await client.get("/api/v1/users/profilo-alias")
+    assert public.json()["display_name"] == "Gatto Nero"
+
+    clear_res = await client.patch(
+        "/api/v1/users/me", json={"display_name": ""}, headers=user.headers
+    )
+    assert clear_res.json()["display_name"] is None
+
+
+async def test_post_author_name_style_choice(client: AsyncClient, make_user: Callable) -> None:
+    user: AuthedUser = await make_user("stile-nome")
+    await client.patch(
+        "/api/v1/users/me",
+        json={"first_name": "Ada", "last_name": "Byron", "display_name": "Contessa"},
+        headers=user.headers,
+    )
+    await client.post("/api/v1/blogs", json={"slug": "blog-stile", "title": "x"}, headers=user.headers)
+
+    async def author_of_new_post(slug: str) -> str:
+        res = await client.post(
+            "/api/v1/blogs/blog-stile/posts",
+            json={"slug": slug, "title": "t", "content": "c"},
+            headers=user.headers,
+        )
+        assert res.status_code == 201, res.text
+        return res.json()["author_display_name"]
+
+    # default: username
+    assert await author_of_new_post("p-username") == "stile-nome"
+
+    await client.patch(
+        "/api/v1/users/me", json={"post_author_name_style": "full_name"}, headers=user.headers
+    )
+    assert (await client.get("/api/v1/users/stile-nome")).json()["post_author_name_style"] == "full_name"
+    assert await author_of_new_post("p-fullname") == "Ada Byron"
+
+    await client.patch(
+        "/api/v1/users/me", json={"post_author_name_style": "display_name"}, headers=user.headers
+    )
+    assert await author_of_new_post("p-display") == "Contessa"
+
+    # valore non valido → 422
+    bad = await client.patch(
+        "/api/v1/users/me", json={"post_author_name_style": "pseudonimo"}, headers=user.headers
+    )
+    assert bad.status_code == 422
+
+
+async def test_post_author_name_style_ignored_when_blog_imposes_alias(
+    client: AsyncClient, make_user: Callable
+) -> None:
+    user: AuthedUser = await make_user("stile-ignorato")
+    await client.patch(
+        "/api/v1/users/me",
+        json={"first_name": "Ada", "post_author_name_style": "full_name"},
+        headers=user.headers,
+    )
+    await client.post(
+        "/api/v1/blogs", json={"slug": "blog-impone", "title": "x"}, headers=user.headers
+    )
+    await client.patch(
+        "/api/v1/blogs/blog-impone",
+        json={"default_author_display_name": "La Voce"},
+        headers=user.headers,
+    )
+    res = await client.post(
+        "/api/v1/blogs/blog-impone/posts",
+        json={"slug": "p", "title": "t", "content": "c"},
+        headers=user.headers,
+    )
+    # l'alias del blog vince sulla preferenza di profilo, senza override
+    assert res.json()["author_display_name"] == "La Voce"
+
+
+async def test_resave_by_author_realigns_name_to_current_preference(
+    client: AsyncClient, make_user: Callable
+) -> None:
+    user: AuthedUser = await make_user("risalva-nome")
+    await client.post(
+        "/api/v1/blogs", json={"slug": "blog-risalva", "title": "x"}, headers=user.headers
+    )
+    created = await client.post(
+        "/api/v1/blogs/blog-risalva/posts",
+        json={"slug": "p", "title": "t", "content": "c"},
+        headers=user.headers,
+    )
+    post_id = created.json()["id"]
+    assert created.json()["author_display_name"] == "risalva-nome"
+
+    await client.patch(
+        "/api/v1/users/me",
+        json={"display_name": "Fenice", "post_author_name_style": "display_name"},
+        headers=user.headers,
+    )
+    updated = await client.patch(
+        f"/api/v1/posts/{post_id}", json={"content": "c2"}, headers=user.headers
+    )
+    assert updated.json()["author_display_name"] == "Fenice"
 
 
 async def test_update_profile_rejects_invalid_country_and_language(

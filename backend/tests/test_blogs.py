@@ -108,8 +108,8 @@ async def test_default_author_display_name_used_when_post_omits_it(
     )
     assert post_res.json()["author_display_name"] == "Nome di Penna"
 
-    # un autore che specifica esplicitamente il proprio nome per il singolo
-    # post continua a poterlo fare, sovrascrivendo il default del blog
+    # todo/USERS.md #2: con un alias imposto dal blog non c'è override — il
+    # campo author_display_name non esiste più nel payload e verrebbe ignorato.
     override_res = await client.post(
         "/api/v1/blogs/blog-pen-name/posts",
         json={
@@ -120,15 +120,135 @@ async def test_default_author_display_name_used_when_post_omits_it(
         },
         headers=owner.headers,
     )
-    assert override_res.json()["author_display_name"] == "Altro Nome"
+    assert override_res.json()["author_display_name"] == "Nome di Penna"
 
-    # rimozione con stringa vuota: torna al fallback sullo username
+    # rimozione con stringa vuota: si torna alla preferenza di profilo
+    # (default: username)
     clear_res = await client.patch(
         "/api/v1/blogs/blog-pen-name",
         json={"default_author_display_name": ""},
         headers=owner.headers,
     )
     assert clear_res.json()["default_author_display_name"] is None
+
+    after_clear = await client.post(
+        "/api/v1/blogs/blog-pen-name/posts",
+        json={"slug": "post-dopo", "title": "x", "content": "y"},
+        headers=owner.headers,
+    )
+    assert after_clear.json()["author_display_name"] == "owner-pen-name"
+
+
+async def test_blog_subtitle_and_description(client: AsyncClient, make_user: Callable) -> None:
+    owner: AuthedUser = await make_user("owner-sub")
+    create = await client.post(
+        "/api/v1/blogs",
+        json={
+            "slug": "blog-sottotitolo",
+            "title": "x",
+            "subtitle": "Un sottotitolo breve",
+            "description": "Una descrizione un po' più lunga del blog.",
+        },
+        headers=owner.headers,
+    )
+    assert create.status_code == 201, create.text
+    body = create.json()
+    assert body["subtitle"] == "Un sottotitolo breve"
+    assert body["description"] == "Una descrizione un po' più lunga del blog."
+    assert body["visibility"] == "public"
+
+    # troppo lungo → 400
+    too_long = await client.patch(
+        "/api/v1/blogs/blog-sottotitolo",
+        json={"subtitle": "x" * 65},
+        headers=owner.headers,
+    )
+    assert too_long.status_code == 400
+
+    # "" azzera
+    cleared = await client.patch(
+        "/api/v1/blogs/blog-sottotitolo",
+        json={"subtitle": "", "description": ""},
+        headers=owner.headers,
+    )
+    assert cleared.json()["subtitle"] is None
+    assert cleared.json()["description"] is None
+
+
+async def test_blog_visibility_members_and_private(
+    client: AsyncClient, make_user: Callable
+) -> None:
+    owner: AuthedUser = await make_user("owner-vis")
+    stranger: AuthedUser = await make_user("stranger-vis")
+    await client.post(
+        "/api/v1/blogs",
+        json={"slug": "blog-riservato", "title": "x", "visibility": "members"},
+        headers=owner.headers,
+    )
+
+    # members: anonimo → 404, utente autenticato qualsiasi → 200
+    assert (await client.get("/api/v1/blogs/blog-riservato")).status_code == 404
+    assert (
+        await client.get("/api/v1/blogs/blog-riservato", headers=stranger.headers)
+    ).status_code == 200
+    assert (
+        await client.get("/api/v1/blogs/blog-riservato", headers=owner.headers)
+    ).status_code == 200
+
+    # passa a private: solo il proprietario vede
+    await client.patch(
+        "/api/v1/blogs/blog-riservato",
+        json={"visibility": "private"},
+        headers=owner.headers,
+    )
+    assert (
+        await client.get("/api/v1/blogs/blog-riservato", headers=stranger.headers)
+    ).status_code == 404
+    assert (
+        await client.get("/api/v1/blogs/blog-riservato", headers=owner.headers)
+    ).status_code == 200
+    # anche i post del blog seguono la visibilità
+    assert (
+        await client.get("/api/v1/blogs/blog-riservato/posts", headers=stranger.headers)
+    ).status_code == 404
+
+
+async def test_private_blog_only_owner_writes(client: AsyncClient, make_user: Callable) -> None:
+    owner: AuthedUser = await make_user("owner-diary")
+    collaborator: AuthedUser = await make_user("collab-diary")
+    await client.post(
+        "/api/v1/blogs",
+        json={"slug": "diario-privato", "title": "x", "visibility": "private"},
+        headers=owner.headers,
+    )
+    # invita e fai accettare come co-autore
+    inv = await client.post(
+        "/api/v1/blogs/diario-privato/invitations",
+        json={"username": "collab-diary", "role": "co_autore"},
+        headers=owner.headers,
+    )
+    assert inv.status_code == 201, inv.text
+    invitation_id = inv.json()["id"]
+    accept = await client.post(
+        f"/api/v1/blogs/received-invitations/{invitation_id}/accept",
+        headers=collaborator.headers,
+    )
+    assert accept.status_code == 200
+
+    # nonostante la membership co_autore, su un blog privato scrive solo il proprietario
+    forbidden = await client.post(
+        "/api/v1/blogs/diario-privato/posts",
+        json={"slug": "post-collab", "title": "x", "content": "y"},
+        headers=collaborator.headers,
+    )
+    assert forbidden.status_code == 403
+
+    ok = await client.post(
+        "/api/v1/blogs/diario-privato/posts",
+        json={"slug": "post-owner", "title": "x", "content": "y"},
+        headers=owner.headers,
+    )
+    assert ok.status_code == 201
 
 
 async def test_blog_follow_unfollow(client: AsyncClient, make_user: Callable) -> None:

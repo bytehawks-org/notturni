@@ -7,16 +7,20 @@ import { Table } from "@tiptap/extension-table";
 import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
 import TableRow from "@tiptap/extension-table-row";
+import type { Editor } from "@tiptap/react";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Markdown, type MarkdownStorage } from "tiptap-markdown";
 
 import { ApiClientError, api } from "@/lib/api";
+import { MAX_NOTE_LENGTH, type PostNote } from "@/lib/types";
+
 import {
   BulletListIcon,
   ImageIcon,
   LinkIcon,
+  NoteIcon,
   OrderedListIcon,
   QuoteIcon,
   RedoIcon,
@@ -32,6 +36,9 @@ interface RichTextEditorProps {
   blogSlug: string;
   authFetch: <T>(fn: (token: string) => Promise<T>) => Promise<T>;
   placeholder?: string;
+  /** Note a piè di pagina del post (todo/EDITOR.md). */
+  notes: PostNote[];
+  onNotesChange: (notes: PostNote[]) => void;
 }
 
 function ToolbarButton({
@@ -68,6 +75,157 @@ function ToolbarDivider() {
   return <span className="mx-1.5 h-6 w-px bg-border" />;
 }
 
+interface MentionCandidate {
+  username: string;
+  display_name: string | null;
+}
+
+// La `@` deve essere a inizio riga o preceduta da uno spazio; poi 0..32
+// caratteri del formato username (vedi app/domain/usernames.py).
+const MENTION_TRIGGER_RE = /(?:^|\s)@([a-z0-9_-]{0,32})$/;
+
+/** Autocomplete delle @menzioni nell'editor (todo/EDITOR.md): rileva la
+ * digitazione di `@parola`, propone gli utenti del blog e, alla selezione,
+ * inserisce `@username ` come testo semplice (il Markdown resta pulito, il
+ * link si forma al rendering — vedi src/lib/markdown.ts). Se il blog ha le
+ * menzioni disattivate l'endpoint non restituisce nulla e il menu non appare. */
+function useMentionAutocomplete(
+  editor: Editor | null,
+  blogSlug: string,
+  authFetch: <T>(fn: (token: string) => Promise<T>) => Promise<T>
+) {
+  const [anchor, setAnchor] = useState<{
+    from: number;
+    to: number;
+    query: string;
+    left: number;
+    top: number;
+  } | null>(null);
+  const [items, setItems] = useState<MentionCandidate[]>([]);
+  const [index, setIndex] = useState(0);
+
+  const anchorRef = useRef(anchor);
+  const itemsRef = useRef(items);
+  const indexRef = useRef(index);
+  useEffect(() => {
+    anchorRef.current = anchor;
+    itemsRef.current = items;
+    indexRef.current = index;
+  });
+
+  const close = useCallback(() => {
+    setAnchor(null);
+    setItems([]);
+    setIndex(0);
+  }, []);
+
+  const applyMention = useCallback(
+    (candidate: MentionCandidate) => {
+      const current = anchorRef.current;
+      if (!editor || !current) return;
+      editor
+        .chain()
+        .focus()
+        .insertContentAt({ from: current.from, to: current.to }, `@${candidate.username} `)
+        .run();
+      close();
+    },
+    [editor, close]
+  );
+
+  useEffect(() => {
+    if (!editor) return;
+    const detect = () => {
+      const { selection } = editor.state;
+      if (!selection.empty) return close();
+      const { $from } = selection;
+      const textBefore = $from.parent.textBetween(
+        Math.max(0, $from.parentOffset - 60),
+        $from.parentOffset,
+        undefined,
+        "￼"
+      );
+      const match = MENTION_TRIGGER_RE.exec(textBefore);
+      if (!match) return close();
+      const from = selection.from - match[1].length - 1;
+      const coords = editor.view.coordsAtPos(from);
+      setAnchor({ from, to: selection.from, query: match[1], left: coords.left, top: coords.bottom + 4 });
+    };
+    editor.on("selectionUpdate", detect);
+    editor.on("update", detect);
+    return () => {
+      editor.off("selectionUpdate", detect);
+      editor.off("update", detect);
+    };
+  }, [editor, close]);
+
+  const query = anchor?.query;
+  const open = anchor !== null;
+  useEffect(() => {
+    if (!open) return;
+    const handle = setTimeout(() => {
+      authFetch((token) => api.blogs.mentionableUsers(token, blogSlug, query ?? ""))
+        .then((list) => {
+          setItems(list);
+          setIndex(0);
+        })
+        .catch(() => setItems([]));
+    }, 120);
+    return () => clearTimeout(handle);
+  }, [open, query, blogSlug, authFetch]);
+
+  useEffect(() => {
+    if (!editor) return;
+    const dom = editor.view.dom;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!anchorRef.current || itemsRef.current.length === 0) return;
+      const count = itemsRef.current.length;
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setIndex((i) => (i + 1) % count);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setIndex((i) => (i - 1 + count) % count);
+      } else if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault();
+        applyMention(itemsRef.current[indexRef.current]);
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        close();
+      }
+    };
+    dom.addEventListener("keydown", onKeyDown, true);
+    return () => dom.removeEventListener("keydown", onKeyDown, true);
+  }, [editor, applyMention, close]);
+
+  if (!anchor || items.length === 0) return null;
+  return (
+    <ul
+      style={{ position: "fixed", left: anchor.left, top: anchor.top, zIndex: 50 }}
+      className="max-h-56 w-64 overflow-auto rounded-lg border border-border bg-background py-1 text-sm shadow-lg"
+    >
+      {items.map((item, i) => (
+        <li key={item.username}>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              applyMention(item);
+            }}
+            className={`flex w-full items-center gap-1.5 px-3 py-1.5 text-left ${
+              i === index ? "bg-primary/10 text-foreground" : "text-foreground/80 hover:bg-foreground/5"
+            }`}
+          >
+            <span className="text-muted">@</span>
+            <span className="font-medium">{item.username}</span>
+            {item.display_name && <span className="truncate text-muted">· {item.display_name}</span>}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 const DEFAULT_TOOLBAR_STATE = {
   bold: false,
   italic: false,
@@ -85,7 +243,15 @@ const DEFAULT_TOOLBAR_STATE = {
   canRedo: false,
 };
 
-export function RichTextEditor({ value, onChange, blogSlug, authFetch, placeholder }: RichTextEditorProps) {
+export function RichTextEditor({
+  value,
+  onChange,
+  blogSlug,
+  authFetch,
+  placeholder,
+  notes,
+  onNotesChange,
+}: RichTextEditorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   // Snapshot preso una sola volta al primo render: il contenuto iniziale
@@ -123,6 +289,8 @@ export function RichTextEditor({ value, onChange, blogSlug, authFetch, placehold
       onChange(markdownStorage.markdown.getMarkdown());
     },
   });
+
+  const mentionMenu = useMentionAutocomplete(editor, blogSlug, authFetch);
 
   // Se il contenuto arriva in modo asincrono dopo il mount (es. GET del post
   // ancora in corso al primo render), risincronizza l'editor una volta sola.
@@ -174,6 +342,56 @@ export function RichTextEditor({ value, onChange, blogSlug, authFetch, placehold
       return;
     }
     editor!.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+  }
+
+  /** Inserisce al cursore il marcatore `[n](#nota-n)` (un vero nodo link, così
+   * sopravvive al round-trip del serializzatore Markdown) e aggiunge la nota
+   * all'elenco. */
+  function insertNote() {
+    const text = window.prompt("Testo della nota");
+    if (text === null) return;
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    if (trimmed.length > MAX_NOTE_LENGTH) {
+      setUploadError(`La nota supera i ${MAX_NOTE_LENGTH} caratteri.`);
+      return;
+    }
+    const nextIdx = notes.reduce((max, n) => Math.max(max, n.idx), 0) + 1;
+    editor!
+      .chain()
+      .focus()
+      .insertContent({
+        type: "text",
+        text: String(nextIdx),
+        marks: [{ type: "link", attrs: { href: `#nota-${nextIdx}` } }],
+      })
+      // il mark link resta "attivo": lo si stacca subito così il testo dopo non ci finisce dentro
+      .unsetMark("link")
+      .run();
+    onNotesChange([...notes, { idx: nextIdx, content: trimmed }]);
+  }
+
+  function updateNote(idx: number, content: string) {
+    onNotesChange(notes.map((n) => (n.idx === idx ? { ...n, content } : n)));
+  }
+
+  function removeNote(idx: number) {
+    onNotesChange(notes.filter((n) => n.idx !== idx));
+    // toglie anche i marcatori [idx](#nota-idx) rimasti nel testo
+    const ranges: [number, number][] = [];
+    editor!.state.doc.descendants((node, pos) => {
+      if (
+        node.isText &&
+        node.marks.some((m) => m.type.name === "link" && m.attrs.href === `#nota-${idx}`)
+      ) {
+        ranges.push([pos, pos + node.nodeSize]);
+      }
+    });
+    if (ranges.length > 0) {
+      const tr = editor!.state.tr;
+      ranges.sort((a, b) => b[0] - a[0]).forEach(([from, to]) => tr.delete(from, to));
+      editor!.view.dispatch(tr);
+    }
   }
 
   async function handleImagePicked(file: File) {
@@ -243,6 +461,9 @@ export function RichTextEditor({ value, onChange, blogSlug, authFetch, placehold
         </ToolbarButton>
         <ToolbarButton title="Link" active={state.link} onClick={setLink}>
           <LinkIcon />
+        </ToolbarButton>
+        <ToolbarButton title="Nota a piè di pagina" onClick={insertNote}>
+          <NoteIcon />
         </ToolbarButton>
 
         <ToolbarDivider />
@@ -319,6 +540,39 @@ export function RichTextEditor({ value, onChange, blogSlug, authFetch, placehold
       {uploadError && <p className="mb-2 text-xs text-red-700">{uploadError}</p>}
 
       <EditorContent editor={editor} />
+      {mentionMenu}
+
+      {notes.length > 0 && (
+        <div className="mt-8 border-t border-border pt-4">
+          <p className="mb-2 text-xs uppercase tracking-wide text-muted">Note a piè di pagina</p>
+          <ul className="space-y-2">
+            {[...notes]
+              .sort((a, b) => a.idx - b.idx)
+              .map((note) => (
+                <li key={note.idx} className="flex items-start gap-2">
+                  <span className="mt-2 w-5 shrink-0 text-right text-xs text-muted">{note.idx}.</span>
+                  <textarea
+                    value={note.content}
+                    maxLength={MAX_NOTE_LENGTH}
+                    rows={2}
+                    onChange={(e) => updateNote(note.idx, e.target.value)}
+                    className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeNote(note.idx)}
+                    className="mt-1 text-xs text-muted hover:text-foreground"
+                  >
+                    Rimuovi
+                  </button>
+                </li>
+              ))}
+          </ul>
+          <p className="mt-2 text-xs text-muted">
+            Il riferimento nel testo è il numero cliccabile inserito col pulsante «Nota».
+          </p>
+        </div>
+      )}
     </div>
   );
 }

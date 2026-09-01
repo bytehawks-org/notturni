@@ -10,25 +10,37 @@ import { Card, CardTitle } from "@/components/ui/Card";
 import { FieldGroup, Input, Label } from "@/components/ui/Field";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import type { Blog, BlogConfig, Category, Comment, Post } from "@/lib/types";
+import {
+  BLOG_VISIBILITY_LABELS,
+  INVITABLE_BLOG_ROLES,
+  type Blog,
+  type BlogConfig,
+  type BlogInvitation,
+  type BlogMember,
+  type BlogRole,
+  type BlogVisibility,
+  type Category,
+  type Comment,
+  type Post,
+} from "@/lib/types";
 
 function errorMessage(err: unknown): string {
   return err instanceof ApiClientError ? err.message : "Errore imprevisto.";
 }
 
-type Tab = "posts" | "settings" | "appearance" | "comments";
+const ROLE_LABELS: Record<string, string> = {
+  autore: "Autore",
+  co_autore: "Co-autore",
+  revisore: "Revisore",
+  mediatore: "Mediatore",
+};
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: "posts", label: "Post" },
-  { id: "comments", label: "Commenti" },
-  { id: "appearance", label: "Aspetto" },
-  { id: "settings", label: "Impostazioni" },
-];
+type Tab = "posts" | "comments" | "appearance" | "collaborators" | "settings";
 
 export default function BlogDetailPage() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug;
-  const { user } = useAuth();
+  const { user, accessToken } = useAuth();
 
   const [blog, setBlog] = useState<Blog | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -36,10 +48,10 @@ export default function BlogDetailPage() {
 
   const load = useCallback(() => {
     api.blogs
-      .get(slug)
+      .get(slug, accessToken)
       .then(setBlog)
       .catch((err) => setError(errorMessage(err)));
-  }, [slug]);
+  }, [slug, accessToken]);
 
   useEffect(load, [load]);
 
@@ -48,6 +60,14 @@ export default function BlogDetailPage() {
 
   const isOwner = blog.owner_id === user.id;
 
+  const tabs: { id: Tab; label: string }[] = [
+    { id: "posts", label: "Post" },
+    { id: "comments", label: "Commenti" },
+    { id: "appearance", label: "Aspetto" },
+    ...(isOwner ? [{ id: "collaborators" as Tab, label: "Collaboratori" }] : []),
+    { id: "settings", label: "Impostazioni" },
+  ];
+
   return (
     <div>
       <div className="mb-6">
@@ -55,15 +75,25 @@ export default function BlogDetailPage() {
           ← I miei blog
         </Link>
         <h1 className="mt-2 font-serif text-2xl text-foreground">{blog.title}</h1>
-        <p className="text-sm text-muted">{blog.slug}.notturni.eu</p>
+        {blog.subtitle && <p className="text-sm text-foreground/80">{blog.subtitle}</p>}
+        <p className="text-sm text-muted">
+          {blog.slug}.notturni.eu · {BLOG_VISIBILITY_LABELS[blog.visibility]}
+        </p>
       </div>
 
       {!isOwner && (
-        <Alert kind="info">Non sei il proprietario di questo blog: alcune azioni non sono disponibili.</Alert>
+        <>
+          <Alert kind="info">
+            Non sei il proprietario di questo blog: alcune azioni non sono disponibili.
+          </Alert>
+          <div className="mt-4">
+            <MyMembershipCard blogSlug={blog.slug} />
+          </div>
+        </>
       )}
 
       <div className="mb-6 mt-4 flex gap-1 border-b border-border">
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
@@ -81,8 +111,74 @@ export default function BlogDetailPage() {
       {tab === "posts" && <PostsTab blogSlug={blog.slug} canWrite={isOwner} />}
       {tab === "comments" && <CommentsTab blogSlug={blog.slug} canModerate={isOwner} />}
       {tab === "appearance" && <AppearanceTab blogSlug={blog.slug} canEdit={isOwner} />}
+      {tab === "collaborators" && isOwner && <CollaboratorsTab blogSlug={blog.slug} />}
       {tab === "settings" && <SettingsTab blog={blog} canEdit={isOwner} onUpdated={setBlog} />}
     </div>
+  );
+}
+
+function MyMembershipCard({ blogSlug }: { blogSlug: string }) {
+  const { authFetch } = useAuth();
+  const [alias, setAlias] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    authFetch((token) => api.blogs.memberOf(token))
+      .then((list) => {
+        const mine = list.find((m) => m.blog.slug === blogSlug);
+        setAlias(mine ? (mine.author_display_name ?? "") : null);
+      })
+      .catch(() => setAlias(null));
+  }, [authFetch, blogSlug]);
+
+  if (alias === null) return null;
+
+  async function handleSave() {
+    setError(null);
+    try {
+      const updated = await authFetch((token) =>
+        api.blogs.updateMyMembership(token, blogSlug, alias ?? "")
+      );
+      setAlias(updated.author_display_name ?? "");
+      setSaved(true);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  return (
+    <Card>
+      <CardTitle>Il mio nome su questo blog</CardTitle>
+      <FieldGroup>
+        <Label htmlFor="my-alias">Alias autore (todo/BLOG.md #4)</Label>
+        <Input
+          id="my-alias"
+          value={alias}
+          maxLength={255}
+          placeholder="Lasciare vuoto per usare il nome predefinito del blog o il tuo alias di profilo"
+          onChange={(e) => {
+            setAlias(e.target.value);
+            setSaved(false);
+          }}
+        />
+        <p className="mt-1 text-xs text-muted">
+          Con cui firmi i post scritti qui. Ha la precedenza sul nome predefinito del blog e
+          sull&apos;alias del tuo profilo.
+        </p>
+      </FieldGroup>
+      {error && (
+        <div className="mb-3">
+          <Alert kind="error">{error}</Alert>
+        </div>
+      )}
+      {saved && (
+        <div className="mb-3">
+          <Alert kind="success">Salvato.</Alert>
+        </div>
+      )}
+      <Button onClick={handleSave}>Salva</Button>
+    </Card>
   );
 }
 
@@ -220,8 +316,167 @@ function CommentsTab({ blogSlug, canModerate }: { blogSlug: string; canModerate:
   );
 }
 
-function AppearanceTab({ blogSlug, canEdit }: { blogSlug: string; canEdit: boolean }) {
+function CollaboratorsTab({ blogSlug }: { blogSlug: string }) {
   const { authFetch } = useAuth();
+  const [members, setMembers] = useState<BlogMember[] | null>(null);
+  const [invitations, setInvitations] = useState<BlogInvitation[]>([]);
+  const [username, setUsername] = useState("");
+  const [role, setRole] = useState<BlogRole>(INVITABLE_BLOG_ROLES[0].value);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    authFetch((token) => api.blogs.members(token, blogSlug))
+      .then(setMembers)
+      .catch((err) => setError(errorMessage(err)));
+    authFetch((token) => api.blogs.listInvitations(token, blogSlug))
+      .then(setInvitations)
+      .catch(() => undefined);
+  }, [authFetch, blogSlug]);
+
+  useEffect(load, [load]);
+
+  async function handleInvite(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    try {
+      await authFetch((token) => api.blogs.createInvitation(token, blogSlug, username, role));
+      setUsername("");
+      load();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  async function handleRevoke(invitationId: string) {
+    try {
+      await authFetch((token) => api.blogs.revokeInvitation(token, blogSlug, invitationId));
+      load();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  async function handleRemoveMember(userId: string) {
+    try {
+      await authFetch((token) => api.blogs.removeMember(token, blogSlug, userId));
+      load();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  async function handleChangeRole(userId: string, newRole: BlogRole) {
+    try {
+      await authFetch((token) => api.blogs.updateMemberRole(token, blogSlug, userId, newRole));
+      load();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  const pending = invitations.filter((i) => i.status === "pending");
+
+  return (
+    <div className="space-y-6">
+      {error && <Alert kind="error">{error}</Alert>}
+
+      <Card>
+        <CardTitle>Collaboratori</CardTitle>
+        {members !== null && members.length === 0 && (
+          <p className="text-sm text-muted">Nessun collaboratore.</p>
+        )}
+        <ul className="space-y-2">
+          {members?.map((m) => (
+            <li key={m.user_id} className="flex flex-wrap items-center justify-between gap-3 text-sm">
+              <span className="text-foreground">
+                @{m.username}
+                {m.author_display_name && (
+                  <span className="text-muted"> — firma come «{m.author_display_name}»</span>
+                )}
+              </span>
+              <span className="flex items-center gap-2">
+                <select
+                  value={m.role}
+                  onChange={(e) => handleChangeRole(m.user_id, e.target.value as BlogRole)}
+                  className="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
+                >
+                  {INVITABLE_BLOG_ROLES.map((r) => (
+                    <option key={r.value} value={r.value}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveMember(m.user_id)}
+                  className="text-muted hover:text-foreground"
+                >
+                  Rimuovi
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </Card>
+
+      <Card>
+        <CardTitle>Invita un collaboratore</CardTitle>
+        <p className="mb-4 text-sm text-muted">
+          L&apos;invito resta in attesa finché l&apos;utente non lo accetta dalla propria dashboard.
+        </p>
+        <form onSubmit={handleInvite} className="flex flex-wrap items-end gap-3">
+          <div>
+            <Label htmlFor="invite-username">Username</Label>
+            <Input
+              id="invite-username"
+              required
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="invite-role">Ruolo</Label>
+            <select
+              id="invite-role"
+              value={role}
+              onChange={(e) => setRole(e.target.value as BlogRole)}
+              className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+            >
+              {INVITABLE_BLOG_ROLES.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <Button type="submit">Invia invito</Button>
+        </form>
+
+        {pending.length > 0 && (
+          <ul className="mt-4 space-y-2">
+            {pending.map((inv) => (
+              <li key={inv.id} className="flex items-center justify-between text-sm">
+                <span className="text-foreground">
+                  @{inv.invited_username} — {ROLE_LABELS[inv.role] ?? inv.role} (in attesa)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleRevoke(inv.id)}
+                  className="text-muted hover:text-foreground"
+                >
+                  Revoca
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function AppearanceTab({ blogSlug, canEdit }: { blogSlug: string; canEdit: boolean }) {
+  const { accessToken, authFetch } = useAuth();
   const [config, setConfig] = useState<BlogConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -229,10 +484,10 @@ function AppearanceTab({ blogSlug, canEdit }: { blogSlug: string; canEdit: boole
 
   useEffect(() => {
     api.blogs
-      .getConfig(blogSlug)
+      .getConfig(blogSlug, accessToken)
       .then(setConfig)
       .catch((err) => setError(errorMessage(err)));
-  }, [blogSlug]);
+  }, [blogSlug, accessToken]);
 
   function updatePaletteColor(key: string, value: string) {
     setConfig((prev) => ({ ...prev, palette: { ...prev?.palette, [key]: value } }));
@@ -341,7 +596,11 @@ function SettingsTab({
 }) {
   const { authFetch } = useAuth();
   const [title, setTitle] = useState(blog.title);
+  const [subtitle, setSubtitle] = useState(blog.subtitle ?? "");
+  const [description, setDescription] = useState(blog.description ?? "");
+  const [visibility, setVisibility] = useState<BlogVisibility>(blog.visibility);
   const [allowAnonymous, setAllowAnonymous] = useState(blog.allow_anonymous_comments);
+  const [mentionsEnabled, setMentionsEnabled] = useState(blog.mentions_enabled);
   const [defaultAuthorName, setDefaultAuthorName] = useState(blog.default_author_display_name ?? "");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -354,7 +613,11 @@ function SettingsTab({
       const updated = await authFetch((token) =>
         api.blogs.update(token, blog.slug, {
           title,
+          subtitle,
+          description,
+          visibility,
           allow_anonymous_comments: allowAnonymous,
+          mentions_enabled: mentionsEnabled,
           default_author_display_name: defaultAuthorName,
         })
       );
@@ -375,6 +638,50 @@ function SettingsTab({
           <Input id="blog-title" value={title} onChange={(e) => setTitle(e.target.value)} disabled={!canEdit} />
         </FieldGroup>
         <FieldGroup>
+          <Label htmlFor="blog-subtitle">Sottotitolo (max 64)</Label>
+          <Input
+            id="blog-subtitle"
+            maxLength={64}
+            value={subtitle}
+            onChange={(e) => setSubtitle(e.target.value)}
+            disabled={!canEdit}
+          />
+        </FieldGroup>
+        <FieldGroup>
+          <Label htmlFor="blog-description">Descrizione breve (max 256)</Label>
+          <textarea
+            id="blog-description"
+            maxLength={256}
+            rows={3}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            disabled={!canEdit}
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground disabled:opacity-60"
+          />
+          <p className="mt-1 text-xs text-muted">{description.length}/256</p>
+        </FieldGroup>
+        <FieldGroup>
+          <Label htmlFor="blog-visibility">Visibilità</Label>
+          <select
+            id="blog-visibility"
+            value={visibility}
+            onChange={(e) => setVisibility(e.target.value as BlogVisibility)}
+            disabled={!canEdit}
+            className="w-full max-w-xs rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground disabled:opacity-60"
+          >
+            {(Object.keys(BLOG_VISIBILITY_LABELS) as BlogVisibility[]).map((v) => (
+              <option key={v} value={v}>
+                {BLOG_VISIBILITY_LABELS[v]}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-muted">
+            <strong>Pubblico</strong>: visibile a tutti e nel feed della homepage.{" "}
+            <strong>Solo iscritti</strong>: leggibile solo da chi ha un account.{" "}
+            <strong>Privato</strong>: diario visibile e scrivibile solo da te.
+          </p>
+        </FieldGroup>
+        <FieldGroup>
           <Label htmlFor="blog-pen-name">Nome pubblico predefinito per gli autori</Label>
           <Input
             id="blog-pen-name"
@@ -384,8 +691,8 @@ function SettingsTab({
             disabled={!canEdit}
           />
           <p className="mt-1 text-xs text-muted">
-            Usato come nome dell&apos;autore sui nuovi post quando non se ne indica uno diverso per
-            singolo post — il nome pubblico può differire dal nome utente reale.
+            Nome pubblico degli autori sui post di questo blog. Se impostato, vale sempre e non
+            è sovrascrivibile dal singolo autore (todo/USERS.md #2).
           </p>
         </FieldGroup>
         <FieldGroup>
@@ -397,6 +704,17 @@ function SettingsTab({
               disabled={!canEdit}
             />
             Consenti commenti da chi non è registrato (con moderazione obbligatoria)
+          </label>
+        </FieldGroup>
+        <FieldGroup>
+          <label className="flex items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={mentionsEnabled}
+              onChange={(e) => setMentionsEnabled(e.target.checked)}
+              disabled={!canEdit}
+            />
+            Trasforma le @menzioni nei post in link al profilo dell&apos;utente citato
           </label>
         </FieldGroup>
         <p className="mb-4 text-sm text-muted">Lingua di default: {blog.default_locale}</p>

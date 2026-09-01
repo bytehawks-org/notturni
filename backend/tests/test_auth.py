@@ -44,6 +44,27 @@ async def test_register_reserved_username_rejected(client: AsyncClient) -> None:
     assert res.status_code == 400
 
 
+@pytest.mark.parametrize(
+    "username",
+    ["Giulia", "gi ulia", "gi@ulia", "-giulia", "giulia-", "gi--ulia", "ab", "x" * 33],
+)
+async def test_register_rejects_invalid_username_format(client: AsyncClient, username: str) -> None:
+    res = await client.post(
+        "/api/v1/auth/register",
+        json={"username": username, "email": "u@example.com", "password": "Password123!"},
+    )
+    assert res.status_code == 400
+
+
+@pytest.mark.parametrize("username", ["giulia", "gi-ulia", "gi_ulia_9", "abc"])
+async def test_register_accepts_valid_username_format(client: AsyncClient, username: str) -> None:
+    res = await client.post(
+        "/api/v1/auth/register",
+        json={"username": username, "email": f"{username}@example.com", "password": "Password123!"},
+    )
+    assert res.status_code == 201, res.text
+
+
 async def test_login_wrong_password(client: AsyncClient, make_user: Callable) -> None:
     user: AuthedUser = await make_user("giulia")
     res = await client.post(

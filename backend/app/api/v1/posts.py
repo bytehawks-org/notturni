@@ -10,25 +10,46 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_optional_current_user
 from app.core.broker import publish_post_backup
 from app.core.database import get_session
-from app.domain.authorization import can_review_posts, can_write_posts, is_publicly_visible
+from app.domain.authorization import (
+    can_review_posts,
+    can_view_blog,
+    can_write_posts,
+    get_membership,
+    is_publicly_visible,
+)
 from app.domain.i18n import validate_locale
+from app.domain.notes import NoteInput, normalize_notes
 from app.domain.permalinks import build_permalink, is_valid_permalink_date, permalink_date
 from app.domain.tags import resolve_tags
 from app.models.blog import Blog
 from app.models.category import Category
 from app.models.post import Post, PostStatus
+from app.models.post_note import post_notes
 from app.models.tag import Tag, post_tags
-from app.models.user import User
+from app.models.user import PostAuthorNameStyle, User
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+class NoteIn(BaseModel):
+    idx: int
+    content: str
+
+
+class NoteOut(BaseModel):
+    idx: int
+    content: str
+
+
+def _to_note_inputs(notes: list[NoteIn] | None) -> list[NoteInput]:
+    return [NoteInput(idx=n.idx, content=n.content) for n in (notes or [])]
 
 
 class PostCreateRequest(BaseModel):
     slug: str
     title: str
     content: str
-    author_display_name: str | None = None
     locale: str | None = None  # default: la lingua di default del blog
     cover_image_url: str | None = None
     # Esito della moderazione automatica ricevuto da POST /blogs/{slug}/media
@@ -40,6 +61,9 @@ class PostCreateRequest(BaseModel):
     # Categoria (vedi app/domain/categories.py) — al più una, deve
     # appartenere allo stesso blog.
     category_id: uuid.UUID | None = None
+    # Note a piè di pagina (todo/EDITOR.md): elenco strutturato, non nel
+    # corpo. Nel `content` il riferimento è il marcatore `[idx](#nota-idx)`.
+    notes: list[NoteIn] | None = None
 
 
 class PostTranslationRequest(BaseModel):
@@ -47,11 +71,11 @@ class PostTranslationRequest(BaseModel):
     locale: str
     title: str
     content: str
-    author_display_name: str | None = None
     cover_image_url: str | None = None
     cover_image_is_sensitive: bool = False
     tags: list[str] | None = None
     category_id: uuid.UUID | None = None
+    notes: list[NoteIn] | None = None
 
 
 class PostUpdateRequest(BaseModel):
@@ -72,6 +96,8 @@ class PostUpdateRequest(BaseModel):
     # "campo assente" (non toccarla) — servirsi di model_fields_set in
     # update_post, non di un semplice "is not None".
     category_id: uuid.UUID | None = None
+    # assente: lascia invariate le note; lista (anche vuota `[]`): le sostituisce.
+    notes: list[NoteIn] | None = None
 
 
 class PublishRequest(BaseModel):
@@ -107,6 +133,12 @@ class PostOut(BaseModel):
     # _post_out() ad ogni risposta, serve perciò anche blog_slug qui.
     blog_slug: str
     permalink: str
+    # todo/EDITOR.md: se il blog ha le @menzioni attive, il frontend le
+    # trasforma in link al profilo citato al momento del rendering.
+    mentions_enabled: bool
+    # Note a piè di pagina (todo/EDITOR.md), ordinate per `idx`. Il frontend
+    # le rende come elenco in fondo + tooltip sui marcatori nel testo.
+    notes: list[NoteOut]
     # manual_tags: solo quelli del campo dedicato (per ripresentarli in
     # modifica). tags: l'insieme effettivo (manual_tags + hashtag nel testo),
     # per la visualizzazione pubblica e le pagine/tendenze per tag.
@@ -141,12 +173,45 @@ async def _get_post_or_404(session: AsyncSession, post_id: uuid.UUID) -> Post:
     return post
 
 
+async def _require_blog_viewable(session: AsyncSession, user: User | None, blog: Blog) -> None:
+    """todo/BLOG.md #2: i post di un blog `members`/`private` non sono
+    raggiungibili da chi non può vedere il blog — 404, non 403."""
+    if not await can_view_blog(session, user_id=user.id if user else None, blog=blog):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Post non trovato.")
+
+
 async def _require_write_access(session: AsyncSession, user: User, blog: Blog) -> None:
     if not await can_write_posts(session, user_id=user.id, blog=blog):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "Serve essere proprietario del blog o avere ruolo autore/co-autore.",
         )
+
+
+async def _resolve_author_display_name(session: AsyncSession, user: User, blog: Blog) -> str:
+    """Nome pubblico dell'autore di un post (CLAUDE.md #1, todo/BLOG.md #4,
+    todo/USERS.md #2). Calcolato alla scrittura del post (creazione, modifica,
+    traduzione) e salvato come colonna — non c'è più un valore per singolo post
+    indicato dal client.
+
+    1. Alias dell'autore sulla propria membership di *questo* blog, se presente;
+    2. nome pubblico predefinito del blog (`default_author_display_name`), se presente.
+       Se uno di questi due esiste, è imposto: nessuna possibilità di override.
+    3. altrimenti la preferenza dell'utente (`post_author_name_style`):
+       nome e cognome, alias globale del profilo, o username (default).
+    """
+    membership = await get_membership(session, user_id=user.id, blog_id=blog.id)
+    if membership is not None and membership.author_display_name:
+        return membership.author_display_name
+    if blog.default_author_display_name:
+        return blog.default_author_display_name
+
+    if user.post_author_name_style == PostAuthorNameStyle.FULL_NAME:
+        full = " ".join(part for part in (user.first_name, user.last_name) if part).strip()
+        return full or user.username
+    if user.post_author_name_style == PostAuthorNameStyle.DISPLAY_NAME:
+        return user.display_name or user.username
+    return user.username
 
 
 async def _validate_category(session: AsyncSession, blog: Blog, category_id: uuid.UUID | None) -> None:
@@ -165,6 +230,12 @@ async def _post_out(session: AsyncSession, post: Post, blog: Blog) -> PostOut:
     # un session.get() esplicito qui, non la relazione ORM su Post.
     _, effective_tags = resolve_tags(post.manual_tags, post.content)
     category = await session.get(Category, post.category_id) if post.category_id else None
+    note_rows = await session.execute(
+        select(post_notes.c.idx, post_notes.c.content)
+        .where(post_notes.c.post_id == post.id)
+        .order_by(post_notes.c.idx)
+    )
+    notes = [NoteOut(idx=idx, content=content) for idx, content in note_rows.all()]
     return PostOut(
         id=post.id,
         blog_id=post.blog_id,
@@ -182,6 +253,8 @@ async def _post_out(session: AsyncSession, post: Post, blog: Blog) -> PostOut:
         created_at=post.created_at,
         blog_slug=blog.slug,
         permalink=build_permalink(blog.slug, post),
+        mentions_enabled=blog.mentions_enabled,
+        notes=notes,
         manual_tags=post.manual_tags,
         tags=effective_tags,
         category=CategorySummaryOut.model_validate(category) if category else None,
@@ -217,6 +290,22 @@ async def _sync_post_tags(session: AsyncSession, post: Post, effective_tags: lis
         await session.execute(
             insert(post_tags),
             [{"post_id": post.id, "tag_id": tag_id} for tag_id in tag_ids],
+        )
+
+
+async def _sync_post_notes(session: AsyncSession, post: Post, notes: list[NoteInput]) -> None:
+    """Riscrive le note del post nella tabella `post_notes` (Core, non una
+    relazione ORM — stessa insidia async di `_sync_post_tags`). Sorgente di
+    verità delle note è questo elenco strutturato, non il corpo del post."""
+    # per un post appena creato serve l'id, che i default di colonna assegnano
+    # solo al flush (un delete/insert Core non lo fa scattare da sé).
+    if post.id is None:
+        await session.flush()
+    await session.execute(delete(post_notes).where(post_notes.c.post_id == post.id))
+    if notes:
+        await session.execute(
+            insert(post_notes),
+            [{"post_id": post.id, "idx": n.idx, "content": n.content} for n in notes],
         )
 
 
@@ -261,6 +350,7 @@ async def create_post(
 
     try:
         manual_tags, effective_tags = resolve_tags(payload.tags or [], payload.content)
+        notes = normalize_notes(_to_note_inputs(payload.notes))
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
@@ -269,7 +359,7 @@ async def create_post(
     post = Post(
         blog_id=blog.id,
         author_id=current_user.id,
-        author_display_name=payload.author_display_name or blog.default_author_display_name or current_user.username,
+        author_display_name=await _resolve_author_display_name(session, current_user, blog),
         locale=locale,
         title=payload.title,
         slug=payload.slug,
@@ -281,6 +371,7 @@ async def create_post(
     )
     session.add(post)
     await _sync_post_tags(session, post, effective_tags)
+    await _sync_post_notes(session, post, notes)
     await session.commit()
     await session.refresh(post, attribute_names=["created_at", "updated_at"])
     _backup_to_s3(blog, post)
@@ -324,6 +415,7 @@ async def add_post_translation(
 
     try:
         manual_tags, effective_tags = resolve_tags(payload.tags or [], payload.content)
+        notes = normalize_notes(_to_note_inputs(payload.notes))
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
@@ -337,7 +429,7 @@ async def add_post_translation(
     translation = Post(
         blog_id=blog.id,
         author_id=current_user.id,
-        author_display_name=payload.author_display_name or blog.default_author_display_name or current_user.username,
+        author_display_name=await _resolve_author_display_name(session, current_user, blog),
         translation_group_id=original.translation_group_id,
         locale=payload.locale,
         title=payload.title,
@@ -350,6 +442,7 @@ async def add_post_translation(
     )
     session.add(translation)
     await _sync_post_tags(session, translation, effective_tags)
+    await _sync_post_notes(session, translation, notes)
     await session.commit()
     await session.refresh(translation, attribute_names=["created_at", "updated_at"])
     _backup_to_s3(blog, translation)
@@ -379,6 +472,7 @@ async def list_posts(
     pianificati, con data raggiunta). Chi ha accesso in scrittura al blog
     (proprietario/autore/co-autore) vede anche bozze/in revisione/pianificati."""
     blog = await _get_blog_or_404(session, blog_slug)
+    await _require_blog_viewable(session, current_user, blog)
 
     stmt = select(Post).where(Post.blog_id == blog.id)
     if locale is not None:
@@ -403,6 +497,7 @@ async def get_post(
     post = await _get_post_or_404(session, post_id)
     blog = await session.get(Blog, post.blog_id)
     assert blog is not None
+    await _require_blog_viewable(session, current_user, blog)
     if is_publicly_visible(post):
         return await _post_out(session, post, blog)
 
@@ -428,6 +523,7 @@ async def get_post_by_permalink(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Formato data non valido, atteso YYYYMMDD.")
 
     blog = await _get_blog_or_404(session, blog_slug)
+    await _require_blog_viewable(session, current_user, blog)
     result = await session.execute(
         select(Post).where(Post.blog_id == blog.id, Post.slug == post_slug)
     )
@@ -485,6 +581,20 @@ async def update_post(
     if "category_id" in payload.model_fields_set:
         await _validate_category(session, blog, payload.category_id)
         post.category_id = payload.category_id
+
+    # note: assente lascia invariato; lista (anche `[]`) sostituisce.
+    if payload.notes is not None:
+        try:
+            notes = normalize_notes(_to_note_inputs(payload.notes))
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        await _sync_post_notes(session, post, notes)
+
+    # todo/USERS.md #2: quando è l'autore stesso a risalvare, riallinea il nome
+    # pubblico alle regole correnti (alias imposto dal blog o preferenza di
+    # profilo) — non esiste più un valore per singolo post da preservare.
+    if current_user.id == post.author_id:
+        post.author_display_name = await _resolve_author_display_name(session, current_user, blog)
 
     await session.commit()
     await session.refresh(post, attribute_names=["created_at", "updated_at"])

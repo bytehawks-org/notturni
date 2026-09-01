@@ -12,6 +12,7 @@ import { RichTextEditor } from "@/components/editor/RichTextEditor";
 import { TagInput } from "@/components/editor/TagInput";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import type { PostNote } from "@/lib/types";
 
 const FORM_ID = "new-post-form";
 
@@ -27,6 +28,7 @@ export default function NewPostPage() {
   const [coverImageIsSensitive, setCoverImageIsSensitive] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [notes, setNotes] = useState<PostNote[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -44,6 +46,7 @@ export default function NewPostPage() {
           cover_image_is_sensitive: coverImageIsSensitive,
           tags,
           category_id: categoryId,
+          notes,
         })
       );
       router.push(`/dashboard/blogs/${params.slug}/posts/${post.id}`);
@@ -107,7 +110,14 @@ export default function NewPostPage() {
           />
         </div>
 
-        <RichTextEditor value={content} onChange={setContent} blogSlug={params.slug} authFetch={authFetch} />
+        <RichTextEditor
+          value={content}
+          onChange={setContent}
+          blogSlug={params.slug}
+          authFetch={authFetch}
+          notes={notes}
+          onNotesChange={setNotes}
+        />
 
         {error && (
           <div className="mt-6">

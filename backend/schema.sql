@@ -357,4 +357,61 @@ ALTER TABLE posts ADD CONSTRAINT fk_posts_category_id_categories FOREIGN KEY(cat
 
 UPDATE alembic_version SET version_num='b16963e9cdcb' WHERE alembic_version.version_num = 'd5dbeeb3f79f';
 
+-- Running upgrade b16963e9cdcb -> c4e1a7f2b830
+
+ALTER TABLE users ADD COLUMN display_name VARCHAR(255);
+
+ALTER TABLE blogs ADD COLUMN subtitle VARCHAR(64);
+
+ALTER TABLE blogs ADD COLUMN description VARCHAR(256);
+
+CREATE TYPE blog_visibility AS ENUM ('public', 'members', 'private');
+
+ALTER TABLE blogs ADD COLUMN visibility blog_visibility DEFAULT 'public' NOT NULL;
+
+ALTER TABLE blog_memberships ADD COLUMN author_display_name VARCHAR(255);
+
+CREATE TYPE blog_invitation_status AS ENUM ('pending', 'accepted', 'declined', 'revoked');
+
+CREATE TABLE blog_invitations (
+    blog_id UUID NOT NULL,
+    invited_user_id UUID NOT NULL,
+    invited_by_id UUID NOT NULL,
+    role blog_role NOT NULL,
+    status blog_invitation_status DEFAULT 'pending' NOT NULL,
+    responded_at TIMESTAMP WITH TIME ZONE,
+    id UUID NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(blog_id) REFERENCES blogs (id) ON DELETE CASCADE,
+    FOREIGN KEY(invited_user_id) REFERENCES users (id),
+    FOREIGN KEY(invited_by_id) REFERENCES users (id),
+    CONSTRAINT uq_blog_invitation_blog_user UNIQUE (blog_id, invited_user_id)
+);
+
+UPDATE alembic_version SET version_num='c4e1a7f2b830' WHERE alembic_version.version_num = 'b16963e9cdcb';
+
+-- Running upgrade c4e1a7f2b830 -> d8b3f1027a45
+
+CREATE TYPE post_author_name_style AS ENUM ('username', 'full_name', 'display_name');
+
+ALTER TABLE users ADD COLUMN post_author_name_style post_author_name_style DEFAULT 'username' NOT NULL;
+
+ALTER TABLE blogs ADD COLUMN mentions_enabled BOOLEAN DEFAULT true NOT NULL;
+
+UPDATE alembic_version SET version_num='d8b3f1027a45' WHERE alembic_version.version_num = 'c4e1a7f2b830';
+
+-- Running upgrade d8b3f1027a45 -> e2c9a4517f60
+
+CREATE TABLE post_notes (
+    post_id UUID NOT NULL,
+    idx INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    PRIMARY KEY (post_id, idx),
+    FOREIGN KEY(post_id) REFERENCES posts (id) ON DELETE CASCADE
+);
+
+UPDATE alembic_version SET version_num='e2c9a4517f60' WHERE alembic_version.version_num = 'd8b3f1027a45';
+
 COMMIT;

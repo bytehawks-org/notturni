@@ -81,6 +81,57 @@ body {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+/* @menzione (todo/USERS.md #1): link al profilo, senza sottolineatura per
+   distinguerla dai link normali nel testo. */
+.notturni-prose a.mention {
+  text-decoration: none;
+  font-weight: 500;
+}
+.notturni-prose a.mention:hover {
+  text-decoration: underline;
+}
+/* Note a piè di pagina (todo/EDITOR.md): riferimento in apice nel testo,
+   elenco numerato in fondo. Il testo della nota è anche nell'attributo
+   title del <sup>, quindi il browser mostra un tooltip al passaggio. */
+.notturni-prose .footnote-ref {
+  font-size: 0.75em;
+  line-height: 0;
+  margin-left: 1px;
+  cursor: help;
+}
+.notturni-prose .footnote-ref a {
+  text-decoration: none;
+  padding: 0 1px;
+}
+.notturni-prose .footnote-ref--missing {
+  color: var(--muted);
+}
+.notturni-prose .footnotes {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color);
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.notturni-prose .footnotes-title {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.75rem;
+}
+.notturni-prose .footnotes ol {
+  padding-left: 1.25rem;
+}
+.notturni-prose .footnotes li {
+  margin: 0.4rem 0;
+}
+.notturni-prose .footnotes li p {
+  display: inline;
+}
+.notturni-prose .footnote-backref {
+  text-decoration: none;
+  margin-left: 0.35rem;
+}
 .notturni-prose blockquote {
   margin: 1em 0;
   padding-left: 1em;
