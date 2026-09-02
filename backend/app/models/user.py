@@ -1,7 +1,7 @@
 import enum
 import uuid
 
-from sqlalchemy import Boolean, Enum, String, Text
+from sqlalchemy import ARRAY, Boolean, Enum, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
@@ -58,6 +58,15 @@ class User(Base, UUIDPKMixin, TimestampMixin):
 
     # Profilo pubblico (CLAUDE.md #1)
     bio: Mapped[str | None] = mapped_column(Text, nullable=True)
+    first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # ISO 3166-1 alpha-2 (es. "IT"); ISO 639-1 per le lingue (stesso formato
+    # già usato per il locale dei post/pagine, vedi app/domain/i18n.py)
+    country: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    native_language: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    # lingue verso cui l'utente potrà eventualmente tradurre i propri
+    # contenuti, oltre alla lingua madre — vedi app/domain/profile.py
+    fallback_languages: Mapped[list[str]] = mapped_column(ARRAY(String(2)), default=list, nullable=False)
     # object key su MinIO (bucket avatars), non l'URL: quello si genera al volo
     # (app/core/storage.py) per restare compatibili tra MinIO locale e S3/R2 in
     # produzione senza persistere un host specifico.

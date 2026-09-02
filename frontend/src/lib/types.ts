@@ -36,6 +36,8 @@ export interface Blog {
   custom_domain: string | null;
   allow_anonymous_comments: boolean;
   default_locale: string;
+  /** Nome pubblico predefinito per i testi scritti su questo blog — vedi Post.author_display_name. */
+  default_author_display_name: string | null;
   owner_id: string;
   created_at: string;
 }
@@ -59,9 +61,35 @@ export interface Post {
   title: string;
   slug: string;
   content: string;
+  cover_image_url: string | null;
+  /** Risultato della moderazione automatica al momento dell'upload — vedi API.md. */
+  cover_image_is_sensitive: boolean;
   status: PostStatus;
   published_at: string | null;
   created_at: string;
+  /** Permalink leggibile /{blog_slug}/{YYYYMMDD}/{slug}, senza UUID. */
+  blog_slug: string;
+  permalink: string;
+  /** Solo i tag del campo dedicato (per ripresentarli in modifica). */
+  manual_tags: string[];
+  /** Insieme effettivo: manual_tags + hashtag nel testo. Massimo 5 in tutto. */
+  tags: string[];
+  /** Tassonomia del blog: al più una per post, a differenza dei tag. */
+  category: Category | null;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+export const MAX_TAGS_PER_POST = 5;
+export const MAX_FALLBACK_LANGUAGES = 5;
+
+export interface TrendingTag {
+  tag: string;
+  post_count: number;
 }
 
 export interface PostTranslationSummary {
@@ -96,6 +124,7 @@ export interface Page {
 
 export interface SocialLink {
   id: string;
+  /** Chiave di piattaforma (vedi lib/social-platforms.tsx), non più un'etichetta libera. */
   label: string;
   url: string;
   position: number;
@@ -104,6 +133,11 @@ export interface SocialLink {
 export interface Profile {
   username: string;
   bio: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  country: string | null;
+  native_language: string | null;
+  fallback_languages: string[];
   avatar_url: string | null;
   social_links: SocialLink[];
   created_at: string;

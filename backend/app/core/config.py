@@ -59,6 +59,11 @@ class Settings(BaseSettings):
     # media incorporati nei post + backup del markdown (path: {site_slug}/userdata/{user}/{blog}/...)
     minio_bucket_content: str = "notturni-content"
 
+    # Servizio di moderazione automatica delle immagini (self-hosted, vedi
+    # moderation/), chiamato da app/domain/moderation.py all'upload di un
+    # media. None: moderazione disattivata (nessuna chiamata, mai bloccante).
+    moderation_service_url: str | None = None
+
     # origini ammesse per le chiamate del frontend dal browser (CORS), separate da virgola
     cors_origins: str = "http://localhost:3000"
 

@@ -57,6 +57,25 @@ services:
     volumes:
       - minio_data:/data
 
+  # Moderazione automatica delle immagini (nudità/contenuti sensibili),
+  # self-hosted — vedi moderation/. Container separato apposta: le
+  # dipendenze ML (torch/transformers) resterebbero fuori posto in
+  # un'immagine backend pensata per essere leggera. Mai un requisito rigido
+  # per il backend (fail open, vedi app/domain/moderation.py): un
+  # depends_on con service_started basta, non service_healthy.
+  moderation:
+    build:
+      context: ./moderation
+    restart: on-failure
+    ports:
+      - "8100:8100"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
   backend:
     build:
       context: ./backend
@@ -70,6 +89,7 @@ services:
       # dall'URL pubblico (il browser risolve solo l'host esposto)
       NOCT_MINIO_ENDPOINT_URL: http://minio:9000
       NOCT_MINIO_PUBLIC_URL: http://localhost:9000
+      NOCT_MODERATION_SERVICE_URL: http://moderation:8100
     ports:
       - "8000:8000"
     depends_on:
@@ -78,6 +98,8 @@ services:
       rabbitmq:
         condition: service_healthy
       minio:
+        condition: service_started
+      moderation:
         condition: service_started
 
   worker-post-backup:
@@ -116,6 +138,13 @@ services:
         # il browser gira sull'host, non nella rete di compose: deve
         # raggiungere il backend sulla porta pubblicata, non per nome servizio
         NEXT_PUBLIC_API_URL: http://localhost:8000
+    environment:
+      # le pagine renderizzate lato server (Server Component, es. la pagina
+      # pubblica del post) girano nel processo Node.js del container: a
+      # differenza del browser raggiungono il backend per nome servizio.
+      # Variabile normale, non build-arg: letta a runtime, non inglobata nel
+      # bundle — non richiede un rebuild dell'immagine per essere cambiata.
+      NOCT_BACKEND_INTERNAL_URL: http://backend:8000
     restart: on-failure
     ports:
       - "3000:3000"

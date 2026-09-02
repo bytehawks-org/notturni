@@ -1,14 +1,19 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { Card, CardTitle } from "@/components/ui/Card";
-import { FieldGroup, Input, Label, TextArea } from "@/components/ui/Field";
+import { CategorySelect } from "@/components/editor/CategorySelect";
+import { CoverImageUpload } from "@/components/editor/CoverImageUpload";
+import { RichTextEditor } from "@/components/editor/RichTextEditor";
+import { TagInput } from "@/components/editor/TagInput";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+
+const FORM_ID = "new-post-form";
 
 export default function NewPostPage() {
   const params = useParams<{ slug: string }>();
@@ -18,6 +23,10 @@ export default function NewPostPage() {
   const [slug, setSlug] = useState("");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
+  const [coverImageIsSensitive, setCoverImageIsSensitive] = useState(false);
+  const [tags, setTags] = useState<string[]>([]);
+  const [categoryId, setCategoryId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -27,7 +36,15 @@ export default function NewPostPage() {
     setSubmitting(true);
     try {
       const post = await authFetch((token) =>
-        api.posts.create(token, params.slug, { slug, title, content })
+        api.posts.create(token, params.slug, {
+          slug,
+          title,
+          content,
+          cover_image_url: coverImageUrl,
+          cover_image_is_sensitive: coverImageIsSensitive,
+          tags,
+          category_id: categoryId,
+        })
       );
       router.push(`/dashboard/blogs/${params.slug}/posts/${post.id}`);
     } catch (err) {
@@ -38,36 +55,66 @@ export default function NewPostPage() {
   }
 
   return (
-    <Card className="mx-auto max-w-2xl">
-      <CardTitle>Nuovo post</CardTitle>
-      <form onSubmit={handleSubmit}>
-        <FieldGroup>
-          <Label htmlFor="post-title">Titolo</Label>
-          <Input id="post-title" required value={title} onChange={(e) => setTitle(e.target.value)} />
-        </FieldGroup>
-        <FieldGroup>
-          <Label htmlFor="post-slug">Slug</Label>
-          <Input id="post-slug" required value={slug} onChange={(e) => setSlug(e.target.value)} />
-        </FieldGroup>
-        <FieldGroup>
-          <Label htmlFor="post-content">Contenuto</Label>
-          <TextArea
-            id="post-content"
+    <div className="mx-auto max-w-2xl">
+      <div className="mb-10 flex items-center justify-between">
+        <Link href={`/dashboard/blogs/${params.slug}`} className="text-sm text-muted hover:text-foreground">
+          ← Torna al blog
+        </Link>
+        <Button type="submit" form={FORM_ID} disabled={submitting || !content.trim()}>
+          {submitting ? "Creazione…" : "Crea bozza"}
+        </Button>
+      </div>
+
+      <form id={FORM_ID} onSubmit={handleSubmit}>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Titolo"
+          required
+          className="mb-3 w-full border-0 bg-transparent font-serif text-5xl font-semibold leading-tight text-foreground placeholder:text-muted/70 focus:outline-none"
+        />
+
+        <div className="mb-8 flex items-center gap-1 text-sm text-muted">
+          <span>{params.slug}/</span>
+          <input
+            value={slug}
+            onChange={(e) => setSlug(e.target.value)}
+            placeholder="slug-del-post"
             required
-            className="min-h-64"
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
+            className="border-0 bg-transparent p-0 text-foreground/70 placeholder:text-muted focus:text-foreground focus:outline-none"
+            style={{ width: `${Math.max(slug.length, 14) + 1}ch` }}
           />
-        </FieldGroup>
+        </div>
+
+        <div className="mb-4">
+          <CategorySelect blogSlug={params.slug} value={categoryId} onChange={setCategoryId} />
+        </div>
+
+        <div className="mb-8">
+          <TagInput value={tags} onChange={setTags} />
+        </div>
+
+        <div className="mb-8">
+          <CoverImageUpload
+            value={coverImageUrl}
+            isSensitive={coverImageIsSensitive}
+            onChange={(url, sensitive) => {
+              setCoverImageUrl(url);
+              setCoverImageIsSensitive(sensitive);
+            }}
+            blogSlug={params.slug}
+            authFetch={authFetch}
+          />
+        </div>
+
+        <RichTextEditor value={content} onChange={setContent} blogSlug={params.slug} authFetch={authFetch} />
+
         {error && (
-          <div className="mb-4">
+          <div className="mt-6">
             <Alert kind="error">{error}</Alert>
           </div>
         )}
-        <Button type="submit" disabled={submitting}>
-          {submitting ? "Creazione…" : "Crea bozza"}
-        </Button>
       </form>
-    </Card>
+    </div>
   );
 }

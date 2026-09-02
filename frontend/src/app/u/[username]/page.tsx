@@ -9,7 +9,19 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { languageName } from "@/lib/languages";
+import { getSocialPlatform } from "@/lib/social-platforms";
 import type { Profile } from "@/lib/types";
+
+const countryNames = new Intl.DisplayNames(["it"], { type: "region" });
+
+function countryName(code: string): string {
+  try {
+    return countryNames.of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
 
 function errorMessage(err: unknown): string {
   return err instanceof ApiClientError ? err.message : "Errore imprevisto.";
@@ -78,8 +90,15 @@ export default function PublicProfilePage() {
             </div>
           )}
           <div>
-            <h1 className="font-serif text-2xl text-foreground">{profile.username}</h1>
-            <p className="text-sm text-muted">{followers.length} follower</p>
+            <h1 className="font-serif text-2xl text-foreground">
+              {profile.first_name || profile.last_name
+                ? [profile.first_name, profile.last_name].filter(Boolean).join(" ")
+                : profile.username}
+            </h1>
+            <p className="text-sm text-muted">
+              {profile.first_name || profile.last_name ? `@${profile.username} · ` : ""}
+              {followers.length} follower
+            </p>
           </div>
           {canFollow && (
             <div className="ml-auto">
@@ -90,22 +109,45 @@ export default function PublicProfilePage() {
           )}
         </div>
 
+        {(profile.country || profile.native_language || profile.fallback_languages.length > 0) && (
+          <p className="mt-4 text-sm text-muted">
+            {profile.country && countryName(profile.country)}
+            {profile.native_language && (
+              <>
+                {profile.country && " · "}
+                Lingua madre: {languageName(profile.native_language)}
+              </>
+            )}
+            {profile.fallback_languages.length > 0 && (
+              <>
+                {" · "}
+                Traduce anche in: {profile.fallback_languages.map(languageName).join(", ")}
+              </>
+            )}
+          </p>
+        )}
+
         {profile.bio && <p className="mt-4 text-sm text-foreground">{profile.bio}</p>}
 
         {profile.social_links.length > 0 && (
-          <ul className="mt-4 flex flex-wrap gap-3">
-            {profile.social_links.map((link) => (
-              <li key={link.id}>
-                <a
-                  href={link.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-primary underline underline-offset-4"
-                >
-                  {link.label}
-                </a>
-              </li>
-            ))}
+          <ul className="mt-4 flex flex-wrap gap-4">
+            {profile.social_links.map((link) => {
+              const platform = getSocialPlatform(link.label);
+              return (
+                <li key={link.id}>
+                  <a
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={platform.label}
+                    className="flex items-center gap-1.5 text-sm text-muted hover:text-primary"
+                  >
+                    <platform.Icon />
+                    {platform.label}
+                  </a>
+                </li>
+              );
+            })}
           </ul>
         )}
       </Card>

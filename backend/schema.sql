@@ -285,4 +285,76 @@ ALTER TYPE post_status ADD VALUE IF NOT EXISTS 'pending_review';
 
 UPDATE alembic_version SET version_num='2807a24ea58f' WHERE alembic_version.version_num = 'a7bbd274e2af';
 
+-- Running upgrade 2807a24ea58f -> e416be915439
+
+ALTER TABLE posts ADD COLUMN cover_image_url VARCHAR(2048);
+
+UPDATE alembic_version SET version_num='e416be915439' WHERE alembic_version.version_num = '2807a24ea58f';
+
+-- Running upgrade e416be915439 -> bd9a65e7bdd4
+
+CREATE TABLE tags (
+    name VARCHAR(30) NOT NULL,
+    id UUID NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    PRIMARY KEY (id)
+);
+
+CREATE UNIQUE INDEX ix_tags_name ON tags (name);
+
+CREATE TABLE post_tags (
+    post_id UUID NOT NULL,
+    tag_id UUID NOT NULL,
+    FOREIGN KEY(post_id) REFERENCES posts (id) ON DELETE CASCADE,
+    FOREIGN KEY(tag_id) REFERENCES tags (id) ON DELETE CASCADE,
+    PRIMARY KEY (post_id, tag_id)
+);
+
+ALTER TABLE posts ADD COLUMN manual_tags VARCHAR(30)[] DEFAULT '{}' NOT NULL;
+
+UPDATE alembic_version SET version_num='bd9a65e7bdd4' WHERE alembic_version.version_num = 'e416be915439';
+
+-- Running upgrade bd9a65e7bdd4 -> f3ed30401d5f
+
+ALTER TABLE blogs ADD COLUMN default_author_display_name VARCHAR(255);
+
+ALTER TABLE users ADD COLUMN first_name VARCHAR(100);
+
+ALTER TABLE users ADD COLUMN last_name VARCHAR(100);
+
+ALTER TABLE users ADD COLUMN country VARCHAR(2);
+
+ALTER TABLE users ADD COLUMN native_language VARCHAR(2);
+
+ALTER TABLE users ADD COLUMN fallback_languages VARCHAR(2)[] DEFAULT '{}' NOT NULL;
+
+UPDATE alembic_version SET version_num='f3ed30401d5f' WHERE alembic_version.version_num = 'bd9a65e7bdd4';
+
+-- Running upgrade f3ed30401d5f -> d5dbeeb3f79f
+
+ALTER TABLE posts ADD COLUMN cover_image_is_sensitive BOOLEAN DEFAULT false NOT NULL;
+
+UPDATE alembic_version SET version_num='d5dbeeb3f79f' WHERE alembic_version.version_num = 'f3ed30401d5f';
+
+-- Running upgrade d5dbeeb3f79f -> b16963e9cdcb
+
+CREATE TABLE categories (
+    blog_id UUID NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    slug VARCHAR(60) NOT NULL,
+    id UUID NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    FOREIGN KEY(blog_id) REFERENCES blogs (id),
+    PRIMARY KEY (id),
+    CONSTRAINT uq_category_blog_slug UNIQUE (blog_id, slug)
+);
+
+ALTER TABLE posts ADD COLUMN category_id UUID;
+
+ALTER TABLE posts ADD CONSTRAINT fk_posts_category_id_categories FOREIGN KEY(category_id) REFERENCES categories (id) ON DELETE SET NULL;
+
+UPDATE alembic_version SET version_num='b16963e9cdcb' WHERE alembic_version.version_num = 'd5dbeeb3f79f';
+
 COMMIT;

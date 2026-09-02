@@ -10,6 +10,8 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import get_current_user
 from app.core.database import get_session
 from app.core.storage import avatar_public_url, delete_avatar, upload_avatar
+from app.domain.i18n import validate_locale
+from app.domain.profile import validate_country_code, validate_fallback_languages
 from app.models.follow import UserFollow
 from app.models.social_link import SocialLink
 from app.models.user import User
@@ -19,6 +21,14 @@ router = APIRouter()
 
 class ProfileUpdateRequest(BaseModel):
     bio: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    # "" per azzerare uno di questi tre; assente lascia invariato (stesso
+    # schema di cover_image_url/default_author_display_name altrove)
+    country: str | None = None
+    native_language: str | None = None
+    # assente: lascia invariate; lista (anche vuota) la sostituisce
+    fallback_languages: list[str] | None = None
 
 
 class SocialLinkCreateRequest(BaseModel):
@@ -42,6 +52,11 @@ class AvatarOut(BaseModel):
 class ProfileOut(BaseModel):
     username: str
     bio: str | None
+    first_name: str | None
+    last_name: str | None
+    country: str | None
+    native_language: str | None
+    fallback_languages: list[str]
     avatar_url: str | None
     social_links: list[SocialLinkOut]
     created_at: datetime
@@ -80,6 +95,11 @@ def _to_profile_out(user: User) -> ProfileOut:
     return ProfileOut(
         username=user.username,
         bio=user.bio,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        country=user.country,
+        native_language=user.native_language,
+        fallback_languages=user.fallback_languages,
         avatar_url=avatar_public_url(user.avatar_object_key) if user.avatar_object_key else None,
         social_links=[SocialLinkOut.model_validate(link) for link in user.social_links],
         created_at=user.created_at,
@@ -100,6 +120,34 @@ async def update_profile(
 ) -> ProfileOut:
     if payload.bio is not None:
         current_user.bio = payload.bio
+    if payload.first_name is not None:
+        current_user.first_name = payload.first_name or None
+    if payload.last_name is not None:
+        current_user.last_name = payload.last_name or None
+    if payload.country is not None:
+        country = payload.country.strip().upper()
+        if country:
+            try:
+                validate_country_code(country)
+            except ValueError as exc:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        current_user.country = country or None
+    if payload.native_language is not None:
+        native_language = payload.native_language.strip().lower()
+        if native_language:
+            try:
+                validate_locale(native_language)
+            except ValueError as exc:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        current_user.native_language = native_language or None
+    if payload.fallback_languages is not None:
+        normalized = [loc.strip().lower() for loc in payload.fallback_languages]
+        try:
+            validate_fallback_languages(normalized)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        current_user.fallback_languages = normalized
+
     await session.commit()
     await session.refresh(current_user, attribute_names=["social_links"])
     return _to_profile_out(current_user)

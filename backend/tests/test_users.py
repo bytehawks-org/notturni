@@ -13,6 +13,11 @@ async def test_public_profile(client: AsyncClient, make_user: Callable) -> None:
     assert body == {
         "username": "profilo1",
         "bio": None,
+        "first_name": None,
+        "last_name": None,
+        "country": None,
+        "native_language": None,
+        "fallback_languages": [],
         "avatar_url": None,
         "social_links": [],
         "created_at": body["created_at"],
@@ -157,3 +162,57 @@ async def test_user_follow_unfollow(client: AsyncClient, make_user: Callable) ->
     assert unfollow_res.status_code == 204
     followers_res2 = await client.get(f"/api/v1/users/{b.username}/followers")
     assert followers_res2.json() == []
+
+
+async def test_update_profile_bio_fields(client: AsyncClient, make_user: Callable) -> None:
+    user: AuthedUser = await make_user("profilo-bio")
+
+    res = await client.patch(
+        "/api/v1/users/me",
+        json={
+            "first_name": "Ada",
+            "last_name": "Lovelace",
+            "country": "gb",
+            "native_language": "EN",
+            "fallback_languages": ["It", "fr"],
+        },
+        headers=user.headers,
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["first_name"] == "Ada"
+    assert body["last_name"] == "Lovelace"
+    assert body["country"] == "GB"
+    assert body["native_language"] == "en"
+    assert body["fallback_languages"] == ["it", "fr"]
+
+    # azzerare con stringa vuota
+    clear_res = await client.patch(
+        "/api/v1/users/me", json={"country": ""}, headers=user.headers
+    )
+    assert clear_res.json()["country"] is None
+    # gli altri campi restano quelli già salvati
+    assert clear_res.json()["first_name"] == "Ada"
+
+
+async def test_update_profile_rejects_invalid_country_and_language(
+    client: AsyncClient, make_user: Callable
+) -> None:
+    user: AuthedUser = await make_user("profilo-bio-invalid")
+
+    bad_country = await client.patch(
+        "/api/v1/users/me", json={"country": "italy"}, headers=user.headers
+    )
+    assert bad_country.status_code == 400
+
+    bad_language = await client.patch(
+        "/api/v1/users/me", json={"native_language": "ita"}, headers=user.headers
+    )
+    assert bad_language.status_code == 400
+
+    too_many = await client.patch(
+        "/api/v1/users/me",
+        json={"fallback_languages": ["it", "en", "fr", "de", "es", "pt"]},
+        headers=user.headers,
+    )
+    assert too_many.status_code == 400

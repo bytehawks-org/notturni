@@ -2,6 +2,7 @@ import type {
   AdminUser,
   Blog,
   BlogConfig,
+  Category,
   Comment,
   CurrentUser,
   LoginResponse,
@@ -101,7 +102,12 @@ export const api = {
     update: (
       token: string,
       slug: string,
-      payload: { title?: string; allow_anonymous_comments?: boolean }
+      payload: {
+        title?: string;
+        allow_anonymous_comments?: boolean;
+        /** "" azzera (torna allo username di chi scrive); assente non tocca. */
+        default_author_display_name?: string;
+      }
     ) => request<Blog>(`/api/v1/blogs/${slug}`, { method: "PATCH", token, body: payload }),
     getConfig: (slug: string) => request<BlogConfig>(`/api/v1/blogs/${slug}/config`),
     updateConfig: (token: string, slug: string, config: BlogConfig) =>
@@ -111,6 +117,34 @@ export const api = {
     unfollow: (token: string, slug: string) =>
       request<void>(`/api/v1/blogs/${slug}/follow`, { method: "DELETE", token }),
     followers: (slug: string) => request<{ username: string }[]>(`/api/v1/blogs/${slug}/followers`),
+    /** Immagine da incorporare nel contenuto o da usare come cover di un post.
+     * `is_sensitive`: risultato della moderazione automatica (nudità/contenuti
+     * sensibili) fatta lato backend al momento dell'upload — vedi API.md. */
+    uploadMedia: (token: string, slug: string, file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return request<{ url: string; is_sensitive: boolean }>(`/api/v1/blogs/${slug}/media`, {
+        method: "POST",
+        token,
+        formData,
+      });
+    },
+    listCategories: (slug: string) => request<Category[]>(`/api/v1/blogs/${slug}/categories`),
+    createCategory: (token: string, slug: string, payload: { name: string; slug: string }) =>
+      request<Category>(`/api/v1/blogs/${slug}/categories`, { method: "POST", token, body: payload }),
+    updateCategory: (
+      token: string,
+      slug: string,
+      categoryId: string,
+      payload: { name?: string; slug?: string }
+    ) =>
+      request<Category>(`/api/v1/blogs/${slug}/categories/${categoryId}`, {
+        method: "PATCH",
+        token,
+        body: payload,
+      }),
+    deleteCategory: (token: string, slug: string, categoryId: string) =>
+      request<void>(`/api/v1/blogs/${slug}/categories/${categoryId}`, { method: "DELETE", token }),
   },
 
   posts: {
@@ -118,13 +152,37 @@ export const api = {
     list: (token: string | null, blogSlug: string, locale?: string) =>
       request<Post[]>(`/api/v1/blogs/${blogSlug}/posts${locale ? `?locale=${locale}` : ""}`, { token }),
     get: (token: string | null, postId: string) => request<Post>(`/api/v1/posts/${postId}`, { token }),
+    /** Risolve il permalink pubblico /{blogSlug}/{date}/{postSlug} (niente UUID nell'URL). */
+    getByPermalink: (token: string | null, blogSlug: string, date: string, postSlug: string) =>
+      request<Post>(`/api/v1/blogs/${blogSlug}/posts/${date}/${postSlug}`, { token }),
     create: (
       token: string,
       blogSlug: string,
-      payload: { slug: string; title: string; content: string; author_display_name?: string; locale?: string }
+      payload: {
+        slug: string;
+        title: string;
+        content: string;
+        author_display_name?: string;
+        locale?: string;
+        cover_image_url?: string | null;
+        cover_image_is_sensitive?: boolean;
+        tags?: string[];
+        category_id?: string | null;
+      }
     ) => request<Post>(`/api/v1/blogs/${blogSlug}/posts`, { method: "POST", token, body: payload }),
-    update: (token: string, postId: string, payload: { title?: string; content?: string }) =>
-      request<Post>(`/api/v1/posts/${postId}`, { method: "PATCH", token, body: payload }),
+    update: (
+      token: string,
+      postId: string,
+      payload: {
+        title?: string;
+        content?: string;
+        cover_image_url?: string | null;
+        cover_image_is_sensitive?: boolean;
+        tags?: string[];
+        /** assente: non tocca la categoria; null: la rimuove; id: la imposta. */
+        category_id?: string | null;
+      }
+    ) => request<Post>(`/api/v1/posts/${postId}`, { method: "PATCH", token, body: payload }),
     publish: (token: string, postId: string) =>
       request<Post>(`/api/v1/posts/${postId}/publish`, { method: "POST", token }),
     translations: (postId: string) =>
@@ -132,7 +190,16 @@ export const api = {
     addTranslation: (
       token: string,
       postId: string,
-      payload: { slug: string; locale: string; title: string; content: string; author_display_name?: string }
+      payload: {
+        slug: string;
+        locale: string;
+        title: string;
+        content: string;
+        author_display_name?: string;
+        cover_image_url?: string | null;
+        tags?: string[];
+        category_id?: string | null;
+      }
     ) => request<Post>(`/api/v1/posts/${postId}/translations`, { method: "POST", token, body: payload }),
   },
 
@@ -175,8 +242,17 @@ export const api = {
 
   users: {
     profile: (username: string) => request<Profile>(`/api/v1/users/${username}`),
-    updateMe: (token: string, payload: { bio?: string }) =>
-      request<Profile>("/api/v1/users/me", { method: "PATCH", token, body: payload }),
+    updateMe: (
+      token: string,
+      payload: {
+        bio?: string;
+        first_name?: string;
+        last_name?: string;
+        country?: string;
+        native_language?: string;
+        fallback_languages?: string[];
+      }
+    ) => request<Profile>("/api/v1/users/me", { method: "PATCH", token, body: payload }),
     uploadAvatar: (token: string, file: File) => {
       const formData = new FormData();
       formData.append("file", file);

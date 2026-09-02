@@ -3,12 +3,14 @@
 import Image from "next/image";
 import { useEffect, useState, type FormEvent } from "react";
 
+import { LanguagePicker } from "@/components/LanguagePicker";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { FieldGroup, Input, Label, TextArea } from "@/components/ui/Field";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { SOCIAL_PLATFORMS, getSocialPlatform } from "@/lib/social-platforms";
 import type { Profile } from "@/lib/types";
 
 function errorMessage(err: unknown): string {
@@ -21,9 +23,14 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
 
   const [bio, setBio] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [country, setCountry] = useState("");
+  const [nativeLanguage, setNativeLanguage] = useState<string | null>(null);
+  const [fallbackLanguages, setFallbackLanguages] = useState<string[]>([]);
   const [savingBio, setSavingBio] = useState(false);
 
-  const [linkLabel, setLinkLabel] = useState("");
+  const [linkPlatform, setLinkPlatform] = useState(SOCIAL_PLATFORMS[0].key);
   const [linkUrl, setLinkUrl] = useState("");
   const [linkError, setLinkError] = useState<string | null>(null);
 
@@ -44,6 +51,11 @@ export default function ProfilePage() {
       .then((p) => {
         setProfile(p);
         setBio(p.bio ?? "");
+        setFirstName(p.first_name ?? "");
+        setLastName(p.last_name ?? "");
+        setCountry(p.country ?? "");
+        setNativeLanguage(p.native_language);
+        setFallbackLanguages(p.fallback_languages);
       })
       .catch((err) => setError(errorMessage(err)));
   };
@@ -54,7 +66,16 @@ export default function ProfilePage() {
     event.preventDefault();
     setSavingBio(true);
     try {
-      const updated = await authFetch((token) => api.users.updateMe(token, { bio }));
+      const updated = await authFetch((token) =>
+        api.users.updateMe(token, {
+          bio,
+          first_name: firstName,
+          last_name: lastName,
+          country,
+          native_language: nativeLanguage ?? "",
+          fallback_languages: fallbackLanguages,
+        })
+      );
       setProfile(updated);
     } catch (err) {
       setError(errorMessage(err));
@@ -67,8 +88,7 @@ export default function ProfilePage() {
     event.preventDefault();
     setLinkError(null);
     try {
-      await authFetch((token) => api.users.addSocialLink(token, { label: linkLabel, url: linkUrl }));
-      setLinkLabel("");
+      await authFetch((token) => api.users.addSocialLink(token, { label: linkPlatform, url: linkUrl }));
       setLinkUrl("");
       loadProfile();
     } catch (err) {
@@ -222,9 +242,39 @@ export default function ProfilePage() {
 
       <Card>
         <CardTitle>Bio</CardTitle>
-        <form onSubmit={handleSaveBio}>
+        <form onSubmit={handleSaveBio} className="space-y-4">
+          <div className="flex flex-wrap gap-4">
+            <FieldGroup>
+              <Label htmlFor="first-name">Nome</Label>
+              <Input id="first-name" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+            </FieldGroup>
+            <FieldGroup>
+              <Label htmlFor="last-name">Cognome</Label>
+              <Input id="last-name" value={lastName} onChange={(e) => setLastName(e.target.value)} />
+            </FieldGroup>
+            <FieldGroup>
+              <Label htmlFor="country">Paese (es. IT)</Label>
+              <Input
+                id="country"
+                maxLength={2}
+                value={country}
+                onChange={(e) => setCountry(e.target.value.toUpperCase())}
+                className="w-20 uppercase"
+              />
+            </FieldGroup>
+          </div>
+
+          <LanguagePicker
+            nativeLanguage={nativeLanguage}
+            onNativeLanguageChange={setNativeLanguage}
+            fallbackLanguages={fallbackLanguages}
+            onFallbackLanguagesChange={setFallbackLanguages}
+          />
+
           <FieldGroup>
+            <Label htmlFor="bio">Bio</Label>
             <TextArea
+              id="bio"
               value={bio}
               onChange={(e) => setBio(e.target.value)}
               placeholder="Racconta qualcosa di te…"
@@ -239,33 +289,42 @@ export default function ProfilePage() {
       <Card>
         <CardTitle>Link social</CardTitle>
         <ul className="mb-4 space-y-2">
-          {profile?.social_links.map((link) => (
-            <li key={link.id} className="flex items-center justify-between text-sm">
-              <span>
-                <span className="text-foreground">{link.label}</span>{" "}
-                <span className="text-muted">{link.url}</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => handleDeleteLink(link.id)}
-                className="text-muted hover:text-foreground"
-              >
-                Rimuovi
-              </button>
-            </li>
-          ))}
+          {profile?.social_links.map((link) => {
+            const platform = getSocialPlatform(link.label);
+            return (
+              <li key={link.id} className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2">
+                  <platform.Icon className="text-foreground/70" />
+                  <span className="text-foreground">{platform.label}</span>{" "}
+                  <span className="text-muted">{link.url}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteLink(link.id)}
+                  className="text-muted hover:text-foreground"
+                >
+                  Rimuovi
+                </button>
+              </li>
+            );
+          })}
         </ul>
         {(profile?.social_links.length ?? 0) < 5 && (
           <form onSubmit={handleAddLink} className="flex flex-wrap items-end gap-3">
             <div>
-              <Label htmlFor="link-label">Etichetta</Label>
-              <Input
-                id="link-label"
-                required
-                placeholder="Mastodon"
-                value={linkLabel}
-                onChange={(e) => setLinkLabel(e.target.value)}
-              />
+              <Label htmlFor="link-platform">Piattaforma</Label>
+              <select
+                id="link-platform"
+                value={linkPlatform}
+                onChange={(e) => setLinkPlatform(e.target.value)}
+                className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+              >
+                {SOCIAL_PLATFORMS.map((p) => (
+                  <option key={p.key} value={p.key}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="flex-1 min-w-[200px]">
               <Label htmlFor="link-url">URL</Label>

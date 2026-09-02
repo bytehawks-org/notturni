@@ -44,3 +44,122 @@ body {
   background: var(--background);
   color: var(--foreground);
 }
+
+/* Tipografia condivisa per il contenuto Markdown dei post: sia nell'editor
+   WYSIWYG (RichTextEditor / Tiptap) sia nella pagina pubblica del post
+   (Markdown renderizzato a HTML lato server, vedi lib/markdown.ts) — le due
+   viste restano visivamente vicine di proposito. */
+.notturni-prose h1,
+.notturni-prose h2,
+.notturni-prose h3 {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 1.2em 0 0.5em;
+}
+.notturni-prose h1 {
+  font-size: 1.75em;
+}
+.notturni-prose h2 {
+  font-size: 1.4em;
+}
+.notturni-prose h3 {
+  font-size: 1.15em;
+}
+.notturni-prose p {
+  margin: 0.75em 0;
+}
+.notturni-prose p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--muted);
+  pointer-events: none;
+}
+.notturni-prose a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.notturni-prose blockquote {
+  margin: 1em 0;
+  padding-left: 1em;
+  border-left: 3px solid var(--border-color);
+  color: var(--muted);
+  font-style: italic;
+}
+.notturni-prose code {
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  border-radius: 0.25em;
+  padding: 0.1em 0.35em;
+  font-size: 0.9em;
+}
+.notturni-prose ul,
+.notturni-prose ol {
+  margin: 0.75em 0;
+  padding-left: 1.4em;
+}
+.notturni-prose ul {
+  list-style: disc;
+}
+.notturni-prose ol {
+  list-style: decimal;
+}
+.notturni-prose img {
+  max-width: 100%;
+  border-radius: 0.5em;
+  margin: 0.75em 0;
+}
+.notturni-prose table {
+  width: 100%;
+  margin: 1em 0;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+.notturni-prose th,
+.notturni-prose td {
+  border: 1px solid var(--border-color);
+  padding: 0.5em 0.75em;
+  text-align: left;
+}
+.notturni-prose th {
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+  font-weight: 600;
+}
+
+/* Immagine segnalata come possibile contenuto sensibile dalla moderazione
+   automatica (vedi lib/markdown.ts e API.md) — sfocata finché non ci si
+   clicca sopra. Puro CSS (checkbox nascosto + selettore ~), non serve JS
+   lato client: la pagina pubblica del post resta un Server Component. */
+.sensitive-image-wrapper {
+  position: relative;
+  display: block;
+  cursor: pointer;
+}
+.sensitive-image-toggle {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.sensitive-image-wrapper img {
+  filter: blur(28px);
+  transition: filter 0.2s;
+}
+.sensitive-image-toggle:checked ~ img {
+  filter: none;
+}
+.sensitive-image-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 1em;
+  background: rgb(0 0 0 / 25%);
+  color: #fff;
+  font-size: 0.875rem;
+}
+.sensitive-image-toggle:checked ~ .sensitive-image-overlay {
+  display: none;
+}

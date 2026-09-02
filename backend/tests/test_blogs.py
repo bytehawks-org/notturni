@@ -1,5 +1,6 @@
 from collections.abc import Callable
 
+import pytest
 from httpx import AsyncClient
 
 from tests.conftest import AuthedUser, FakeS3Client
@@ -85,6 +86,51 @@ async def test_update_blog_owner_only(client: AsyncClient, make_user: Callable) 
     assert ok_res.json()["allow_anonymous_comments"] is True
 
 
+async def test_default_author_display_name_used_when_post_omits_it(
+    client: AsyncClient, make_user: Callable
+) -> None:
+    owner: AuthedUser = await make_user("owner-pen-name")
+    await client.post(
+        "/api/v1/blogs", json={"slug": "blog-pen-name", "title": "x"}, headers=owner.headers
+    )
+
+    set_res = await client.patch(
+        "/api/v1/blogs/blog-pen-name",
+        json={"default_author_display_name": "Nome di Penna"},
+        headers=owner.headers,
+    )
+    assert set_res.json()["default_author_display_name"] == "Nome di Penna"
+
+    post_res = await client.post(
+        "/api/v1/blogs/blog-pen-name/posts",
+        json={"slug": "post-anonimo", "title": "x", "content": "y"},
+        headers=owner.headers,
+    )
+    assert post_res.json()["author_display_name"] == "Nome di Penna"
+
+    # un autore che specifica esplicitamente il proprio nome per il singolo
+    # post continua a poterlo fare, sovrascrivendo il default del blog
+    override_res = await client.post(
+        "/api/v1/blogs/blog-pen-name/posts",
+        json={
+            "slug": "post-con-nome",
+            "title": "x",
+            "content": "y",
+            "author_display_name": "Altro Nome",
+        },
+        headers=owner.headers,
+    )
+    assert override_res.json()["author_display_name"] == "Altro Nome"
+
+    # rimozione con stringa vuota: torna al fallback sullo username
+    clear_res = await client.patch(
+        "/api/v1/blogs/blog-pen-name",
+        json={"default_author_display_name": ""},
+        headers=owner.headers,
+    )
+    assert clear_res.json()["default_author_display_name"] is None
+
+
 async def test_blog_follow_unfollow(client: AsyncClient, make_user: Callable) -> None:
     owner: AuthedUser = await make_user("owner2")
     follower: AuthedUser = await make_user("follower2")
@@ -135,6 +181,9 @@ async def test_media_upload_public_url(
     assert "/userdata/" in url
     assert "/media/" in url
     assert len(fake_s3.objects) == 1
+    # NOCT_MODERATION_SERVICE_URL non impostato nei test: mai bloccante,
+    # nessuna chiamata di rete, sempre "non sensibile" (fail open).
+    assert res.json()["is_sensitive"] is False
 
     rejected = await client.post(
         "/api/v1/blogs/blog-media-test2/media",
@@ -142,3 +191,27 @@ async def test_media_upload_public_url(
         headers=owner.headers,
     )
     assert rejected.status_code == 400
+
+
+async def test_media_upload_flagged_by_moderation(
+    client: AsyncClient, make_user: Callable, fake_s3: FakeS3Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """La chiamata al servizio di moderazione è mockata qui (non un vero
+    modello ML nei test, vedi app/domain/moderation.py) — verifica solo che
+    l'esito venga propagato correttamente nella risposta."""
+
+    async def _fake_classify(content: bytes, filename: str, content_type: str) -> bool:
+        return True
+
+    monkeypatch.setattr("app.api.v1.blogs.classify_image", _fake_classify)
+
+    owner: AuthedUser = await make_user("owner-media-flagged")
+    await client.post("/api/v1/blogs", json={"slug": "blog-media-flagged", "title": "x"}, headers=owner.headers)
+
+    res = await client.post(
+        "/api/v1/blogs/blog-media-flagged/media",
+        files={"file": ("x.png", b"\x89PNG\r\n\x1a\n0000", "image/png")},
+        headers=owner.headers,
+    )
+    assert res.status_code == 201
+    assert res.json()["is_sensitive"] is True
