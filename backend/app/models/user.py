@@ -21,6 +21,15 @@ class MfaMethod(str, enum.Enum):
     EMAIL = "email"
 
 
+class PostAuthorNameStyle(str, enum.Enum):
+    """Come mostrare il nome dell'autore sui propri post quando il blog non
+    impone un alias (todo/USERS.md #2)."""
+
+    USERNAME = "username"
+    FULL_NAME = "full_name"
+    DISPLAY_NAME = "display_name"
+
+
 class User(Base, UUIDPKMixin, TimestampMixin):
     __tablename__ = "users"
 
@@ -60,6 +69,26 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     bio: Mapped[str | None] = mapped_column(Text, nullable=True)
     first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Alias pubblico globale dell'utente (CLAUDE.md #1: il nome mostrato può
+    # differire dallo username reale e dal nome/cognome). Usato come nome
+    # autore di default sui post — con precedenza inferiore al default del
+    # blog e all'alias per-blog, vedi app/api/v1/posts.py — e come intestazione
+    # del profilo pubblico quando valorizzato.
+    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # todo/USERS.md #2: scelta dell'utente su cosa mostrare come nome autore
+    # sui propri post, quando il blog non impone un alias (default/alias di
+    # membership). Non ha effetto se il blog impone un alias — in quel caso
+    # non c'è possibilità di override.
+    post_author_name_style: Mapped[PostAuthorNameStyle] = mapped_column(
+        Enum(
+            PostAuthorNameStyle,
+            name="post_author_name_style",
+            native_enum=True,
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+        ),
+        default=PostAuthorNameStyle.USERNAME,
+        nullable=False,
+    )
     # ISO 3166-1 alpha-2 (es. "IT"); ISO 639-1 per le lingue (stesso formato
     # già usato per il locale dei post/pagine, vedi app/domain/i18n.py)
     country: Mapped[str | None] = mapped_column(String(2), nullable=True)

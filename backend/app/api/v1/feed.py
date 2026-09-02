@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.posts import PostOut, _post_out
 from app.core.database import get_session
-from app.models.blog import Blog
+from app.models.blog import Blog, BlogVisibility
 from app.models.category import Category
 from app.models.post import Post, PostStatus
 from app.models.tag import Tag, post_tags
@@ -51,7 +51,12 @@ async def list_feed(
     stmt = (
         select(Post, Blog)
         .join(Blog, Post.blog_id == Blog.id)
-        .where(Post.status == PostStatus.PUBLISHED, Post.published_at <= datetime.now(timezone.utc))
+        .where(
+            Post.status == PostStatus.PUBLISHED,
+            Post.published_at <= datetime.now(timezone.utc),
+            # todo/BLOG.md #2: la raccolta della homepage mostra solo blog pubblici.
+            Blog.visibility == BlogVisibility.PUBLIC,
+        )
         .order_by(Post.published_at.desc())
         .limit(limit)
         .offset(offset)
@@ -93,10 +98,12 @@ async def list_trending_tags(
         select(Tag.name, post_count)
         .join(post_tags, Tag.id == post_tags.c.tag_id)
         .join(Post, Post.id == post_tags.c.post_id)
+        .join(Blog, Blog.id == Post.blog_id)
         .where(
             Post.status == PostStatus.PUBLISHED,
             Post.published_at >= since,
             Post.published_at <= datetime.now(timezone.utc),
+            Blog.visibility == BlogVisibility.PUBLIC,
         )
         .group_by(Tag.name)
         .order_by(post_count.desc())

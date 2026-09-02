@@ -11,7 +11,7 @@ import { FieldGroup, Input, Label, TextArea } from "@/components/ui/Field";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { SOCIAL_PLATFORMS, getSocialPlatform } from "@/lib/social-platforms";
-import type { Profile } from "@/lib/types";
+import { POST_AUTHOR_NAME_STYLE_LABELS, type PostAuthorNameStyle, type Profile } from "@/lib/types";
 
 function errorMessage(err: unknown): string {
   return err instanceof ApiClientError ? err.message : "Errore imprevisto.";
@@ -25,6 +25,8 @@ export default function ProfilePage() {
   const [bio, setBio] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [authorNameStyle, setAuthorNameStyle] = useState<PostAuthorNameStyle>("username");
   const [country, setCountry] = useState("");
   const [nativeLanguage, setNativeLanguage] = useState<string | null>(null);
   const [fallbackLanguages, setFallbackLanguages] = useState<string[]>([]);
@@ -53,6 +55,8 @@ export default function ProfilePage() {
         setBio(p.bio ?? "");
         setFirstName(p.first_name ?? "");
         setLastName(p.last_name ?? "");
+        setDisplayName(p.display_name ?? "");
+        setAuthorNameStyle(p.post_author_name_style);
         setCountry(p.country ?? "");
         setNativeLanguage(p.native_language);
         setFallbackLanguages(p.fallback_languages);
@@ -71,6 +75,8 @@ export default function ProfilePage() {
           bio,
           first_name: firstName,
           last_name: lastName,
+          display_name: displayName,
+          post_author_name_style: authorNameStyle,
           country,
           native_language: nativeLanguage ?? "",
           fallback_languages: fallbackLanguages,
@@ -263,6 +269,40 @@ export default function ProfilePage() {
               />
             </FieldGroup>
           </div>
+
+          <FieldGroup>
+            <Label htmlFor="display-name">Nome pubblico (alias)</Label>
+            <Input
+              id="display-name"
+              value={displayName}
+              maxLength={255}
+              placeholder="Come vuoi apparire nei post — lasciare vuoto per usare lo username"
+              onChange={(e) => setDisplayName(e.target.value)}
+            />
+            <p className="mt-1 text-xs text-muted">
+              Mostrato al posto dello username (e del nome e cognome) sul profilo pubblico.
+            </p>
+          </FieldGroup>
+
+          <FieldGroup>
+            <Label htmlFor="author-name-style">Nome mostrato come autore nei post</Label>
+            <select
+              id="author-name-style"
+              value={authorNameStyle}
+              onChange={(e) => setAuthorNameStyle(e.target.value as PostAuthorNameStyle)}
+              className="w-full max-w-xs rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+            >
+              {(Object.keys(POST_AUTHOR_NAME_STYLE_LABELS) as PostAuthorNameStyle[]).map((s) => (
+                <option key={s} value={s}>
+                  {POST_AUTHOR_NAME_STYLE_LABELS[s]}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-muted">
+              Vale quando scrivi su un blog che non impone un nome pubblico: se il blog (o il tuo
+              ruolo su quel blog) ha un alias, quello viene usato sempre, senza eccezioni.
+            </p>
+          </FieldGroup>
 
           <LanguagePicker
             nativeLanguage={nativeLanguage}

@@ -14,7 +14,7 @@ from app.domain.i18n import validate_locale
 from app.domain.profile import validate_country_code, validate_fallback_languages
 from app.models.follow import UserFollow
 from app.models.social_link import SocialLink
-from app.models.user import User
+from app.models.user import PostAuthorNameStyle, User
 
 router = APIRouter()
 
@@ -23,6 +23,12 @@ class ProfileUpdateRequest(BaseModel):
     bio: str | None = None
     first_name: str | None = None
     last_name: str | None = None
+    # Alias pubblico globale (todo/BLOG.md #4): "" azzera, assente lascia
+    # invariato.
+    display_name: str | None = None
+    # todo/USERS.md #2: come mostrare il proprio nome sui post quando il blog
+    # non impone un alias. Assente lascia invariato.
+    post_author_name_style: PostAuthorNameStyle | None = None
     # "" per azzerare uno di questi tre; assente lascia invariato (stesso
     # schema di cover_image_url/default_author_display_name altrove)
     country: str | None = None
@@ -54,6 +60,8 @@ class ProfileOut(BaseModel):
     bio: str | None
     first_name: str | None
     last_name: str | None
+    display_name: str | None
+    post_author_name_style: PostAuthorNameStyle
     country: str | None
     native_language: str | None
     fallback_languages: list[str]
@@ -97,6 +105,8 @@ def _to_profile_out(user: User) -> ProfileOut:
         bio=user.bio,
         first_name=user.first_name,
         last_name=user.last_name,
+        display_name=user.display_name,
+        post_author_name_style=user.post_author_name_style,
         country=user.country,
         native_language=user.native_language,
         fallback_languages=user.fallback_languages,
@@ -124,6 +134,10 @@ async def update_profile(
         current_user.first_name = payload.first_name or None
     if payload.last_name is not None:
         current_user.last_name = payload.last_name or None
+    if payload.display_name is not None:
+        current_user.display_name = payload.display_name.strip() or None
+    if payload.post_author_name_style is not None:
+        current_user.post_author_name_style = payload.post_author_name_style
     if payload.country is not None:
         country = payload.country.strip().upper()
         if country:

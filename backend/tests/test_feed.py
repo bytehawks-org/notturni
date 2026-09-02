@@ -68,6 +68,28 @@ async def test_feed_excludes_drafts_and_scheduled(client: AsyncClient, make_user
     assert scheduled_id not in ids
 
 
+async def test_feed_excludes_non_public_blogs(client: AsyncClient, make_user: Callable) -> None:
+    owner: AuthedUser = await make_user("feed-owner-visibility")
+    await client.post(
+        "/api/v1/blogs",
+        json={"slug": "feed-blog-riservato", "title": "x", "visibility": "members"},
+        headers=owner.headers,
+    )
+    hidden = await _create_and_publish(client, owner, "feed-blog-riservato", "nascosto")
+
+    res = await client.get("/api/v1/feed/posts")
+    assert hidden["id"] not in [p["id"] for p in res.json()]
+
+    # tornando pubblico, il post rientra nel feed
+    await client.patch(
+        "/api/v1/blogs/feed-blog-riservato",
+        json={"visibility": "public"},
+        headers=owner.headers,
+    )
+    res2 = await client.get("/api/v1/feed/posts")
+    assert hidden["id"] in [p["id"] for p in res2.json()]
+
+
 async def test_feed_filters_by_locale_and_paginates(client: AsyncClient, make_user: Callable) -> None:
     owner: AuthedUser = await make_user("feed-owner-locale")
     await client.post("/api/v1/blogs", json={"slug": "feed-blog-locale", "title": "x"}, headers=owner.headers)

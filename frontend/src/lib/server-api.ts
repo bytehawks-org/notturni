@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { Post, TrendingTag } from "./types";
+import type { BibliographyEntry, Blog, Post, TrendingTag } from "./types";
 
 // Le pagine renderizzate lato server (Server Component) girano nel processo
 // Node.js del container: a differenza del browser, non raggiungono il
@@ -26,6 +26,24 @@ export async function getPublicPostByPermalink(
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero del post.`);
   return (await res.json()) as Post;
+}
+
+/** Dettaglio pubblico di un blog. `null` se non trovato o non visibile (404). */
+export async function getPublicBlog(slug: string): Promise<Blog | null> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}`, { cache: "no-store" });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero del blog.`);
+  return (await res.json()) as Blog;
+}
+
+/** Bibliografia automatica del blog: tutte le note dei post pubblicati. */
+export async function getBlogBibliography(slug: string): Promise<BibliographyEntry[] | null> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}/bibliography`, {
+    cache: "no-store",
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero della bibliografia.`);
+  return (await res.json()) as BibliographyEntry[];
 }
 
 /** Feed multi-blog per la homepage: post pubblicati di tutti i blog, dal più recente. */

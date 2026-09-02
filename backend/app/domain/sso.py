@@ -1,14 +1,11 @@
-import re
 from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.usernames import RESERVED_USERNAMES
+from app.domain.usernames import RESERVED_USERNAMES, normalize_username_candidate
 from app.models.sso_identity import SsoIdentity, SsoProvider
 from app.models.user import User
-
-_USERNAME_SANITIZE = re.compile(r"[^a-z0-9_]")
 
 
 @dataclass(frozen=True)
@@ -43,9 +40,9 @@ async def _find_identity(session: AsyncSession, profile: ExternalProfile) -> Sso
 
 
 async def _generate_username(session: AsyncSession, email: str) -> str:
-    base = _USERNAME_SANITIZE.sub("", email.split("@")[0].lower()) or "utente"
+    base = normalize_username_candidate(email.split("@")[0]) or "utente"
     if base in RESERVED_USERNAMES:
-        base = f"{base}_"
+        base = f"{base}1"
     candidate = base
     suffix = 0
     while (await session.execute(select(User).where(User.username == candidate))).scalar_one_or_none():

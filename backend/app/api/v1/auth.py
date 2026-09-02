@@ -45,6 +45,7 @@ class UserOut(BaseModel):
     id: uuid.UUID
     username: str
     email: str
+    display_name: str | None = None
     mfa_enabled: bool
     platform_role: PlatformRole
 

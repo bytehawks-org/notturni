@@ -1,13 +1,21 @@
 import type {
   AdminUser,
+  BibliographyEntry,
   Blog,
   BlogConfig,
+  BlogInvitation,
+  BlogMember,
+  BlogRole,
+  BlogVisibility,
   Category,
   Comment,
   CurrentUser,
   LoginResponse,
+  MembershipBlog,
   Page,
   Post,
+  PostAuthorNameStyle,
+  PostNote,
   PostTranslationSummary,
   Profile,
   SessionResponse,
@@ -96,20 +104,48 @@ export const api = {
 
   blogs: {
     listMine: (token: string) => request<Blog[]>("/api/v1/blogs/mine", { token }),
-    get: (slug: string) => request<Blog>(`/api/v1/blogs/${slug}`),
-    create: (token: string, payload: { slug: string; title: string; default_locale?: string }) =>
-      request<Blog>("/api/v1/blogs", { method: "POST", token, body: payload }),
+    /** Blog altrui su cui l'utente ha una membership (todo/BLOG.md #3). */
+    memberOf: (token: string) => request<MembershipBlog[]>("/api/v1/blogs/member-of", { token }),
+    /** Il token è opzionale ma necessario per i blog `members`/`private`. */
+    get: (slug: string, token?: string | null) =>
+      request<Blog>(`/api/v1/blogs/${slug}`, { token }),
+    create: (
+      token: string,
+      payload: {
+        slug: string;
+        title: string;
+        default_locale?: string;
+        subtitle?: string | null;
+        description?: string | null;
+        visibility?: BlogVisibility;
+      }
+    ) => request<Blog>("/api/v1/blogs", { method: "POST", token, body: payload }),
     update: (
       token: string,
       slug: string,
       payload: {
         title?: string;
+        /** "" azzera; assente non tocca. */
+        subtitle?: string;
+        description?: string;
+        visibility?: BlogVisibility;
         allow_anonymous_comments?: boolean;
+        mentions_enabled?: boolean;
         /** "" azzera (torna allo username di chi scrive); assente non tocca. */
         default_author_display_name?: string;
       }
     ) => request<Blog>(`/api/v1/blogs/${slug}`, { method: "PATCH", token, body: payload }),
-    getConfig: (slug: string) => request<BlogConfig>(`/api/v1/blogs/${slug}/config`),
+    getConfig: (slug: string, token?: string | null) =>
+      request<BlogConfig>(`/api/v1/blogs/${slug}/config`, { token }),
+    /** Bibliografia automatica del blog: tutte le note dei post pubblicati. */
+    bibliography: (slug: string, token?: string | null) =>
+      request<BibliographyEntry[]>(`/api/v1/blogs/${slug}/bibliography`, { token }),
+    /** Suggerimenti per l'autocomplete delle @menzioni nell'editor. */
+    mentionableUsers: (token: string, slug: string, q: string) =>
+      request<{ username: string; display_name: string | null }[]>(
+        `/api/v1/blogs/${slug}/mentionable-users?q=${encodeURIComponent(q)}`,
+        { token }
+      ),
     updateConfig: (token: string, slug: string, config: BlogConfig) =>
       request<BlogConfig>(`/api/v1/blogs/${slug}/config`, { method: "PUT", token, body: config }),
     follow: (token: string, slug: string) =>
@@ -145,6 +181,51 @@ export const api = {
       }),
     deleteCategory: (token: string, slug: string, categoryId: string) =>
       request<void>(`/api/v1/blogs/${slug}/categories/${categoryId}`, { method: "DELETE", token }),
+
+    // --- Collaboratori: membership e inviti (todo/BLOG.md #3) ---
+    members: (token: string, slug: string) =>
+      request<BlogMember[]>(`/api/v1/blogs/${slug}/members`, { token }),
+    updateMemberRole: (token: string, slug: string, userId: string, role: BlogRole) =>
+      request<BlogMember>(`/api/v1/blogs/${slug}/members/${userId}`, {
+        method: "PATCH",
+        token,
+        body: { role },
+      }),
+    removeMember: (token: string, slug: string, userId: string) =>
+      request<void>(`/api/v1/blogs/${slug}/members/${userId}`, { method: "DELETE", token }),
+    /** Il collaboratore imposta il proprio alias per questo blog (todo/BLOG.md #4). */
+    updateMyMembership: (token: string, slug: string, authorDisplayName: string) =>
+      request<MembershipBlog>(`/api/v1/blogs/${slug}/my-membership`, {
+        method: "PATCH",
+        token,
+        body: { author_display_name: authorDisplayName },
+      }),
+    listInvitations: (token: string, slug: string) =>
+      request<BlogInvitation[]>(`/api/v1/blogs/${slug}/invitations`, { token }),
+    createInvitation: (token: string, slug: string, username: string, role: BlogRole) =>
+      request<BlogInvitation>(`/api/v1/blogs/${slug}/invitations`, {
+        method: "POST",
+        token,
+        body: { username, role },
+      }),
+    revokeInvitation: (token: string, slug: string, invitationId: string) =>
+      request<void>(`/api/v1/blogs/${slug}/invitations/${invitationId}`, {
+        method: "DELETE",
+        token,
+      }),
+    /** Inviti a collaborare ricevuti dall'utente corrente, ancora in attesa. */
+    receivedInvitations: (token: string) =>
+      request<BlogInvitation[]>("/api/v1/blogs/received-invitations", { token }),
+    acceptInvitation: (token: string, invitationId: string) =>
+      request<BlogInvitation>(`/api/v1/blogs/received-invitations/${invitationId}/accept`, {
+        method: "POST",
+        token,
+      }),
+    declineInvitation: (token: string, invitationId: string) =>
+      request<BlogInvitation>(`/api/v1/blogs/received-invitations/${invitationId}/decline`, {
+        method: "POST",
+        token,
+      }),
   },
 
   posts: {
@@ -162,12 +243,12 @@ export const api = {
         slug: string;
         title: string;
         content: string;
-        author_display_name?: string;
         locale?: string;
         cover_image_url?: string | null;
         cover_image_is_sensitive?: boolean;
         tags?: string[];
         category_id?: string | null;
+        notes?: PostNote[];
       }
     ) => request<Post>(`/api/v1/blogs/${blogSlug}/posts`, { method: "POST", token, body: payload }),
     update: (
@@ -181,6 +262,8 @@ export const api = {
         tags?: string[];
         /** assente: non tocca la categoria; null: la rimuove; id: la imposta. */
         category_id?: string | null;
+        /** assente: non tocca le note; lista (anche []): le sostituisce. */
+        notes?: PostNote[];
       }
     ) => request<Post>(`/api/v1/posts/${postId}`, { method: "PATCH", token, body: payload }),
     publish: (token: string, postId: string) =>
@@ -195,10 +278,10 @@ export const api = {
         locale: string;
         title: string;
         content: string;
-        author_display_name?: string;
         cover_image_url?: string | null;
         tags?: string[];
         category_id?: string | null;
+        notes?: PostNote[];
       }
     ) => request<Post>(`/api/v1/posts/${postId}/translations`, { method: "POST", token, body: payload }),
   },
@@ -248,6 +331,9 @@ export const api = {
         bio?: string;
         first_name?: string;
         last_name?: string;
+        /** "" azzera l'alias globale; assente non tocca. */
+        display_name?: string;
+        post_author_name_style?: PostAuthorNameStyle;
         country?: string;
         native_language?: string;
         fallback_languages?: string[];

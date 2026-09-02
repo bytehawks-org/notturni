@@ -1,26 +1,41 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_optional_current_user
 from app.core.database import get_session
 from app.core.storage import content_public_url, upload_media
-from app.domain.authorization import can_write_posts
+from app.domain.authorization import can_view_blog, can_write_posts, get_membership
 from app.domain.blog_config import DEFAULT_BLOG_CONFIG, validate_blog_config
-from app.domain.blog_rules import assert_can_create_blog, validate_blog_slug
+from app.domain.blog_rules import (
+    assert_can_create_blog,
+    validate_blog_description,
+    validate_blog_slug,
+    validate_blog_subtitle,
+)
 from app.domain.categories import validate_category_name, validate_category_slug
 from app.domain.i18n import DEFAULT_LOCALE, validate_locale
 from app.domain.moderation import classify_image
-from app.models.blog import Blog
+from app.domain.permalinks import build_permalink
+from app.models.blog import (
+    Blog,
+    BlogInvitation,
+    BlogInvitationStatus,
+    BlogMembership,
+    BlogRole,
+    BlogVisibility,
+)
 from app.models.blog_config import BlogConfig
 from app.models.category import Category
 from app.models.follow import BlogFollow
+from app.models.post import Post, PostStatus
+from app.models.post_note import post_notes
 from app.models.user import User
 
 router = APIRouter()
@@ -30,11 +45,21 @@ class BlogCreateRequest(BaseModel):
     slug: str
     title: str
     default_locale: str = DEFAULT_LOCALE
+    subtitle: str | None = None
+    description: str | None = None
+    visibility: BlogVisibility = BlogVisibility.PUBLIC
 
 
 class BlogUpdateRequest(BaseModel):
     title: str | None = None
+    # "" azzera (torna a nessun sottotitolo/descrizione), assente lascia
+    # invariato — stesso schema di default_author_display_name.
+    subtitle: str | None = None
+    description: str | None = None
+    visibility: BlogVisibility | None = None
     allow_anonymous_comments: bool | None = None
+    # todo/EDITOR.md: @menzioni nei post trasformate in link (attive di default).
+    mentions_enabled: bool | None = None
     # "" per tornare al default (username di chi scrive), qualsiasi altro
     # valore lo imposta; assente lascia invariato — stesso schema di
     # Post.cover_image_url in PATCH /posts/{id}.
@@ -45,8 +70,12 @@ class BlogOut(BaseModel):
     id: uuid.UUID
     slug: str
     title: str
+    subtitle: str | None
+    description: str | None
+    visibility: BlogVisibility
     custom_domain: str | None
     allow_anonymous_comments: bool
+    mentions_enabled: bool
     default_locale: str
     default_author_display_name: str | None
     owner_id: uuid.UUID
@@ -77,6 +106,15 @@ async def _require_blog_write_access(session: AsyncSession, user: User, blog: Bl
         )
 
 
+async def _require_blog_viewable(
+    session: AsyncSession, user: User | None, blog: Blog
+) -> None:
+    """todo/BLOG.md #2: un blog `members`/`private` non deve rivelare nulla di
+    sé a chi non può vederlo — 404 come se non esistesse, non 403."""
+    if not await can_view_blog(session, user_id=user.id if user else None, blog=blog):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Blog non trovato.")
+
+
 @router.post("", response_model=BlogOut, status_code=status.HTTP_201_CREATED)
 async def create_blog(
     payload: BlogCreateRequest,
@@ -86,6 +124,10 @@ async def create_blog(
     try:
         validate_blog_slug(payload.slug)
         validate_locale(payload.default_locale)
+        if payload.subtitle:
+            validate_blog_subtitle(payload.subtitle)
+        if payload.description:
+            validate_blog_description(payload.description)
         await assert_can_create_blog(session, current_user.id)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
@@ -97,6 +139,9 @@ async def create_blog(
     blog = Blog(
         slug=payload.slug,
         title=payload.title,
+        subtitle=(payload.subtitle or None),
+        description=(payload.description or None),
+        visibility=payload.visibility,
         default_locale=payload.default_locale,
         owner_id=current_user.id,
     )
@@ -111,15 +156,159 @@ async def list_my_blogs(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[Blog]:
-    """Solo i blog di proprietà: l'elenco che include anche le membership su
-    blog altrui è rimandato a un secondo momento."""
+    """Solo i blog di proprietà. I blog su cui l'utente ha una membership
+    (co-autore/mediatore/...) sono su `GET /api/v1/blogs/member-of`."""
     result = await session.execute(select(Blog).where(Blog.owner_id == current_user.id))
     return list(result.scalars().all())
 
 
+class MembershipBlogOut(BaseModel):
+    blog: BlogOut
+    role: BlogRole
+    author_display_name: str | None
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/member-of", response_model=list[MembershipBlogOut])
+async def list_blogs_i_belong_to(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[MembershipBlogOut]:
+    """Blog altrui su cui l'utente corrente ha una membership attiva
+    (accettando un invito, vedi sotto)."""
+    result = await session.execute(
+        select(BlogMembership, Blog)
+        .join(Blog, Blog.id == BlogMembership.blog_id)
+        .where(BlogMembership.user_id == current_user.id)
+        .order_by(Blog.title)
+    )
+    return [
+        MembershipBlogOut(
+            blog=BlogOut.model_validate(blog),
+            role=membership.role,
+            author_display_name=membership.author_display_name,
+        )
+        for membership, blog in result.all()
+    ]
+
+
+class InvitationOut(BaseModel):
+    id: uuid.UUID
+    blog_slug: str
+    blog_title: str
+    role: BlogRole
+    status: BlogInvitationStatus
+    invited_username: str
+    invited_by_username: str
+    created_at: datetime
+    responded_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
+def _invitation_out(inv: BlogInvitation) -> InvitationOut:
+    return InvitationOut(
+        id=inv.id,
+        blog_slug=inv.blog.slug,
+        blog_title=inv.blog.title,
+        role=inv.role,
+        status=inv.status,
+        invited_username=inv.invited_user.username,
+        invited_by_username=inv.invited_by.username,
+        created_at=inv.created_at,
+        responded_at=inv.responded_at,
+    )
+
+
+_INVITATION_LOADS = (
+    selectinload(BlogInvitation.blog),
+    selectinload(BlogInvitation.invited_user),
+    selectinload(BlogInvitation.invited_by),
+)
+
+
+@router.get("/received-invitations", response_model=list[InvitationOut])
+async def list_received_invitations(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[InvitationOut]:
+    """Inviti a collaborare ricevuti dall'utente corrente, ancora in attesa di
+    risposta (todo/BLOG.md #3)."""
+    result = await session.execute(
+        select(BlogInvitation)
+        .where(
+            BlogInvitation.invited_user_id == current_user.id,
+            BlogInvitation.status == BlogInvitationStatus.PENDING,
+        )
+        .options(*_INVITATION_LOADS)
+        .order_by(BlogInvitation.created_at.desc())
+    )
+    return [_invitation_out(inv) for inv in result.scalars().all()]
+
+
+async def _get_received_invitation_or_404(
+    session: AsyncSession, invitation_id: uuid.UUID, user: User
+) -> BlogInvitation:
+    result = await session.execute(
+        select(BlogInvitation)
+        .where(BlogInvitation.id == invitation_id)
+        .options(*_INVITATION_LOADS)
+    )
+    inv = result.scalar_one_or_none()
+    if inv is None or inv.invited_user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Invito non trovato.")
+    if inv.status != BlogInvitationStatus.PENDING:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Invito già gestito.")
+    return inv
+
+
+@router.post("/received-invitations/{invitation_id}/accept", response_model=InvitationOut)
+async def accept_invitation(
+    invitation_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> InvitationOut:
+    inv = await _get_received_invitation_or_404(session, invitation_id, current_user)
+
+    existing = await get_membership(session, user_id=current_user.id, blog_id=inv.blog_id)
+    if existing is None:
+        session.add(
+            BlogMembership(user_id=current_user.id, blog_id=inv.blog_id, role=inv.role)
+        )
+    else:
+        # già membro (es. invito duplicato via altra strada): allinea il ruolo.
+        existing.role = inv.role
+    inv.status = BlogInvitationStatus.ACCEPTED
+    inv.responded_at = datetime.now(timezone.utc)
+    await session.commit()
+    await session.refresh(inv)
+    return _invitation_out(inv)
+
+
+@router.post("/received-invitations/{invitation_id}/decline", response_model=InvitationOut)
+async def decline_invitation(
+    invitation_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> InvitationOut:
+    inv = await _get_received_invitation_or_404(session, invitation_id, current_user)
+    inv.status = BlogInvitationStatus.DECLINED
+    inv.responded_at = datetime.now(timezone.utc)
+    await session.commit()
+    await session.refresh(inv)
+    return _invitation_out(inv)
+
+
 @router.get("/{slug}", response_model=BlogOut)
-async def get_blog(slug: str, session: AsyncSession = Depends(get_session)) -> Blog:
-    return await _get_blog_or_404(session, slug)
+async def get_blog(
+    slug: str,
+    current_user: User | None = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> Blog:
+    blog = await _get_blog_or_404(session, slug)
+    await _require_blog_viewable(session, current_user, blog)
+    return blog
 
 
 @router.patch("/{slug}", response_model=BlogOut)
@@ -133,10 +322,26 @@ async def update_blog(
     if blog.owner_id != current_user.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo il proprietario può modificare il blog.")
 
+    try:
+        if payload.subtitle:
+            validate_blog_subtitle(payload.subtitle)
+        if payload.description:
+            validate_blog_description(payload.description)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
     if payload.title is not None:
         blog.title = payload.title
+    if payload.subtitle is not None:
+        blog.subtitle = payload.subtitle or None
+    if payload.description is not None:
+        blog.description = payload.description or None
+    if payload.visibility is not None:
+        blog.visibility = payload.visibility
     if payload.allow_anonymous_comments is not None:
         blog.allow_anonymous_comments = payload.allow_anonymous_comments
+    if payload.mentions_enabled is not None:
+        blog.mentions_enabled = payload.mentions_enabled
     if payload.default_author_display_name is not None:
         blog.default_author_display_name = payload.default_author_display_name or None
 
@@ -190,16 +395,22 @@ async def list_blog_followers(slug: str, session: AsyncSession = Depends(get_ses
 
 
 @router.get("/{slug}/config")
-async def get_blog_config(slug: str, session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
-    """Configurazione di presentazione (palette/tipografia/layout). Pubblica:
-    serve a renderizzare la pagina pubblica del blog. Se il proprietario non
-    ha ancora salvato nulla, ritorna il default della piattaforma."""
+async def get_blog_config(
+    slug: str,
+    current_user: User | None = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """Configurazione di presentazione (palette/tipografia/layout). Serve a
+    renderizzare la pagina pubblica del blog; segue la visibilità del blog
+    (todo/BLOG.md #2). Se il proprietario non ha ancora salvato nulla,
+    ritorna il default della piattaforma."""
     result = await session.execute(
         select(Blog).where(Blog.slug == slug).options(selectinload(Blog.config))
     )
     blog = result.scalar_one_or_none()
     if blog is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Blog non trovato.")
+    await _require_blog_viewable(session, current_user, blog)
     return blog.config.config if blog.config is not None else DEFAULT_BLOG_CONFIG
 
 
@@ -269,6 +480,52 @@ async def upload_blog_media(
     return MediaOut(url=content_public_url(object_key), is_sensitive=is_sensitive)
 
 
+class MentionableUserOut(BaseModel):
+    username: str
+    display_name: str | None
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/{slug}/mentionable-users", response_model=list[MentionableUserOut])
+async def list_mentionable_users(
+    slug: str,
+    q: str = "",
+    limit: int = 8,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[MentionableUserOut]:
+    """Suggerimenti per l'autocomplete delle @menzioni nell'editor
+    (todo/EDITOR.md): proprietario, collaboratori e follower del blog il cui
+    username o nome pubblico inizia/contiene `q`. Richiede accesso in scrittura
+    al blog. Se le menzioni sono disattivate sul blog, ritorna lista vuota."""
+    blog = await _get_blog_or_404(session, slug)
+    await _require_blog_write_access(session, current_user, blog)
+    if not blog.mentions_enabled:
+        return []
+
+    limit = min(max(limit, 1), 25)
+    prefix = q.strip().lstrip("@").lower()
+
+    related_ids = select(BlogMembership.user_id).where(BlogMembership.blog_id == blog.id).union(
+        select(BlogFollow.follower_id).where(BlogFollow.blog_id == blog.id),
+        select(Blog.owner_id).where(Blog.id == blog.id),
+    )
+    stmt = select(User).where(User.id.in_(related_ids))
+    if prefix:
+        like = f"%{prefix}%"
+        stmt = stmt.where(
+            func.lower(User.username).like(f"{prefix}%")
+            | func.lower(func.coalesce(User.display_name, "")).like(like)
+        )
+    stmt = stmt.order_by(User.username).limit(limit)
+    result = await session.execute(stmt)
+    return [
+        MentionableUserOut(username=u.username, display_name=u.display_name)
+        for u in result.scalars().all()
+    ]
+
+
 class CategoryCreateRequest(BaseModel):
     name: str
     slug: str
@@ -288,14 +545,74 @@ class CategoryOut(BaseModel):
 
 
 @router.get("/{slug}/categories", response_model=list[CategoryOut])
-async def list_categories(slug: str, session: AsyncSession = Depends(get_session)) -> list[Category]:
-    """Pubblico: la tassonomia di un blog è visibile a chiunque, serve a
-    orientarsi tra i contenuti (CLAUDE.md)."""
+async def list_categories(
+    slug: str,
+    current_user: User | None = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[Category]:
+    """La tassonomia di un blog serve a orientarsi tra i contenuti (CLAUDE.md);
+    segue la visibilità del blog (todo/BLOG.md #2)."""
     blog = await _get_blog_or_404(session, slug)
+    await _require_blog_viewable(session, current_user, blog)
     result = await session.execute(
         select(Category).where(Category.blog_id == blog.id).order_by(Category.name)
     )
     return list(result.scalars().all())
+
+
+class BibliographyCitationOut(BaseModel):
+    post_title: str
+    post_slug: str
+    permalink: str
+    locale: str
+    idx: int
+
+
+class BibliographyEntryOut(BaseModel):
+    content: str
+    citations: list[BibliographyCitationOut]
+
+
+@router.get("/{slug}/bibliography", response_model=list[BibliographyEntryOut])
+async def get_blog_bibliography(
+    slug: str,
+    current_user: User | None = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[BibliographyEntryOut]:
+    """todo/EDITOR.md: bibliografia automatica del blog — tutte le note a piè
+    di pagina dei post pubblicati, raggruppate per testo identico e con
+    l'elenco dei post che le citano. Segue la visibilità del blog."""
+    blog = await _get_blog_or_404(session, slug)
+    await _require_blog_viewable(session, current_user, blog)
+
+    rows = await session.execute(
+        select(Post, post_notes.c.idx, post_notes.c.content)
+        .join(post_notes, post_notes.c.post_id == Post.id)
+        .where(
+            Post.blog_id == blog.id,
+            Post.status == PostStatus.PUBLISHED,
+            Post.published_at <= datetime.now(timezone.utc),
+        )
+        .order_by(Post.published_at.desc(), post_notes.c.idx.asc())
+    )
+
+    entries: dict[str, BibliographyEntryOut] = {}
+    for post, idx, content in rows.all():
+        key = " ".join(content.split()).casefold()
+        entry = entries.get(key)
+        if entry is None:
+            entry = BibliographyEntryOut(content=content, citations=[])
+            entries[key] = entry
+        entry.citations.append(
+            BibliographyCitationOut(
+                post_title=post.title,
+                post_slug=post.slug,
+                permalink=build_permalink(blog.slug, post),
+                locale=post.locale,
+                idx=idx,
+            )
+        )
+    return list(entries.values())
 
 
 @router.post("/{slug}/categories", response_model=CategoryOut, status_code=status.HTTP_201_CREATED)
@@ -385,3 +702,228 @@ async def delete_category(
 
     await session.delete(category)
     await session.commit()
+
+
+# ---- Collaboratori: membership e inviti (todo/BLOG.md #3) -----------------
+
+# Il todo limita gli inviti a co-autore e mediatore; autore/revisore restano
+# assegnabili solo per via diretta a DB, non da questa interfaccia.
+INVITABLE_ROLES = {BlogRole.CO_AUTORE, BlogRole.MEDIATORE}
+
+
+class MemberOut(BaseModel):
+    user_id: uuid.UUID
+    username: str
+    role: BlogRole
+    author_display_name: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class InvitationCreateRequest(BaseModel):
+    username: str
+    role: BlogRole
+
+
+class MemberRoleUpdateRequest(BaseModel):
+    role: BlogRole
+
+
+class MyMembershipUpdateRequest(BaseModel):
+    # "" azzera (torna alla precedenza: default del blog → alias profilo →
+    # username); assente lascia invariato.
+    author_display_name: str | None = None
+
+
+async def _require_blog_owner(session: AsyncSession, user: User, slug: str) -> Blog:
+    blog = await _get_blog_or_404(session, slug)
+    if blog.owner_id != user.id:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Solo il proprietario può gestire i collaboratori."
+        )
+    return blog
+
+
+@router.get("/{slug}/members", response_model=list[MemberOut])
+async def list_blog_members(
+    slug: str,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[MemberOut]:
+    blog = await _require_blog_owner(session, current_user, slug)
+    result = await session.execute(
+        select(BlogMembership, User)
+        .join(User, User.id == BlogMembership.user_id)
+        .where(BlogMembership.blog_id == blog.id)
+        .order_by(User.username)
+    )
+    return [
+        MemberOut(
+            user_id=m.user_id,
+            username=u.username,
+            role=m.role,
+            author_display_name=m.author_display_name,
+            created_at=m.created_at,
+        )
+        for m, u in result.all()
+    ]
+
+
+@router.patch("/{slug}/members/{user_id}", response_model=MemberOut)
+async def update_blog_member(
+    slug: str,
+    user_id: uuid.UUID,
+    payload: MemberRoleUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MemberOut:
+    blog = await _require_blog_owner(session, current_user, slug)
+    if payload.role not in INVITABLE_ROLES:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Ruolo assegnabile solo co_autore o mediatore da questa interfaccia.",
+        )
+    membership = await get_membership(session, user_id=user_id, blog_id=blog.id)
+    if membership is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Collaboratore non trovato.")
+    membership.role = payload.role
+    await session.commit()
+    user = await session.get(User, user_id)
+    assert user is not None
+    return MemberOut(
+        user_id=membership.user_id,
+        username=user.username,
+        role=membership.role,
+        author_display_name=membership.author_display_name,
+        created_at=membership.created_at,
+    )
+
+
+@router.delete("/{slug}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_blog_member(
+    slug: str,
+    user_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    blog = await _require_blog_owner(session, current_user, slug)
+    membership = await get_membership(session, user_id=user_id, blog_id=blog.id)
+    if membership is not None:
+        await session.delete(membership)
+        await session.commit()
+
+
+@router.patch("/{slug}/my-membership", response_model=MembershipBlogOut)
+async def update_my_membership(
+    slug: str,
+    payload: MyMembershipUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MembershipBlogOut:
+    """Il collaboratore sceglie l'alias con cui firmare i post su questo blog
+    (todo/BLOG.md #4)."""
+    blog = await _get_blog_or_404(session, slug)
+    membership = await get_membership(session, user_id=current_user.id, blog_id=blog.id)
+    if membership is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Non sei un collaboratore di questo blog.")
+    if payload.author_display_name is not None:
+        membership.author_display_name = payload.author_display_name or None
+    await session.commit()
+    await session.refresh(membership)
+    return MembershipBlogOut(
+        blog=BlogOut.model_validate(blog),
+        role=membership.role,
+        author_display_name=membership.author_display_name,
+    )
+
+
+@router.get("/{slug}/invitations", response_model=list[InvitationOut])
+async def list_blog_invitations(
+    slug: str,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[InvitationOut]:
+    blog = await _require_blog_owner(session, current_user, slug)
+    result = await session.execute(
+        select(BlogInvitation)
+        .where(BlogInvitation.blog_id == blog.id)
+        .options(*_INVITATION_LOADS)
+        .order_by(BlogInvitation.created_at.desc())
+    )
+    return [_invitation_out(inv) for inv in result.scalars().all()]
+
+
+@router.post(
+    "/{slug}/invitations", response_model=InvitationOut, status_code=status.HTTP_201_CREATED
+)
+async def create_blog_invitation(
+    slug: str,
+    payload: InvitationCreateRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> InvitationOut:
+    blog = await _require_blog_owner(session, current_user, slug)
+    if payload.role not in INVITABLE_ROLES:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Si può invitare solo come co_autore o mediatore.",
+        )
+
+    invited = await session.execute(select(User).where(User.username == payload.username))
+    invited_user = invited.scalar_one_or_none()
+    if invited_user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Utente non trovato.")
+    if invited_user.id == blog.owner_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Sei già il proprietario del blog.")
+
+    if await get_membership(session, user_id=invited_user.id, blog_id=blog.id) is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "L'utente è già un collaboratore.")
+
+    existing = await session.execute(
+        select(BlogInvitation).where(
+            BlogInvitation.blog_id == blog.id,
+            BlogInvitation.invited_user_id == invited_user.id,
+        )
+    )
+    inv = existing.scalar_one_or_none()
+    if inv is not None and inv.status == BlogInvitationStatus.PENDING:
+        raise HTTPException(status.HTTP_409_CONFLICT, "C'è già un invito in attesa per questo utente.")
+
+    if inv is None:
+        inv = BlogInvitation(
+            blog_id=blog.id,
+            invited_user_id=invited_user.id,
+            invited_by_id=current_user.id,
+            role=payload.role,
+        )
+        session.add(inv)
+    else:
+        # riusa la riga di un invito rifiutato/revocato in precedenza
+        inv.role = payload.role
+        inv.invited_by_id = current_user.id
+        inv.status = BlogInvitationStatus.PENDING
+        inv.responded_at = None
+
+    await session.commit()
+    result = await session.execute(
+        select(BlogInvitation).where(BlogInvitation.id == inv.id).options(*_INVITATION_LOADS)
+    )
+    return _invitation_out(result.scalar_one())
+
+
+@router.delete("/{slug}/invitations/{invitation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_blog_invitation(
+    slug: str,
+    invitation_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    blog = await _require_blog_owner(session, current_user, slug)
+    inv = await session.get(BlogInvitation, invitation_id)
+    if inv is None or inv.blog_id != blog.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Invito non trovato.")
+    if inv.status == BlogInvitationStatus.PENDING:
+        inv.status = BlogInvitationStatus.REVOKED
+        inv.responded_at = datetime.now(timezone.utc)
+        await session.commit()

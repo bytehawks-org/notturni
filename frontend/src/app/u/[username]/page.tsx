@@ -70,6 +70,12 @@ export default function PublicProfilePage() {
   if (!profile) return <p className="text-sm text-muted">Caricamento…</p>;
 
   const canFollow = user && user.username !== params.username;
+  // todo/BLOG.md #4: l'alias pubblico ha la precedenza su nome/cognome e username.
+  const displayHeading =
+    profile.display_name ||
+    (profile.first_name || profile.last_name
+      ? [profile.first_name, profile.last_name].filter(Boolean).join(" ")
+      : profile.username);
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-16">
@@ -90,13 +96,9 @@ export default function PublicProfilePage() {
             </div>
           )}
           <div>
-            <h1 className="font-serif text-2xl text-foreground">
-              {profile.first_name || profile.last_name
-                ? [profile.first_name, profile.last_name].filter(Boolean).join(" ")
-                : profile.username}
-            </h1>
+            <h1 className="font-serif text-2xl text-foreground">{displayHeading}</h1>
             <p className="text-sm text-muted">
-              {profile.first_name || profile.last_name ? `@${profile.username} · ` : ""}
+              {displayHeading !== profile.username ? `@${profile.username} · ` : ""}
               {followers.length} follower
             </p>
           </div>

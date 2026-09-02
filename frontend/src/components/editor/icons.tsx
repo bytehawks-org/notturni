@@ -93,6 +93,16 @@ export function RedoIcon() {
   );
 }
 
+export function NoteIcon() {
+  return (
+    <Icon>
+      <path d="M4 3.5h7l3 3v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1z" />
+      <path d="M10.5 3.5v3h3" />
+      <text x="5.4" y="12.6" fontSize="5" fill="currentColor" stroke="none">*</text>
+    </Icon>
+  );
+}
+
 export function TableIcon() {
   return (
     <Icon>

@@ -29,11 +29,23 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
 - **Blog, post e commenti:** CRUD con le regole di dominio del blueprint (slug,
   limite 5 blog/utente, moderazione commenti). Post in Markdown, con workflow
   di stato completo (bozza → in revisione → pubblicato, con pianificazione
-  della pubblicazione) e ruolo Revisore collegato a una capacità reale.
+  della pubblicazione) e ruolo Revisore collegato a una capacità reale. Ogni
+  blog ha sottotitolo e descrizione breve e una **visibilità** (pubblica /
+  solo iscritti alla piattaforma / privata come diario del solo proprietario).
+- **Collaboratori del blog:** il proprietario invita altri utenti come
+  co-autore o mediatore; l'invito diventa una membership solo dopo che
+  l'invitato lo accetta dalla propria dashboard. Ogni collaboratore può
+  scegliere un alias con cui firmare i post su quel blog.
 - **Editor WYSIWYG (Tiptap):** titoli, grassetto/corsivo/barrato/codice/link,
-  citazioni, elenchi, tabelle, immagini con testo ALT, immagine di copertina;
-  esperienza senza bordi, ariosa, ispirata a fika.bar. Il contenuto resta
-  salvato in Markdown, nessun rendering lato backend.
+  citazioni, elenchi, tabelle, immagini con testo ALT, immagine di copertina,
+  `@menzioni` con autocomplete che diventano link al profilo citato
+  (disattivabili per blog), note a piè di pagina; esperienza senza bordi,
+  ariosa, ispirata a fika.bar. Il contenuto resta salvato in Markdown,
+  nessun rendering lato backend.
+- **Note e bibliografia:** ogni post ha un elenco di note a piè di pagina;
+  la pagina pubblica del post le mostra numerate in fondo, con il testo come
+  tooltip sul riferimento. Una pagina `/{blog}/bibliografia` raccoglie tutte
+  le note dei post pubblicati, deduplicate, con i post che le citano.
 - **Tag e categorie sui post:** tag liberi (massimo 5, da campo dedicato e/o
   `#hashtag` nel testo) e categorie per-blog definite in anticipo dagli
   autori (al più una per post) — usati anche per filtrare il feed della
@@ -64,7 +76,9 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   libero (`blog_configs`), con i vincoli del blueprint (max 5 colori, max 3
   font); nome pubblico predefinito per gli autori/co-autori del blog.
 - **Profilo utente:** bio estesa (nome, cognome, paese, lingua madre e lingue
-  di fallback), avatar (upload su MinIO/S3), link social fissi con icona
+  di fallback), alias pubblico globale alternativo allo username, scelta di
+  cosa mostrare come nome autore sui propri post (username, nome e cognome, o
+  alias), avatar (upload su MinIO/S3), link social fissi con icona
   monocromatica da un file di configurazione facilmente editabile.
 - **Follow:** utenti che seguono altri utenti o blog.
 - **Amministrazione:** gestione utenti (ruolo, attivazione) — l'assegnazione
