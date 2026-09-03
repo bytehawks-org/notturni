@@ -27,20 +27,42 @@ import {
   TableIcon,
   UndoIcon,
 } from "./icons";
+import { LinkPreviewCard } from "./LinkPreviewCard";
+import { sensitiveImageNodeView } from "./SensitiveImageNodeView";
 
 interface RichTextEditorProps {
   /** Contenuto iniziale in Markdown (il backend salva/legge solo Markdown). */
   value: string;
   onChange: (markdown: string) => void;
-  /** Slug del blog: serve per caricare le immagini incorporate su S3/MinIO. */
-  blogSlug: string;
+  /** Slug del blog: serve per caricare le immagini incorporate su S3/MinIO e
+   * per l'autocomplete delle @menzioni. Assente per contenuti non legati a un
+   * blog (es. pagine statiche di piattaforma): in quel caso il pulsante
+   * "Immagine" e le @menzioni sono disattivati. */
+  blogSlug?: string;
   authFetch: <T>(fn: (token: string) => Promise<T>) => Promise<T>;
   placeholder?: string;
-  /** Note a piè di pagina del post (todo/EDITOR.md). */
-  notes: PostNote[];
-  onNotesChange: (notes: PostNote[]) => void;
+  /** Note a piè di pagina del post (todo/EDITOR.md). Assenti per contenuti
+   * che non le prevedono (es. pagine statiche, CLAUDE.md #1): in quel caso
+   * il pulsante "Nota" e l'elenco delle note non vengono mostrati. */
+  notes?: PostNote[];
+  onNotesChange?: (notes: PostNote[]) => void;
+  /** Controlli aggiuntivi (es. categoria, stato di pubblicazione) mostrati
+   * sopra i pulsanti di formattazione, dentro la stessa toolbar — così
+   * restano visibili insieme ad essa. RichTextEditor resta agnostico sul
+   * loro contenuto: chi lo usa compone i propri controlli (es. `CategorySelect`). */
+  toolbarEnd?: React.ReactNode;
+  /** Se true (default), la toolbar resta visibile in cima allo schermo
+   * durante lo scroll di un contenuto lungo. Da disattivare quando l'editor
+   * è annidato in un form breve dentro una pagina più lunga (es. il modulo
+   * "Aggiungi traduzione"), dove una seconda barra fissa sarebbe fuori
+   * contesto. */
+  stickyToolbar?: boolean;
 }
 
+// Dimensione pulsanti/icone della toolbar: ~75% più grandi del precedente
+// h-9/w-9 con icone 16px (richiesta di leggibilità/usabilità), ridotti su
+// mobile dove la riga scorre in orizzontale invece di andare a capo (vedi
+// il contenitore della toolbar più sotto).
 function ToolbarButton({
   active,
   disabled,
@@ -62,7 +84,7 @@ function ToolbarButton({
       disabled={disabled}
       onMouseDown={(e) => e.preventDefault()} // non rubare il focus all'editor
       onClick={onClick}
-      className={`inline-flex h-9 w-9 items-center justify-center rounded-full text-base transition disabled:opacity-30 disabled:cursor-not-allowed ${
+      className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg transition disabled:opacity-30 disabled:cursor-not-allowed sm:h-16 sm:w-16 sm:text-2xl [&>svg]:h-5 [&>svg]:w-5 sm:[&>svg]:h-7 sm:[&>svg]:w-7 ${
         active ? "bg-primary/10 text-primary" : "text-foreground/70 hover:bg-foreground/5 hover:text-foreground"
       }`}
     >
@@ -72,7 +94,7 @@ function ToolbarButton({
 }
 
 function ToolbarDivider() {
-  return <span className="mx-1.5 h-6 w-px bg-border" />;
+  return <span className="mx-1.5 h-8 w-px shrink-0 bg-border sm:h-10" />;
 }
 
 interface MentionCandidate {
@@ -88,10 +110,12 @@ const MENTION_TRIGGER_RE = /(?:^|\s)@([a-z0-9_-]{0,32})$/;
  * digitazione di `@parola`, propone gli utenti del blog e, alla selezione,
  * inserisce `@username ` come testo semplice (il Markdown resta pulito, il
  * link si forma al rendering — vedi src/lib/markdown.ts). Se il blog ha le
- * menzioni disattivate l'endpoint non restituisce nulla e il menu non appare. */
+ * menzioni disattivate l'endpoint non restituisce nulla e il menu non appare.
+ * Senza `blogSlug` (contenuti non legati a un blog, es. pagine di
+ * piattaforma) l'autocomplete resta sempre disattivato. */
 function useMentionAutocomplete(
   editor: Editor | null,
-  blogSlug: string,
+  blogSlug: string | undefined,
   authFetch: <T>(fn: (token: string) => Promise<T>) => Promise<T>
 ) {
   const [anchor, setAnchor] = useState<{
@@ -134,7 +158,7 @@ function useMentionAutocomplete(
   );
 
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || !blogSlug) return;
     const detect = () => {
       const { selection } = editor.state;
       if (!selection.empty) return close();
@@ -157,12 +181,12 @@ function useMentionAutocomplete(
       editor.off("selectionUpdate", detect);
       editor.off("update", detect);
     };
-  }, [editor, close]);
+  }, [editor, blogSlug, close]);
 
   const query = anchor?.query;
   const open = anchor !== null;
   useEffect(() => {
-    if (!open) return;
+    if (!open || !blogSlug) return;
     const handle = setTimeout(() => {
       authFetch((token) => api.blogs.mentionableUsers(token, blogSlug, query ?? ""))
         .then((list) => {
@@ -249,8 +273,10 @@ export function RichTextEditor({
   blogSlug,
   authFetch,
   placeholder,
-  notes,
+  notes = [],
   onNotesChange,
+  toolbarEnd,
+  stickyToolbar = true,
 }: RichTextEditorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -266,7 +292,7 @@ export function RichTextEditor({
     extensions: [
       StarterKit.configure({ link: false }),
       LinkExtension.configure({ openOnClick: false, autolink: true }),
-      ImageExtension,
+      ImageExtension.extend({ addNodeView: sensitiveImageNodeView }),
       Placeholder.configure({ placeholder: placeholder ?? "Scrivi qualcosa..." }),
       // resizable:false — una larghezza di colonna persistita non è
       // rappresentabile in una tabella Markdown a pipe, che non la prevede.
@@ -276,12 +302,34 @@ export function RichTextEditor({
       TableRow,
       TableHeader,
       TableCell,
+      LinkPreviewCard,
       Markdown.configure({ html: false, linkify: true, tightLists: true }),
     ],
     content: initialValue,
     editorProps: {
       attributes: {
         class: "notturni-prose min-h-64 max-w-none text-lg leading-relaxed text-foreground focus:outline-none",
+      },
+      // Incollare un URL da solo (stile Bluesky, CLAUDE.md #1): il link
+      // resta testo libero/cancellabile, la card appare come blocco a sé
+      // subito sotto — vedi LinkPreviewCard per il perché di questa scelta.
+      handlePaste: (view, event) => {
+        const text = event.clipboardData?.getData("text/plain")?.trim();
+        if (!text || !/^https?:\/\/\S+$/i.test(text)) return false;
+
+        const { state } = view;
+        const { schema } = state;
+        const linkMarkType = schema.marks.link;
+        const cardNodeType = schema.nodes.linkPreviewCard;
+        if (!linkMarkType || !cardNodeType) return false;
+
+        const linkedText = schema.text(text, [linkMarkType.create({ href: text })]);
+        let tr = state.tr.replaceSelectionWith(linkedText, false);
+        const $pos = tr.doc.resolve(tr.selection.from);
+        const afterParagraph = $pos.after($pos.depth);
+        tr = tr.insert(afterParagraph, cardNodeType.create({ href: text }));
+        view.dispatch(tr.scrollIntoView());
+        return true;
       },
     },
     onUpdate: ({ editor }) => {
@@ -348,6 +396,7 @@ export function RichTextEditor({
    * sopravvive al round-trip del serializzatore Markdown) e aggiunge la nota
    * all'elenco. */
   function insertNote() {
+    if (!onNotesChange) return;
     const text = window.prompt("Testo della nota");
     if (text === null) return;
     const trimmed = text.trim();
@@ -372,10 +421,12 @@ export function RichTextEditor({
   }
 
   function updateNote(idx: number, content: string) {
+    if (!onNotesChange) return;
     onNotesChange(notes.map((n) => (n.idx === idx ? { ...n, content } : n)));
   }
 
   function removeNote(idx: number) {
+    if (!onNotesChange) return;
     onNotesChange(notes.filter((n) => n.idx !== idx));
     // toglie anche i marcatori [idx](#nota-idx) rimasti nel testo
     const ranges: [number, number][] = [];
@@ -395,20 +446,18 @@ export function RichTextEditor({
   }
 
   async function handleImagePicked(file: File) {
+    if (!blogSlug) return;
     setUploadError(null);
     try {
       const media = await authFetch((token) => api.blogs.uploadMedia(token, blogSlug, file));
-      const alt = window.prompt("Testo alternativo dell'immagine (per l'accessibilità)", "") ?? "";
+      // ALT text e categorie di avviso si impostano dopo l'inserimento,
+      // tramite le pillole in sovraimpressione sull'immagine (stile
+      // Bluesky, CLAUDE.md #2/#3) — niente più window.prompt bloccante.
       editor!
         .chain()
         .focus()
-        .setImage({ src: media.url, alt: alt || undefined, title: media.is_sensitive ? "sensitive" : undefined })
+        .setImage({ src: media.url, title: media.is_sensitive ? "sensitive" : undefined })
         .run();
-      if (media.is_sensitive) {
-        setUploadError(
-          "L'immagine è stata segnalata come possibile contenuto sensibile: verrà mostrata sfocata ai lettori, cliccabile per rivelarla."
-        );
-      }
     } catch (err) {
       setUploadError(err instanceof ApiClientError ? err.message : "Caricamento immagine non riuscito.");
     }
@@ -416,9 +465,16 @@ export function RichTextEditor({
 
   return (
     <div>
-      {/* Barra flottante, senza contenitore: solo un filo di spazio la separa
-          dal testo, niente riquadro o bordo a delimitarla. */}
-      <div className="mb-3 flex flex-wrap items-center gap-1 text-foreground/70">
+      {/* Resta visibile durante lo scroll di un contenuto lungo (altrimenti
+          bisognerebbe risalire alla cima della pagina per riprendere in
+          mano la formattazione). Su mobile i pulsanti scorrono in
+          orizzontale invece di andare a capo su più righe, che
+          occuperebbero troppo spazio verticale una volta fissati in alto. */}
+      <div className={stickyToolbar ? "sticky top-0 z-20 -mx-1 border-b border-border bg-background px-1 pb-3 pt-2" : "mb-3"}>
+        {toolbarEnd && (
+          <div className="mb-3 flex flex-wrap items-end gap-3">{toolbarEnd}</div>
+        )}
+        <div className="flex flex-nowrap items-center gap-1 overflow-x-auto text-foreground/70 sm:flex-wrap sm:overflow-visible">
         <ToolbarButton
           title="Titolo 1"
           active={state.heading1}
@@ -462,9 +518,11 @@ export function RichTextEditor({
         <ToolbarButton title="Link" active={state.link} onClick={setLink}>
           <LinkIcon />
         </ToolbarButton>
-        <ToolbarButton title="Nota a piè di pagina" onClick={insertNote}>
-          <NoteIcon />
-        </ToolbarButton>
+        {onNotesChange && (
+          <ToolbarButton title="Nota a piè di pagina" onClick={insertNote}>
+            <NoteIcon />
+          </ToolbarButton>
+        )}
 
         <ToolbarDivider />
 
@@ -489,9 +547,11 @@ export function RichTextEditor({
         >
           <OrderedListIcon />
         </ToolbarButton>
-        <ToolbarButton title="Immagine" onClick={() => fileInputRef.current?.click()}>
-          <ImageIcon />
-        </ToolbarButton>
+        {blogSlug && (
+          <ToolbarButton title="Immagine" onClick={() => fileInputRef.current?.click()}>
+            <ImageIcon />
+          </ToolbarButton>
+        )}
         <ToolbarButton
           title="Tabella"
           active={state.inTable}
@@ -523,26 +583,29 @@ export function RichTextEditor({
         <ToolbarButton title="Ripeti" disabled={!state.canRedo} onClick={() => editor.chain().focus().redo().run()}>
           <RedoIcon />
         </ToolbarButton>
+        </div>
       </div>
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) void handleImagePicked(file);
-          e.target.value = "";
-        }}
-      />
+      {blogSlug && (
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void handleImagePicked(file);
+            e.target.value = "";
+          }}
+        />
+      )}
 
       {uploadError && <p className="mb-2 text-xs text-red-700">{uploadError}</p>}
 
       <EditorContent editor={editor} />
       {mentionMenu}
 
-      {notes.length > 0 && (
+      {onNotesChange && notes.length > 0 && (
         <div className="mt-8 border-t border-border pt-4">
           <p className="mb-2 text-xs uppercase tracking-wide text-muted">Note a piè di pagina</p>
           <ul className="space-y-2">

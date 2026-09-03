@@ -56,6 +56,13 @@ class Post(Base, UUIDPKMixin, TimestampMixin):
     # ricalcolato lato server (stesso principio di fiducia già in atto per
     # cover_image_url stesso: non verificato contro un media reale).
     cover_image_is_sensitive: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Categorie di avviso scelte manualmente dall'autore tramite il modal
+    # stile Bluesky (CLAUDE.md #3, vedi app/domain/content_media.py per il
+    # vocabolario) — indipendenti da `cover_image_is_sensitive`, che resta il
+    # flag che pilota davvero lo sfocamento: impostare una categoria qui forza
+    # anche quello a True (vedi update_post), ma il flag può restare True per
+    # sola segnalazione automatica anche a lista vuota.
+    cover_image_categories: Mapped[list[str]] = mapped_column(ARRAY(String(20)), default=list, nullable=False)
 
     # Tag inseriti esplicitamente nel campo dedicato (vedi app/domain/tags.py):
     # SOLO quelli, non gli hashtag nel testo — serve a poterli ripresentare

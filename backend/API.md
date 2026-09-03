@@ -199,7 +199,8 @@ email in produzione.
   "default_locale": "it",
   "subtitle": "Appunti sparsi",
   "description": "Descrizione breve del blog, max 256 caratteri.",
-  "visibility": "public"
+  "visibility": "public",
+  "default_author_display_name": "il-mio-username"
 }
 ```
 
@@ -208,7 +209,11 @@ email in produzione.
 caratteri alfanumerici/trattino, non in blacklist (vedi
 `app/domain/blog_rules.py`), massimo 5 blog per utente. `default_locale` è
 opzionale (default `it`). `subtitle` (max 64) e `description` (max 256) sono
-opzionali. `visibility` è opzionale (default `public`), valori:
+opzionali. `default_author_display_name` è opzionale (il frontend lo
+pre-compila con lo username di chi crea il blog, ma resta un campo libero,
+modificabile in seguito con `PATCH`): se assente/vuoto il nome pubblico
+ricade sulla preferenza di profilo di chi scrive (`username` di default).
+`visibility` è opzionale (default `public`), valori:
 
 - `public` — raggiungibile da chiunque, compare nel feed della homepage;
 - `members` — pagine pubbliche del blog leggibili solo da un utente
@@ -234,7 +239,11 @@ l'utente ha una membership attiva (dopo aver accettato un invito). Ogni voce:
 la `visibility`: un blog `members`/`private` non visibile all'utente
 corrente (o anonimo) risponde `404` come se non esistesse. Lo stesso vale per
 `GET .../config`, `GET .../categories` e per gli endpoint di lettura dei post
-del blog (vedi sezione Post).
+del blog (vedi sezione Post). Il campo `owner_id` della risposta vale
+`null` per chiunque non sia il proprietario stesso: è l'unico campo che
+punterebbe all'id reale di chi gestisce il blog, e un blog che si presenta
+con un `default_author_display_name` diverso dallo username del proprietario
+non deve permettere di risalirvi (vedi "Profilo utente e follow" più sotto).
 
 **`PATCH /api/v1/blogs/{slug}`** — richiede sessione, solo il proprietario
 (`403` altrimenti). Campi aggiornabili: `title`, `subtitle` / `description`
@@ -310,6 +319,48 @@ maiuscole/spaziatura) e ordinate per recency del primo post che le cita:
 ]
 ```
 
+**`GET /api/v1/blogs/{slug}/media-bibliography`** — stessa autorizzazione e
+stesso principio della bibliografia sopra, per i media (oggi solo immagini)
+citati nel corpo dei post **pubblicati**, raggruppati per URL identico:
+
+```json
+[
+  {
+    "url": "https://.../media/....jpg",
+    "alt_text": "Descrizione dell'immagine",
+    "categories": ["nudity", "explicit"],
+    "citations": [
+      {"post_title": "...", "post_slug": "...", "permalink": "/{blog}/{YYYYMMDD}/{slug}", "locale": "it", "used_at": "2026-01-01T00:00:00Z"}
+    ]
+  }
+]
+```
+
+`categories` è il sottoinsieme di `suggestive`/`nudity`/`explicit`/`other`
+scelto dall'autore per quell'immagine (vedi "Avviso sui contenuti" nella
+sezione Post) — vuoto se non segnalata o segnalata senza una categoria
+specifica. `used_at` è la data di pubblicazione del post che la cita.
+
+**`GET /api/v1/blogs/{slug}/links-bibliography`** — stesso principio, per i
+link citati nel corpo dei post pubblicati:
+
+```json
+[
+  {
+    "url": "https://esempio.org/articolo",
+    "link_text": "testo del link",
+    "citations": [
+      {"post_title": "...", "post_slug": "...", "permalink": "/{blog}/{YYYYMMDD}/{slug}", "locale": "it", "used_at": "2026-01-01T00:00:00Z"}
+    ]
+  }
+]
+```
+
+I dati di entrambi gli endpoint vengono dalla stessa fonte di verità del
+contenuto Markdown del post (tabelle `post_media`/`post_links`, riscritte
+per intero ad ogni salvataggio come `post_tags`/`post_notes` — non un
+elenco indicato a parte dal client).
+
 ### Categorie
 
 Tassonomia del blog (CLAUDE.md): a differenza dei tag (liberi, fino a 5 per
@@ -331,6 +382,67 @@ di validazione/unicità della creazione.
 **`DELETE /api/v1/blogs/{slug}/categories/{category_id}`** — stessa
 autorizzazione. I post con questa categoria non vengono cancellati, restano
 solo senza categoria.
+
+### Pagine statiche del blog
+
+Feature opt-in per blog (`Blog.static_pages_enabled`, **disattiva di
+default** — a differenza delle pagine di piattaforma, sempre attive, vedi
+sezione "Pagine statiche (sito principale)"), pensata per pagine come "Chi
+sono"/"Contattami" del singolo blog. Stesso schema di traduzione dei post
+(`translation_group_id` + `locale` + `slug`), ma **niente tag, categorie o
+stato di pubblicazione a workflow**: solo `is_published` booleano. Permalink
+pubblico `/{blog_slug}/pagina/{slug}` (niente data, a differenza dei post).
+
+**`GET /api/v1/blogs/{slug}/pages?locale=it`** — elenco. Pubblico: solo
+pagine `is_published=true`; chi ha accesso in scrittura al blog vede anche
+le bozze.
+
+**`GET /api/v1/blogs/{slug}/pages/{page_slug}?locale=it`** — risoluzione del
+permalink pubblico. Stessa distinzione pubblicate/bozze di sopra. `404` se
+non trovata.
+
+**`GET /api/v1/blogs/{slug}/pages/by-id/{page_id}`** — richiede accesso in
+scrittura al blog. Recupera una pagina per id (bozza inclusa), per l'editor
+di dashboard — a differenza della rotta per slug sopra, pensata per la
+risoluzione del permalink pubblico.
+
+Tutte le risposte (`PageOut`) includono `permalink` (calcolato,
+`/{blog_slug}/pagina/{slug}` per le pagine di blog o `/pages/{slug}` per
+quelle di piattaforma) e `mentions_enabled` (mirror di `Blog.mentions_enabled`,
+sempre `true` per le pagine di piattaforma) — utili al rendering pubblico
+lato frontend senza una fetch separata del blog.
+
+**`POST /api/v1/blogs/{slug}/pages`** — richiede accesso in scrittura al
+blog (proprietario o membership `autore`/`co_autore`) **e**
+`static_pages_enabled=true` sul blog (`403` altrimenti, messaggio esplicito).
+Crea una pagina, radice di una nuova famiglia di traduzioni:
+
+```json
+{"slug": "contattami", "locale": "it", "title": "Contattami", "content": "...", "is_published": true}
+```
+
+`400` se lo slug non è nel formato valido (minuscolo, lettere/cifre/trattini
+singoli, max 80 caratteri) o la lingua non è supportata; `409` se esiste già
+una pagina con quello slug in quella lingua su questo blog.
+
+**`POST /api/v1/blogs/{slug}/pages/{page_id}/translations`** — stessa
+autorizzazione (inclusa `static_pages_enabled`). Aggiunge una traduzione alla
+stessa famiglia (stesso corpo di `POST .../pages`, `locale` sempre esplicito).
+
+**`GET /api/v1/blogs/{slug}/pages/{page_id}/translations`** — pubblico.
+Lista `{id, locale, slug, is_published}` delle sole traduzioni pubblicate
+della stessa famiglia (stesso pattern di `GET /api/v1/posts/{post_id}/translations`
+per i post): per il selettore di lingua lato frontend, che mostra sempre a
+parte la pagina corrente.
+
+**`PATCH /api/v1/blogs/{slug}/pages/{page_id}`** — richiede accesso in
+scrittura al blog (**non** richiede `static_pages_enabled`: modificare o
+disattivare pagine già esistenti resta sempre possibile, anche a feature
+disattivata). Aggiorna `slug`/`title`/`content`/`is_published`, tutti
+opzionali.
+
+**`DELETE /api/v1/blogs/{slug}/pages/{page_id}`** — stessa autorizzazione di
+`PATCH` (nessun controllo su `static_pages_enabled`). `204`.
 
 ### Collaboratori e inviti
 
@@ -431,8 +543,7 @@ Accoda anche un backup su S3 (vedi sezione "Media e backup" più sotto).
 ```
 
 Il nome pubblico dell'autore **non** è indicato dal client (todo/USERS.md #2):
-è calcolato alla scrittura del post e salvato in `PostOut.author_display_name`,
-come primo valore applicabile in questo ordine:
+è calcolato come primo valore applicabile in questo ordine:
 
 1. alias del collaboratore su *questo* blog (`PATCH /blogs/{slug}/my-membership`);
 2. `default_author_display_name` del blog.
@@ -441,9 +552,13 @@ come primo valore applicabile in questo ordine:
    Utenti): `full_name` (nome e cognome), `display_name` (alias globale) o
    `username` (default).
 
-Risalvando il post (`PATCH /posts/{id}`) **l'autore stesso** riallinea il
-proprio nome pubblico a queste regole; un altro utente che modifica il post
-(es. un revisore) non lo tocca.
+Il valore è salvato in `PostOut.author_display_name` alla scrittura del
+post, ma **ricalcolato di nuovo ad ogni lettura**: cambiare l'alias del blog
+o della membership, o rinominare l'utente, si riflette subito su tutti i
+post già scritti, non solo su quelli risalvati. Risalvando comunque il post
+(`PATCH /posts/{id}`) l'autore stesso ne riallinea anche la colonna
+salvata; un altro utente che modifica il post (es. un revisore) non la
+tocca — irrilevante per la risposta, che è comunque ricalcolata.
 
 `locale` è opzionale: se omesso usa il `default_locale` del blog. `cover_image_url` è opzionale: l'URL ritornato da un precedente upload
 su `POST /blogs/{slug}/media` (vedi sotto) — il campo accetta qualsiasi
@@ -451,7 +566,11 @@ stringa, non verifica che punti davvero a un media caricato su questo blog.
 `cover_image_is_sensitive` (default `false`) riprende l'esito della
 moderazione automatica ricevuto in quella stessa risposta di upload — vedi
 sezione "Moderazione automatica delle immagini" più sotto; non viene
-ricalcolato qui. `tags` è opzionale (vedi sezione "Tag" sotto).
+ricalcolato qui. `cover_image_categories` (default `[]`) sono le categorie
+di avviso sui contenuti scelte manualmente dall'autore (vedi "Avviso sui
+contenuti" più sotto): non vuoto forza anche `cover_image_is_sensitive` a
+`true`, indipendentemente dal valore passato per quel campo. `tags` è
+opzionale (vedi sezione "Tag" sotto).
 `category_id` è opzionale: l'UUID di una categoria esistente del blog (vedi
 sezione "Categorie" sopra) — `404` se non appartiene a questo blog. `409` se
 lo slug è già in uso su quel blog per quella lingua. `notes` è opzionale
@@ -536,19 +655,54 @@ visibile per il chiamante).
 
 **`PATCH /api/v1/posts/{post_id}`** — stessa autorizzazione della creazione.
 Aggiorna
-`title`/`content`/`cover_image_url`/`cover_image_is_sensitive`/`tags`/`category_id`/`notes`
-(tutti opzionali). Se `content` cambia, accoda di nuovo il backup su S3.
-Per `notes`: campo assente lascia le note invariate, una lista (anche vuota
-`[]`) le sostituisce. Per
+`title`/`content`/`cover_image_url`/`cover_image_is_sensitive`/`cover_image_categories`/`tags`/`category_id`/`notes`
+(tutti opzionali). Se `content` cambia, accoda di nuovo il backup su S3 e
+ricalcola anche i media/link citati (vedi "Avviso sui contenuti" e
+"Media e link citati" più sotto). Per `notes`: campo assente lascia le note
+invariate, una lista (anche vuota `[]`) le sostituisce. Per
 `cover_image_url`: valore assente (`null`/campo omesso) lascia la cover
 invariata, stringa vuota `""` la rimuove (azzerando anche
-`cover_image_is_sensitive`, indipendentemente da cosa viene passato per
-quel campo), qualsiasi altro valore la sostituisce. Per `tags`, vedi sezione
-"Tag" sopra. Per `category_id`: campo assente lascia la categoria invariata,
-`null` esplicito la rimuove, un UUID valido la sostituisce (`404` se non
-appartiene a questo blog) — a differenza di `cover_image_url` non esiste un
-valore "vuoto" per un UUID, da cui la distinzione esplicita
-assente/`null`/valore.
+`cover_image_is_sensitive`/`cover_image_categories`, indipendentemente da
+cosa viene passato per quei campi), qualsiasi altro valore la sostituisce
+insieme a `cover_image_categories` nella stessa richiesta (assente in quel
+caso → `[]`, coerente con `cover_image_is_sensitive`: una cover nuova parte
+sempre senza avviso a meno di dirlo esplicitamente). Per
+`cover_image_categories` **senza** un nuovo `cover_image_url` nella stessa
+richiesta — a differenza di `cover_image_is_sensitive`, che in quel caso
+resta invariato — assente lascia le categorie di una cover già esistente
+invariate, una lista (anche vuota) le sostituisce, forzando
+`cover_image_is_sensitive` a `true` se non vuota: permette al modal di
+avviso sui contenuti di aggiornare una cover già caricata senza doverla
+ricaricare. Per `tags`, vedi sezione "Tag" sopra. Per `category_id`: campo
+assente lascia la categoria invariata, `null` esplicito la rimuove, un UUID
+valido la sostituisce (`404` se non appartiene a questo blog) — a
+differenza di `cover_image_url` non esiste un valore "vuoto" per un UUID, da
+cui la distinzione esplicita assente/`null`/valore.
+
+### Avviso sui contenuti
+
+Oltre alla segnalazione automatica (vedi "Moderazione automatica delle
+immagini" più sotto), l'autore può impostare manualmente un avviso sulle
+immagini con un modal stile Bluesky: **Suggestivo** (`suggestive`),
+**Nudità** (`nudity`), **Esplicito** (`explicit`), **Contenuto sensibile**
+(`other`) — `app/domain/content_media.py::SENSITIVITY_CATEGORIES`. Per le
+immagini nel corpo del post viaggia nello stesso `title` Markdown già usato
+per "sensitive" (vedi sotto): `![alt](url "sensitive")` per la sola
+segnalazione automatica (categoria non nota), `![alt](url "sensitive:nudity,explicit")`
+per una scelta esplicita — nessun campo dedicato, l'editor riscrive
+direttamente il `title` dell'immagine. Selezionare zero categorie nel modal
+rimuove del tutto l'avviso, anche se messo dall'automoderazione: la scelta
+finale è sempre dell'autore. Per la cover, vedi `cover_image_categories`
+sopra.
+
+### Media e link citati
+
+CLAUDE.md: come i tag, media (oggi solo immagini) e link nel corpo del post
+sono estratti dal Markdown e materializzati in tabelle di sola lettura
+(`post_media`/`post_links`) ad ogni salvataggio — non un elenco indicato a
+parte dal client. Servono alla bibliografia aggregata del blog: vedi
+`GET /api/v1/blogs/{slug}/media-bibliography` e `.../links-bibliography`
+nella sezione Blog.
 
 **`POST /api/v1/posts/{post_id}/submit-for-review`** — proprietario/autore/
 co-autore. Sposta un post da `draft` a `pending_review` (`400` se non era in
@@ -634,6 +788,39 @@ non deve mai far fallire un upload altrimenti riuscito (stesso principio
 già in atto per il backup dei post su S3). Non è pensato come barriera di
 sicurezza legale, solo come aiuto automatico all'autore.
 
+## Anteprima di un link
+
+**`GET /api/v1/link-preview?url=<url>`** — pubblico, nessuna autenticazione
+(CLAUDE.md: serve anche al rendering della pagina pubblica del post, non
+solo all'editor). Recupera titolo/descrizione/immagine Open Graph di una
+pagina esterna:
+
+```json
+{"url": "https://esempio.org/articolo", "title": "...", "description": "...", "image": "https://.../cover.jpg"}
+```
+
+`title`/`description`/`image` sono `null` se non trovati nell'HTML della
+pagina, o se il fetch fallisce (sito irraggiungibile, timeout, redirect —
+i redirect non vengono seguiti automaticamente) — in quel caso la risposta
+resta comunque `200` con solo `url` valorizzato, mai un errore, così chi
+chiama può sempre mostrare un link semplice. `400` solo per un URL non
+idoneo in partenza: schema diverso da `http`/`https`, o il cui hostname
+risolve a un indirizzo privato/loopback/link-local/riservato (mitigazione
+SSRF — `app/domain/link_preview.py::validate_previewable_url`; non è una
+barriera assoluta, stesso principio di "aiuto best-effort" già in atto per
+la moderazione automatica delle immagini sopra). **Nessuna cache**: ogni
+chiamata rifà il fetch (timeout 5s, corpo troncato a 512 KB) — un buon primo
+caso d'uso per Redis quando verrà usato per la prima volta nel progetto
+(oggi deployato ma non ancora sfruttato, vedi ROADMAP.md).
+
+Usato dall'editor (`frontend/src/components/editor/LinkPreviewCard.tsx`)
+quando si incolla un URL da solo: il link resta testo semplice/cancellabile,
+la card è un blocco indipendente subito sotto, salvato nel Markdown come un
+link con `title="card"` (`[url](url "card")`, stessa convenzione di
+"sensitive" sulle immagini) — senza salvare uno snapshot di
+titolo/descrizione/immagine, richiesti di nuovo ad ogni apertura
+dell'editor o rendering della pagina pubblica.
+
 ## Commenti
 
 Di default solo utenti registrati; il proprietario del blog può aprire ai non
@@ -646,6 +833,12 @@ registrati ma con moderazione obbligatoria in quel caso.
   ```json
   {"content": "..."}
   ```
+  `author_display_name` nella risposta segue la preferenza di profilo
+  `post_author_name_style` (username/nome e cognome/alias globale — non
+  l'alias di blog, che si applica solo ai post: un commento resta sempre a
+  nome della persona, non del blog) ed è **ricalcolato ad ogni lettura**, non
+  solo alla creazione: un cambio di username o di preferenza si riflette
+  subito anche sui commenti passati.
 - **senza sessione:** richiede che il blog abbia `allow_anonymous_comments=true`
   (altrimenti `401`); richiede `author_display_name` e `author_email` nel
   payload (altrimenti `400`); il commento è creato in stato `pending`.
@@ -665,9 +858,13 @@ autorizzazione di `pending`. Cambiano lo stato del commento.
 
 ## Pagine statiche (sito principale)
 
-Pagine come Chi siamo, Contatti, Privacy — non legate a un blog utente,
-gestite dal team della piattaforma. Stesso schema di traduzione dei post
-(sezione Multilingua sopra).
+Pagine come Chi siamo, Contatti, Privacy — non legate a un blog utente
+(`blog_id: null` nella risposta), gestite dal team della piattaforma, sempre
+attive (a differenza delle pagine di blog, opt-in — vedi "Pagine statiche del
+blog" più sotto). Stesso schema di traduzione dei post (sezione Multilingua
+sopra). Permalink pubblico `/pages/{slug}` (prefisso dedicato per non
+collidere con gli slug dei blog raggiungibili senza sottodominio su
+`/{blog_slug}/...`), riportato anche nel campo `permalink` della risposta.
 
 **`POST /api/v1/pages`** — richiede sessione con `platform_role` in
 `amministratore`/`super_admin` (`403` altrimenti). Crea una pagina, radice di
@@ -682,6 +879,10 @@ una nuova famiglia di traduzioni.
 **`POST /api/v1/pages/{page_id}/translations`** — stessa autorizzazione.
 Aggiunge una traduzione alla stessa famiglia (stesso corpo di `POST /pages`,
 senza `locale` implicito: va sempre indicato esplicitamente).
+
+**`GET /api/v1/pages/{page_id}/translations`** — pubblico. Lista
+`{id, locale, slug, is_published}` delle sole traduzioni pubblicate della
+stessa famiglia, stesso pattern delle pagine di blog sopra e dei post.
 
 **`GET /api/v1/pages/{slug}?locale=it`** — pubblico (token opzionale): senza
 sessione admin, solo pagine `is_published=true` (`404` altrimenti, bozza o
@@ -725,7 +926,7 @@ sezione Multilingua). `fallback_languages` sono pensate anche come le lingue
 verso cui l'utente potrà eventualmente tradurre i propri contenuti; massimo
 5.
 
-**`PATCH /api/v1/users/me`** — richiede sessione. Aggiorna `bio`,
+**`PATCH /api/v1/users/me`** — richiede sessione. Aggiorna `username`, `bio`,
 `first_name`, `last_name`, `display_name`, `post_author_name_style`,
 `country`, `native_language`, `fallback_languages` (tutti opzionali). Per
 `first_name`/`last_name`/`display_name`/`country`/`native_language`: stringa
@@ -734,7 +935,31 @@ valore lo sostituisce (`400` se il formato di `country`/`native_language` non
 è valido). `post_author_name_style`: uno tra `username` | `full_name` |
 `display_name` (`422` altrimenti), assente lo lascia invariato. Per
 `fallback_languages`: assente lascia invariata la lista, una lista (anche
-vuota) la sostituisce (`400` se oltre 5 o un codice non valido).
+vuota) la sostituisce (`400` se oltre 5 o un codice non valido). `username`:
+assente lo lascia invariato, altrimenti stesso formato/blacklist della
+registrazione (`app/domain/usernames.py`, `400` se non valido, `409` se già
+in uso); l'id resta la vera chiave con cui il resto del sistema referenzia
+l'utente, quindi il cambio è visibile subito ovunque (post, commenti,
+autocomplete `@menzioni`) — eccetto le `@menzioni` già scritte nel testo di
+post/pagine esistenti, salvate come testo semplice e non riscritte.
+
+**`GET /api/v1/users/me/follow-stats`** — richiede sessione. Somma i
+follower dell'utente (`UserFollow`) con quelli di tutti i suoi blog
+(`BlogFollow`), inclusi i blog che si presentano con un alias diverso dal
+suo username:
+
+```json
+{
+  "user_followers": 12,
+  "blogs": [{"blog_slug": "il-mio-blog", "blog_title": "...", "alias": "Anonimo Curioso", "followers": 40}],
+  "total_followers": 52
+}
+```
+
+Riservato al proprietario: è l'unico endpoint in cui identità reale e alias
+di blog compaiono insieme. Pubblicamente, `GET /api/v1/users/{username}/followers`
+e `GET /api/v1/blogs/{slug}/followers` continuano a mostrare solo il
+conteggio/elenco della singola entità, senza mai collegarli tra loro.
 
 **`POST /api/v1/users/me/avatar`** — richiede sessione, `multipart/form-data`
 con campo `file`. Formati ammessi: PNG, JPEG, WEBP; max 2 MiB (`400`

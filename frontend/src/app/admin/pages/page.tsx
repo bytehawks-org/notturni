@@ -5,10 +5,12 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card, CardTitle } from "@/components/ui/Card";
-import { FieldGroup, Input, Label, TextArea } from "@/components/ui/Field";
+import { FieldGroup, Input, Label } from "@/components/ui/Field";
+import { RichTextEditor } from "@/components/editor/RichTextEditor";
+import { TranslationsBar } from "@/components/editor/TranslationsBar";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import type { Page } from "@/lib/types";
+import type { Page, PageTranslationSummary } from "@/lib/types";
 
 function errorMessage(err: unknown): string {
   return err instanceof ApiClientError ? err.message : "Errore imprevisto.";
@@ -131,10 +133,9 @@ function CreatePageForm({ defaultLocale, onCreated }: { defaultLocale: string; o
           <Label htmlFor="new-page-title">Titolo</Label>
           <Input id="new-page-title" required value={title} onChange={(e) => setTitle(e.target.value)} />
         </FieldGroup>
-        <FieldGroup>
-          <Label htmlFor="new-page-content">Contenuto</Label>
-          <TextArea id="new-page-content" required value={content} onChange={(e) => setContent(e.target.value)} />
-        </FieldGroup>
+        <div className="mb-4">
+          <RichTextEditor value={content} onChange={setContent} authFetch={authFetch} stickyToolbar={false} />
+        </div>
         <FieldGroup>
           <label className="flex items-center gap-2 text-sm text-foreground">
             <input type="checkbox" checked={isPublished} onChange={(e) => setIsPublished(e.target.checked)} />
@@ -159,11 +160,11 @@ function EditPageForm({ page, onSaved }: { page: Page; onSaved: () => void }) {
   const [isPublished, setIsPublished] = useState(page.is_published);
   const [error, setError] = useState<string | null>(null);
 
-  const [showTranslate, setShowTranslate] = useState(false);
-  const [trLocale, setTrLocale] = useState("");
-  const [trSlug, setTrSlug] = useState("");
-  const [trTitle, setTrTitle] = useState("");
-  const [trContent, setTrContent] = useState("");
+  const [translations, setTranslations] = useState<PageTranslationSummary[]>([]);
+
+  useEffect(() => {
+    api.pages.translations(page.id).then(setTranslations).catch(() => undefined);
+  }, [page.id]);
 
   async function handleSave(event: FormEvent) {
     event.preventDefault();
@@ -176,24 +177,14 @@ function EditPageForm({ page, onSaved }: { page: Page; onSaved: () => void }) {
     }
   }
 
-  async function handleAddTranslation(event: FormEvent) {
-    event.preventDefault();
-    setError(null);
-    try {
-      await authFetch((token) =>
-        api.pages.addTranslation(token, page.id, {
-          slug: trSlug,
-          locale: trLocale,
-          title: trTitle,
-          content: trContent,
-          is_published: false,
-        })
-      );
-      setShowTranslate(false);
-      onSaved();
-    } catch (err) {
-      setError(errorMessage(err));
-    }
+  async function handleAddTranslation(payload: {
+    slug: string;
+    locale: string;
+    title: string;
+    content: string;
+  }) {
+    await authFetch((token) => api.pages.addTranslation(token, page.id, { ...payload, is_published: false }));
+    onSaved();
   }
 
   return (
@@ -203,14 +194,9 @@ function EditPageForm({ page, onSaved }: { page: Page; onSaved: () => void }) {
           <Label htmlFor={`edit-title-${page.id}`}>Titolo</Label>
           <Input id={`edit-title-${page.id}`} value={title} onChange={(e) => setTitle(e.target.value)} />
         </FieldGroup>
-        <FieldGroup>
-          <Label htmlFor={`edit-content-${page.id}`}>Contenuto</Label>
-          <TextArea
-            id={`edit-content-${page.id}`}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-          />
-        </FieldGroup>
+        <div className="mb-4">
+          <RichTextEditor value={content} onChange={setContent} authFetch={authFetch} stickyToolbar={false} />
+        </div>
         <FieldGroup>
           <label className="flex items-center gap-2 text-sm text-foreground">
             <input type="checkbox" checked={isPublished} onChange={(e) => setIsPublished(e.target.checked)} />
@@ -225,34 +211,16 @@ function EditPageForm({ page, onSaved }: { page: Page; onSaved: () => void }) {
         <Button type="submit">Salva</Button>
       </form>
 
-      <div className="mt-4">
-        {!showTranslate ? (
-          <Button variant="secondary" onClick={() => setShowTranslate(true)}>
-            Aggiungi traduzione
-          </Button>
-        ) : (
-          <form onSubmit={handleAddTranslation} className="mt-3 space-y-3">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Input
-                required
-                placeholder="lingua (es. en)"
-                maxLength={2}
-                value={trLocale}
-                onChange={(e) => setTrLocale(e.target.value.toLowerCase())}
-              />
-              <Input required placeholder="slug" value={trSlug} onChange={(e) => setTrSlug(e.target.value)} />
-            </div>
-            <Input required placeholder="titolo" value={trTitle} onChange={(e) => setTrTitle(e.target.value)} />
-            <TextArea
-              required
-              placeholder="contenuto"
-              value={trContent}
-              onChange={(e) => setTrContent(e.target.value)}
-            />
-            <Button type="submit">Crea traduzione</Button>
-          </form>
-        )}
-      </div>
+      <TranslationsBar
+        currentId={page.id}
+        currentLocale={page.locale}
+        translations={translations}
+        hrefFor={() => "/admin/pages"}
+        suggestedLocales={[]}
+        authFetch={authFetch}
+        withNotes={false}
+        onAddTranslation={handleAddTranslation}
+      />
     </div>
   );
 }

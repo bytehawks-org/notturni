@@ -32,7 +32,7 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
   const post = await getPublicPostByPermalink(blogSlug, date, postSlug);
   if (!post) notFound();
 
-  const html = renderMarkdown(post.content, {
+  const html = await renderMarkdown(post.content, {
     mentions: post.mentions_enabled,
     notes: post.notes,
   });

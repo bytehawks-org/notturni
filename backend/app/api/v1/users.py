@@ -3,7 +3,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -12,7 +12,9 @@ from app.core.database import get_session
 from app.core.storage import avatar_public_url, delete_avatar, upload_avatar
 from app.domain.i18n import validate_locale
 from app.domain.profile import validate_country_code, validate_fallback_languages
-from app.models.follow import UserFollow
+from app.domain.usernames import validate_username
+from app.models.blog import Blog
+from app.models.follow import BlogFollow, UserFollow
 from app.models.social_link import SocialLink
 from app.models.user import PostAuthorNameStyle, User
 
@@ -20,6 +22,13 @@ router = APIRouter()
 
 
 class ProfileUpdateRequest(BaseModel):
+    # todo/USERS.md #7: citabile ovunque come @username (menzioni, permalink
+    # profilo /u/{username}); cambiarlo si riflette subito ovunque perché
+    # tutto il resto del sistema referenzia l'utente per id, non per
+    # username — l'unica eccezione nota sono le @menzioni già scritte nel
+    # testo dei post/pagine, salvate come testo semplice: restano invariate
+    # e puntano allo username precedente. Assente lascia invariato.
+    username: str | None = None
     bio: str | None = None
     first_name: str | None = None
     last_name: str | None = None
@@ -78,6 +87,30 @@ class FollowerOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class BlogFollowerCountOut(BaseModel):
+    blog_slug: str
+    blog_title: str
+    # Nome sotto cui il blog appare pubblicamente (CLAUDE.md #1): se diverso
+    # dallo username di chi lo gestisce, i follower di questo blog non lo
+    # associano alla persona reale — vedi FollowStatsOut più sotto.
+    alias: str | None
+    followers: int
+
+
+class FollowStatsOut(BaseModel):
+    """Solo per il proprietario (`GET /users/me/follow-stats`): l'unico posto
+    dove identità reale e alias di blog compaiono fianco a fianco, per
+    tenere traccia di quante persone lo seguono in tutto — sotto qualunque
+    identità abbia usato per farlo. Il conteggio per singola entità (utente
+    reale o blog) resta invece visibile pubblicamente in modo separato,
+    tramite gli endpoint /{username}/followers e /blogs/{slug}/followers,
+    senza che i due si tocchino mai altrove."""
+
+    user_followers: int
+    blogs: list[BlogFollowerCountOut]
+    total_followers: int
+
+
 MAX_SOCIAL_LINKS = 5
 
 
@@ -128,6 +161,17 @@ async def update_profile(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> ProfileOut:
+    if payload.username is not None:
+        new_username = payload.username.strip().lower()
+        if new_username != current_user.username:
+            try:
+                validate_username(new_username)
+            except ValueError as exc:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+            existing = await session.execute(select(User).where(User.username == new_username))
+            if existing.scalar_one_or_none() is not None:
+                raise HTTPException(status.HTTP_409_CONFLICT, "Username già in uso.")
+            current_user.username = new_username
     if payload.bio is not None:
         current_user.bio = payload.bio
     if payload.first_name is not None:
@@ -300,3 +344,38 @@ async def list_following(username: str, session: AsyncSession = Depends(get_sess
         .where(UserFollow.follower_id == target.id)
     )
     return list(result.scalars().all())
+
+
+@router.get("/me/follow-stats", response_model=FollowStatsOut)
+async def my_follow_stats(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> FollowStatsOut:
+    """CLAUDE.md #8: quante persone seguono l'utente in tutto, sommando chi lo
+    segue con lo username reale (UserFollow) e chi segue uno qualunque dei
+    suoi blog (BlogFollow) — anche quando quel blog appare con un alias che
+    non rivela chi lo gestisce. Riservato al proprietario: è l'unico posto
+    dove le due cose vengono messe insieme."""
+    user_followers = await session.scalar(
+        select(func.count()).select_from(UserFollow).where(UserFollow.followed_user_id == current_user.id)
+    )
+
+    blog_rows = await session.execute(
+        select(
+            Blog.slug,
+            Blog.title,
+            Blog.default_author_display_name,
+            func.count(BlogFollow.id),
+        )
+        .outerjoin(BlogFollow, BlogFollow.blog_id == Blog.id)
+        .where(Blog.owner_id == current_user.id)
+        .group_by(Blog.id)
+        .order_by(Blog.title)
+    )
+    blogs = [
+        BlogFollowerCountOut(blog_slug=slug, blog_title=title, alias=alias, followers=count)
+        for slug, title, alias, count in blog_rows.all()
+    ]
+
+    total = (user_followers or 0) + sum(b.followers for b in blogs)
+    return FollowStatsOut(user_followers=user_followers or 0, blogs=blogs, total_followers=total)

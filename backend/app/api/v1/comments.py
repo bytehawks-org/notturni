@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_optional_current_user
 from app.core.database import get_session
 from app.domain.authorization import can_moderate_comments
+from app.domain.display_names import resolve_personal_display_name
 from app.models.blog import Blog
 from app.models.comment import Comment, CommentStatus
 from app.models.post import Post
@@ -45,13 +46,36 @@ async def _get_post_and_blog_or_404(session: AsyncSession, post_id: uuid.UUID) -
     return post, blog
 
 
+async def _comment_out(session: AsyncSession, comment: Comment) -> CommentOut:
+    # Ricalcolato ad ogni lettura per i commenti di utenti registrati (non
+    # dalla colonna, che resta solo l'ultimo valore scritto): un cambio di
+    # username o di preferenza di visualizzazione (dashboard/profilo) si
+    # riflette subito anche sui commenti passati (CLAUDE.md #1). I commenti
+    # anonimi restano invece il nome libero indicato da chi ha commentato,
+    # senza un account a cui risalire.
+    display_name = comment.author_display_name
+    if comment.author_id is not None:
+        author = await session.get(User, comment.author_id)
+        if author is not None:
+            display_name = resolve_personal_display_name(author)
+    return CommentOut(
+        id=comment.id,
+        post_id=comment.post_id,
+        author_id=comment.author_id,
+        author_display_name=display_name,
+        status=comment.status,
+        content=comment.content,
+        created_at=comment.created_at,
+    )
+
+
 @router.post("/posts/{post_id}/comments", response_model=CommentOut, status_code=status.HTTP_201_CREATED)
 async def create_comment(
     post_id: uuid.UUID,
     payload: CommentCreateRequest,
     current_user: User | None = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
-) -> Comment:
+) -> CommentOut:
     _post, blog = await _get_post_and_blog_or_404(session, post_id)
 
     if current_user is not None:
@@ -86,16 +110,16 @@ async def create_comment(
     session.add(comment)
     await session.commit()
     await session.refresh(comment)
-    return comment
+    return await _comment_out(session, comment)
 
 
 @router.get("/posts/{post_id}/comments", response_model=list[CommentOut])
-async def list_approved_comments(post_id: uuid.UUID, session: AsyncSession = Depends(get_session)) -> list[Comment]:
+async def list_approved_comments(post_id: uuid.UUID, session: AsyncSession = Depends(get_session)) -> list[CommentOut]:
     await _get_post_and_blog_or_404(session, post_id)
     result = await session.execute(
         select(Comment).where(Comment.post_id == post_id, Comment.status == CommentStatus.APPROVED)
     )
-    return list(result.scalars().all())
+    return [await _comment_out(session, c) for c in result.scalars().all()]
 
 
 @router.get("/posts/{post_id}/comments/pending", response_model=list[CommentOut])
@@ -103,7 +127,7 @@ async def list_pending_comments(
     post_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-) -> list[Comment]:
+) -> list[CommentOut]:
     _post, blog = await _get_post_and_blog_or_404(session, post_id)
     if not await can_moderate_comments(session, user_id=current_user.id, blog=blog):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Serve essere proprietario del blog o mediatore.")
@@ -111,7 +135,7 @@ async def list_pending_comments(
     result = await session.execute(
         select(Comment).where(Comment.post_id == post_id, Comment.status == CommentStatus.PENDING)
     )
-    return list(result.scalars().all())
+    return [await _comment_out(session, c) for c in result.scalars().all()]
 
 
 async def _moderate(
@@ -119,7 +143,7 @@ async def _moderate(
     new_status: CommentStatus,
     current_user: User,
     session: AsyncSession,
-) -> Comment:
+) -> CommentOut:
     comment = await session.get(Comment, comment_id)
     if comment is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Commento non trovato.")
@@ -134,7 +158,7 @@ async def _moderate(
     comment.status = new_status
     await session.commit()
     await session.refresh(comment)
-    return comment
+    return await _comment_out(session, comment)
 
 
 @router.post("/comments/{comment_id}/approve", response_model=CommentOut)
@@ -142,7 +166,7 @@ async def approve_comment(
     comment_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-) -> Comment:
+) -> CommentOut:
     return await _moderate(comment_id, CommentStatus.APPROVED, current_user, session)
 
 
@@ -151,5 +175,5 @@ async def reject_comment(
     comment_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-) -> Comment:
+) -> CommentOut:
     return await _moderate(comment_id, CommentStatus.REJECTED, current_user, session)

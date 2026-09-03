@@ -3,22 +3,33 @@
 import { useRef, useState } from "react";
 
 import { ApiClientError, api } from "@/lib/api";
-import { ImageIcon } from "./icons";
+import type { SensitivityCategory } from "@/lib/content-media";
+import { ContentWarningModal } from "./ContentWarningModal";
+import { ImageIcon, ShieldIcon } from "./icons";
 
 interface CoverImageUploadProps {
   value: string | null;
   isSensitive: boolean;
-  onChange: (url: string | null, isSensitive: boolean) => void;
+  categories: SensitivityCategory[];
+  onChange: (url: string | null, isSensitive: boolean, categories: SensitivityCategory[]) => void;
   blogSlug: string;
   authFetch: <T>(fn: (token: string) => Promise<T>) => Promise<T>;
 }
 
 /** Area di caricamento della cover del post, stile fika.bar: 16:9, click per scegliere il file. */
-export function CoverImageUpload({ value, isSensitive, onChange, blogSlug, authFetch }: CoverImageUploadProps) {
+export function CoverImageUpload({
+  value,
+  isSensitive,
+  categories,
+  onChange,
+  blogSlug,
+  authFetch,
+}: CoverImageUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(false);
+  const [showWarningModal, setShowWarningModal] = useState(false);
 
   async function handleFile(file: File) {
     setUploading(true);
@@ -26,12 +37,7 @@ export function CoverImageUpload({ value, isSensitive, onChange, blogSlug, authF
     setRevealed(false);
     try {
       const media = await authFetch((token) => api.blogs.uploadMedia(token, blogSlug, file));
-      onChange(media.url, media.is_sensitive);
-      if (media.is_sensitive) {
-        setError(
-          "Segnalata come possibile contenuto sensibile: verrà mostrata sfocata ai lettori, cliccabile per rivelarla."
-        );
-      }
+      onChange(media.url, media.is_sensitive, []);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Caricamento immagine non riuscito.");
     } finally {
@@ -57,11 +63,26 @@ export function CoverImageUpload({ value, isSensitive, onChange, blogSlug, authF
         )}
         <button
           type="button"
-          onClick={() => onChange(null, false)}
+          onClick={() => onChange(null, false, [])}
           className="absolute right-2 top-2 rounded-md bg-background/90 px-2 py-1 text-xs text-foreground opacity-0 shadow-sm transition group-hover:opacity-100"
         >
           Rimuovi
         </button>
+        <button
+          type="button"
+          onClick={() => setShowWarningModal(true)}
+          className="absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full bg-foreground/70 px-3 py-1 text-xs font-medium text-background"
+        >
+          <ShieldIcon />
+          {isSensitive ? "Avviso sul contenuto" : "Aggiungi un avviso"}
+        </button>
+        {showWarningModal && (
+          <ContentWarningModal
+            initialCategories={categories}
+            onSave={(next) => onChange(value, next.length > 0, next)}
+            onClose={() => setShowWarningModal(false)}
+          />
+        )}
         {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
       </div>
     );

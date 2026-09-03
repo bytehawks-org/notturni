@@ -43,7 +43,7 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 export default function DashboardHomePage() {
-  const { authFetch } = useAuth();
+  const { user, authFetch } = useAuth();
   const [blogs, setBlogs] = useState<Blog[] | null>(null);
   const [shared, setShared] = useState<MembershipBlog[]>([]);
   const [invitations, setInvitations] = useState<BlogInvitation[]>([]);
@@ -54,6 +54,12 @@ export default function DashboardHomePage() {
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
   const [visibility, setVisibility] = useState<BlogVisibility>("public");
+  // CLAUDE.md #4: suggerito come lo username di chi crea il blog finché
+  // l'utente non lo tocca, resta modificabile — se lasciato vuoto il nome
+  // pubblico ricade comunque sullo username (vedi _resolve_author_display_name
+  // lato backend), quindi il suggerimento qui è solo per renderlo esplicito.
+  const [defaultAuthorNameInput, setDefaultAuthorNameInput] = useState<string | null>(null);
+  const defaultAuthorName = defaultAuthorNameInput ?? user?.username ?? "";
   const [createError, setCreateError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -82,6 +88,7 @@ export default function DashboardHomePage() {
           title,
           subtitle: subtitle || null,
           visibility,
+          default_author_display_name: defaultAuthorName || null,
         })
       );
       setBlogs((prev) => [...(prev ?? []), blog]);
@@ -90,6 +97,7 @@ export default function DashboardHomePage() {
       setTitle("");
       setSubtitle("");
       setVisibility("public");
+      setDefaultAuthorNameInput(null);
     } catch (err) {
       setCreateError(err instanceof ApiClientError ? err.message : "Errore imprevisto.");
     } finally {
@@ -168,6 +176,14 @@ export default function DashboardHomePage() {
                 maxLength={64}
                 value={subtitle}
                 onChange={(e) => setSubtitle(e.target.value)}
+              />
+            </FieldGroup>
+            <FieldGroup>
+              <Label htmlFor="default-author-name">Nome pubblico predefinito sugli articoli</Label>
+              <Input
+                id="default-author-name"
+                value={defaultAuthorName}
+                onChange={(e) => setDefaultAuthorNameInput(e.target.value)}
               />
             </FieldGroup>
             <FieldGroup>

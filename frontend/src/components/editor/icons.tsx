@@ -111,3 +111,28 @@ export function TableIcon() {
     </Icon>
   );
 }
+
+/** Avviso sui contenuti (CLAUDE.md #3), stile Bluesky. */
+export function ShieldIcon() {
+  return (
+    <Icon>
+      <path d="M9 2.5 3.5 4.5v4c0 3.5 2.3 6.2 5.5 7 3.2-.8 5.5-3.5 5.5-7v-4L9 2.5z" />
+    </Icon>
+  );
+}
+
+export function CloseIcon() {
+  return (
+    <Icon>
+      <path d="M4.5 4.5l9 9M13.5 4.5l-9 9" />
+    </Icon>
+  );
+}
+
+export function PencilIcon() {
+  return (
+    <Icon>
+      <path d="M11.5 3.5 14.5 6.5 6 15H3v-3z" />
+    </Icon>
+  );
+}

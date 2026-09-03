@@ -41,11 +41,19 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   `@menzioni` con autocomplete che diventano link al profilo citato
   (disattivabili per blog), note a piè di pagina; esperienza senza bordi,
   ariosa, ispirata a fika.bar. Il contenuto resta salvato in Markdown,
-  nessun rendering lato backend.
-- **Note e bibliografia:** ogni post ha un elenco di note a piè di pagina;
-  la pagina pubblica del post le mostra numerate in fondo, con il testo come
-  tooltip sul riferimento. Una pagina `/{blog}/bibliografia` raccoglie tutte
-  le note dei post pubblicati, deduplicate, con i post che le citano.
+  nessun rendering lato backend. Immagini in stile Bluesky (pillola ALT e
+  rimozione in sovraimpressione, sfocate con click-per-rivelare già
+  nell'editor se segnalate sensibili, un modal per scegliere manualmente
+  l'avviso — Suggestivo/Nudità/Esplicito/Contenuto sensibile). Incollare un
+  link da solo aggiunge anche una card di anteprima (titolo, descrizione,
+  immagine) sotto il testo del link.
+- **Note, media e link: bibliografia automatica del blog.** Ogni post ha un
+  elenco di note a piè di pagina, mostrate numerate in fondo alla pagina
+  pubblica del post con il testo come tooltip sul riferimento. Una pagina
+  `/{blog}/bibliografia` raccoglie tutte le note dei post pubblicati,
+  deduplicate, con i post che le citano; allo stesso modo `/{blog}/media` e
+  `/{blog}/link` raccolgono le immagini e i link citati nel corpo dei post,
+  con la data di pubblicazione di ciascuna citazione.
 - **Tag e categorie sui post:** tag liberi (massimo 5, da campo dedicato e/o
   `#hashtag` nel testo) e categorie per-blog definite in anticipo dagli
   autori (al più una per post) — usati anche per filtrare il feed della
@@ -70,17 +78,28 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   convenzione lasciata al routing pubblico del frontend (non ancora
   costruito: oggi il frontend seleziona la lingua via parametro, non via
   path).
-- **Pagine statiche del sito principale:** Chi siamo, Contatti, Privacy, ecc.,
-  gestite da Amministratore/Super Admin.
+- **Pagine statiche:** Chi siamo, Contatti, Privacy, ecc. del sito
+  principale, gestite da Amministratore/Super Admin (sempre attive,
+  permalink `/pages/{slug}`); estese anche ai singoli blog come feature
+  opt-in per il proprietario (disattiva di default), stessa interfaccia di
+  editing, permalink `/{blog}/pagina/{slug}`.
 - **Aspetto personalizzabile per blog:** palette/tipografia/layout in JSON
   libero (`blog_configs`), con i vincoli del blueprint (max 5 colori, max 3
   font); nome pubblico predefinito per gli autori/co-autori del blog.
 - **Profilo utente:** bio estesa (nome, cognome, paese, lingua madre e lingue
-  di fallback), alias pubblico globale alternativo allo username, scelta di
-  cosa mostrare come nome autore sui propri post (username, nome e cognome, o
-  alias), avatar (upload su MinIO/S3), link social fissi con icona
-  monocromatica da un file di configurazione facilmente editabile.
-- **Follow:** utenti che seguono altri utenti o blog.
+  di fallback), username modificabile in qualsiasi momento (citato ovunque
+  per id, non per stringa: il cambio si riflette subito su post, commenti e
+  autocomplete `@menzioni`), alias pubblico globale alternativo allo
+  username, scelta di cosa mostrare come nome autore sui propri post
+  (username, nome e cognome, o alias), avatar (upload su MinIO/S3), link
+  social fissi con icona monocromatica da un file di configurazione
+  facilmente editabile.
+- **Follow:** utenti che seguono altri utenti o blog — anche in forma
+  anonima, seguendo un blog che si presenta con un alias diverso dal nome di
+  chi lo gestisce, la cui identità reale non compare mai fuori dalle pagine
+  di gestione del proprietario. Chi possiede un blog vede, solo nel proprio
+  profilo, il totale dei follower sommato tra username e alias, oltre al
+  conteggio separato per ciascuna entità.
 - **Amministrazione:** gestione utenti (ruolo, attivazione) — l'assegnazione
   dei ruoli di amministrazione è riservata al Super Admin.
 - **API token:** accesso diretto per il motore core, predisposto per il futuro

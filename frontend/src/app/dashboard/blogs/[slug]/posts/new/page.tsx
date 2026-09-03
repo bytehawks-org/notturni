@@ -12,6 +12,7 @@ import { RichTextEditor } from "@/components/editor/RichTextEditor";
 import { TagInput } from "@/components/editor/TagInput";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import type { SensitivityCategory } from "@/lib/content-media";
 import type { PostNote } from "@/lib/types";
 
 const FORM_ID = "new-post-form";
@@ -26,6 +27,7 @@ export default function NewPostPage() {
   const [content, setContent] = useState("");
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
   const [coverImageIsSensitive, setCoverImageIsSensitive] = useState(false);
+  const [coverImageCategories, setCoverImageCategories] = useState<SensitivityCategory[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [notes, setNotes] = useState<PostNote[]>([]);
@@ -44,6 +46,7 @@ export default function NewPostPage() {
           content,
           cover_image_url: coverImageUrl,
           cover_image_is_sensitive: coverImageIsSensitive,
+          cover_image_categories: coverImageCategories,
           tags,
           category_id: categoryId,
           notes,
@@ -59,7 +62,7 @@ export default function NewPostPage() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <div className="mb-10 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-y-2">
         <Link href={`/dashboard/blogs/${params.slug}`} className="text-sm text-muted hover:text-foreground">
           ← Torna al blog
         </Link>
@@ -74,10 +77,10 @@ export default function NewPostPage() {
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Titolo"
           required
-          className="mb-3 w-full border-0 bg-transparent font-serif text-5xl font-semibold leading-tight text-foreground placeholder:text-muted/70 focus:outline-none"
+          className="mb-3 w-full border-0 bg-transparent font-serif text-3xl font-semibold leading-tight text-foreground placeholder:text-muted/70 focus:outline-none sm:text-5xl"
         />
 
-        <div className="mb-8 flex items-center gap-1 text-sm text-muted">
+        <div className="mb-8 flex flex-wrap items-center gap-1 text-sm text-muted">
           <span>{params.slug}/</span>
           <input
             value={slug}
@@ -89,10 +92,6 @@ export default function NewPostPage() {
           />
         </div>
 
-        <div className="mb-4">
-          <CategorySelect blogSlug={params.slug} value={categoryId} onChange={setCategoryId} />
-        </div>
-
         <div className="mb-8">
           <TagInput value={tags} onChange={setTags} />
         </div>
@@ -101,9 +100,11 @@ export default function NewPostPage() {
           <CoverImageUpload
             value={coverImageUrl}
             isSensitive={coverImageIsSensitive}
-            onChange={(url, sensitive) => {
+            categories={coverImageCategories}
+            onChange={(url, sensitive, categories) => {
               setCoverImageUrl(url);
               setCoverImageIsSensitive(sensitive);
+              setCoverImageCategories(categories);
             }}
             blogSlug={params.slug}
             authFetch={authFetch}
@@ -117,6 +118,7 @@ export default function NewPostPage() {
           authFetch={authFetch}
           notes={notes}
           onNotesChange={setNotes}
+          toolbarEnd={<CategorySelect blogSlug={params.slug} value={categoryId} onChange={setCategoryId} />}
         />
 
         {error && (

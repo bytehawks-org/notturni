@@ -24,6 +24,10 @@ RESERVED_BLOG_SLUGS = {
     "monitor",
     "stats",
     "status",
+    # CLAUDE.md #1: prefisso dedicato al permalink delle pagine statiche di
+    # piattaforma (/pages/{slug}, vedi app/domain/pages.py) — un blog con
+    # questo slug renderebbe le sue pagine irraggiungibili senza sottodominio.
+    "pages",
 }
 
 SLUG_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")

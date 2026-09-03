@@ -1,3 +1,4 @@
+import type { SensitivityCategory } from "./content-media";
 import type {
   AdminUser,
   BibliographyEntry,
@@ -10,9 +11,13 @@ import type {
   Category,
   Comment,
   CurrentUser,
+  FollowStats,
+  LinkBibliographyEntry,
   LoginResponse,
+  MediaBibliographyEntry,
   MembershipBlog,
   Page,
+  PageTranslationSummary,
   Post,
   PostAuthorNameStyle,
   PostNote,
@@ -118,6 +123,7 @@ export const api = {
         subtitle?: string | null;
         description?: string | null;
         visibility?: BlogVisibility;
+        default_author_display_name?: string | null;
       }
     ) => request<Blog>("/api/v1/blogs", { method: "POST", token, body: payload }),
     update: (
@@ -131,6 +137,7 @@ export const api = {
         visibility?: BlogVisibility;
         allow_anonymous_comments?: boolean;
         mentions_enabled?: boolean;
+        static_pages_enabled?: boolean;
         /** "" azzera (torna allo username di chi scrive); assente non tocca. */
         default_author_display_name?: string;
       }
@@ -140,6 +147,12 @@ export const api = {
     /** Bibliografia automatica del blog: tutte le note dei post pubblicati. */
     bibliography: (slug: string, token?: string | null) =>
       request<BibliographyEntry[]>(`/api/v1/blogs/${slug}/bibliography`, { token }),
+    /** CLAUDE.md #4: come sopra, per i media (immagini) citati nei post pubblicati. */
+    mediaBibliography: (slug: string, token?: string | null) =>
+      request<MediaBibliographyEntry[]>(`/api/v1/blogs/${slug}/media-bibliography`, { token }),
+    /** CLAUDE.md #4: come sopra, per i link citati nei post pubblicati. */
+    linksBibliography: (slug: string, token?: string | null) =>
+      request<LinkBibliographyEntry[]>(`/api/v1/blogs/${slug}/links-bibliography`, { token }),
     /** Suggerimenti per l'autocomplete delle @menzioni nell'editor. */
     mentionableUsers: (token: string, slug: string, q: string) =>
       request<{ username: string; display_name: string | null }[]>(
@@ -181,6 +194,42 @@ export const api = {
       }),
     deleteCategory: (token: string, slug: string, categoryId: string) =>
       request<void>(`/api/v1/blogs/${slug}/categories/${categoryId}`, { method: "DELETE", token }),
+
+    // --- Pagine statiche del blog: feature opt-in (Blog.static_pages_enabled) ---
+    listPages: (slug: string, locale: string, token?: string | null) =>
+      request<Page[]>(`/api/v1/blogs/${slug}/pages?locale=${locale}`, { token }),
+    getPage: (slug: string, pageSlug: string, locale: string, token?: string | null) =>
+      request<Page>(`/api/v1/blogs/${slug}/pages/${pageSlug}?locale=${locale}`, { token }),
+    /** Per l'editor di dashboard: recupera per id (bozza inclusa), non per slug/locale. */
+    getPageById: (token: string | null, slug: string, pageId: string) =>
+      request<Page>(`/api/v1/blogs/${slug}/pages/by-id/${pageId}`, { token }),
+    createPage: (
+      token: string,
+      slug: string,
+      payload: { slug: string; locale: string; title: string; content: string; is_published: boolean }
+    ) => request<Page>(`/api/v1/blogs/${slug}/pages`, { method: "POST", token, body: payload }),
+    addPageTranslation: (
+      token: string,
+      slug: string,
+      pageId: string,
+      payload: { slug: string; locale: string; title: string; content: string; is_published: boolean }
+    ) =>
+      request<Page>(`/api/v1/blogs/${slug}/pages/${pageId}/translations`, {
+        method: "POST",
+        token,
+        body: payload,
+      }),
+    pageTranslations: (slug: string, pageId: string) =>
+      request<PageTranslationSummary[]>(`/api/v1/blogs/${slug}/pages/${pageId}/translations`),
+    updatePage: (
+      token: string,
+      slug: string,
+      pageId: string,
+      payload: { slug?: string; title?: string; content?: string; is_published?: boolean }
+    ) =>
+      request<Page>(`/api/v1/blogs/${slug}/pages/${pageId}`, { method: "PATCH", token, body: payload }),
+    deletePage: (token: string, slug: string, pageId: string) =>
+      request<void>(`/api/v1/blogs/${slug}/pages/${pageId}`, { method: "DELETE", token }),
 
     // --- Collaboratori: membership e inviti (todo/BLOG.md #3) ---
     members: (token: string, slug: string) =>
@@ -246,6 +295,7 @@ export const api = {
         locale?: string;
         cover_image_url?: string | null;
         cover_image_is_sensitive?: boolean;
+        cover_image_categories?: SensitivityCategory[];
         tags?: string[];
         category_id?: string | null;
         notes?: PostNote[];
@@ -259,6 +309,10 @@ export const api = {
         content?: string;
         cover_image_url?: string | null;
         cover_image_is_sensitive?: boolean;
+        /** assente: non tocca le categorie; lista (anche []): le sostituisce
+         * — indipendente da cover_image_url, a differenza di
+         * cover_image_is_sensitive (vedi backend/API.md). */
+        cover_image_categories?: SensitivityCategory[];
         tags?: string[];
         /** assente: non tocca la categoria; null: la rimuove; id: la imposta. */
         category_id?: string | null;
@@ -279,6 +333,7 @@ export const api = {
         title: string;
         content: string;
         cover_image_url?: string | null;
+        cover_image_categories?: SensitivityCategory[];
         tags?: string[];
         category_id?: string | null;
         notes?: PostNote[];
@@ -301,6 +356,16 @@ export const api = {
       request<Comment>(`/api/v1/comments/${commentId}/reject`, { method: "POST", token }),
   },
 
+  /** CLAUDE.md #1: anteprima di un link (titolo/descrizione/immagine Open
+   * Graph), usata sia dall'editor sia dal rendering pubblico del post per i
+   * link salvati come card. Pubblico, nessun token. */
+  linkPreview: {
+    get: (url: string) =>
+      request<{ url: string; title: string | null; description: string | null; image: string | null }>(
+        `/api/v1/link-preview?url=${encodeURIComponent(url)}`
+      ),
+  },
+
   pages: {
     /** Pubblico: solo pubblicate. Con token admin: anche le bozze. */
     list: (token: string | null, locale: string) =>
@@ -316,6 +381,8 @@ export const api = {
       pageId: string,
       payload: { slug: string; locale: string; title: string; content: string; is_published: boolean }
     ) => request<Page>(`/api/v1/pages/${pageId}/translations`, { method: "POST", token, body: payload }),
+    translations: (pageId: string) =>
+      request<PageTranslationSummary[]>(`/api/v1/pages/${pageId}/translations`),
     update: (
       token: string,
       pageId: string,
@@ -328,6 +395,9 @@ export const api = {
     updateMe: (
       token: string,
       payload: {
+        /** Citabile ovunque come @username; unico, minuscolo (vedi
+         * backend/app/domain/usernames.py). Assente non tocca. */
+        username?: string;
         bio?: string;
         first_name?: string;
         last_name?: string;
@@ -339,6 +409,7 @@ export const api = {
         fallback_languages?: string[];
       }
     ) => request<Profile>("/api/v1/users/me", { method: "PATCH", token, body: payload }),
+    followStats: (token: string) => request<FollowStats>("/api/v1/users/me/follow-stats", { token }),
     uploadAvatar: (token: string, file: File) => {
       const formData = new FormData();
       formData.append("file", file);

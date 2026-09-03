@@ -21,6 +21,7 @@ import {
   type BlogVisibility,
   type Category,
   type Comment,
+  type Page,
   type Post,
 } from "@/lib/types";
 
@@ -35,7 +36,7 @@ const ROLE_LABELS: Record<string, string> = {
   mediatore: "Mediatore",
 };
 
-type Tab = "posts" | "comments" | "appearance" | "collaborators" | "settings";
+type Tab = "posts" | "pages" | "comments" | "appearance" | "collaborators" | "settings";
 
 export default function BlogDetailPage() {
   const params = useParams<{ slug: string }>();
@@ -62,6 +63,7 @@ export default function BlogDetailPage() {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "posts", label: "Post" },
+    { id: "pages", label: "Pagine" },
     { id: "comments", label: "Commenti" },
     { id: "appearance", label: "Aspetto" },
     ...(isOwner ? [{ id: "collaborators" as Tab, label: "Collaboratori" }] : []),
@@ -109,6 +111,7 @@ export default function BlogDetailPage() {
       </div>
 
       {tab === "posts" && <PostsTab blogSlug={blog.slug} canWrite={isOwner} />}
+      {tab === "pages" && <PagesTab blog={blog} canWrite={isOwner} />}
       {tab === "comments" && <CommentsTab blogSlug={blog.slug} canModerate={isOwner} />}
       {tab === "appearance" && <AppearanceTab blogSlug={blog.slug} canEdit={isOwner} />}
       {tab === "collaborators" && isOwner && <CollaboratorsTab blogSlug={blog.slug} />}
@@ -236,6 +239,84 @@ function PostsTab({ blogSlug, canWrite }: { blogSlug: string; canWrite: boolean 
               )}
               {canWrite && post.status === "draft" && (
                 <Button variant="secondary" onClick={() => handlePublish(post.id)}>
+                  Pubblica
+                </Button>
+              )}
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PagesTab({ blog, canWrite }: { blog: Blog; canWrite: boolean }) {
+  const { accessToken, authFetch } = useAuth();
+  const [pages, setPages] = useState<Page[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    api.blogs
+      .listPages(blog.slug, blog.default_locale, accessToken)
+      .then(setPages)
+      .catch((err) => setError(errorMessage(err)));
+  }, [blog.slug, blog.default_locale, accessToken]);
+
+  useEffect(load, [load]);
+
+  async function handlePublish(pageId: string) {
+    try {
+      const updated = await authFetch((token) =>
+        api.blogs.updatePage(token, blog.slug, pageId, { is_published: true })
+      );
+      setPages((prev) => prev?.map((p) => (p.id === pageId ? updated : p)) ?? null);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  if (!blog.static_pages_enabled) {
+    return (
+      <p className="text-sm text-muted">
+        Le pagine statiche non sono attive per questo blog: puoi attivarle dalla scheda
+        Impostazioni.
+      </p>
+    );
+  }
+
+  return (
+    <div>
+      {canWrite && (
+        <div className="mb-4">
+          <Link href={`/dashboard/blogs/${blog.slug}/pages/new`}>
+            <Button>Nuova pagina</Button>
+          </Link>
+        </div>
+      )}
+      {error && <Alert kind="error">{error}</Alert>}
+      {pages !== null && pages.length === 0 && <p className="text-sm text-muted">Nessuna pagina.</p>}
+      <div className="space-y-3">
+        {pages?.map((page) => (
+          <Card key={page.id} className="flex items-center justify-between">
+            <div>
+              <Link
+                href={`/dashboard/blogs/${blog.slug}/pages/${page.id}`}
+                className="font-serif text-lg text-foreground hover:text-primary"
+              >
+                {page.title}
+              </Link>
+              <p className="text-sm text-muted">
+                /{page.slug} · {page.locale} · {page.is_published ? "pubblicata" : "bozza"}
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              {page.is_published && page.permalink && (
+                <Link href={page.permalink} className="text-sm text-primary hover:underline">
+                  Vedi
+                </Link>
+              )}
+              {canWrite && !page.is_published && (
+                <Button variant="secondary" onClick={() => handlePublish(page.id)}>
                   Pubblica
                 </Button>
               )}
@@ -601,6 +682,7 @@ function SettingsTab({
   const [visibility, setVisibility] = useState<BlogVisibility>(blog.visibility);
   const [allowAnonymous, setAllowAnonymous] = useState(blog.allow_anonymous_comments);
   const [mentionsEnabled, setMentionsEnabled] = useState(blog.mentions_enabled);
+  const [staticPagesEnabled, setStaticPagesEnabled] = useState(blog.static_pages_enabled);
   const [defaultAuthorName, setDefaultAuthorName] = useState(blog.default_author_display_name ?? "");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -618,6 +700,7 @@ function SettingsTab({
           visibility,
           allow_anonymous_comments: allowAnonymous,
           mentions_enabled: mentionsEnabled,
+          static_pages_enabled: staticPagesEnabled,
           default_author_display_name: defaultAuthorName,
         })
       );
@@ -715,6 +798,17 @@ function SettingsTab({
               disabled={!canEdit}
             />
             Trasforma le @menzioni nei post in link al profilo dell&apos;utente citato
+          </label>
+        </FieldGroup>
+        <FieldGroup>
+          <label className="flex items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={staticPagesEnabled}
+              onChange={(e) => setStaticPagesEnabled(e.target.checked)}
+              disabled={!canEdit}
+            />
+            Pagine statiche (Chi sono, Contattami, ...) — disattiva di default
           </label>
         </FieldGroup>
         <p className="mb-4 text-sm text-muted">Lingua di default: {blog.default_locale}</p>

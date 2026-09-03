@@ -17,6 +17,8 @@ from app.domain.authorization import (
     get_membership,
     is_publicly_visible,
 )
+from app.domain.content_media import extract_links, extract_media
+from app.domain.display_names import resolve_personal_display_name
 from app.domain.i18n import validate_locale
 from app.domain.notes import NoteInput, normalize_notes
 from app.domain.permalinks import build_permalink, is_valid_permalink_date, permalink_date
@@ -24,9 +26,11 @@ from app.domain.tags import resolve_tags
 from app.models.blog import Blog
 from app.models.category import Category
 from app.models.post import Post, PostStatus
+from app.models.post_link import post_links
+from app.models.post_media import post_media
 from app.models.post_note import post_notes
 from app.models.tag import Tag, post_tags
-from app.models.user import PostAuthorNameStyle, User
+from app.models.user import User
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -55,6 +59,10 @@ class PostCreateRequest(BaseModel):
     # Esito della moderazione automatica ricevuto da POST /blogs/{slug}/media
     # al momento dell'upload (vedi app/domain/moderation.py) — non ricalcolato qui.
     cover_image_is_sensitive: bool = False
+    # Categorie di avviso scelte manualmente dal modal stile Bluesky
+    # (CLAUDE.md #3, vocabolario in app/domain/content_media.py). Non vuoto
+    # forza anche cover_image_is_sensitive a True.
+    cover_image_categories: list[str] = []
     # Tag del campo dedicato (vedi app/domain/tags.py); si sommano agli
     # eventuali #hashtag scritti nel testo, massimo 5 in tutto.
     tags: list[str] | None = None
@@ -73,6 +81,7 @@ class PostTranslationRequest(BaseModel):
     content: str
     cover_image_url: str | None = None
     cover_image_is_sensitive: bool = False
+    cover_image_categories: list[str] = []
     tags: list[str] | None = None
     category_id: uuid.UUID | None = None
     notes: list[NoteIn] | None = None
@@ -88,6 +97,12 @@ class PostUpdateRequest(BaseModel):
     cover_image_url: str | None = None
     # assente: lascia invariato; ha senso solo insieme a un nuovo cover_image_url.
     cover_image_is_sensitive: bool | None = None
+    # A differenza di cover_image_is_sensitive sopra, indipendente da un
+    # nuovo cover_image_url: il modal di avviso sui contenuti (CLAUDE.md #3)
+    # deve poter cambiare le categorie di un'immagine di copertina già
+    # esistente. Assente: lascia invariate; lista (anche vuota `[]`): la
+    # sostituisce — non vuota forza anche cover_image_is_sensitive a True.
+    cover_image_categories: list[str] | None = None
     # assente: lascia invariati i tag del campo dedicato; lista (anche vuota
     # []): la sostituisce. Gli #hashtag nel testo sono comunque ricalcolati
     # ad ogni modifica del contenuto, a prescindere da questo campo.
@@ -125,6 +140,7 @@ class PostOut(BaseModel):
     content: str
     cover_image_url: str | None
     cover_image_is_sensitive: bool
+    cover_image_categories: list[str]
     status: PostStatus
     published_at: datetime | None
     created_at: datetime
@@ -190,9 +206,12 @@ async def _require_write_access(session: AsyncSession, user: User, blog: Blog) -
 
 async def _resolve_author_display_name(session: AsyncSession, user: User, blog: Blog) -> str:
     """Nome pubblico dell'autore di un post (CLAUDE.md #1, todo/BLOG.md #4,
-    todo/USERS.md #2). Calcolato alla scrittura del post (creazione, modifica,
-    traduzione) e salvato come colonna — non c'è più un valore per singolo post
-    indicato dal client.
+    todo/USERS.md #2). Scritto sulla colonna `Post.author_display_name` alla
+    creazione/modifica del post, ma ricalcolato di nuovo ad ogni lettura in
+    `_post_out` — così un alias di membership o di blog cambiato dopo la
+    pubblicazione si riflette subito su tutti i post esistenti, non solo su
+    quelli risalvati dall'autore. Non c'è un valore per singolo post indicato
+    dal client.
 
     1. Alias dell'autore sulla propria membership di *questo* blog, se presente;
     2. nome pubblico predefinito del blog (`default_author_display_name`), se presente.
@@ -206,12 +225,7 @@ async def _resolve_author_display_name(session: AsyncSession, user: User, blog: 
     if blog.default_author_display_name:
         return blog.default_author_display_name
 
-    if user.post_author_name_style == PostAuthorNameStyle.FULL_NAME:
-        full = " ".join(part for part in (user.first_name, user.last_name) if part).strip()
-        return full or user.username
-    if user.post_author_name_style == PostAuthorNameStyle.DISPLAY_NAME:
-        return user.display_name or user.username
-    return user.username
+    return resolve_personal_display_name(user)
 
 
 async def _validate_category(session: AsyncSession, blog: Blog, category_id: uuid.UUID | None) -> None:
@@ -236,11 +250,21 @@ async def _post_out(session: AsyncSession, post: Post, blog: Blog) -> PostOut:
         .order_by(post_notes.c.idx)
     )
     notes = [NoteOut(idx=idx, content=content) for idx, content in note_rows.all()]
+    # Ricalcolato ad ogni lettura (non dalla colonna `author_display_name`,
+    # che resta solo l'ultimo valore scritto): un alias di blog/membership
+    # cambiato dopo la pubblicazione deve riflettersi subito su tutti i post
+    # già scritti, non solo su quelli risalvati dall'autore (CLAUDE.md #1).
+    author = await session.get(User, post.author_id)
+    author_display_name = (
+        await _resolve_author_display_name(session, author, blog)
+        if author is not None
+        else post.author_display_name
+    )
     return PostOut(
         id=post.id,
         blog_id=post.blog_id,
         author_id=post.author_id,
-        author_display_name=post.author_display_name,
+        author_display_name=author_display_name,
         locale=post.locale,
         translation_group_id=post.translation_group_id,
         title=post.title,
@@ -248,6 +272,7 @@ async def _post_out(session: AsyncSession, post: Post, blog: Blog) -> PostOut:
         content=post.content,
         cover_image_url=post.cover_image_url,
         cover_image_is_sensitive=post.cover_image_is_sensitive,
+        cover_image_categories=post.cover_image_categories,
         status=post.status,
         published_at=post.published_at,
         created_at=post.created_at,
@@ -309,6 +334,43 @@ async def _sync_post_notes(session: AsyncSession, post: Post, notes: list[NoteIn
         )
 
 
+async def _sync_post_media(session: AsyncSession, post: Post) -> None:
+    """Riscrive la cache `post_media` a partire dal contenuto del post
+    (CLAUDE.md #4) — stessa insidia async di `_sync_post_tags`/`_sync_post_notes`."""
+    if post.id is None:
+        await session.flush()
+    refs = extract_media(post.content)
+    await session.execute(delete(post_media).where(post_media.c.post_id == post.id))
+    if refs:
+        await session.execute(
+            insert(post_media),
+            [
+                {
+                    "post_id": post.id,
+                    "position": r.position,
+                    "url": r.url,
+                    "alt_text": r.alt_text,
+                    "categories": list(r.categories),
+                }
+                for r in refs
+            ],
+        )
+
+
+async def _sync_post_links(session: AsyncSession, post: Post) -> None:
+    """Riscrive la cache `post_links` a partire dal contenuto del post
+    (CLAUDE.md #4) — stessa insidia async di `_sync_post_tags`/`_sync_post_notes`."""
+    if post.id is None:
+        await session.flush()
+    refs = extract_links(post.content)
+    await session.execute(delete(post_links).where(post_links.c.post_id == post.id))
+    if refs:
+        await session.execute(
+            insert(post_links),
+            [{"post_id": post.id, "position": r.position, "url": r.url, "link_text": r.link_text} for r in refs],
+        )
+
+
 def _backup_to_s3(blog: Blog, post: Post) -> None:
     """Fire-and-forget: accoda il backup su S3. Il database resta la fonte di
     verità del post, quindi un problema di RabbitMQ/S3 qui non deve mai far
@@ -365,13 +427,16 @@ async def create_post(
         slug=payload.slug,
         content=payload.content,
         cover_image_url=payload.cover_image_url,
-        cover_image_is_sensitive=payload.cover_image_is_sensitive,
+        cover_image_is_sensitive=payload.cover_image_is_sensitive or bool(payload.cover_image_categories),
+        cover_image_categories=payload.cover_image_categories,
         manual_tags=manual_tags,
         category_id=payload.category_id,
     )
     session.add(post)
     await _sync_post_tags(session, post, effective_tags)
     await _sync_post_notes(session, post, notes)
+    await _sync_post_media(session, post)
+    await _sync_post_links(session, post)
     await session.commit()
     await session.refresh(post, attribute_names=["created_at", "updated_at"])
     _backup_to_s3(blog, post)
@@ -436,13 +501,16 @@ async def add_post_translation(
         slug=payload.slug,
         content=payload.content,
         cover_image_url=payload.cover_image_url,
-        cover_image_is_sensitive=payload.cover_image_is_sensitive,
+        cover_image_is_sensitive=payload.cover_image_is_sensitive or bool(payload.cover_image_categories),
+        cover_image_categories=payload.cover_image_categories,
         manual_tags=manual_tags,
         category_id=category_id,
     )
     session.add(translation)
     await _sync_post_tags(session, translation, effective_tags)
     await _sync_post_notes(session, translation, notes)
+    await _sync_post_media(session, translation)
+    await _sync_post_links(session, translation)
     await session.commit()
     await session.refresh(translation, attribute_names=["created_at", "updated_at"])
     _backup_to_s3(blog, translation)
@@ -561,10 +629,22 @@ async def update_post(
         post.content = payload.content
     if payload.cover_image_url is not None:
         post.cover_image_url = payload.cover_image_url or None
-        # nessuna nuova cover (rimossa): non ha senso restare "sensibile".
-        post.cover_image_is_sensitive = bool(post.cover_image_url) and (
-            payload.cover_image_is_sensitive or False
-        )
+        if post.cover_image_url:
+            post.cover_image_categories = payload.cover_image_categories or []
+            post.cover_image_is_sensitive = bool(payload.cover_image_is_sensitive) or bool(
+                post.cover_image_categories
+            )
+        else:
+            # nessuna nuova cover (rimossa): non ha senso restare "sensibile".
+            post.cover_image_categories = []
+            post.cover_image_is_sensitive = False
+    elif payload.cover_image_categories is not None:
+        # A differenza del ramo sopra, qui la cover non cambia: il modal di
+        # avviso sui contenuti (CLAUDE.md #3) può aggiornare le categorie di
+        # un'immagine di copertina già esistente in qualsiasi momento.
+        post.cover_image_categories = payload.cover_image_categories
+        if post.cover_image_categories:
+            post.cover_image_is_sensitive = True
 
     # i tag vanno ricalcolati se è cambiato il contenuto (gli #hashtag nel
     # testo potrebbero essere cambiati) o se il campo dedicato è stato
@@ -577,6 +657,12 @@ async def update_post(
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
         post.manual_tags = manual_tags
         await _sync_post_tags(session, post, effective_tags)
+
+    # media e link citati (CLAUDE.md #4): ricalcolati solo se il contenuto è
+    # effettivamente cambiato, stesso principio dei tag sopra.
+    if payload.content is not None:
+        await _sync_post_media(session, post)
+        await _sync_post_links(session, post)
 
     if "category_id" in payload.model_fields_set:
         await _validate_category(session, blog, payload.category_id)

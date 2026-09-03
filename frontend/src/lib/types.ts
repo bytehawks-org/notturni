@@ -1,3 +1,5 @@
+import type { SensitivityCategory } from "./content-media";
+
 export type PlatformRole = "super_admin" | "amministratore" | "moderatore" | "utente";
 export type MfaMethod = "totp" | "email";
 
@@ -75,10 +77,14 @@ export interface Blog {
   allow_anonymous_comments: boolean;
   /** todo/EDITOR.md: @menzioni nel contenuto trasformate in link (default: true). */
   mentions_enabled: boolean;
+  /** Pagine statiche del blog: feature opt-in, disattiva di default. */
+  static_pages_enabled: boolean;
   default_locale: string;
   /** Nome pubblico predefinito per i testi scritti su questo blog — vedi Post.author_display_name. */
   default_author_display_name: string | null;
-  owner_id: string;
+  /** `null` per chiunque non sia il proprietario stesso (CLAUDE.md #8): non
+   * correla un blog che usa un alias con l'id dell'utente reale dietro. */
+  owner_id: string | null;
   created_at: string;
 }
 
@@ -133,6 +139,8 @@ export interface Post {
   cover_image_url: string | null;
   /** Risultato della moderazione automatica al momento dell'upload — vedi API.md. */
   cover_image_is_sensitive: boolean;
+  /** Categorie di avviso scelte manualmente dal modal stile Bluesky (CLAUDE.md #3). */
+  cover_image_categories: SensitivityCategory[];
   status: PostStatus;
   published_at: string | null;
   created_at: string;
@@ -179,6 +187,29 @@ export interface BibliographyEntry {
   citations: BibliographyCitation[];
 }
 
+/** CLAUDE.md #4: come BibliographyCitation, ma con la data di pubblicazione
+ * invece del numero della nota — usata da media e link. */
+export interface ContentCitation {
+  post_title: string;
+  post_slug: string;
+  permalink: string;
+  locale: string;
+  used_at: string | null;
+}
+
+export interface MediaBibliographyEntry {
+  url: string;
+  alt_text: string;
+  categories: SensitivityCategory[];
+  citations: ContentCitation[];
+}
+
+export interface LinkBibliographyEntry {
+  url: string;
+  link_text: string;
+  citations: ContentCitation[];
+}
+
 export const MAX_TAGS_PER_POST = 5;
 export const MAX_FALLBACK_LANGUAGES = 5;
 
@@ -194,6 +225,13 @@ export interface PostTranslationSummary {
   status: PostStatus;
 }
 
+export interface PageTranslationSummary {
+  id: string;
+  locale: string;
+  slug: string;
+  is_published: boolean;
+}
+
 export type CommentStatus = "pending" | "approved" | "rejected";
 
 export interface Comment {
@@ -206,8 +244,26 @@ export interface Comment {
   created_at: string;
 }
 
+/** Solo per il proprietario (GET /users/me/follow-stats, CLAUDE.md #8):
+ * l'unico posto dove identità reale e alias di blog compaiono insieme, per
+ * sapere quante persone lo seguono in tutto sotto qualunque identità. */
+export interface BlogFollowerCount {
+  blog_slug: string;
+  blog_title: string;
+  alias: string | null;
+  followers: number;
+}
+
+export interface FollowStats {
+  user_followers: number;
+  blogs: BlogFollowerCount[];
+  total_followers: number;
+}
+
 export interface Page {
   id: string;
+  /** `null` = pagina del sito principale; valorizzato = pagina di un blog. */
+  blog_id: string | null;
   slug: string;
   locale: string;
   translation_group_id: string;
@@ -215,6 +271,10 @@ export interface Page {
   content: string;
   is_published: boolean;
   created_at: string;
+  /** Permalink pubblico: `/pages/{slug}` (piattaforma) o `/{blog_slug}/pagina/{slug}` (blog). */
+  permalink: string | null;
+  /** Mirror di Blog.mentions_enabled (sempre true per le pagine di piattaforma). */
+  mentions_enabled: boolean;
 }
 
 export interface SocialLink {
