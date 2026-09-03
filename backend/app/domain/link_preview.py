@@ -23,8 +23,12 @@ from urllib.parse import urlparse
 
 import httpx
 
-_TIMEOUT = httpx.Timeout(5.0, connect=5.0)
-_MAX_BYTES = 512 * 1024
+_TIMEOUT = httpx.Timeout(8.0, connect=5.0)
+# Alcuni siti (es. YouTube) mettono un'enorme quantità di dati inline prima
+# dei tag Open Graph nell'<head> — 512 KB non bastavano nemmeno ad arrivarci.
+# Ci si ferma comunque appena si vede la chiusura di </head> (vedi sotto),
+# questo è solo il tetto di sicurezza per pagine senza un head chiuso.
+_MAX_BYTES = 3 * 1024 * 1024
 _ALLOWED_SCHEMES = {"http", "https"}
 
 
@@ -109,7 +113,7 @@ async def fetch_link_preview(url: str) -> LinkPreview:
                 chunks = bytearray()
                 async for chunk in resp.aiter_bytes():
                     chunks.extend(chunk)
-                    if len(chunks) >= _MAX_BYTES:
+                    if len(chunks) >= _MAX_BYTES or b"</head" in chunks[-len(chunk) - 8 :].lower():
                         break
                 html = chunks.decode("utf-8", errors="ignore")
     except (httpx.HTTPError, OSError):

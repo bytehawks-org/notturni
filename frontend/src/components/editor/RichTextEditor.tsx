@@ -3,6 +3,7 @@
 import ImageExtension from "@tiptap/extension-image";
 import LinkExtension from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
+import { TextSelection } from "@tiptap/pm/state";
 import { Table } from "@tiptap/extension-table";
 import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
@@ -321,13 +322,21 @@ export function RichTextEditor({
         const { schema } = state;
         const linkMarkType = schema.marks.link;
         const cardNodeType = schema.nodes.linkPreviewCard;
-        if (!linkMarkType || !cardNodeType) return false;
+        const paragraphType = schema.nodes.paragraph;
+        if (!linkMarkType || !cardNodeType || !paragraphType) return false;
 
         const linkedText = schema.text(text, [linkMarkType.create({ href: text })]);
         let tr = state.tr.replaceSelectionWith(linkedText, false);
         const $pos = tr.doc.resolve(tr.selection.from);
         const afterParagraph = $pos.after($pos.depth);
-        tr = tr.insert(afterParagraph, cardNodeType.create({ href: text }));
+        const card = cardNodeType.create({ href: text });
+        const emptyParagraph = paragraphType.create();
+        // Una riga vuota subito dopo la card, per poter continuare a
+        // scrivere senza dover prima creare un nuovo paragrafo a mano.
+        tr = tr
+          .insert(afterParagraph, card)
+          .insert(afterParagraph + card.nodeSize, emptyParagraph);
+        tr = tr.setSelection(TextSelection.near(tr.doc.resolve(afterParagraph + card.nodeSize + 1)));
         view.dispatch(tr.scrollIntoView());
         return true;
       },
@@ -453,10 +462,15 @@ export function RichTextEditor({
       // ALT text e categorie di avviso si impostano dopo l'inserimento,
       // tramite le pillole in sovraimpressione sull'immagine (stile
       // Bluesky, CLAUDE.md #2/#3) — niente più window.prompt bloccante.
+      // Un paragrafo vuoto subito dopo permette di continuare a scrivere
+      // senza doverlo creare a mano.
       editor!
         .chain()
         .focus()
-        .setImage({ src: media.url, title: media.is_sensitive ? "sensitive" : undefined })
+        .insertContent([
+          { type: "image", attrs: { src: media.url, title: media.is_sensitive ? "sensitive" : null } },
+          { type: "paragraph" },
+        ])
         .run();
     } catch (err) {
       setUploadError(err instanceof ApiClientError ? err.message : "Caricamento immagine non riuscito.");

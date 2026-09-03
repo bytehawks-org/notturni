@@ -30,7 +30,7 @@ const renderer = new MarkdownIt({ html: false, linkify: true, breaks: false });
 function wrapSensitiveImages(html: string): string {
   const dom = new JSDOM(`<body>${html}</body>`);
   const document = dom.window.document;
-  document.querySelectorAll('img[title="sensitive"]').forEach((img) => {
+  document.querySelectorAll('img[title^="sensitive"]').forEach((img) => {
     const wrapper = document.createElement("label");
     wrapper.className = "sensitive-image-wrapper";
     const toggle = document.createElement("input");

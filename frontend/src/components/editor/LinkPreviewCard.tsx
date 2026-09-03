@@ -70,7 +70,11 @@ function LinkPreviewCardView({ node, deleteNode }: NodeViewProps) {
         <div className="p-3">
           <p className="text-xs text-muted">{hostname}</p>
           <p className="mt-0.5 line-clamp-2 text-sm font-medium text-foreground">
-            {preview?.title || (failed ? href : "Caricamento anteprima…")}
+            {/* "Caricamento…" solo prima che la risposta arrivi: una volta
+                arrivata (anche con titolo/descrizione/immagine tutti nulli,
+                es. sito irraggiungibile) si ripiega subito sull'URL, non si
+                resta bloccati sul messaggio di caricamento. */}
+            {preview ? preview.title || href : failed ? href : "Caricamento anteprima…"}
           </p>
           {preview?.description && (
             <p className="mt-1 line-clamp-2 text-xs text-muted">{preview.description}</p>
