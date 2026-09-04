@@ -315,3 +315,26 @@ export interface AdminUser {
 export interface ApiError {
   detail: string;
 }
+
+/** Porzione di testo evidenziata e salvata da un lettore su un post
+ * pubblicato — raccolta unificata in /dashboard/frammenti. Non supera mai il
+ * 15% del testo del post (vinto lato client alla selezione, ricontrollato
+ * lato server). */
+export interface PostFragment {
+  id: string;
+  post_id: string;
+  text: string;
+  created_at: string;
+}
+
+export const MAX_FRAGMENT_RATIO = 0.15;
+
+export interface FragmentCollectionEntry {
+  id: string;
+  text: string;
+  created_at: string;
+  post_title: string;
+  author_display_name: string;
+  /** Permalink pubblico /{blog}/{data}/{slug} del post di provenienza. */
+  permalink: string;
+}

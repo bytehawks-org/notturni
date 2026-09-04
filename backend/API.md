@@ -856,6 +856,59 @@ altrimenti). Coda di moderazione.
 **`POST /api/v1/comments/{comment_id}/approve`** / **`.../reject`** — stessa
 autorizzazione di `pending`. Cambiano lo stato del commento.
 
+## Frammenti
+
+Porzione di testo evidenziata dal lettore (con il mouse) su un post
+pubblicato e salvata in una raccolta personale unificata — non legata
+all'autore del post, che non deve fare nulla per abilitarla. Richiede sempre
+sessione: un frammento appartiene a chi lo ha salvato, mai pubblico. Il testo
+è salvato così com'è (non un offset nel post): il frontend lo ri-cerca nel
+testo reso ad ogni lettura per ri-evidenziarlo (`lib/highlight-fragments.ts`),
+tollerando piccole differenze di spazi bianchi ma non un post riscritto nel
+frattempo — in quel caso il frammento resta salvato ma non più
+ri-evidenziato in pagina. Ri-selezionare (anche solo in parte) un frammento
+già evidenziato propone di rimuoverlo (`DELETE`) invece di salvarne uno
+nuovo — interamente lato frontend (`Range.intersectsNode` sui `<mark>` già
+presenti), nessun endpoint dedicato oltre alla `DELETE` già descritta sotto.
+
+**`POST /api/v1/posts/{post_id}/fragments`** — richiede sessione. `404` se il
+post non è pubblicato o non è visibile all'utente (stessa regola d'accesso
+del permalink pubblico). `400` se il testo è vuoto o supera il **15%** della
+lunghezza del Markdown grezzo del post (`app/domain/fragments.py`) — un
+proxy della lunghezza del testo reso, che il backend non calcola mai (nessun
+rendering Markdown lato server, vedi Post). Salvare due volte lo stesso
+identico testo sullo stesso post è idempotente: ritorna lo stesso frammento,
+non un errore.
+
+```json
+{"text": "il pezzo di testo evidenziato"}
+```
+
+```json
+{"id": "...", "post_id": "...", "text": "...", "created_at": "..."}
+```
+
+**`GET /api/v1/posts/{post_id}/fragments`** — richiede sessione. Solo i
+frammenti salvati dall'utente corrente su quel post (mai quelli di altri
+utenti) — usato dal frontend per ri-evidenziarli ad ogni lettura,
+indipendentemente dal fatto che si sia arrivati al post dalla pagina di
+raccolta o da un link diretto.
+
+**`GET /api/v1/users/me/fragments`** — richiede sessione. Raccolta unificata
+di tutti i frammenti salvati dall'utente, più recenti prima: testo, data di
+cattura, titolo del post e permalink pubblico, nome dell'autore. Quest'ultimo
+è il valore già risolto al salvataggio/ultima modifica del post
+(`Post.author_display_name`), non ricalcolato da un alias cambiato dopo come
+invece fa `PostOut` — semplificazione accettata per questa vista derivata.
+
+```json
+[{"id": "...", "text": "...", "created_at": "...", "post_title": "...", "author_display_name": "...", "permalink": "/blog/20260101/post"}]
+```
+
+**`DELETE /api/v1/fragments/{fragment_id}`** — richiede sessione ed essere il
+proprietario del frammento (`404` altrimenti, non `403`: non rivela
+l'esistenza del frammento a chi non è suo). `204` se rimosso.
+
 ## Pagine statiche (sito principale)
 
 Pagine come Chi siamo, Contatti, Privacy — non legate a un blog utente
