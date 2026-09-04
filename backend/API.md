@@ -945,7 +945,7 @@ prima di pubblicarle.
 **`GET /api/v1/pages?locale=it`** — pubblico (token opzionale): stessa
 distinzione pubblicate/tutte in base al ruolo del chiamante. Query param
 opzionale `q`: filtra per titolo o slug (`ilike`, sottostringa), usato dalla
-ricerca della sezione Pagine di `frontend/admin/`.
+ricerca della sezione Pagine del dashboard (`frontend/src/app/dashboard/pagine`).
 
 **`PATCH /api/v1/pages/{page_id}`** — richiede ruolo admin. Aggiorna una
 singola traduzione (`slug`, `title`, `content`, `is_published`, tutti
@@ -1097,9 +1097,9 @@ token proprio, `404` se l'id non esiste.
 ## Amministrazione di piattaforma
 
 Tutti gli endpoint richiedono sessione con `platform_role` in
-`amministratore`/`super_admin` (`403` altrimenti). Consumati da
-`frontend/admin/`, app Next.js separata dal frontend pubblico (non una route
-di `frontend/`) — vedi ROADMAP.md.
+`amministratore`/`super_admin` (`403` altrimenti). Consumati dalle sezioni
+`frontend/src/app/dashboard/{utenti,blog}` — voci di menu del dashboard
+esistente, non un'app separata — vedi ROADMAP.md.
 
 **`GET /api/v1/admin/users`** — lista tutti gli utenti della piattaforma
 (id, username, email, `platform_role`, `is_active`, `mfa_enabled`). Query
@@ -1180,9 +1180,9 @@ chiameranno l'API direttamente dal browser.
 compose healthcheck).
 
 **`GET /api/v1/config`** — pubblico, nessuna autenticazione. Espone
-`{"deployment_mode": "solo"|"platform"}` (`NOCT_DEPLOYMENT_MODE`). Usato da
-`frontend/admin/` per nascondere le sezioni multi-utente (es. Utenti) in
-modalità `solo`, senza dover già avere una sessione autenticata.
+`{"deployment_mode": "solo"|"platform"}` (`NOCT_DEPLOYMENT_MODE`). Usato dal
+dashboard (`frontend/src/app/dashboard/layout.tsx`) per nascondere la voce
+Utenti in modalità `solo`, senza dover già avere una sessione autenticata.
 
 ## Errori comuni
 

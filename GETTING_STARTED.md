@@ -44,7 +44,7 @@ essere notate:
 - `NOCT_SUPER_ADMIN_USERNAME`/`_EMAIL`/`_PASSWORD` — se tutte e tre
   valorizzate (i default in `.env.example` lo sono già), il backend crea
   questo account come Super Admin al primo avvio: nessun passaggio manuale
-  per entrare nell'app admin (punto 4).
+  per entrare nell'area di amministrazione (punto 4).
 
 ## 2. Avvio dello stack
 
@@ -55,10 +55,9 @@ podman-compose up -d --build
 ```
 
 La prima volta impiega qualche minuto (build delle immagini + download di
-Postgres/Redis/RabbitMQ/MinIO). Al termine dovresti avere 10 container su:
+Postgres/Redis/RabbitMQ/MinIO). Al termine dovresti avere 9 container su:
 
-- Frontend: <http://localhost:3000>
-- Amministrazione (app separata, `frontend/admin/`): <http://localhost:3001>
+- Frontend (dashboard e amministrazione incluse): <http://localhost:3000>
 - Backend — Swagger UI: <http://localhost:8000/docs>
 - Backend — health check: <http://localhost:8000/api/v1/health>
 - RabbitMQ — console: <http://localhost:15672> (admin/foo)
@@ -88,7 +87,8 @@ suffisso diverso: `podman ps` per controllare, o cerca quello con l'immagine
 Con i default di `.env.example` non serve fare nulla: il backend crea da solo
 un Super Admin al primo avvio, da `NOCT_SUPER_ADMIN_USERNAME`/`_EMAIL`/
 `_PASSWORD` (idempotente — un riavvio successivo non lo tocca). Accedi
-direttamente su <http://localhost:3001> (l'app admin) con quelle credenziali.
+direttamente su <http://localhost:3000> con quelle credenziali: le voci di
+amministrazione compaiono nel menu del dashboard.
 
 Se preferisci un tuo account invece del preset (o hai svuotato quelle
 variabili), registra un utente normale dall'interfaccia (punto 5) o via API,
@@ -121,16 +121,15 @@ script), vedi lo script di bootstrap in [backend/API.md](backend/API.md#come-ott
 6. Prova la tab **Aspetto** per cambiare la palette del blog, e **Impostazioni**
    per aprire i commenti anche a chi non è registrato.
 7. Vai su **Profilo** (menu in alto): imposta una bio, carica un avatar,
-   aggiungi un link social. La voce **Amministrazione** compare solo se
-   l'utente con cui hai fatto login è Super Admin/Amministratore — con i
-   default del punto 4 è un account separato da quello appena registrato,
-   quindi accedi all'app su <http://localhost:3001> con le credenziali
-   `NOCT_SUPER_ADMIN_*` (o con l'utente promosso a mano, se hai seguito
-   l'alternativa del punto 4): **Pagine** (crea "Chi siamo", "Privacy",
-   ecc.), **Utenti** (ruoli/attivazione — solo
-   in modalità `platform`) e **Blog** (elenco di tutti i blog della
-   piattaforma, con ricerca e sospensione). Ogni sezione ha un campo di
-   ricerca.
+   aggiungi un link social. Se l'utente con cui hai fatto login è Super
+   Admin/Amministratore (con i default del punto 4 è un account separato da
+   quello appena registrato: rifai login con le credenziali
+   `NOCT_SUPER_ADMIN_*`, o con l'utente promosso a mano se hai seguito
+   l'alternativa del punto 4), compaiono nello stesso menu anche **Pagine**
+   (crea "Chi siamo", "Privacy", ecc., stesso editor dei post), **Utenti**
+   (ruoli/attivazione — solo in modalità `platform`) e **Tutti i blog**
+   (elenco di tutti i blog della piattaforma, con ricerca e sospensione).
+   Ogni sezione ha un campo di ricerca.
 8. Prova il selettore del tema (chiaro/scuro/automatico) in alto a destra —
    in automatico il browser chiederà il permesso di geolocalizzazione per
    calcolare alba/tramonto; se lo neghi, ripiega sulle preferenze di sistema.
@@ -188,10 +187,9 @@ podman compose down -v       # ferma e cancella anche i dati (riparti da zero)
   guardane i log con `podman logs $(podman ps -aqf "name=rabbitmq")`.
 - **Il backend risponde ma ogni chiamata autenticata dà errore** — hai
   applicato le migrazioni (punto 3)? Senza schema, molte tabelle non esistono.
-- **Il frontend (o l'app admin) non riesce a chiamare il backend (errori di
-  rete/CORS in console)** — succede se girano su un URL diverso da
-  `http://localhost:3000`/`http://localhost:3001`: `NOCT_CORS_ORIGINS` nel
-  `.env` deve includere entrambe le origini (separate da virgola).
+- **Il frontend non riesce a chiamare il backend (errori di rete/CORS in
+  console)** — succede se il frontend gira su un URL diverso da
+  `http://localhost:3000`: `NOCT_CORS_ORIGINS` nel `.env` deve includerlo.
 - **Upload avatar/media/aspetto non funziona** — verifica che il container
   `minio` sia `Up` (`podman ps`); i bucket si creano automaticamente al primo
   upload.

@@ -30,6 +30,5 @@ data:
 
   # placeholder: CORS ad origine esatta non copre i sottodomini per-blog
   # (nomeutente.notturni.eu) — da rivedere con un match a wildcard quando le
-  # pagine pubbliche dei blog chiameranno l'API dal browser. Include anche
-  # l'app admin (frontend/admin/, k8s/ingress.yaml host admin.notturni.eu).
-  NOCT_CORS_ORIGINS: "https://notturni.eu,https://admin.notturni.eu"
+  # pagine pubbliche dei blog chiameranno l'API dal browser.
+  NOCT_CORS_ORIGINS: "https://notturni.eu"

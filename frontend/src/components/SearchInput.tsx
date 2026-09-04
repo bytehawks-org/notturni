@@ -6,9 +6,9 @@ import { Input } from "@/components/ui/Field";
 
 const DEBOUNCE_MS = 300;
 
-/** Campo di ricerca condiviso dalle sezioni admin (Pagine/Utenti/Blog):
- * notifica onChange con un debounce, per non rifare una richiesta ad ogni
- * carattere digitato. */
+/** Campo di ricerca condiviso dalle sezioni di amministrazione del dashboard
+ * (Pagine/Utenti/Blog): notifica onChange con un debounce, per non rifare
+ * una richiesta ad ogni carattere digitato. */
 export function SearchInput({
   value,
   onChange,

@@ -15,7 +15,7 @@ function errorMessage(err: unknown): string {
 
 const ROLES: PlatformRole[] = ["utente", "moderatore", "amministratore", "super_admin"];
 
-export default function AdminUsersPage() {
+export default function DashboardUsersPage() {
   const { user: me, authFetch } = useAuth();
   const [q, setQ] = useState("");
   const [users, setUsers] = useState<AdminUser[] | null>(null);

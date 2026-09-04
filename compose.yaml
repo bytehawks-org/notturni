@@ -138,9 +138,6 @@ services:
         # il browser gira sull'host, non nella rete di compose: deve
         # raggiungere il backend sulla porta pubblicata, non per nome servizio
         NEXT_PUBLIC_API_URL: http://localhost:8000
-        # link "Amministrazione" nella dashboard: punta al servizio admin,
-        # app Next.js separata (frontend/admin/), non a una route di questa app
-        NEXT_PUBLIC_ADMIN_URL: http://localhost:3001
     environment:
       # le pagine renderizzate lato server (Server Component, es. la pagina
       # pubblica del post) girano nel processo Node.js del container: a
@@ -151,20 +148,6 @@ services:
     restart: on-failure
     ports:
       - "3000:3000"
-    depends_on:
-      - backend
-
-  # Pannello di amministrazione (utenti, pagine statiche, blog di
-  # piattaforma): app Next.js separata da frontend/, come backend/frontend/
-  # moderation sono servizi indipendenti — vedi frontend/admin/.
-  admin:
-    build:
-      context: ./frontend/admin
-      args:
-        NEXT_PUBLIC_API_URL: http://localhost:8000
-    restart: on-failure
-    ports:
-      - "3001:3001"
     depends_on:
       - backend
 

@@ -35,7 +35,7 @@ async def get_membership_role(
 
 
 async def can_write_posts(session: AsyncSession, *, user_id: uuid.UUID, blog: Blog) -> bool:
-    # Sospensione da admin di piattaforma (frontend/admin/): blocca la
+    # Sospensione da admin di piattaforma (dashboard/blog): blocca la
     # scrittura anche per il proprietario, finché non viene riattivato.
     if blog.is_suspended:
         return False
@@ -56,7 +56,8 @@ async def can_view_blog(
     autenticato sulla piattaforma. ``PRIVATE``: solo il proprietario o chi ha
     una membership sul blog. Un blog sospeso (vedi can_write_posts) è
     irraggiungibile per chiunque, proprietario incluso — la sospensione si
-    vede/gestisce solo da frontend/admin/."""
+    vede/gestisce solo dal dashboard (dashboard/blog, riservato ad
+    Amministratore/Super Admin)."""
     if blog.is_suspended:
         return False
     if blog.visibility == BlogVisibility.PUBLIC:

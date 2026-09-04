@@ -1,5 +1,7 @@
 import type { SensitivityCategory } from "./content-media";
 import type {
+  AdminBlog,
+  AdminUser,
   BibliographyEntry,
   Blog,
   BlogConfig,
@@ -12,12 +14,14 @@ import type {
   CurrentUser,
   FollowStats,
   FragmentCollectionEntry,
+  InstanceConfig,
   LinkBibliographyEntry,
   LoginResponse,
   MediaBibliographyEntry,
   MembershipBlog,
   Page,
   PageTranslationSummary,
+  PlatformRole,
   Post,
   PostAuthorNameStyle,
   PostFragment,
@@ -79,6 +83,15 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   }
 
   return data as T;
+}
+
+function withQuery(path: string, params: Record<string, string | undefined>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value) search.set(key, value);
+  }
+  const qs = search.toString();
+  return qs ? `${path}?${qs}` : path;
 }
 
 export const api = {
@@ -427,5 +440,48 @@ export const api = {
     listMine: (token: string) => request<FragmentCollectionEntry[]>("/api/v1/users/me/fragments", { token }),
     remove: (token: string, fragmentId: string) =>
       request<void>(`/api/v1/fragments/${fragmentId}`, { method: "DELETE", token }),
+  },
+
+  config: {
+    get: () => request<InstanceConfig>("/api/v1/config"),
+  },
+
+  /** Pagine statiche del sito principale (dashboard/pagine, riservato ad
+   * Amministratore/Super Admin) — non le pagine di un blog (vedi `blogs.pages` sopra). */
+  pages: {
+    /** Pubblico: solo pubblicate. Con token admin: anche le bozze. Parametro
+     * `q` opzionale: filtra per titolo o slug (sottostringa). */
+    list: (token: string | null, locale: string, q?: string) =>
+      request<Page[]>(withQuery("/api/v1/pages", { locale, q }), { token }),
+    create: (
+      token: string,
+      payload: { slug: string; locale: string; title: string; content: string; is_published: boolean }
+    ) => request<Page>("/api/v1/pages", { method: "POST", token, body: payload }),
+    addTranslation: (
+      token: string,
+      pageId: string,
+      payload: { slug: string; locale: string; title: string; content: string; is_published: boolean }
+    ) => request<Page>(`/api/v1/pages/${pageId}/translations`, { method: "POST", token, body: payload }),
+    translations: (pageId: string) =>
+      request<PageTranslationSummary[]>(`/api/v1/pages/${pageId}/translations`),
+    update: (
+      token: string,
+      pageId: string,
+      payload: Partial<{ slug: string; title: string; content: string; is_published: boolean }>
+    ) => request<Page>(`/api/v1/pages/${pageId}`, { method: "PATCH", token, body: payload }),
+  },
+
+  admin: {
+    listUsers: (token: string, q?: string) =>
+      request<AdminUser[]>(withQuery("/api/v1/admin/users", { q }), { token }),
+    updateUser: (
+      token: string,
+      userId: string,
+      payload: Partial<{ platform_role: PlatformRole; is_active: boolean }>
+    ) => request<AdminUser>(`/api/v1/admin/users/${userId}`, { method: "PATCH", token, body: payload }),
+    listBlogs: (token: string, q?: string) =>
+      request<AdminBlog[]>(withQuery("/api/v1/admin/blogs", { q }), { token }),
+    updateBlog: (token: string, blogId: string, payload: { is_suspended: boolean }) =>
+      request<AdminBlog>(`/api/v1/admin/blogs/${blogId}`, { method: "PATCH", token, body: payload }),
   },
 };

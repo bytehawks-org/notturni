@@ -2,6 +2,3 @@ node_modules/
 .next/
 .git/
 npm-debug.log*
-# progetto Next.js a sé, con il proprio contesto di build (./frontend/admin
-# in compose.yaml) — non deve finire nell'immagine del frontend pubblico.
-admin/

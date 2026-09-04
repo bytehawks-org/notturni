@@ -2,13 +2,11 @@
 
 Next.js (App Router) + Tailwind CSS.
 
-Il pannello di amministrazione **non** è qui: è un'app Next.js a sé,
-`frontend/admin/` (proprio `package.json`, build e porta — 3001 in locale),
-avviata allo stesso modo (`cd frontend/admin && npm install && npm run dev`).
-Struttura interna analoga a questa (`lib/api.ts`, `lib/auth-context.tsx`,
-`components/ui/`), duplicata invece di condivisa — nessun pacchetto comune
-tra i due progetti in questo repo, come backend/frontend/moderation non
-condividono codice tra loro. Vedi [backend/API.md](../backend/API.md#amministrazione-di-piattaforma)
+Il pannello di amministrazione è parte di questa stessa app, non un
+progetto a sé: `dashboard/pagine`, `dashboard/utenti`, `dashboard/blog`
+(voci di menu visibili solo ad Amministratore/Super Admin — riusano
+`RichTextEditor` e gli altri componenti già usati per i post, nessuna
+duplicazione). Vedi [backend/API.md](../backend/API.md#amministrazione-di-piattaforma)
 per gli endpoint usati.
 
 ## Setup
@@ -37,7 +35,8 @@ src/
 ├── app/
 │   ├── login/, register/          # autenticazione (con step MFA)
 │   ├── dashboard/                  # area autore: blog, post, profilo
-│   │   └── blogs/[slug]/            # dettaglio blog: tab post/commenti/aspetto/impostazioni
+│   │   ├── blogs/[slug]/            # dettaglio blog: tab post/commenti/aspetto/impostazioni
+│   │   ├── pagine/, utenti/, blog/  # amministrazione (solo Amministratore/Super Admin): pagine statiche, utenti, elenco blog di piattaforma
 │   └── u/[username]/                # profilo pubblico + follow
 ├── lib/
 │   ├── api.ts                       # client HTTP tipizzato verso il backend
@@ -46,6 +45,7 @@ src/
 │   └── sun.ts                       # calcolo alba/tramonto (locale, nessuna chiamata esterna)
 └── components/
     ├── ui/                          # Button, Input, Card, Alert, ...
+    ├── SearchInput.tsx               # campo di ricerca con debounce, usato dalle sezioni di amministrazione
     └── ThemeToggle.tsx
 ```
 

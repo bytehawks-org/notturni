@@ -302,6 +302,36 @@ export interface Profile {
   created_at: string;
 }
 
+export interface AdminUser {
+  id: string;
+  username: string;
+  email: string;
+  platform_role: PlatformRole;
+  is_active: boolean;
+  mfa_enabled: boolean;
+  created_at: string;
+}
+
+/** Elenco di piattaforma (dashboard/blog, riservato ad Amministratore/Super
+ * Admin) — distinto da `Blog`, che include tutti i campi di gestione del
+ * proprio blog non necessari qui. */
+export interface AdminBlog {
+  id: string;
+  slug: string;
+  title: string;
+  owner_username: string;
+  visibility: BlogVisibility;
+  is_suspended: boolean;
+  created_at: string;
+}
+
+/** `GET /api/v1/config`, pubblico: per sapere se nascondere le sezioni
+ * multi-utente (dashboard/utenti) in modalità "solo" senza dover già avere
+ * una sessione. */
+export interface InstanceConfig {
+  deployment_mode: "solo" | "platform";
+}
+
 export interface ApiError {
   detail: string;
 }

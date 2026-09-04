@@ -11,5 +11,4 @@ resources:
   - minio.yaml
   - backend.yaml
   - frontend.yaml
-  - admin.yaml
   - ingress.yaml

@@ -16,7 +16,7 @@ async def health(session: AsyncSession = Depends(get_session)) -> dict[str, str]
 
 @router.get("/config")
 async def public_config() -> dict[str, str]:
-    """Pubblico, nessuna auth: usato da frontend/admin/ per sapere se
-    nascondere le sezioni multi-utente in modalità "solo" senza dover già
-    avere una sessione (CLAUDE.md #8, NOCT_DEPLOYMENT_MODE)."""
+    """Pubblico, nessuna auth: usato dal dashboard per sapere se nascondere
+    la voce Utenti in modalità "solo" senza dover già avere una sessione
+    (CLAUDE.md #8, NOCT_DEPLOYMENT_MODE)."""
     return {"deployment_mode": settings.deployment_mode}

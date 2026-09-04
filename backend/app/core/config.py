@@ -18,8 +18,9 @@ class Settings(BaseSettings):
     deployment_mode: Literal["solo", "platform"] = "platform"
 
     # Bootstrap del primo Super Admin all'avvio del backend (CLAUDE.md #5),
-    # per accedere a frontend/admin/ senza promuoverlo a mano sul database.
-    # Tutte e tre richieste per attivarlo; vedi app/domain/auth.py::bootstrap_super_admin.
+    # per accedere all'area di amministrazione del dashboard senza
+    # promuoverlo a mano sul database. Tutte e tre richieste per attivarlo;
+    # vedi app/domain/auth.py::bootstrap_super_admin.
     super_admin_username: str | None = None
     super_admin_email: str | None = None
     super_admin_password: str | None = None

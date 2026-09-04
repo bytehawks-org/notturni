@@ -82,8 +82,8 @@ class Blog(Base, UUIDPKMixin, TimestampMixin):
     # per blog, disattive di default — sempre attive invece per le pagine di
     # piattaforma (vedi app/models/page.py, app/api/v1/pages.py).
     static_pages_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    # Sospensione da parte di un admin di piattaforma (frontend/admin/):
-    # blog irraggiungibile pubblicamente e non scrivibile finché non viene
+    # Sospensione da parte di un admin di piattaforma (dashboard/blog): blog
+    # irraggiungibile pubblicamente e non scrivibile finché non viene
     # riattivato, indipendentemente da `visibility` — vedi app/domain/authorization.py.
     # Mai impostabile dal proprietario, solo da PATCH /api/v1/admin/blogs/{id}.
     is_suspended: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

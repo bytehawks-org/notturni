@@ -13,7 +13,7 @@ function errorMessage(err: unknown): string {
   return err instanceof ApiClientError ? err.message : "Errore imprevisto.";
 }
 
-export default function AdminBlogsPage() {
+export default function DashboardAllBlogsPage() {
   const { authFetch } = useAuth();
   const [q, setQ] = useState("");
   const [blogs, setBlogs] = useState<AdminBlog[] | null>(null);
@@ -41,7 +41,7 @@ export default function AdminBlogsPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="font-serif text-2xl text-foreground">Blog</h1>
+        <h1 className="font-serif text-2xl text-foreground">Tutti i blog</h1>
         <SearchInput value={q} onChange={setQ} placeholder="Cerca per slug, titolo o proprietario…" />
       </div>
       {error && <Alert kind="error">{error}</Alert>}
