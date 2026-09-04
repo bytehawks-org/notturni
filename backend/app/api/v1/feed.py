@@ -54,6 +54,7 @@ async def list_feed(
         .where(
             Post.status == PostStatus.PUBLISHED,
             Post.published_at <= datetime.now(timezone.utc),
+            Post.is_hidden.is_(False),
             # todo/BLOG.md #2: la raccolta della homepage mostra solo blog pubblici.
             Blog.visibility == BlogVisibility.PUBLIC,
         )
@@ -103,6 +104,7 @@ async def list_trending_tags(
             Post.status == PostStatus.PUBLISHED,
             Post.published_at >= since,
             Post.published_at <= datetime.now(timezone.utc),
+            Post.is_hidden.is_(False),
             Blog.visibility == BlogVisibility.PUBLIC,
         )
         .group_by(Tag.name)

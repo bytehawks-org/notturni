@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import require_platform_admin
 from app.core.database import get_session
 from app.models.blog import Blog, BlogVisibility
+from app.models.post import Post, PostStatus
 from app.models.user import PlatformRole, User
 
 router = APIRouter()
@@ -144,3 +145,87 @@ async def update_blog(
     await session.commit()
     await session.refresh(blog, attribute_names=["owner"])
     return _to_admin_blog_out(blog)
+
+
+class AdminPostOut(BaseModel):
+    id: uuid.UUID
+    title: str
+    slug: str
+    blog_slug: str
+    blog_title: str
+    author_username: str
+    status: PostStatus
+    is_hidden: bool
+    published_at: datetime | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+def _to_admin_post_out(post: Post, blog: Blog, author: User) -> AdminPostOut:
+    return AdminPostOut(
+        id=post.id,
+        title=post.title,
+        slug=post.slug,
+        blog_slug=blog.slug,
+        blog_title=blog.title,
+        author_username=author.username,
+        status=post.status,
+        is_hidden=post.is_hidden,
+        published_at=post.published_at,
+        created_at=post.created_at,
+    )
+
+
+class AdminPostUpdateRequest(BaseModel):
+    is_hidden: bool
+
+
+@router.get("/posts", response_model=list[AdminPostOut])
+async def list_posts(
+    q: str | None = None,
+    current_user: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_session),
+) -> list[AdminPostOut]:
+    stmt = (
+        select(Post, Blog, User)
+        .join(Blog, Post.blog_id == Blog.id)
+        .join(User, Post.author_id == User.id)
+        .order_by(Post.created_at.desc())
+    )
+    if q:
+        needle = f"%{q}%"
+        stmt = stmt.where(
+            or_(
+                Post.title.ilike(needle),
+                Post.slug.ilike(needle),
+                Blog.slug.ilike(needle),
+                User.username.ilike(needle),
+            )
+        )
+    result = await session.execute(stmt)
+    return [_to_admin_post_out(post, blog, author) for post, blog, author in result.all()]
+
+
+@router.patch("/posts/{post_id}", response_model=AdminPostOut)
+async def update_post(
+    post_id: uuid.UUID,
+    payload: AdminPostUpdateRequest,
+    current_user: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_session),
+) -> AdminPostOut:
+    result = await session.execute(
+        select(Post, Blog, User)
+        .join(Blog, Post.blog_id == Blog.id)
+        .join(User, Post.author_id == User.id)
+        .where(Post.id == post_id)
+    )
+    row = result.first()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Post non trovato.")
+    post, blog, author = row
+
+    post.is_hidden = payload.is_hidden
+    await session.commit()
+    await session.refresh(post)
+    return _to_admin_post_out(post, blog, author)

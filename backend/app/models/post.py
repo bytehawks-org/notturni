@@ -94,6 +94,11 @@ class Post(Base, UUIDPKMixin, TimestampMixin):
     # status=published e published_at futuro non è ancora pubblicamente
     # visibile — vedi app/domain/authorization.py:is_publicly_visible.
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Moderazione da parte di un admin di piattaforma (dashboard/moderazione):
+    # post irraggiungibile pubblicamente finché non viene riportato visibile,
+    # indipendentemente da `status` — vedi app/domain/authorization.py:is_publicly_visible.
+    # Mai impostabile dall'autore, solo da PATCH /api/v1/admin/posts/{id}.
+    is_hidden: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     blog: Mapped["Blog"] = relationship(back_populates="posts")
     comments: Mapped[list["Comment"]] = relationship(back_populates="post", cascade="all, delete-orphan")

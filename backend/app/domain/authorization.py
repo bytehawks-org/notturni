@@ -89,7 +89,10 @@ async def can_review_posts(session: AsyncSession, *, user_id: uuid.UUID, blog: B
 
 
 def is_publicly_visible(post: Post) -> bool:
-    """Pubblicato E (nessuna pianificazione futura oppure già raggiunta)."""
+    """Pubblicato E (nessuna pianificazione futura oppure già raggiunta) E non
+    nascosto da un admin di piattaforma (`Post.is_hidden`, dashboard/moderazione)."""
+    if post.is_hidden:
+        return False
     if post.status != PostStatus.PUBLISHED:
         return False
     if post.published_at is None:

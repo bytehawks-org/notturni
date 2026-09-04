@@ -127,9 +127,10 @@ script), vedi lo script di bootstrap in [backend/API.md](backend/API.md#come-ott
    `NOCT_SUPER_ADMIN_*`, o con l'utente promosso a mano se hai seguito
    l'alternativa del punto 4), compaiono nello stesso menu anche **Pagine**
    (crea "Chi siamo", "Privacy", ecc., stesso editor dei post), **Utenti**
-   (ruoli/attivazione — solo in modalità `platform`) e **Tutti i blog**
-   (elenco di tutti i blog della piattaforma, con ricerca e sospensione).
-   Ogni sezione ha un campo di ricerca.
+   (ruoli/attivazione — solo in modalità `platform`), **Tutti i blog**
+   (elenco di tutti i blog della piattaforma, con ricerca e sospensione) e
+   **Moderazione** (elenco di tutti i post della piattaforma, con ricerca e
+   nascondi/mostra il singolo post). Ogni sezione ha un campo di ricerca.
 8. Prova il selettore del tema (chiaro/scuro/automatico) in alto a destra —
    in automatico il browser chiederà il permesso di geolocalizzazione per
    calcolare alba/tramonto; se lo neghi, ripiega sulle preferenze di sistema.

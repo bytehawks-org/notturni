@@ -36,7 +36,7 @@ src/
 │   ├── login/, register/          # autenticazione (con step MFA)
 │   ├── dashboard/                  # area autore: blog, post, profilo
 │   │   ├── blogs/[slug]/            # dettaglio blog: tab post/commenti/aspetto/impostazioni
-│   │   ├── pagine/, utenti/, blog/  # amministrazione (solo Amministratore/Super Admin): pagine statiche, utenti, elenco blog di piattaforma
+│   │   ├── pagine/, utenti/, blog/, moderazione/  # amministrazione (solo Amministratore/Super Admin): pagine statiche, utenti, elenco blog di piattaforma, moderazione post
 │   └── u/[username]/                # profilo pubblico + follow
 ├── lib/
 │   ├── api.ts                       # client HTTP tipizzato verso il backend

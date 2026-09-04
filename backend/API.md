@@ -517,6 +517,13 @@ serve anche per la pianificazione: un post con `status=published` e
 `published_at` nel futuro non è ancora pubblicamente visibile — vedi
 `is_publicly_visible` più sotto.
 
+`is_hidden` (`PostOut`): moderazione da parte di un admin di piattaforma
+(`dashboard/moderazione`, `PATCH /api/v1/admin/posts/{id}`) — se `true`, il
+post è irraggiungibile pubblicamente indipendentemente da `status`, per
+l'autore incluso (stesso trattamento 404 di un post inesistente per chi non
+ha accesso in scrittura — vedi `app/domain/authorization.py::is_publicly_visible`).
+Mai impostabile dall'autore.
+
 Ogni post ha un **permalink leggibile**, senza UUID: `blog_slug` e
 `permalink` sono calcolati ad ogni risposta (non colonne del modello) e
 inclusi in ogni `PostOut`:
@@ -1098,8 +1105,8 @@ token proprio, `404` se l'id non esiste.
 
 Tutti gli endpoint richiedono sessione con `platform_role` in
 `amministratore`/`super_admin` (`403` altrimenti). Consumati dalle sezioni
-`frontend/src/app/dashboard/{utenti,blog}` — voci di menu del dashboard
-esistente, non un'app separata — vedi ROADMAP.md.
+`frontend/src/app/dashboard/{utenti,blog,moderazione}` — voci di menu del
+dashboard esistente, non un'app separata — vedi ROADMAP.md.
 
 **`GET /api/v1/admin/users`** — lista tutti gli utenti della piattaforma
 (id, username, email, `platform_role`, `is_active`, `mfa_enabled`). Query
@@ -1138,6 +1145,19 @@ scrivibile — **anche per il proprietario stesso**, indipendentemente da
 Riattivabile con lo stesso endpoint (`is_suspended: false`). Nessun'altra
 conseguenza automatica (i post restano nel database, nessuna notifica al
 proprietario).
+
+**`GET /api/v1/admin/posts`** — lista tutti i post della piattaforma, dal più
+recente (id, title, slug, `blog_slug`, `blog_title`, `author_username`,
+`status`, `is_hidden`, `published_at`, `created_at`) — bozze/in
+revisione/pianificati inclusi, non solo i pubblicati. Query param opzionale
+`q`: filtra per titolo o slug del post, slug del blog, o username
+dell'autore (`ilike`, sottostringa).
+
+**`PATCH /api/v1/admin/posts/{post_id}`** — `{is_hidden: bool}`. Vedi
+`Post.is_hidden` nella sezione Post: nasconde/mostra un post indipendentemente
+da `status`, anche per l'autore. Nessun'altra conseguenza automatica (nessuna
+notifica all'autore, nessun log delle motivazioni — vedi ROADMAP.md per i
+dettagli di rifinitura non ancora fatti).
 
 ## Feed (homepage multi-blog)
 

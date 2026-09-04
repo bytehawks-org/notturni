@@ -147,3 +147,74 @@ async def test_admin_suspends_blog_and_blocks_public_access(
     assert res.status_code == 200
     assert res.json()["is_suspended"] is False
     assert (await client.get("/api/v1/blogs/blog-sospeso")).status_code == 200
+
+
+async def test_list_posts_requires_admin(client: AsyncClient, make_user: Callable) -> None:
+    user: AuthedUser = await make_user()
+    res = await client.get("/api/v1/admin/posts", headers=user.headers)
+    assert res.status_code == 403
+
+
+async def test_admin_lists_and_searches_posts(
+    client: AsyncClient, make_admin: Callable, make_user: Callable
+) -> None:
+    admin: AuthedUser = await make_admin()
+    author: AuthedUser = await make_user("autore-post-admin")
+    await client.post(
+        "/api/v1/blogs", json={"slug": "blog-post-admin", "title": "x"}, headers=author.headers
+    )
+    await client.post(
+        "/api/v1/blogs/blog-post-admin/posts",
+        json={"slug": "post-cercabile", "title": "Titolo cercabile", "content": "y"},
+        headers=author.headers,
+    )
+
+    res = await client.get("/api/v1/admin/posts", headers=admin.headers)
+    assert res.status_code == 200
+    slugs = {p["slug"] for p in res.json()}
+    assert "post-cercabile" in slugs
+    row = next(p for p in res.json() if p["slug"] == "post-cercabile")
+    assert row["blog_slug"] == "blog-post-admin"
+    assert row["author_username"] == author.username
+    assert row["is_hidden"] is False
+
+    res = await client.get("/api/v1/admin/posts?q=cercabile", headers=admin.headers)
+    assert {p["slug"] for p in res.json()} == {"post-cercabile"}
+
+    res = await client.get(f"/api/v1/admin/posts?q={author.username}", headers=admin.headers)
+    assert {p["slug"] for p in res.json()} == {"post-cercabile"}
+
+
+async def test_admin_hides_post_and_blocks_public_access(
+    client: AsyncClient, make_admin: Callable, make_user: Callable
+) -> None:
+    admin: AuthedUser = await make_admin()
+    author: AuthedUser = await make_user("autore-post-nascosto")
+    await client.post(
+        "/api/v1/blogs", json={"slug": "blog-post-nascosto", "title": "x"}, headers=author.headers
+    )
+    create_res = await client.post(
+        "/api/v1/blogs/blog-post-nascosto/posts",
+        json={"slug": "post-da-nascondere", "title": "x", "content": "y"},
+        headers=author.headers,
+    )
+    post_id = create_res.json()["id"]
+    await client.post(f"/api/v1/posts/{post_id}/publish", headers=author.headers)
+
+    assert (await client.get(f"/api/v1/posts/{post_id}")).status_code == 200
+
+    res = await client.patch(
+        f"/api/v1/admin/posts/{post_id}", json={"is_hidden": True}, headers=admin.headers
+    )
+    assert res.status_code == 200
+    assert res.json()["is_hidden"] is True
+
+    res = await client.get(f"/api/v1/posts/{post_id}")
+    assert res.status_code == 404
+
+    res = await client.patch(
+        f"/api/v1/admin/posts/{post_id}", json={"is_hidden": False}, headers=admin.headers
+    )
+    assert res.status_code == 200
+    assert res.json()["is_hidden"] is False
+    assert (await client.get(f"/api/v1/posts/{post_id}")).status_code == 200

@@ -144,6 +144,10 @@ class PostOut(BaseModel):
     status: PostStatus
     published_at: datetime | None
     created_at: datetime
+    # Vedi Post.is_hidden: True se un admin di piattaforma lo ha nascosto
+    # (dashboard/moderazione), indipendentemente da `status`. L'autore lo
+    # vede qui per sapere perché il post non è raggiungibile pubblicamente.
+    is_hidden: bool
     # permalink leggibile /{blog_slug}/{YYYYMMDD}/{slug} (CLAUDE.md #2: niente
     # UUID negli URL pubblici) — non colonne del modello, calcolati da
     # _post_out() ad ogni risposta, serve perciò anche blog_slug qui.
@@ -276,6 +280,7 @@ async def _post_out(session: AsyncSession, post: Post, blog: Blog) -> PostOut:
         status=post.status,
         published_at=post.published_at,
         created_at=post.created_at,
+        is_hidden=post.is_hidden,
         blog_slug=blog.slug,
         permalink=build_permalink(blog.slug, post),
         mentions_enabled=blog.mentions_enabled,

@@ -1,6 +1,7 @@
 import type { SensitivityCategory } from "./content-media";
 import type {
   AdminBlog,
+  AdminPost,
   AdminUser,
   BibliographyEntry,
   Blog,
@@ -483,5 +484,9 @@ export const api = {
       request<AdminBlog[]>(withQuery("/api/v1/admin/blogs", { q }), { token }),
     updateBlog: (token: string, blogId: string, payload: { is_suspended: boolean }) =>
       request<AdminBlog>(`/api/v1/admin/blogs/${blogId}`, { method: "PATCH", token, body: payload }),
+    listPosts: (token: string, q?: string) =>
+      request<AdminPost[]>(withQuery("/api/v1/admin/posts", { q }), { token }),
+    updatePost: (token: string, postId: string, payload: { is_hidden: boolean }) =>
+      request<AdminPost>(`/api/v1/admin/posts/${postId}`, { method: "PATCH", token, body: payload }),
   },
 };

@@ -70,6 +70,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 Tutti i blog
               </Link>
             )}
+            {isAdmin && (
+              <Link href="/dashboard/moderazione" className="text-sm text-muted hover:text-foreground">
+                Moderazione
+              </Link>
+            )}
           </nav>
           <div className="flex items-center gap-4">
             <ThemeToggle />

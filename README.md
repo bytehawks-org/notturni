@@ -112,7 +112,9 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   riservata al Super Admin; nascosta in modalità `solo`), Pagine statiche
   (stesso editor Tiptap dei post), Tutti i blog (elenco piattaforma con
   proprietario/visibilità, sospensione di un blog — blocca lettura e
-  scrittura pubbliche, anche per il proprietario).
+  scrittura pubbliche, anche per il proprietario), Moderazione (elenco di
+  tutti i post della piattaforma, nascondi/mostra il singolo post
+  indipendentemente dal suo stato).
 - **API token:** accesso diretto per il motore core, predisposto per il futuro
   utilizzo diretto da parte degli utenti.
 - **Frontend:** interfaccia autore (dashboard, editor, profilo), tema
