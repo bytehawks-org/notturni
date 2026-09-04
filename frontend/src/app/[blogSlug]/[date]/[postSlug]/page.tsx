@@ -32,7 +32,7 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
   const post = await getPublicPostByPermalink(blogSlug, date, postSlug);
   if (!post) notFound();
 
-  const html = renderMarkdown(post.content, {
+  const html = await renderMarkdown(post.content, {
     mentions: post.mentions_enabled,
     notes: post.notes,
   });
@@ -60,12 +60,16 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
         </p>
 
         {post.cover_image_url && post.cover_image_is_sensitive && (
-          <div className="sensitive-image-wrapper mt-8 aspect-[16/9] w-full overflow-hidden rounded-xl">
+          // Deve essere un <label> (non un <div>): il trucco CSS che toglie
+          // la sfocatura al click si basa sull'associazione nativa
+          // label→checkbox, che un <div> non offre (il checkbox non
+          // riceverebbe mai il click, avendo pointer-events:none).
+          <label className="sensitive-image-wrapper mt-8 aspect-[16/9] w-full overflow-hidden rounded-xl">
             <input type="checkbox" className="sensitive-image-toggle" aria-label="Rivela l'immagine di copertina" />
             {/* eslint-disable-next-line @next/next/no-img-element -- URL S3/MinIO esterno */}
             <img src={post.cover_image_url} alt="" className="h-full w-full object-cover" />
             <span className="sensitive-image-overlay">Contenuto sensibile — clicca per vedere</span>
-          </div>
+          </label>
         )}
         {post.cover_image_url && !post.cover_image_is_sensitive && (
           // eslint-disable-next-line @next/next/no-img-element -- URL S3/MinIO esterno

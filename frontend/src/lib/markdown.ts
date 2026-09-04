@@ -6,6 +6,12 @@ import MarkdownIt from "markdown-it";
 
 import type { PostNote } from "./types";
 
+// Stessa risoluzione di server-api.ts::BACKEND_INTERNAL_URL — endpoint
+// interno alla rete di compose, diverso dall'URL pubblico che risolve solo
+// il browser (vedi CLAUDE.md).
+const BACKEND_INTERNAL_URL =
+  process.env.NOCT_BACKEND_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 // Il backend salva Markdown grezzo, non fidato (può arrivare anche da
 // chiamate dirette all'API, non solo dall'editor WYSIWYG) — vedi API.md:
 // "conversione a HTML (con sanificazione) è responsabilità del frontend al
@@ -24,7 +30,7 @@ const renderer = new MarkdownIt({ html: false, linkify: true, breaks: false });
 function wrapSensitiveImages(html: string): string {
   const dom = new JSDOM(`<body>${html}</body>`);
   const document = dom.window.document;
-  document.querySelectorAll('img[title="sensitive"]').forEach((img) => {
+  document.querySelectorAll('img[title^="sensitive"]').forEach((img) => {
     const wrapper = document.createElement("label");
     wrapper.className = "sensitive-image-wrapper";
     const toggle = document.createElement("input");
@@ -36,6 +42,82 @@ function wrapSensitiveImages(html: string): string {
     img.replaceWith(wrapper);
     wrapper.append(toggle, img, overlay);
   });
+  return document.body.innerHTML;
+}
+
+interface LinkPreviewData {
+  title: string | null;
+  description: string | null;
+  image: string | null;
+}
+
+/** Un link salvato come card dall'editor (CLAUDE.md #1) viene inserito come
+ * `[url](url "card")`: il title "card" è la stessa convenzione di
+ * "sensitive" sulle immagini. Qui recuperiamo l'anteprima (sempre dal vivo,
+ * mai una copia salvata: vedi frontend/src/components/editor/LinkPreviewCard.tsx)
+ * e sostituiamo il link semplice con la card. Se il fetch fallisce (sito
+ * irraggiungibile, timeout) resta un link semplice, mai un errore di
+ * rendering della pagina. */
+async function resolveLinkCards(html: string): Promise<string> {
+  const dom = new JSDOM(`<body>${html}</body>`);
+  const { document } = dom.window;
+  const cardLinks = Array.from(document.querySelectorAll('a[title="card"]'));
+  if (cardLinks.length === 0) return html;
+
+  await Promise.all(
+    cardLinks.map(async (a) => {
+      const href = a.getAttribute("href");
+      if (!href) return;
+
+      let preview: LinkPreviewData | null = null;
+      try {
+        const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/link-preview?url=${encodeURIComponent(href)}`, {
+          cache: "no-store",
+        });
+        if (res.ok) preview = (await res.json()) as LinkPreviewData;
+      } catch {
+        // rete non disponibile o timeout: la card degrada a link semplice sotto.
+      }
+
+      let hostname = href;
+      try {
+        hostname = new URL(href).hostname;
+      } catch {
+        // href relativo/non valido: mostriamo il testo così com'è.
+      }
+
+      const card = document.createElement("a");
+      card.className = "link-preview-card";
+      card.setAttribute("href", href);
+      card.setAttribute("target", "_blank");
+      card.setAttribute("rel", "noopener noreferrer nofollow");
+
+      if (preview?.image) {
+        const img = document.createElement("img");
+        img.setAttribute("src", preview.image);
+        img.setAttribute("alt", "");
+        card.append(img);
+      }
+      const body = document.createElement("span");
+      body.className = "link-preview-card-body";
+      const host = document.createElement("span");
+      host.className = "link-preview-card-host";
+      host.textContent = hostname;
+      const title = document.createElement("span");
+      title.className = "link-preview-card-title";
+      title.textContent = preview?.title || href;
+      body.append(host, title);
+      if (preview?.description) {
+        const description = document.createElement("span");
+        description.className = "link-preview-card-description";
+        description.textContent = preview.description;
+        body.append(description);
+      }
+      card.append(body);
+      a.replaceWith(card);
+    })
+  );
+
   return document.body.innerHTML;
 }
 
@@ -202,11 +284,12 @@ export interface RenderOptions {
   notes?: PostNote[];
 }
 
-export function renderMarkdown(markdown: string, options: RenderOptions = {}): string {
+export async function renderMarkdown(markdown: string, options: RenderOptions = {}): Promise<string> {
   const rawHtml = renderer.render(markdown);
   const cleanHtml = DOMPurify.sanitize(rawHtml);
   const withImages = wrapSensitiveImages(cleanHtml);
-  const withMentions = options.mentions === false ? withImages : linkifyMentions(withImages);
+  const withCards = await resolveLinkCards(withImages);
+  const withMentions = options.mentions === false ? withCards : linkifyMentions(withCards);
   return options.notes && options.notes.length > 0
     ? renderFootnotes(withMentions, options.notes)
     : withMentions;

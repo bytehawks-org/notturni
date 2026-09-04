@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import PLATFORM_ADMIN_ROLES, get_optional_current_user, require_platform_admin
 from app.core.database import get_session
 from app.domain.i18n import validate_locale
+from app.domain.pages import build_platform_page_permalink
 from app.models.page import Page
 from app.models.user import User
 
@@ -40,6 +41,7 @@ class PageUpdateRequest(BaseModel):
 
 class PageOut(BaseModel):
     id: uuid.UUID
+    blog_id: uuid.UUID | None = None
     slug: str
     locale: str
     translation_group_id: uuid.UUID
@@ -47,8 +49,20 @@ class PageOut(BaseModel):
     content: str
     is_published: bool
     created_at: datetime
+    permalink: str | None = None
+    # Per il rendering pubblico lato frontend, senza una fetch separata del
+    # blog: sempre True per le pagine di piattaforma (niente blog da cui
+    # ereditarlo), mirror di Blog.mentions_enabled per le pagine di blog —
+    # vedi app/api/v1/blogs.py::_to_page_out (stesso pattern di Post.mentions_enabled).
+    mentions_enabled: bool = True
 
     model_config = {"from_attributes": True}
+
+
+def _to_out(page: Page) -> PageOut:
+    out = PageOut.model_validate(page)
+    out.permalink = build_platform_page_permalink(page)
+    return out
 
 
 @router.post("", response_model=PageOut, status_code=status.HTTP_201_CREATED)
@@ -56,14 +70,16 @@ async def create_page(
     payload: PageCreateRequest,
     current_user: User = Depends(require_platform_admin),
     session: AsyncSession = Depends(get_session),
-) -> Page:
+) -> PageOut:
     try:
         validate_locale(payload.locale)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
     existing = await session.execute(
-        select(Page).where(Page.slug == payload.slug, Page.locale == payload.locale)
+        select(Page).where(
+            Page.blog_id.is_(None), Page.slug == payload.slug, Page.locale == payload.locale
+        )
     )
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Slug già in uso per questa lingua.")
@@ -79,7 +95,7 @@ async def create_page(
     session.add(page)
     await session.commit()
     await session.refresh(page)
-    return page
+    return _to_out(page)
 
 
 @router.post(
@@ -90,9 +106,9 @@ async def add_page_translation(
     payload: PageTranslationRequest,
     current_user: User = Depends(require_platform_admin),
     session: AsyncSession = Depends(get_session),
-) -> Page:
+) -> PageOut:
     original = await session.get(Page, page_id)
-    if original is None:
+    if original is None or original.blog_id is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pagina non trovata.")
 
     try:
@@ -120,7 +136,32 @@ async def add_page_translation(
     session.add(translation)
     await session.commit()
     await session.refresh(translation)
-    return translation
+    return _to_out(translation)
+
+
+class PageTranslationSummaryOut(BaseModel):
+    id: uuid.UUID
+    locale: str
+    slug: str
+    is_published: bool
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/{page_id}/translations", response_model=list[PageTranslationSummaryOut])
+async def list_page_translations(
+    page_id: uuid.UUID, session: AsyncSession = Depends(get_session)
+) -> list[Page]:
+    """Per il selettore di lingua lato frontend, stesso pattern di
+    app/api/v1/posts.py::list_post_translations — solo le pubblicate, il
+    chiamante mostra sempre la pagina corrente a parte."""
+    original = await session.get(Page, page_id)
+    if original is None or original.blog_id is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pagina non trovata.")
+    result = await session.execute(
+        select(Page).where(Page.translation_group_id == original.translation_group_id)
+    )
+    return [p for p in result.scalars().all() if p.is_published]
 
 
 def _is_admin(user: User | None) -> bool:
@@ -133,17 +174,17 @@ async def get_page(
     locale: str,
     current_user: User | None = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
-) -> Page:
+) -> PageOut:
     """Pubblico: solo pagine pubblicate. Un amministratore vede anche le bozze
     (per poterle rivedere/modificare prima della pubblicazione)."""
-    stmt = select(Page).where(Page.slug == slug, Page.locale == locale)
+    stmt = select(Page).where(Page.blog_id.is_(None), Page.slug == slug, Page.locale == locale)
     if not _is_admin(current_user):
         stmt = stmt.where(Page.is_published.is_(True))
     result = await session.execute(stmt)
     page = result.scalar_one_or_none()
     if page is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pagina non trovata.")
-    return page
+    return _to_out(page)
 
 
 @router.get("", response_model=list[PageOut])
@@ -151,12 +192,12 @@ async def list_pages(
     locale: str,
     current_user: User | None = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
-) -> list[Page]:
-    stmt = select(Page).where(Page.locale == locale)
+) -> list[PageOut]:
+    stmt = select(Page).where(Page.blog_id.is_(None), Page.locale == locale)
     if not _is_admin(current_user):
         stmt = stmt.where(Page.is_published.is_(True))
     result = await session.execute(stmt)
-    return list(result.scalars().all())
+    return [_to_out(page) for page in result.scalars().all()]
 
 
 @router.patch("/{page_id}", response_model=PageOut)
@@ -165,9 +206,9 @@ async def update_page(
     payload: PageUpdateRequest,
     current_user: User = Depends(require_platform_admin),
     session: AsyncSession = Depends(get_session),
-) -> Page:
+) -> PageOut:
     page = await session.get(Page, page_id)
-    if page is None:
+    if page is None or page.blog_id is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pagina non trovata.")
 
     if payload.slug is not None:
@@ -182,4 +223,4 @@ async def update_page(
 
     await session.commit()
     await session.refresh(page)
-    return page
+    return _to_out(page)

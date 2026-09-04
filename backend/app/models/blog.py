@@ -78,6 +78,10 @@ class Blog(Base, UUIDPKMixin, TimestampMixin):
     # in link al profilo dell'utente citato. Attive di default, disattivabili
     # dal proprietario del blog.
     mentions_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # CLAUDE.md #1: pagine statiche (Chi siamo, Contattami, ...) sono opt-in
+    # per blog, disattive di default — sempre attive invece per le pagine di
+    # piattaforma (vedi app/models/page.py, app/api/v1/pages.py).
+    static_pages_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # i18n (CLAUDE.md #1/#2): lingua di default del blog; i singoli post
     # possono avere traduzioni in altre lingue, vedi app/models/post.py
     default_locale: Mapped[str] = mapped_column(String(2), default=DEFAULT_LOCALE, nullable=False)
@@ -98,6 +102,7 @@ class Blog(Base, UUIDPKMixin, TimestampMixin):
         back_populates="blog", cascade="all, delete-orphan"
     )
     posts: Mapped[list["Post"]] = relationship(back_populates="blog", cascade="all, delete-orphan")
+    pages: Mapped[list["Page"]] = relationship(back_populates="blog", cascade="all, delete-orphan")
     categories: Mapped[list["Category"]] = relationship(back_populates="blog", cascade="all, delete-orphan")
     follows: Mapped[list["BlogFollow"]] = relationship(back_populates="blog", cascade="all, delete-orphan")
     config: Mapped["BlogConfig | None"] = relationship(

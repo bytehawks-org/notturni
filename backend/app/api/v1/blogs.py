@@ -19,9 +19,17 @@ from app.domain.blog_rules import (
     validate_blog_slug,
     validate_blog_subtitle,
 )
+from app.api.v1.pages import (
+    PageCreateRequest,
+    PageOut,
+    PageTranslationRequest,
+    PageTranslationSummaryOut,
+    PageUpdateRequest,
+)
 from app.domain.categories import validate_category_name, validate_category_slug
 from app.domain.i18n import DEFAULT_LOCALE, validate_locale
 from app.domain.moderation import classify_image
+from app.domain.pages import build_page_permalink, validate_page_slug
 from app.domain.permalinks import build_permalink
 from app.models.blog import (
     Blog,
@@ -34,7 +42,10 @@ from app.models.blog import (
 from app.models.blog_config import BlogConfig
 from app.models.category import Category
 from app.models.follow import BlogFollow
+from app.models.page import Page
 from app.models.post import Post, PostStatus
+from app.models.post_link import post_links
+from app.models.post_media import post_media
 from app.models.post_note import post_notes
 from app.models.user import User
 
@@ -48,6 +59,11 @@ class BlogCreateRequest(BaseModel):
     subtitle: str | None = None
     description: str | None = None
     visibility: BlogVisibility = BlogVisibility.PUBLIC
+    # CLAUDE.md #4: il frontend pre-compila questo campo con lo username di
+    # chi crea il blog (resta modificabile) — vedi _resolve_author_display_name
+    # in app/api/v1/posts.py per come si combina con l'alias di membership e
+    # con la preferenza di profilo quando è vuoto.
+    default_author_display_name: str | None = None
 
 
 class BlogUpdateRequest(BaseModel):
@@ -60,6 +76,8 @@ class BlogUpdateRequest(BaseModel):
     allow_anonymous_comments: bool | None = None
     # todo/EDITOR.md: @menzioni nei post trasformate in link (attive di default).
     mentions_enabled: bool | None = None
+    # CLAUDE.md #1: pagine statiche del blog, opt-in e disattive di default.
+    static_pages_enabled: bool | None = None
     # "" per tornare al default (username di chi scrive), qualsiasi altro
     # valore lo imposta; assente lascia invariato — stesso schema di
     # Post.cover_image_url in PATCH /posts/{id}.
@@ -76,9 +94,15 @@ class BlogOut(BaseModel):
     custom_domain: str | None
     allow_anonymous_comments: bool
     mentions_enabled: bool
+    static_pages_enabled: bool
     default_locale: str
     default_author_display_name: str | None
-    owner_id: uuid.UUID
+    # CLAUDE.md #8: presente solo per il proprietario stesso (usato lato
+    # frontend per calcolare `isOwner`) — chiunque altro lo riceve a `null`,
+    # perché è l'unico campo di Blog che punterebbe direttamente all'id
+    # dell'utente reale dietro un blog che può mostrarsi con un alias
+    # (Blog.default_author_display_name). Vedi _to_blog_out.
+    owner_id: uuid.UUID | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -115,6 +139,17 @@ async def _require_blog_viewable(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Blog non trovato.")
 
 
+def _to_blog_out(blog: Blog, viewer: User | None) -> BlogOut:
+    """CLAUDE.md #8: `owner_id` è l'unico campo di Blog che punta all'id
+    reale di chi lo gestisce — nascosto a chiunque non sia il proprietario
+    stesso, per non permettere di correlare un blog che usa un alias
+    (Blog.default_author_display_name) con l'identità reale dietro di esso."""
+    out = BlogOut.model_validate(blog)
+    if viewer is None or viewer.id != blog.owner_id:
+        out.owner_id = None
+    return out
+
+
 @router.post("", response_model=BlogOut, status_code=status.HTTP_201_CREATED)
 async def create_blog(
     payload: BlogCreateRequest,
@@ -143,6 +178,7 @@ async def create_blog(
         description=(payload.description or None),
         visibility=payload.visibility,
         default_locale=payload.default_locale,
+        default_author_display_name=(payload.default_author_display_name or None),
         owner_id=current_user.id,
     )
     session.add(blog)
@@ -305,10 +341,10 @@ async def get_blog(
     slug: str,
     current_user: User | None = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
-) -> Blog:
+) -> BlogOut:
     blog = await _get_blog_or_404(session, slug)
     await _require_blog_viewable(session, current_user, blog)
-    return blog
+    return _to_blog_out(blog, current_user)
 
 
 @router.patch("/{slug}", response_model=BlogOut)
@@ -342,6 +378,8 @@ async def update_blog(
         blog.allow_anonymous_comments = payload.allow_anonymous_comments
     if payload.mentions_enabled is not None:
         blog.mentions_enabled = payload.mentions_enabled
+    if payload.static_pages_enabled is not None:
+        blog.static_pages_enabled = payload.static_pages_enabled
     if payload.default_author_display_name is not None:
         blog.default_author_display_name = payload.default_author_display_name or None
 
@@ -615,6 +653,109 @@ async def get_blog_bibliography(
     return list(entries.values())
 
 
+class ContentCitationOut(BaseModel):
+    post_title: str
+    post_slug: str
+    permalink: str
+    locale: str
+    used_at: datetime | None
+
+
+class MediaBibliographyEntryOut(BaseModel):
+    url: str
+    alt_text: str
+    categories: list[str]
+    citations: list[ContentCitationOut]
+
+
+@router.get("/{slug}/media-bibliography", response_model=list[MediaBibliographyEntryOut])
+async def get_blog_media_bibliography(
+    slug: str,
+    current_user: User | None = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[MediaBibliographyEntryOut]:
+    """CLAUDE.md #4: come la bibliografia delle note (sopra), ma per i media
+    (oggi solo immagini) citati nel corpo dei post pubblicati — raggruppati
+    per URL identico, con l'elenco dei post che li usano e la data di
+    pubblicazione di ciascuno. Segue la visibilità del blog."""
+    blog = await _get_blog_or_404(session, slug)
+    await _require_blog_viewable(session, current_user, blog)
+
+    rows = await session.execute(
+        select(Post, post_media.c.alt_text, post_media.c.categories, post_media.c.url)
+        .join(post_media, post_media.c.post_id == Post.id)
+        .where(
+            Post.blog_id == blog.id,
+            Post.status == PostStatus.PUBLISHED,
+            Post.published_at <= datetime.now(timezone.utc),
+        )
+        .order_by(Post.published_at.desc(), post_media.c.position.asc())
+    )
+
+    entries: dict[str, MediaBibliographyEntryOut] = {}
+    for post, alt_text, categories, url in rows.all():
+        entry = entries.get(url)
+        if entry is None:
+            entry = MediaBibliographyEntryOut(url=url, alt_text=alt_text, categories=categories, citations=[])
+            entries[url] = entry
+        entry.citations.append(
+            ContentCitationOut(
+                post_title=post.title,
+                post_slug=post.slug,
+                permalink=build_permalink(blog.slug, post),
+                locale=post.locale,
+                used_at=post.published_at,
+            )
+        )
+    return list(entries.values())
+
+
+class LinkBibliographyEntryOut(BaseModel):
+    url: str
+    link_text: str
+    citations: list[ContentCitationOut]
+
+
+@router.get("/{slug}/links-bibliography", response_model=list[LinkBibliographyEntryOut])
+async def get_blog_links_bibliography(
+    slug: str,
+    current_user: User | None = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[LinkBibliographyEntryOut]:
+    """CLAUDE.md #4: come la bibliografia dei media sopra, ma per i link
+    citati nel corpo dei post pubblicati."""
+    blog = await _get_blog_or_404(session, slug)
+    await _require_blog_viewable(session, current_user, blog)
+
+    rows = await session.execute(
+        select(Post, post_links.c.link_text, post_links.c.url)
+        .join(post_links, post_links.c.post_id == Post.id)
+        .where(
+            Post.blog_id == blog.id,
+            Post.status == PostStatus.PUBLISHED,
+            Post.published_at <= datetime.now(timezone.utc),
+        )
+        .order_by(Post.published_at.desc(), post_links.c.position.asc())
+    )
+
+    entries: dict[str, LinkBibliographyEntryOut] = {}
+    for post, link_text, url in rows.all():
+        entry = entries.get(url)
+        if entry is None:
+            entry = LinkBibliographyEntryOut(url=url, link_text=link_text, citations=[])
+            entries[url] = entry
+        entry.citations.append(
+            ContentCitationOut(
+                post_title=post.title,
+                post_slug=post.slug,
+                permalink=build_permalink(blog.slug, post),
+                locale=post.locale,
+                used_at=post.published_at,
+            )
+        )
+    return list(entries.values())
+
+
 @router.post("/{slug}/categories", response_model=CategoryOut, status_code=status.HTTP_201_CREATED)
 async def create_category(
     slug: str,
@@ -701,6 +842,256 @@ async def delete_category(
     category = await _get_category_or_404(session, blog.id, category_id)
 
     await session.delete(category)
+    await session.commit()
+
+
+# ---- Pagine statiche del blog: feature opt-in (CLAUDE.md #1, todo/BLOG.md).
+# Blog.static_pages_enabled, disattiva di default — sempre attiva invece per
+# le pagine di piattaforma (app/api/v1/pages.py). Niente tag/categorie/
+# pubblicazioni su queste pagine: solo titolo/slug/lingua/contenuto.
+
+
+def _require_static_pages_enabled(blog: Blog) -> None:
+    if not blog.static_pages_enabled:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Le pagine statiche non sono attive per questo blog."
+        )
+
+
+def _to_page_out(blog: Blog, page: Page) -> PageOut:
+    out = PageOut.model_validate(page)
+    out.permalink = build_page_permalink(blog.slug, page)
+    out.mentions_enabled = blog.mentions_enabled
+    return out
+
+
+async def _get_blog_page_or_404(session: AsyncSession, blog_id: uuid.UUID, page_id: uuid.UUID) -> Page:
+    page = await session.get(Page, page_id)
+    if page is None or page.blog_id != blog_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pagina non trovata.")
+    return page
+
+
+@router.get("/{slug}/pages", response_model=list[PageOut])
+async def list_blog_pages(
+    slug: str,
+    locale: str,
+    current_user: User | None = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[PageOut]:
+    blog = await _get_blog_or_404(session, slug)
+    await _require_blog_viewable(session, current_user, blog)
+    stmt = select(Page).where(Page.blog_id == blog.id, Page.locale == locale)
+    can_write = current_user is not None and await can_write_posts(
+        session, user_id=current_user.id, blog=blog
+    )
+    if not can_write:
+        stmt = stmt.where(Page.is_published.is_(True))
+    result = await session.execute(stmt)
+    return [_to_page_out(blog, page) for page in result.scalars().all()]
+
+
+@router.get("/{slug}/pages/by-id/{page_id}", response_model=PageOut)
+async def get_blog_page_by_id(
+    slug: str,
+    page_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> PageOut:
+    """Per l'editor di dashboard (bozza inclusa): richiede accesso in
+    scrittura al blog, non la sola visibilità pubblica — a differenza di
+    ``GET /{slug}/pages/{page_slug}`` sotto, pensato per la risoluzione del
+    permalink pubblico. Registrata prima di quella rotta perché "by-id" non
+    collida con `{page_slug}`."""
+    blog = await _get_blog_or_404(session, slug)
+    await _require_blog_write_access(session, current_user, blog)
+    page = await _get_blog_page_or_404(session, blog.id, page_id)
+    return _to_page_out(blog, page)
+
+
+@router.get("/{slug}/pages/{page_slug}", response_model=PageOut)
+async def get_blog_page(
+    slug: str,
+    page_slug: str,
+    locale: str,
+    current_user: User | None = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> PageOut:
+    """Pubblico: risolve il permalink /{blog_slug}/pagina/{page_slug} (solo
+    pagine pubblicate, a meno che il chiamante non abbia accesso in scrittura
+    sul blog — vedi app/domain/pages.py)."""
+    blog = await _get_blog_or_404(session, slug)
+    await _require_blog_viewable(session, current_user, blog)
+    stmt = select(Page).where(Page.blog_id == blog.id, Page.slug == page_slug, Page.locale == locale)
+    can_write = current_user is not None and await can_write_posts(
+        session, user_id=current_user.id, blog=blog
+    )
+    if not can_write:
+        stmt = stmt.where(Page.is_published.is_(True))
+    result = await session.execute(stmt)
+    page = result.scalar_one_or_none()
+    if page is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pagina non trovata.")
+    return _to_page_out(blog, page)
+
+
+@router.post("/{slug}/pages", response_model=PageOut, status_code=status.HTTP_201_CREATED)
+async def create_blog_page(
+    slug: str,
+    payload: PageCreateRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> PageOut:
+    blog = await _get_blog_or_404(session, slug)
+    await _require_blog_write_access(session, current_user, blog)
+    _require_static_pages_enabled(blog)
+
+    try:
+        validate_locale(payload.locale)
+        validate_page_slug(payload.slug)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    existing = await session.execute(
+        select(Page).where(
+            Page.blog_id == blog.id, Page.slug == payload.slug, Page.locale == payload.locale
+        )
+    )
+    if existing.scalar_one_or_none() is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Slug già in uso per questa lingua.")
+
+    page = Page(
+        blog_id=blog.id,
+        slug=payload.slug,
+        locale=payload.locale,
+        title=payload.title,
+        content=payload.content,
+        is_published=payload.is_published,
+        updated_by_id=current_user.id,
+    )
+    session.add(page)
+    await session.commit()
+    await session.refresh(page)
+    return _to_page_out(blog, page)
+
+
+@router.post(
+    "/{slug}/pages/{page_id}/translations", response_model=PageOut, status_code=status.HTTP_201_CREATED
+)
+async def add_blog_page_translation(
+    slug: str,
+    page_id: uuid.UUID,
+    payload: PageTranslationRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> PageOut:
+    blog = await _get_blog_or_404(session, slug)
+    await _require_blog_write_access(session, current_user, blog)
+    _require_static_pages_enabled(blog)
+    original = await _get_blog_page_or_404(session, blog.id, page_id)
+
+    try:
+        validate_locale(payload.locale)
+        validate_page_slug(payload.slug)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    existing = await session.execute(
+        select(Page).where(
+            Page.translation_group_id == original.translation_group_id, Page.locale == payload.locale
+        )
+    )
+    if existing.scalar_one_or_none() is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Traduzione già presente per questa lingua.")
+
+    translation = Page(
+        blog_id=blog.id,
+        slug=payload.slug,
+        locale=payload.locale,
+        translation_group_id=original.translation_group_id,
+        title=payload.title,
+        content=payload.content,
+        is_published=payload.is_published,
+        updated_by_id=current_user.id,
+    )
+    session.add(translation)
+    await session.commit()
+    await session.refresh(translation)
+    return _to_page_out(blog, translation)
+
+
+@router.get("/{slug}/pages/{page_id}/translations", response_model=list[PageTranslationSummaryOut])
+async def list_blog_page_translations(
+    slug: str,
+    page_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+) -> list[Page]:
+    """Per il selettore di lingua lato frontend, stesso pattern di
+    app/api/v1/pages.py::list_page_translations (e di
+    app/api/v1/posts.py::list_post_translations) — solo le pubblicate."""
+    blog = await _get_blog_or_404(session, slug)
+    original = await _get_blog_page_or_404(session, blog.id, page_id)
+    result = await session.execute(
+        select(Page).where(Page.translation_group_id == original.translation_group_id)
+    )
+    return [p for p in result.scalars().all() if p.is_published]
+
+
+@router.patch("/{slug}/pages/{page_id}", response_model=PageOut)
+async def update_blog_page(
+    slug: str,
+    page_id: uuid.UUID,
+    payload: PageUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> PageOut:
+    """Modifica/rimozione restano possibili anche a feature disattivata
+    (`static_pages_enabled=False` blocca solo la creazione di pagine/
+    traduzioni nuove, non la gestione di quelle esistenti)."""
+    blog = await _get_blog_or_404(session, slug)
+    await _require_blog_write_access(session, current_user, blog)
+    page = await _get_blog_page_or_404(session, blog.id, page_id)
+
+    try:
+        if payload.slug is not None:
+            validate_page_slug(payload.slug)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    if payload.slug is not None and payload.slug != page.slug:
+        existing = await session.execute(
+            select(Page).where(
+                Page.blog_id == blog.id, Page.slug == payload.slug, Page.locale == page.locale
+            )
+        )
+        if existing.scalar_one_or_none() is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "Slug già in uso per questa lingua.")
+        page.slug = payload.slug
+    if payload.title is not None:
+        page.title = payload.title
+    if payload.content is not None:
+        page.content = payload.content
+    if payload.is_published is not None:
+        page.is_published = payload.is_published
+    page.updated_by_id = current_user.id
+
+    await session.commit()
+    await session.refresh(page)
+    return _to_page_out(blog, page)
+
+
+@router.delete("/{slug}/pages/{page_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_blog_page(
+    slug: str,
+    page_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    blog = await _get_blog_or_404(session, slug)
+    await _require_blog_write_access(session, current_user, blog)
+    page = await _get_blog_page_or_404(session, blog.id, page_id)
+
+    await session.delete(page)
     await session.commit()
 
 

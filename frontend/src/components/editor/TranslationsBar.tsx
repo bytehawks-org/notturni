@@ -6,7 +6,7 @@ import { useState, type FormEvent } from "react";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
-import type { PostNote, PostTranslationSummary } from "@/lib/types";
+import type { PostNote } from "@/lib/types";
 
 const languageNames = new Intl.DisplayNames(["it"], { type: "language" });
 
@@ -20,39 +20,53 @@ function localeName(locale: string): string {
 }
 
 interface TranslationsBarProps {
-  currentPostId: string;
+  currentId: string;
   currentLocale: string;
-  blogSlug: string;
+  /** Assente per le pagine di piattaforma (non legate a un blog): in quel
+   * caso l'editor di traduzione non carica immagini né @menzioni — vedi
+   * RichTextEditor, prop `blogSlug` opzionale. */
+  blogSlug?: string;
   /** Solo le traduzioni pubblicamente visibili (l'endpoint le filtra così) —
-   * per questo il post corrente va sempre mostrato a parte: se è una bozza
-   * non compare in questa lista, nemmeno se stesso. */
-  translations: PostTranslationSummary[];
+   * per questo l'originale va sempre mostrato a parte: se è una bozza non
+   * compare in questa lista, nemmeno se stesso. Stesso shape per post e
+   * pagine (id/locale/slug), lo stato di pubblicazione non serve qui. */
+  translations: { id: string; locale: string; slug: string }[];
+  /** Link dell'editor di dashboard per una traduzione già esistente (varia
+   * per post/pagina di blog/pagina di piattaforma — ognuno ha il proprio
+   * percorso nell'app router). */
+  hrefFor: (id: string) => string;
   /** Lingue di fallback del profilo (dashboard/profilo): popolano il
    * selettore lingua qui sotto invece di dover scrivere la sigla a mano. */
   suggestedLocales: string[];
   authFetch: <T>(fn: (token: string) => Promise<T>) => Promise<T>;
+  /** Note a piè di pagina (CLAUDE.md #1): solo per i post, mai per le
+   * pagine statiche — assente disattiva la gestione note nel form. */
+  withNotes?: boolean;
   onAddTranslation: (payload: {
     slug: string;
     locale: string;
     title: string;
     content: string;
-    notes: PostNote[];
+    notes?: PostNote[];
   }) => Promise<void>;
 }
 
 /** Riga leggera, senza riquadro: le lingue già tradotte come pillole, più
  * un modulo che si apre per aggiungerne una nuova. Vedi fika.bar per il
- * riferimento stilistico. */
+ * riferimento stilistico. Condivisa da post e pagine statiche (di blog e di
+ * piattaforma) — vedi i rispettivi editor in frontend/src/app. */
 export function TranslationsBar({
-  currentPostId,
+  currentId,
   currentLocale,
   blogSlug,
   translations,
+  hrefFor,
   suggestedLocales,
   authFetch,
+  withNotes = true,
   onAddTranslation,
 }: TranslationsBarProps) {
-  const otherTranslations = translations.filter((t) => t.id !== currentPostId);
+  const otherTranslations = translations.filter((t) => t.id !== currentId);
   const alreadyUsed = new Set([currentLocale, ...otherTranslations.map((t) => t.locale)]);
   const availableSuggestions = suggestedLocales.filter((l) => !alreadyUsed.has(l));
   const [adding, setAdding] = useState(false);
@@ -74,7 +88,7 @@ export function TranslationsBar({
         locale: trLocale,
         title: trTitle,
         content: trContent,
-        notes: trNotes,
+        ...(withNotes ? { notes: trNotes } : {}),
       });
     } catch (err) {
       setTrError(err instanceof Error ? err.message : "Errore imprevisto.");
@@ -91,10 +105,7 @@ export function TranslationsBar({
         {otherTranslations.map((t) => (
           <span key={t.id} className="flex items-center gap-1.5">
             <span className="text-border">·</span>
-            <Link
-              href={`/dashboard/blogs/${blogSlug}/posts/${t.id}`}
-              className="text-foreground/70 hover:text-primary"
-            >
+            <Link href={hrefFor(t.id)} className="text-foreground/70 hover:text-primary">
               {localeName(t.locale)} ✓
             </Link>
           </span>
@@ -162,8 +173,9 @@ export function TranslationsBar({
             onChange={setTrContent}
             blogSlug={blogSlug}
             authFetch={authFetch}
-            notes={trNotes}
-            onNotesChange={setTrNotes}
+            notes={withNotes ? trNotes : undefined}
+            onNotesChange={withNotes ? setTrNotes : undefined}
+            stickyToolbar={false}
           />
           {trError && (
             <div className="mt-4">

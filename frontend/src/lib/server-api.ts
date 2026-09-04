@@ -1,6 +1,14 @@
 import "server-only";
 
-import type { BibliographyEntry, Blog, Post, TrendingTag } from "./types";
+import type {
+  BibliographyEntry,
+  Blog,
+  LinkBibliographyEntry,
+  MediaBibliographyEntry,
+  Page,
+  Post,
+  TrendingTag,
+} from "./types";
 
 // Le pagine renderizzate lato server (Server Component) girano nel processo
 // Node.js del container: a differenza del browser, non raggiungono il
@@ -28,6 +36,35 @@ export async function getPublicPostByPermalink(
   return (await res.json()) as Post;
 }
 
+/** Pagina statica pubblica di un blog, dal permalink /{blogSlug}/pagina/{pageSlug}
+ * (CLAUDE.md #1, feature opt-in — vedi Blog.static_pages_enabled). `null` se
+ * non trovata/non pubblicata (404). */
+export async function getPublicPage(
+  blogSlug: string,
+  pageSlug: string,
+  locale: string
+): Promise<Page | null> {
+  const res = await fetch(
+    `${BACKEND_INTERNAL_URL}/api/v1/blogs/${blogSlug}/pages/${pageSlug}?locale=${locale}`,
+    { cache: "no-store" }
+  );
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero della pagina.`);
+  return (await res.json()) as Page;
+}
+
+/** Pagina statica pubblica del sito principale, permalink dedicato
+ * /pages/{slug} (non legata a un blog — vedi backend/API.md). `null` se non
+ * trovata/non pubblicata (404). */
+export async function getPublicPlatformPage(slug: string, locale: string): Promise<Page | null> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/pages/${slug}?locale=${locale}`, {
+    cache: "no-store",
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero della pagina.`);
+  return (await res.json()) as Page;
+}
+
 /** Dettaglio pubblico di un blog. `null` se non trovato o non visibile (404). */
 export async function getPublicBlog(slug: string): Promise<Blog | null> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}`, { cache: "no-store" });
@@ -44,6 +81,26 @@ export async function getBlogBibliography(slug: string): Promise<BibliographyEnt
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero della bibliografia.`);
   return (await res.json()) as BibliographyEntry[];
+}
+
+/** CLAUDE.md #4: come sopra, per i media (immagini) citati nei post pubblicati. */
+export async function getBlogMediaBibliography(slug: string): Promise<MediaBibliographyEntry[] | null> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}/media-bibliography`, {
+    cache: "no-store",
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero della bibliografia dei media.`);
+  return (await res.json()) as MediaBibliographyEntry[];
+}
+
+/** CLAUDE.md #4: come sopra, per i link citati nei post pubblicati. */
+export async function getBlogLinksBibliography(slug: string): Promise<LinkBibliographyEntry[] | null> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}/links-bibliography`, {
+    cache: "no-store",
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero della bibliografia dei link.`);
+  return (await res.json()) as LinkBibliographyEntry[];
 }
 
 /** Feed multi-blog per la homepage: post pubblicati di tutti i blog, dal più recente. */

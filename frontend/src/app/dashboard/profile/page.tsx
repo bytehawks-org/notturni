@@ -11,17 +11,23 @@ import { FieldGroup, Input, Label, TextArea } from "@/components/ui/Field";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { SOCIAL_PLATFORMS, getSocialPlatform } from "@/lib/social-platforms";
-import { POST_AUTHOR_NAME_STYLE_LABELS, type PostAuthorNameStyle, type Profile } from "@/lib/types";
+import {
+  POST_AUTHOR_NAME_STYLE_LABELS,
+  type FollowStats,
+  type PostAuthorNameStyle,
+  type Profile,
+} from "@/lib/types";
 
 function errorMessage(err: unknown): string {
   return err instanceof ApiClientError ? err.message : "Errore imprevisto.";
 }
 
 export default function ProfilePage() {
-  const { user, authFetch } = useAuth();
+  const { user, authFetch, refreshUser } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [username, setUsername] = useState("");
   const [bio, setBio] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -39,6 +45,8 @@ export default function ProfilePage() {
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
+  const [followStats, setFollowStats] = useState<FollowStats | null>(null);
+
   const [mfaMessage, setMfaMessage] = useState<string | null>(null);
   const [mfaError, setMfaError] = useState<string | null>(null);
   const [totpSetup, setTotpSetup] = useState<{ secret: string; provisioning_uri: string } | null>(null);
@@ -52,6 +60,7 @@ export default function ProfilePage() {
       .profile(user.username)
       .then((p) => {
         setProfile(p);
+        setUsername(p.username);
         setBio(p.bio ?? "");
         setFirstName(p.first_name ?? "");
         setLastName(p.last_name ?? "");
@@ -66,12 +75,19 @@ export default function ProfilePage() {
 
   useEffect(loadProfile, [user]);
 
+  useEffect(() => {
+    authFetch((token) => api.users.followStats(token))
+      .then(setFollowStats)
+      .catch(() => undefined);
+  }, [authFetch]);
+
   async function handleSaveBio(event: FormEvent) {
     event.preventDefault();
     setSavingBio(true);
     try {
       const updated = await authFetch((token) =>
         api.users.updateMe(token, {
+          username,
           bio,
           first_name: firstName,
           last_name: lastName,
@@ -83,6 +99,9 @@ export default function ProfilePage() {
         })
       );
       setProfile(updated);
+      // Lo username può essere cambiato: riallinea subito il resto della UI
+      // (intestazione dashboard, autocomplete @menzioni, ecc.) che legge da qui.
+      await refreshUser();
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -249,6 +268,23 @@ export default function ProfilePage() {
       <Card>
         <CardTitle>Bio</CardTitle>
         <form onSubmit={handleSaveBio} className="space-y-4">
+          <FieldGroup>
+            <Label htmlFor="username">Username</Label>
+            <Input
+              id="username"
+              required
+              minLength={3}
+              maxLength={32}
+              value={username}
+              onChange={(e) => setUsername(e.target.value.toLowerCase())}
+              className="max-w-xs"
+            />
+            <p className="mt-1 text-xs text-muted">
+              Citabile come @{username || "username"} nei post; cambiarlo si riflette subito su tutta
+              la piattaforma (menzioni già scritte nel testo restano invariate).
+            </p>
+          </FieldGroup>
+
           <div className="flex flex-wrap gap-4">
             <FieldGroup>
               <Label htmlFor="first-name">Nome</Label>
@@ -325,6 +361,33 @@ export default function ProfilePage() {
           </Button>
         </form>
       </Card>
+
+      {followStats && (
+        <Card>
+          <CardTitle>Follower</CardTitle>
+          <p className="mb-3 text-sm text-foreground">
+            <span className="font-medium">{followStats.total_followers}</span> in totale, sommando chi
+            ti segue con il tuo username e chi segue i tuoi blog — anche quelli che si presentano con
+            un alias diverso dal tuo nome.
+          </p>
+          <ul className="space-y-1 text-sm text-muted">
+            <li>
+              @{profile?.username ?? username}: {followStats.user_followers}
+            </li>
+            {followStats.blogs.map((b) => (
+              <li key={b.blog_slug}>
+                {b.blog_title}
+                {b.alias && <span className="text-xs"> (alias: {b.alias})</span>}: {b.followers}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-xs text-muted">
+            Visibile solo a te: qui è l&apos;unico punto in cui username e alias dei blog vengono
+            messi insieme. Ogni blog e il tuo profilo mostrano pubblicamente solo il proprio numero di
+            follower, separatamente.
+          </p>
+        </Card>
+      )}
 
       <Card>
         <CardTitle>Link social</CardTitle>

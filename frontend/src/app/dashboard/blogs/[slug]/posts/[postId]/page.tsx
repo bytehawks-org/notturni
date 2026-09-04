@@ -13,12 +13,36 @@ import { TagInput } from "@/components/editor/TagInput";
 import { TranslationsBar } from "@/components/editor/TranslationsBar";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import type { SensitivityCategory } from "@/lib/content-media";
 import type { Post, PostNote, PostTranslationSummary } from "@/lib/types";
 
 const FORM_ID = "edit-post-form";
 
 function errorMessage(err: unknown): string {
   return err instanceof ApiClientError ? err.message : "Errore imprevisto.";
+}
+
+/** Stato di pubblicazione nella toolbar, stesso stile di CategorySelect. La
+ * sola transizione possibile da qui è bozza → pubblicato (non c'è un modo
+ * per tornare a bozza una volta pubblicato): una volta pubblicato il select
+ * mostra una singola opzione disattivata, non un vero multi-stato. */
+function PostStatusSelect({ status, onPublish }: { status: Post["status"]; onPublish: () => void }) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-[11px] font-medium uppercase tracking-wide text-muted">Stato</span>
+      <select
+        value={status}
+        disabled={status === "published"}
+        onChange={(e) => {
+          if (e.target.value === "published") onPublish();
+        }}
+        className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-70"
+      >
+        <option value="draft">Bozza</option>
+        <option value="published">{status === "published" ? "Pubblicato" : "Pubblica ora"}</option>
+      </select>
+    </label>
+  );
 }
 
 export default function PostEditorPage() {
@@ -31,6 +55,7 @@ export default function PostEditorPage() {
   const [content, setContent] = useState("");
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
   const [coverImageIsSensitive, setCoverImageIsSensitive] = useState(false);
+  const [coverImageCategories, setCoverImageCategories] = useState<SensitivityCategory[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [notes, setNotes] = useState<PostNote[]>([]);
@@ -50,6 +75,7 @@ export default function PostEditorPage() {
         setContent(p.content);
         setCoverImageUrl(p.cover_image_url);
         setCoverImageIsSensitive(p.cover_image_is_sensitive);
+        setCoverImageCategories(p.cover_image_categories);
         setTags(p.manual_tags);
         setCategoryId(p.category?.id ?? null);
         setNotes(p.notes);
@@ -81,6 +107,7 @@ export default function PostEditorPage() {
           content,
           cover_image_url: coverImageUrl ?? "",
           cover_image_is_sensitive: coverImageIsSensitive,
+          cover_image_categories: coverImageCategories,
           tags,
           category_id: categoryId,
           notes,
@@ -110,9 +137,11 @@ export default function PostEditorPage() {
     locale: string;
     title: string;
     content: string;
-    notes: PostNote[];
+    notes?: PostNote[];
   }) {
-    const translated = await authFetch((token) => api.posts.addTranslation(token, params.postId, payload));
+    const translated = await authFetch((token) =>
+      api.posts.addTranslation(token, params.postId, { ...payload, notes: payload.notes ?? [] })
+    );
     router.push(`/dashboard/blogs/${params.slug}/posts/${translated.id}`);
   }
 
@@ -120,25 +149,19 @@ export default function PostEditorPage() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <div className="mb-10 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-y-2">
         <Link href={`/dashboard/blogs/${params.slug}`} className="text-sm text-muted hover:text-foreground">
           ← Torna al blog
         </Link>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           {post.status === "published" && (
             <Link href={post.permalink} className="text-sm text-primary hover:underline">
               Vedi
             </Link>
           )}
-          <span className="text-sm text-muted">{post.status === "published" ? "Pubblicato" : "Bozza"}</span>
           <Button type="submit" form={FORM_ID} variant="secondary" disabled={saving}>
             {saving ? "Salvataggio…" : "Salva"}
           </Button>
-          {post.status === "draft" && (
-            <Button type="button" onClick={handlePublish}>
-              Pubblica
-            </Button>
-          )}
         </div>
       </div>
 
@@ -147,12 +170,8 @@ export default function PostEditorPage() {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           required
-          className="mb-8 w-full border-0 bg-transparent font-serif text-5xl font-semibold leading-tight text-foreground placeholder:text-muted/70 focus:outline-none"
+          className="mb-8 w-full border-0 bg-transparent font-serif text-3xl font-semibold leading-tight text-foreground placeholder:text-muted/70 focus:outline-none sm:text-5xl"
         />
-
-        <div className="mb-4">
-          <CategorySelect blogSlug={params.slug} value={categoryId} onChange={setCategoryId} />
-        </div>
 
         <div className="mb-8">
           <TagInput value={tags} onChange={setTags} />
@@ -162,9 +181,11 @@ export default function PostEditorPage() {
           <CoverImageUpload
             value={coverImageUrl}
             isSensitive={coverImageIsSensitive}
-            onChange={(url, sensitive) => {
+            categories={coverImageCategories}
+            onChange={(url, sensitive, categories) => {
               setCoverImageUrl(url);
               setCoverImageIsSensitive(sensitive);
+              setCoverImageCategories(categories);
             }}
             blogSlug={params.slug}
             authFetch={authFetch}
@@ -178,6 +199,12 @@ export default function PostEditorPage() {
           authFetch={authFetch}
           notes={notes}
           onNotesChange={setNotes}
+          toolbarEnd={
+            <>
+              <CategorySelect blogSlug={params.slug} value={categoryId} onChange={setCategoryId} />
+              <PostStatusSelect status={post.status} onPublish={handlePublish} />
+            </>
+          }
         />
 
         {error && (
@@ -193,10 +220,11 @@ export default function PostEditorPage() {
       </form>
 
       <TranslationsBar
-        currentPostId={post.id}
+        currentId={post.id}
         currentLocale={post.locale}
         blogSlug={params.slug}
         translations={translations}
+        hrefFor={(id) => `/dashboard/blogs/${params.slug}/posts/${id}`}
         suggestedLocales={fallbackLanguages}
         authFetch={authFetch}
         onAddTranslation={handleAddTranslation}
