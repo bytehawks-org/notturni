@@ -3,7 +3,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import PLATFORM_ADMIN_ROLES, get_optional_current_user, require_platform_admin
@@ -190,12 +190,16 @@ async def get_page(
 @router.get("", response_model=list[PageOut])
 async def list_pages(
     locale: str,
+    q: str | None = None,
     current_user: User | None = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[PageOut]:
     stmt = select(Page).where(Page.blog_id.is_(None), Page.locale == locale)
     if not _is_admin(current_user):
         stmt = stmt.where(Page.is_published.is_(True))
+    if q:
+        needle = f"%{q}%"
+        stmt = stmt.where(or_(Page.title.ilike(needle), Page.slug.ilike(needle)))
     result = await session.execute(stmt)
     return [_to_out(page) for page in result.scalars().all()]
 

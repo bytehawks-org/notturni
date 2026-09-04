@@ -2,6 +2,15 @@
 
 Next.js (App Router) + Tailwind CSS.
 
+Il pannello di amministrazione **non** è qui: è un'app Next.js a sé,
+`frontend/admin/` (proprio `package.json`, build e porta — 3001 in locale),
+avviata allo stesso modo (`cd frontend/admin && npm install && npm run dev`).
+Struttura interna analoga a questa (`lib/api.ts`, `lib/auth-context.tsx`,
+`components/ui/`), duplicata invece di condivisa — nessun pacchetto comune
+tra i due progetti in questo repo, come backend/frontend/moderation non
+condividono codice tra loro. Vedi [backend/API.md](../backend/API.md#amministrazione-di-piattaforma)
+per gli endpoint usati.
+
 ## Setup
 
 ```bash
@@ -29,7 +38,6 @@ src/
 │   ├── login/, register/          # autenticazione (con step MFA)
 │   ├── dashboard/                  # area autore: blog, post, profilo
 │   │   └── blogs/[slug]/            # dettaglio blog: tab post/commenti/aspetto/impostazioni
-│   ├── admin/                       # area amministrativa (super_admin/amministratore)
 │   └── u/[username]/                # profilo pubblico + follow
 ├── lib/
 │   ├── api.ts                       # client HTTP tipizzato verso il backend

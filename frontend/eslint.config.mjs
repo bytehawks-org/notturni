@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // frontend/admin/ è un progetto Next.js a sé (proprio eslint.config.mjs,
+    // proprio lint da lanciare separatamente) — non va attraversato da qui.
+    "admin/**",
   ]),
 ]);
 

@@ -18,9 +18,10 @@ function errorMessage(err: unknown): string {
   return err instanceof ApiClientError ? err.message : "Errore imprevisto.";
 }
 
-/** Editor di una pagina statica del blog — stessa interfaccia delle pagine
- * di piattaforma (frontend/src/app/admin/pages): niente tag/categorie,
- * editor senza il pulsante "Nota" (CLAUDE.md #1). */
+/** Editor di una pagina statica del blog — stesso concetto delle pagine di
+ * piattaforma (ora gestite dall'app admin separata, frontend/admin/, con un
+ * editor più semplice a textarea): niente tag/categorie, editor senza il
+ * pulsante "Nota" (CLAUDE.md #1). */
 export default function BlogPageEditorPage() {
   const params = useParams<{ slug: string; pageId: string }>();
   const router = useRouter();

@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+/* Palette (CLAUDE.md: massimo 5 colori) + tipografia (titoli serif, corpo/link
+   sans-serif) — stessa palette di frontend/src/app/globals.css, qui senza le
+   regole di rendering del contenuto Markdown dei post (.notturni-prose,
+   immagini sensibili, anteprima link, frammenti): non pertinenti in admin.
+   Il tema (chiaro/scuro/automatico) è gestito da ThemeProvider via
+   l'attributo data-theme su <html>; @media (prefers-color-scheme) copre solo
+   l'istante prima che il JS idrati (vedi script anti-flash in layout.tsx). */
+:root {
+  --background: #fbf9f6;
+  --foreground: #2b2a28;
+  --primary: #3e6259;
+  --muted: #a8a29a;
+  --border-color: #e7e2da;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-muted: var(--muted);
+  --color-border: var(--border-color);
+  --font-sans: var(--font-body);
+  --font-serif: var(--font-heading);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: #1c1b19;
+    --foreground: #ece7e0;
+    --primary: #6fa593;
+    --muted: #8f877b;
+    --border-color: #35322d;
+  }
+}
+
+:root[data-theme="dark"] {
+  --background: #1c1b19;
+  --foreground: #ece7e0;
+  --primary: #6fa593;
+  --muted: #8f877b;
+  --border-color: #35322d;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}

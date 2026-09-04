@@ -51,9 +51,10 @@ podman-compose up -d --build
 ```
 
 La prima volta impiega qualche minuto (build delle immagini + download di
-Postgres/Redis/RabbitMQ/MinIO). Al termine dovresti avere 8 container su:
+Postgres/Redis/RabbitMQ/MinIO). Al termine dovresti avere 10 container su:
 
 - Frontend: <http://localhost:3000>
+- Amministrazione (app separata, `frontend/admin/`): <http://localhost:3001>
 - Backend — Swagger UI: <http://localhost:8000/docs>
 - Backend — health check: <http://localhost:8000/api/v1/health>
 - RabbitMQ — console: <http://localhost:15672> (admin/foo)
@@ -112,8 +113,12 @@ script), vedi lo script di bootstrap in [backend/API.md](backend/API.md#come-ott
    per aprire i commenti anche a chi non è registrato.
 7. Vai su **Profilo** (menu in alto): imposta una bio, carica un avatar,
    aggiungi un link social. Se hai promosso l'utente a Super Admin (punto 4),
-   trovi anche la voce **Amministrazione** → **Pagine** (crea "Chi siamo",
-   "Privacy", ecc.) e **Utenti** (ruoli/attivazione).
+   trovi anche la voce **Amministrazione**, che apre l'app dedicata su
+   <http://localhost:3001> (login separato, stesse credenziali): **Pagine**
+   (crea "Chi siamo", "Privacy", ecc.), **Utenti** (ruoli/attivazione — solo
+   in modalità `platform`) e **Blog** (elenco di tutti i blog della
+   piattaforma, con ricerca e sospensione). Ogni sezione ha un campo di
+   ricerca.
 8. Prova il selettore del tema (chiaro/scuro/automatico) in alto a destra —
    in automatico il browser chiederà il permesso di geolocalizzazione per
    calcolare alba/tramonto; se lo neghi, ripiega sulle preferenze di sistema.
@@ -171,9 +176,10 @@ podman compose down -v       # ferma e cancella anche i dati (riparti da zero)
   guardane i log con `podman logs $(podman ps -aqf "name=rabbitmq")`.
 - **Il backend risponde ma ogni chiamata autenticata dà errore** — hai
   applicato le migrazioni (punto 3)? Senza schema, molte tabelle non esistono.
-- **Il frontend non riesce a chiamare il backend (errori di rete/CORS in
-  console)** — succede se il frontend gira su un URL diverso da
-  `http://localhost:3000`: `NOCT_CORS_ORIGINS` nel `.env` deve includerlo.
+- **Il frontend (o l'app admin) non riesce a chiamare il backend (errori di
+  rete/CORS in console)** — succede se girano su un URL diverso da
+  `http://localhost:3000`/`http://localhost:3001`: `NOCT_CORS_ORIGINS` nel
+  `.env` deve includere entrambe le origini (separate da virgola).
 - **Upload avatar/media/aspetto non funziona** — verifica che il container
   `minio` sia `Up` (`podman ps`); i bucket si creano automaticamente al primo
   upload.

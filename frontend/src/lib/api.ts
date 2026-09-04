@@ -1,6 +1,5 @@
 import type { SensitivityCategory } from "./content-media";
 import type {
-  AdminUser,
   BibliographyEntry,
   Blog,
   BlogConfig,
@@ -368,30 +367,6 @@ export const api = {
       ),
   },
 
-  pages: {
-    /** Pubblico: solo pubblicate. Con token admin: anche le bozze. */
-    list: (token: string | null, locale: string) =>
-      request<Page[]>(`/api/v1/pages?locale=${locale}`, { token }),
-    get: (token: string | null, slug: string, locale: string) =>
-      request<Page>(`/api/v1/pages/${slug}?locale=${locale}`, { token }),
-    create: (
-      token: string,
-      payload: { slug: string; locale: string; title: string; content: string; is_published: boolean }
-    ) => request<Page>("/api/v1/pages", { method: "POST", token, body: payload }),
-    addTranslation: (
-      token: string,
-      pageId: string,
-      payload: { slug: string; locale: string; title: string; content: string; is_published: boolean }
-    ) => request<Page>(`/api/v1/pages/${pageId}/translations`, { method: "POST", token, body: payload }),
-    translations: (pageId: string) =>
-      request<PageTranslationSummary[]>(`/api/v1/pages/${pageId}/translations`),
-    update: (
-      token: string,
-      pageId: string,
-      payload: Partial<{ slug: string; title: string; content: string; is_published: boolean }>
-    ) => request<Page>(`/api/v1/pages/${pageId}`, { method: "PATCH", token, body: payload }),
-  },
-
   users: {
     profile: (username: string) => request<Profile>(`/api/v1/users/${username}`),
     updateMe: (
@@ -452,14 +427,5 @@ export const api = {
     listMine: (token: string) => request<FragmentCollectionEntry[]>("/api/v1/users/me/fragments", { token }),
     remove: (token: string, fragmentId: string) =>
       request<void>(`/api/v1/fragments/${fragmentId}`, { method: "DELETE", token }),
-  },
-
-  admin: {
-    listUsers: (token: string) => request<AdminUser[]>("/api/v1/admin/users", { token }),
-    updateUser: (
-      token: string,
-      userId: string,
-      payload: Partial<{ platform_role: string; is_active: boolean }>
-    ) => request<AdminUser>(`/api/v1/admin/users/${userId}`, { method: "PATCH", token, body: payload }),
   },
 };

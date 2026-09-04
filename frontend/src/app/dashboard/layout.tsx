@@ -9,6 +9,10 @@ import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/lib/auth-context";
 import { PLATFORM_ADMIN_ROLES } from "@/lib/types";
 
+// Pannello di amministrazione: app Next.js separata (frontend/admin/), non
+// una route di questa app — vedi CLAUDE.md #8 e compose.yaml (servizio `admin`).
+const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL || "http://localhost:3001";
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, loading, logout } = useAuth();
@@ -47,9 +51,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               Frammenti
             </Link>
             {isAdmin && (
-              <Link href="/admin" className="text-sm text-muted hover:text-foreground">
+              <a href={ADMIN_URL} className="text-sm text-muted hover:text-foreground">
                 Amministrazione
-              </Link>
+              </a>
             )}
           </nav>
           <div className="flex items-center gap-4">

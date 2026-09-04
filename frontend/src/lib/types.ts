@@ -302,16 +302,6 @@ export interface Profile {
   created_at: string;
 }
 
-export interface AdminUser {
-  id: string;
-  username: string;
-  email: string;
-  platform_role: PlatformRole;
-  is_active: boolean;
-  mfa_enabled: boolean;
-  created_at: string;
-}
-
 export interface ApiError {
   detail: string;
 }

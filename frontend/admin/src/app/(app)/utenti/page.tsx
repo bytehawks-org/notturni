@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { SearchInput } from "@/components/SearchInput";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { ApiClientError, api } from "@/lib/api";
@@ -16,15 +17,16 @@ const ROLES: PlatformRole[] = ["utente", "moderatore", "amministratore", "super_
 
 export default function AdminUsersPage() {
   const { user: me, authFetch } = useAuth();
+  const [q, setQ] = useState("");
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rowError, setRowError] = useState<Record<string, string>>({});
 
   const load = useCallback(() => {
-    authFetch((token) => api.admin.listUsers(token))
+    authFetch((token) => api.admin.listUsers(token, q))
       .then(setUsers)
       .catch((err) => setError(errorMessage(err)));
-  }, [authFetch]);
+  }, [authFetch, q]);
 
   useEffect(load, [load]);
 
@@ -52,7 +54,10 @@ export default function AdminUsersPage() {
 
   return (
     <div>
-      <h1 className="mb-6 font-serif text-2xl text-foreground">Utenti</h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="font-serif text-2xl text-foreground">Utenti</h1>
+        <SearchInput value={q} onChange={setQ} placeholder="Cerca per username o email…" />
+      </div>
       {error && <Alert kind="error">{error}</Alert>}
 
       <div className="overflow-x-auto rounded-lg border border-border">
@@ -106,6 +111,13 @@ export default function AdminUsersPage() {
                 </tr>
               );
             })}
+            {users !== null && users.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-4 py-6 text-center text-muted">
+                  Nessun utente trovato.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

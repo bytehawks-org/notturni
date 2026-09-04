@@ -943,7 +943,9 @@ inesistente). Con sessione admin, anche le bozze — per poterle rivedere
 prima di pubblicarle.
 
 **`GET /api/v1/pages?locale=it`** — pubblico (token opzionale): stessa
-distinzione pubblicate/tutte in base al ruolo del chiamante.
+distinzione pubblicate/tutte in base al ruolo del chiamante. Query param
+opzionale `q`: filtra per titolo o slug (`ilike`, sottostringa), usato dalla
+ricerca della sezione Pagine di `frontend/admin/`.
 
 **`PATCH /api/v1/pages/{page_id}`** — richiede ruolo admin. Aggiorna una
 singola traduzione (`slug`, `title`, `content`, `is_published`, tutti
@@ -1095,10 +1097,13 @@ token proprio, `404` se l'id non esiste.
 ## Amministrazione di piattaforma
 
 Tutti gli endpoint richiedono sessione con `platform_role` in
-`amministratore`/`super_admin` (`403` altrimenti).
+`amministratore`/`super_admin` (`403` altrimenti). Consumati da
+`frontend/admin/`, app Next.js separata dal frontend pubblico (non una route
+di `frontend/`) — vedi ROADMAP.md.
 
 **`GET /api/v1/admin/users`** — lista tutti gli utenti della piattaforma
-(id, username, email, `platform_role`, `is_active`, `mfa_enabled`).
+(id, username, email, `platform_role`, `is_active`, `mfa_enabled`). Query
+param opzionale `q`: filtra per username o email (`ilike`, sottostringa).
 
 **`PATCH /api/v1/admin/users/{user_id}`** — `{platform_role?, is_active?}`.
 
@@ -1114,6 +1119,20 @@ manualmente sul database dopo la registrazione — task aperto, vedi
 [ROADMAP.md](../ROADMAP.md#1-prodotto-e-regole-di-dominio) (bootstrap via
 env/secret al momento della creazione delle risorse, non ancora
 automatizzato in questi script).
+
+**`GET /api/v1/admin/blogs`** — lista tutti i blog della piattaforma (id,
+slug, title, `owner_username`, `visibility`, `is_suspended`, `created_at`).
+Query param opzionale `q`: filtra per slug, titolo o username del
+proprietario (`ilike`, sottostringa).
+
+**`PATCH /api/v1/admin/blogs/{blog_id}`** — `{is_suspended: bool}`. Un blog
+sospeso diventa irraggiungibile pubblicamente (`GET /api/v1/blogs/{slug}` →
+`404`, stesso trattamento di un blog `private` a cui non si ha accesso) e non
+scrivibile — **anche per il proprietario stesso**, indipendentemente da
+`visibility` (`app/domain/authorization.py::can_view_blog`/`can_write_posts`).
+Riattivabile con lo stesso endpoint (`is_suspended: false`). Nessun'altra
+conseguenza automatica (i post restano nel database, nessuna notifica al
+proprietario).
 
 ## Feed (homepage multi-blog)
 
@@ -1154,6 +1173,11 @@ chiameranno l'API direttamente dal browser.
 **`GET /api/v1/health`** — pubblico, nessuna autenticazione. Esegue anche
 `SELECT 1` sul database. Pensato per probe di readiness/liveness (Kubernetes,
 compose healthcheck).
+
+**`GET /api/v1/config`** — pubblico, nessuna autenticazione. Espone
+`{"deployment_mode": "solo"|"platform"}` (`NOCT_DEPLOYMENT_MODE`). Usato da
+`frontend/admin/` per nascondere le sezioni multi-utente (es. Utenti) in
+modalità `solo`, senza dover già avere una sessione autenticata.
 
 ## Errori comuni
 

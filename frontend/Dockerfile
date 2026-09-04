@@ -11,6 +11,10 @@ WORKDIR /app
 # runtime: va passato come build-arg, non come env del container finale.
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# link "Amministrazione" nella dashboard (frontend/src/app/dashboard/layout.tsx):
+# punta all'app admin separata (frontend/admin/), non a una route di questa app.
+ARG NEXT_PUBLIC_ADMIN_URL=http://localhost:3001
+ENV NEXT_PUBLIC_ADMIN_URL=$NEXT_PUBLIC_ADMIN_URL
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build

@@ -14,7 +14,8 @@ const FORM_ID = "new-page-form";
 
 /** Pagine statiche del blog (CLAUDE.md #1): niente tag, categorie o
  * pubblicazioni, editor senza il pulsante "Nota" — solo titolo/slug/lingua/
- * contenuto/pubblicata, come le pagine di piattaforma (frontend/src/app/admin/pages). */
+ * contenuto/pubblicata, stesso concetto delle pagine di piattaforma (ora
+ * gestite dall'app admin separata, frontend/admin/, non più qui). */
 export default function NewBlogPagePage() {
   const params = useParams<{ slug: string }>();
   const router = useRouter();

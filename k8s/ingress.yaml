@@ -15,6 +15,11 @@ spec:
   tls:
     - hosts: ["notturni.eu"]
       secretName: notturni-eu-tls
+    # host dedicato per l'amministrazione (frontend/admin/): non condivide
+    # il routing path-based di notturni.eu, così resta separabile in futuro
+    # anche a livello di rete/accesso senza toccare l'ingress pubblico.
+    - hosts: ["admin.notturni.eu"]
+      secretName: admin-notturni-eu-tls
   rules:
     - host: notturni.eu
       http:
@@ -33,3 +38,13 @@ spec:
                 name: frontend
                 port:
                   number: 3000
+    - host: admin.notturni.eu
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: admin
+                port:
+                  number: 3001

@@ -2,12 +2,10 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
+import { SearchInput } from "@/components/SearchInput";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { Card, CardTitle } from "@/components/ui/Card";
-import { FieldGroup, Input, Label } from "@/components/ui/Field";
-import { RichTextEditor } from "@/components/editor/RichTextEditor";
-import { TranslationsBar } from "@/components/editor/TranslationsBar";
+import { FieldGroup, Input, Label, TextArea } from "@/components/ui/Field";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import type { Page, PageTranslationSummary } from "@/lib/types";
@@ -19,6 +17,7 @@ function errorMessage(err: unknown): string {
 export default function AdminPagesPage() {
   const { accessToken } = useAuth();
   const [locale, setLocale] = useState("it");
+  const [q, setQ] = useState("");
   const [pages, setPages] = useState<Page[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -26,18 +25,19 @@ export default function AdminPagesPage() {
 
   const load = useCallback(() => {
     api.pages
-      .list(accessToken, locale)
+      .list(accessToken, locale, q)
       .then(setPages)
       .catch((err) => setError(errorMessage(err)));
-  }, [accessToken, locale]);
+  }, [accessToken, locale, q]);
 
   useEffect(load, [load]);
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-serif text-2xl text-foreground">Pagine statiche</h1>
         <div className="flex items-center gap-3">
+          <SearchInput value={q} onChange={setQ} placeholder="Cerca per titolo o slug…" />
           <Label htmlFor="locale-filter">Lingua</Label>
           <Input
             id="locale-filter"
@@ -64,7 +64,7 @@ export default function AdminPagesPage() {
 
       <div className="space-y-3">
         {pages?.map((page) => (
-          <Card key={page.id}>
+          <div key={page.id} className="rounded-lg border border-border bg-background p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-serif text-lg text-foreground">{page.title}</p>
@@ -77,10 +77,10 @@ export default function AdminPagesPage() {
               </Button>
             </div>
             {editingId === page.id && <EditPageForm page={page} onSaved={load} />}
-          </Card>
+          </div>
         ))}
         {pages !== null && pages.length === 0 && (
-          <p className="text-sm text-muted">Nessuna pagina per la lingua &quot;{locale}&quot;.</p>
+          <p className="text-sm text-muted">Nessuna pagina trovata per la lingua &quot;{locale}&quot;.</p>
         )}
       </div>
     </div>
@@ -110,8 +110,8 @@ function CreatePageForm({ defaultLocale, onCreated }: { defaultLocale: string; o
   }
 
   return (
-    <Card className="mb-6">
-      <CardTitle>Nuova pagina</CardTitle>
+    <div className="mb-6 rounded-lg border border-border bg-background p-6">
+      <h2 className="mb-4 font-serif text-xl text-foreground">Nuova pagina</h2>
       <form onSubmit={handleSubmit}>
         <div className="grid gap-4 sm:grid-cols-2">
           <FieldGroup>
@@ -133,9 +133,16 @@ function CreatePageForm({ defaultLocale, onCreated }: { defaultLocale: string; o
           <Label htmlFor="new-page-title">Titolo</Label>
           <Input id="new-page-title" required value={title} onChange={(e) => setTitle(e.target.value)} />
         </FieldGroup>
-        <div className="mb-4">
-          <RichTextEditor value={content} onChange={setContent} authFetch={authFetch} stickyToolbar={false} />
-        </div>
+        <FieldGroup>
+          <Label htmlFor="new-page-content">Contenuto (Markdown)</Label>
+          <TextArea
+            id="new-page-content"
+            required
+            rows={12}
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+          />
+        </FieldGroup>
         <FieldGroup>
           <label className="flex items-center gap-2 text-sm text-foreground">
             <input type="checkbox" checked={isPublished} onChange={(e) => setIsPublished(e.target.checked)} />
@@ -149,7 +156,7 @@ function CreatePageForm({ defaultLocale, onCreated }: { defaultLocale: string; o
         )}
         <Button type="submit">Crea</Button>
       </form>
-    </Card>
+    </div>
   );
 }
 
@@ -159,7 +166,6 @@ function EditPageForm({ page, onSaved }: { page: Page; onSaved: () => void }) {
   const [content, setContent] = useState(page.content);
   const [isPublished, setIsPublished] = useState(page.is_published);
   const [error, setError] = useState<string | null>(null);
-
   const [translations, setTranslations] = useState<PageTranslationSummary[]>([]);
 
   useEffect(() => {
@@ -177,16 +183,6 @@ function EditPageForm({ page, onSaved }: { page: Page; onSaved: () => void }) {
     }
   }
 
-  async function handleAddTranslation(payload: {
-    slug: string;
-    locale: string;
-    title: string;
-    content: string;
-  }) {
-    await authFetch((token) => api.pages.addTranslation(token, page.id, { ...payload, is_published: false }));
-    onSaved();
-  }
-
   return (
     <div className="mt-4 border-t border-border pt-4">
       <form onSubmit={handleSave}>
@@ -194,9 +190,15 @@ function EditPageForm({ page, onSaved }: { page: Page; onSaved: () => void }) {
           <Label htmlFor={`edit-title-${page.id}`}>Titolo</Label>
           <Input id={`edit-title-${page.id}`} value={title} onChange={(e) => setTitle(e.target.value)} />
         </FieldGroup>
-        <div className="mb-4">
-          <RichTextEditor value={content} onChange={setContent} authFetch={authFetch} stickyToolbar={false} />
-        </div>
+        <FieldGroup>
+          <Label htmlFor={`edit-content-${page.id}`}>Contenuto (Markdown)</Label>
+          <TextArea
+            id={`edit-content-${page.id}`}
+            rows={12}
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+          />
+        </FieldGroup>
         <FieldGroup>
           <label className="flex items-center gap-2 text-sm text-foreground">
             <input type="checkbox" checked={isPublished} onChange={(e) => setIsPublished(e.target.checked)} />
@@ -211,16 +213,105 @@ function EditPageForm({ page, onSaved }: { page: Page; onSaved: () => void }) {
         <Button type="submit">Salva</Button>
       </form>
 
-      <TranslationsBar
-        currentId={page.id}
-        currentLocale={page.locale}
-        translations={translations}
-        hrefFor={() => "/admin/pages"}
-        suggestedLocales={[]}
-        authFetch={authFetch}
-        withNotes={false}
-        onAddTranslation={handleAddTranslation}
-      />
+      <AddTranslationForm page={page} translations={translations} onAdded={onSaved} />
+    </div>
+  );
+}
+
+function AddTranslationForm({
+  page,
+  translations,
+  onAdded,
+}: {
+  page: Page;
+  translations: PageTranslationSummary[];
+  onAdded: () => void;
+}) {
+  const { authFetch } = useAuth();
+  const [adding, setAdding] = useState(false);
+  const [slug, setSlug] = useState("");
+  const [locale, setLocale] = useState("");
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const otherTranslations = translations.filter((t) => t.id !== page.id);
+
+  async function handleAdd(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    try {
+      await authFetch((token) => api.pages.addTranslation(token, page.id, { slug, locale, title, content, is_published: false }));
+      setAdding(false);
+      onAdded();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  return (
+    <div className="mt-6 border-t border-border/60 pt-4">
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2 text-sm">
+        <span className="text-muted">Anche in</span>
+        <span className="text-foreground underline underline-offset-4">{page.locale}</span>
+        {otherTranslations.map((t) => (
+          <span key={t.id} className="text-foreground/70">
+            · {t.locale} ✓
+          </span>
+        ))}
+        {!adding && (
+          <button type="button" onClick={() => setAdding(true)} className="ml-1 text-primary hover:underline">
+            + Aggiungi lingua
+          </button>
+        )}
+      </div>
+
+      {adding && (
+        <form onSubmit={handleAdd} className="mt-4">
+          <div className="mb-4 grid gap-4 sm:grid-cols-2">
+            <FieldGroup>
+              <Label htmlFor={`tr-locale-${page.id}`}>Lingua</Label>
+              <Input
+                id={`tr-locale-${page.id}`}
+                required
+                maxLength={2}
+                minLength={2}
+                value={locale}
+                onChange={(e) => setLocale(e.target.value.toLowerCase())}
+              />
+            </FieldGroup>
+            <FieldGroup>
+              <Label htmlFor={`tr-slug-${page.id}`}>Slug</Label>
+              <Input id={`tr-slug-${page.id}`} required value={slug} onChange={(e) => setSlug(e.target.value)} />
+            </FieldGroup>
+          </div>
+          <FieldGroup>
+            <Label htmlFor={`tr-title-${page.id}`}>Titolo</Label>
+            <Input id={`tr-title-${page.id}`} required value={title} onChange={(e) => setTitle(e.target.value)} />
+          </FieldGroup>
+          <FieldGroup>
+            <Label htmlFor={`tr-content-${page.id}`}>Contenuto (Markdown)</Label>
+            <TextArea
+              id={`tr-content-${page.id}`}
+              required
+              rows={10}
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+            />
+          </FieldGroup>
+          {error && (
+            <div className="mb-4">
+              <Alert kind="error">{error}</Alert>
+            </div>
+          )}
+          <div className="flex gap-3">
+            <Button type="submit">Crea traduzione</Button>
+            <Button type="button" variant="ghost" onClick={() => setAdding(false)}>
+              Annulla
+            </Button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }
