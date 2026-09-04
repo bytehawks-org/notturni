@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -15,8 +17,18 @@ from app.api.v1.posts import router as posts_router
 from app.api.v1.tokens import router as tokens_router
 from app.api.v1.users import router as users_router
 from app.core.config import settings
+from app.core.database import SessionLocal
+from app.domain.auth import bootstrap_super_admin
 
-app = FastAPI(title="Notturni API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with SessionLocal() as session:
+        await bootstrap_super_admin(session)
+    yield
+
+
+app = FastAPI(title="Notturni API", lifespan=lifespan)
 
 # richiesto da Authlib per il flow OAuth2/OIDC (state/nonce firmati in sessione)
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)

@@ -1114,11 +1114,16 @@ param opzionale `q`: filtra per username o email (`ilike`, sottostringa).
   l'auto-blocco dell'unico Super Admin rimasto.
 - Un utente disattivato (`is_active=false`) non può più fare login.
 
-Non esiste (ancora) un endpoint per creare il primo Super Admin: va promosso
-manualmente sul database dopo la registrazione — task aperto, vedi
-[ROADMAP.md](../ROADMAP.md#1-prodotto-e-regole-di-dominio) (bootstrap via
-env/secret al momento della creazione delle risorse, non ancora
-automatizzato in questi script).
+Non esiste un endpoint per creare il primo Super Admin (nessuna sessione da
+cui autenticare la richiesta), ma non serve più promuoverlo a mano sul
+database: se `NOCT_SUPER_ADMIN_USERNAME`/`NOCT_SUPER_ADMIN_EMAIL`/
+`NOCT_SUPER_ADMIN_PASSWORD` sono tutte valorizzate (`.env`/`k8s/secret.yaml`),
+l'account viene creato automaticamente all'avvio del backend se non esiste
+già (`app/domain/auth.py::bootstrap_super_admin`, eseguita dalla `lifespan`
+di `app/main.py`) — idempotente: un riavvio successivo non lo ricrea né lo
+tocca. Restano comunque disponibili, come alternativa, l'auto-promozione del
+primo utente in modalità `solo` e l'`UPDATE` manuale a DB in modalità
+`platform`.
 
 **`GET /api/v1/admin/blogs`** — lista tutti i blog della piattaforma (id,
 slug, title, `owner_username`, `visibility`, `is_suspended`, `created_at`).

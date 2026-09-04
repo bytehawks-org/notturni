@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     # comportamento CLAUDE.md di default. Vedi app/domain/auth.py.
     deployment_mode: Literal["solo", "platform"] = "platform"
 
+    # Bootstrap del primo Super Admin all'avvio del backend (CLAUDE.md #5),
+    # per accedere a frontend/admin/ senza promuoverlo a mano sul database.
+    # Tutte e tre richieste per attivarlo; vedi app/domain/auth.py::bootstrap_super_admin.
+    super_admin_username: str | None = None
+    super_admin_email: str | None = None
+    super_admin_password: str | None = None
+
     postgres_user: str
     postgres_password: str
     postgres_db: str

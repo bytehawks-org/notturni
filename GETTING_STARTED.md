@@ -41,6 +41,10 @@ essere notate:
 - `NOCT_JWT_SECRET` / `NOCT_SESSION_SECRET` — vanno bene i default (`foo`) per
   un test locale; **non riusarli mai in un ambiente esposto** (vedi i commenti
   nel file per generarne di veri).
+- `NOCT_SUPER_ADMIN_USERNAME`/`_EMAIL`/`_PASSWORD` — se tutte e tre
+  valorizzate (i default in `.env.example` lo sono già), il backend crea
+  questo account come Super Admin al primo avvio: nessun passaggio manuale
+  per entrare nell'app admin (punto 4).
 
 ## 2. Avvio dello stack
 
@@ -81,9 +85,14 @@ suffisso diverso: `podman ps` per controllare, o cerca quello con l'immagine
 
 ## 4. Primo utente
 
-In modalità `platform` non c'è un endpoint per creare il primo Super Admin:
-registra un utente normale dall'interfaccia (punto 5) o via API, poi
-promuovilo a mano:
+Con i default di `.env.example` non serve fare nulla: il backend crea da solo
+un Super Admin al primo avvio, da `NOCT_SUPER_ADMIN_USERNAME`/`_EMAIL`/
+`_PASSWORD` (idempotente — un riavvio successivo non lo tocca). Accedi
+direttamente su <http://localhost:3001> (l'app admin) con quelle credenziali.
+
+Se preferisci un tuo account invece del preset (o hai svuotato quelle
+variabili), registra un utente normale dall'interfaccia (punto 5) o via API,
+poi promuovilo a mano:
 
 ```bash
 podman exec -it $(podman ps -qf "name=postgres") \
@@ -112,10 +121,13 @@ script), vedi lo script di bootstrap in [backend/API.md](backend/API.md#come-ott
 6. Prova la tab **Aspetto** per cambiare la palette del blog, e **Impostazioni**
    per aprire i commenti anche a chi non è registrato.
 7. Vai su **Profilo** (menu in alto): imposta una bio, carica un avatar,
-   aggiungi un link social. Se hai promosso l'utente a Super Admin (punto 4),
-   trovi anche la voce **Amministrazione**, che apre l'app dedicata su
-   <http://localhost:3001> (login separato, stesse credenziali): **Pagine**
-   (crea "Chi siamo", "Privacy", ecc.), **Utenti** (ruoli/attivazione — solo
+   aggiungi un link social. La voce **Amministrazione** compare solo se
+   l'utente con cui hai fatto login è Super Admin/Amministratore — con i
+   default del punto 4 è un account separato da quello appena registrato,
+   quindi accedi all'app su <http://localhost:3001> con le credenziali
+   `NOCT_SUPER_ADMIN_*` (o con l'utente promosso a mano, se hai seguito
+   l'alternativa del punto 4): **Pagine** (crea "Chi siamo", "Privacy",
+   ecc.), **Utenti** (ruoli/attivazione — solo
    in modalità `platform`) e **Blog** (elenco di tutti i blog della
    piattaforma, con ricerca e sospensione). Ogni sezione ha un campo di
    ricerca.
