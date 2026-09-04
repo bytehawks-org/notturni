@@ -12,6 +12,7 @@ import type {
   Comment,
   CurrentUser,
   FollowStats,
+  FragmentCollectionEntry,
   LinkBibliographyEntry,
   LoginResponse,
   MediaBibliographyEntry,
@@ -20,6 +21,7 @@ import type {
   PageTranslationSummary,
   Post,
   PostAuthorNameStyle,
+  PostFragment,
   PostNote,
   PostTranslationSummary,
   Profile,
@@ -433,6 +435,23 @@ export const api = {
       request<{ username: string }[]>(`/api/v1/users/${username}/followers`),
     following: (username: string) =>
       request<{ username: string }[]>(`/api/v1/users/${username}/following`),
+  },
+
+  fragments: {
+    /** Frammenti già salvati dall'utente corrente su questo post — per
+     * ri-evidenziarli ad ogni lettura. */
+    listForPost: (token: string, postId: string) =>
+      request<PostFragment[]>(`/api/v1/posts/${postId}/fragments`, { token }),
+    create: (token: string, postId: string, text: string) =>
+      request<PostFragment>(`/api/v1/posts/${postId}/fragments`, {
+        method: "POST",
+        token,
+        body: { text },
+      }),
+    /** Raccolta unificata di tutti i frammenti salvati dall'utente. */
+    listMine: (token: string) => request<FragmentCollectionEntry[]>("/api/v1/users/me/fragments", { token }),
+    remove: (token: string, fragmentId: string) =>
+      request<void>(`/api/v1/fragments/${fragmentId}`, { method: "DELETE", token }),
   },
 
   admin: {

@@ -54,6 +54,12 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   deduplicate, con i post che le citano; allo stesso modo `/{blog}/media` e
   `/{blog}/link` raccolgono le immagini e i link citati nel corpo dei post,
   con la data di pubblicazione di ciascuna citazione.
+- **Frammenti:** il lettore può selezionare con il mouse una porzione di
+  testo di un post pubblicato (max 15%) e salvarla in una raccolta personale
+  unificata (`/dashboard/frammenti`, con autore, titolo del post, data e
+  link al post originale). Il frammento salvato viene ri-evidenziato in
+  ciano tenue ad ogni lettura successiva del post, indipendentemente da come
+  ci si è arrivati.
 - **Tag e categorie sui post:** tag liberi (massimo 5, da campo dedicato e/o
   `#hashtag` nel testo) e categorie per-blog definite in anticipo dagli
   autori (al più una per post) — usati anche per filtrare il feed della

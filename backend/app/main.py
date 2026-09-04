@@ -7,6 +7,7 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.blogs import router as blogs_router
 from app.api.v1.comments import router as comments_router
 from app.api.v1.feed import router as feed_router
+from app.api.v1.fragments import router as fragments_router
 from app.api.v1.health import router as health_router
 from app.api.v1.link_preview import router as link_preview_router
 from app.api.v1.pages import router as pages_router
@@ -37,6 +38,7 @@ app.include_router(blogs_router, prefix="/api/v1/blogs", tags=["blogs"])
 app.include_router(posts_router, prefix="/api/v1", tags=["posts"])
 app.include_router(feed_router, prefix="/api/v1/feed", tags=["feed"])
 app.include_router(comments_router, prefix="/api/v1", tags=["comments"])
+app.include_router(fragments_router, prefix="/api/v1", tags=["fragments"])
 app.include_router(pages_router, prefix="/api/v1/pages", tags=["pages"])
 app.include_router(users_router, prefix="/api/v1/users", tags=["users"])
 app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])

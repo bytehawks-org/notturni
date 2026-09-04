@@ -43,6 +43,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <Link href="/dashboard/profile" className="text-sm text-muted hover:text-foreground">
               Profilo
             </Link>
+            <Link href="/dashboard/frammenti" className="text-sm text-muted hover:text-foreground">
+              Frammenti
+            </Link>
             {isAdmin && (
               <Link href="/admin" className="text-sm text-muted hover:text-foreground">
                 Amministrazione

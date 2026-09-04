@@ -306,9 +306,9 @@ CREATE UNIQUE INDEX ix_tags_name ON tags (name);
 CREATE TABLE post_tags (
     post_id UUID NOT NULL,
     tag_id UUID NOT NULL,
+    PRIMARY KEY (post_id, tag_id),
     FOREIGN KEY(post_id) REFERENCES posts (id) ON DELETE CASCADE,
-    FOREIGN KEY(tag_id) REFERENCES tags (id) ON DELETE CASCADE,
-    PRIMARY KEY (post_id, tag_id)
+    FOREIGN KEY(tag_id) REFERENCES tags (id) ON DELETE CASCADE
 );
 
 ALTER TABLE posts ADD COLUMN manual_tags VARCHAR(30)[] DEFAULT '{}' NOT NULL;
@@ -333,7 +333,7 @@ UPDATE alembic_version SET version_num='f3ed30401d5f' WHERE alembic_version.vers
 
 -- Running upgrade f3ed30401d5f -> d5dbeeb3f79f
 
-ALTER TABLE posts ADD COLUMN cover_image_is_sensitive BOOLEAN DEFAULT false NOT NULL;
+ALTER TABLE posts ADD COLUMN cover_image_is_sensitive BOOLEAN DEFAULT 'false' NOT NULL;
 
 UPDATE alembic_version SET version_num='d5dbeeb3f79f' WHERE alembic_version.version_num = 'f3ed30401d5f';
 
@@ -346,8 +346,8 @@ CREATE TABLE categories (
     id UUID NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    FOREIGN KEY(blog_id) REFERENCES blogs (id),
     PRIMARY KEY (id),
+    FOREIGN KEY(blog_id) REFERENCES blogs (id),
     CONSTRAINT uq_category_blog_slug UNIQUE (blog_id, slug)
 );
 
@@ -414,4 +414,69 @@ CREATE TABLE post_notes (
 
 UPDATE alembic_version SET version_num='e2c9a4517f60' WHERE alembic_version.version_num = 'd8b3f1027a45';
 
+-- Running upgrade e2c9a4517f60 -> 9fca56e73604
+
+ALTER TABLE blogs ADD COLUMN static_pages_enabled BOOLEAN DEFAULT false NOT NULL;
+
+ALTER TABLE pages ADD COLUMN blog_id UUID;
+
+ALTER TABLE pages ADD CONSTRAINT fk_pages_blog_id_blogs FOREIGN KEY(blog_id) REFERENCES blogs (id) ON DELETE CASCADE;
+
+CREATE INDEX ix_pages_blog_id ON pages (blog_id);
+
+ALTER TABLE pages DROP CONSTRAINT uq_page_slug_locale;
+
+ALTER TABLE pages ADD CONSTRAINT uq_page_blog_slug_locale UNIQUE (blog_id, slug, locale);
+
+CREATE UNIQUE INDEX uq_page_slug_locale_platform ON pages (slug, locale) WHERE blog_id IS NULL;
+
+UPDATE alembic_version SET version_num='9fca56e73604' WHERE alembic_version.version_num = 'e2c9a4517f60';
+
+-- Running upgrade 9fca56e73604 -> ef332d4924b0
+
+CREATE TABLE post_links (
+    post_id UUID NOT NULL,
+    position INTEGER NOT NULL,
+    url TEXT NOT NULL,
+    link_text TEXT NOT NULL,
+    PRIMARY KEY (post_id, position),
+    FOREIGN KEY(post_id) REFERENCES posts (id) ON DELETE CASCADE
+);
+
+CREATE TABLE post_media (
+    post_id UUID NOT NULL,
+    position INTEGER NOT NULL,
+    url TEXT NOT NULL,
+    alt_text TEXT NOT NULL,
+    categories VARCHAR(20)[] NOT NULL,
+    PRIMARY KEY (post_id, position),
+    FOREIGN KEY(post_id) REFERENCES posts (id) ON DELETE CASCADE
+);
+
+ALTER TABLE posts ADD COLUMN cover_image_categories VARCHAR(20)[] DEFAULT '{}' NOT NULL;
+
+UPDATE alembic_version SET version_num='ef332d4924b0' WHERE alembic_version.version_num = '9fca56e73604';
+
+-- Running upgrade ef332d4924b0 -> 98da258b5f92
+
+CREATE TABLE post_fragments (
+    user_id UUID NOT NULL,
+    post_id UUID NOT NULL,
+    text TEXT NOT NULL,
+    id UUID NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(post_id) REFERENCES posts (id),
+    FOREIGN KEY(user_id) REFERENCES users (id),
+    CONSTRAINT uq_post_fragment_user_post_text UNIQUE (user_id, post_id, text)
+);
+
+CREATE INDEX ix_post_fragments_post_id ON post_fragments (post_id);
+
+CREATE INDEX ix_post_fragments_user_id ON post_fragments (user_id);
+
+UPDATE alembic_version SET version_num='98da258b5f92' WHERE alembic_version.version_num = 'ef332d4924b0';
+
 COMMIT;
+

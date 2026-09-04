@@ -15,6 +15,7 @@ from app.models.follow import BlogFollow, UserFollow
 from app.models.mfa_email_code import MfaEmailCode
 from app.models.page import Page
 from app.models.post import Post, PostStatus
+from app.models.post_fragment import PostFragment
 from app.models.post_link import post_links
 from app.models.post_media import post_media
 from app.models.post_note import post_notes
@@ -43,6 +44,7 @@ __all__ = [
     "post_notes",
     "post_media",
     "post_links",
+    "PostFragment",
     "Comment",
     "CommentStatus",
     "ApiToken",

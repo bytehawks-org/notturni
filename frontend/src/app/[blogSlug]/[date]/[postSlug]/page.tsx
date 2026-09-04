@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { FragmentReader } from "@/components/FragmentReader";
 import { SiteHeader } from "@/components/SiteHeader";
 import { TagPills } from "@/components/TagPills";
 import { excerpt, renderMarkdown } from "@/lib/markdown";
@@ -80,7 +81,7 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
           />
         )}
 
-        <div className="notturni-prose mt-10 text-lg leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />
+        <FragmentReader postId={post.id} html={html} className="notturni-prose mt-10 text-lg leading-relaxed" />
 
         {post.notes.length > 0 && (
           <p className="mt-6 text-sm">

@@ -10,6 +10,11 @@
   --primary: #3e6259;
   --muted: #a8a29a;
   --border-color: #e7e2da;
+  /* Evidenziatore dei frammenti salvati (task frammenti): colore funzionale,
+     non un sesto colore di palette — stesso principio delle sovrapposizioni
+     dei contenuti sensibili sopra, indipendenti dai 5 colori di CLAUDE.md #5. */
+  --fragment-highlight: rgb(56 189 248 / 22%);
+  --fragment-highlight-border: rgb(14 165 233 / 45%);
 }
 
 @theme inline {
@@ -257,4 +262,62 @@ body {
   margin-top: 0.25rem;
   font-size: 0.8125rem;
   color: var(--color-muted);
+}
+
+/* Frammenti (task frammenti): porzione di testo selezionata dal lettore e
+   salvata nella raccolta unificata, evidenziata a ogni lettura successiva
+   (vedi lib/highlight-fragments.ts, components/FragmentReader.tsx). */
+.notturni-prose mark.fragment-highlight {
+  background: var(--fragment-highlight);
+  box-shadow: inset 0 -2px 0 0 var(--fragment-highlight-border);
+  color: inherit;
+  border-radius: 0.15em;
+  padding: 0.05em 0;
+}
+
+/* Menu contestuale mostrato dopo una selezione con il mouse. */
+.fragment-menu {
+  position: fixed;
+  transform: translate(-50%, calc(-100% - 10px));
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  background: var(--background);
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 15%);
+  padding: 0.35rem 0.6rem;
+  white-space: nowrap;
+}
+.fragment-menu-button {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+.fragment-menu-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.fragment-menu-button--remove {
+  color: #b91c1c;
+}
+.fragment-menu-link {
+  font-size: 0.8125rem;
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.fragment-menu-hint {
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+/* Citazione di un frammento nella pagina di raccolta (/dashboard/frammenti). */
+.fragment-quote {
+  padding-left: 1rem;
+  border-left: 3px solid var(--fragment-highlight-border);
 }
