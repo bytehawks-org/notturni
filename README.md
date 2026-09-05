@@ -17,7 +17,7 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
 - **Database:** PostgreSQL 16+
 - **Cache & State:** Redis 7+
 - **Message Broker:** RabbitMQ
-- **Object Storage:** MinIO (S3-compatible, via boto3)
+- **Object Storage:** backend S3-compatible via boto3 (MinIO in locale, scelta primaria del progetto — configurabile verso qualunque endpoint S3-compatible/AWS S3 in produzione, con auth via access key o ruolo AWS) oppure filesystem locale (`NOCT_STORAGE_BACKEND=localstorage`, alternativa per installazioni `solo` senza storage S3)
 - **Dev locale:** Podman (rootless, senza Kubernetes)
 - **Produzione:** Kubernetes (K3s), Traefik (ingress), Longhorn (storage), cert-manager
 

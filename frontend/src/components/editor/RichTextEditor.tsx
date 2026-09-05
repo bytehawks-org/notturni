@@ -35,7 +35,7 @@ interface RichTextEditorProps {
   /** Contenuto iniziale in Markdown (il backend salva/legge solo Markdown). */
   value: string;
   onChange: (markdown: string) => void;
-  /** Slug del blog: serve per caricare le immagini incorporate su S3/MinIO e
+  /** Slug del blog: serve per caricare le immagini incorporate sul backend di storage e
    * per l'autocomplete delle @menzioni. Assente per contenuti non legati a un
    * blog (es. pagine statiche di piattaforma): in quel caso il pulsante
    * "Immagine" e le @menzioni sono disattivati. */

@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     app_env: str = "local"
 
     # Identità dell'istanza (self-hosting): hostname/FQDN pubblico e nome
-    # breve usato come namespace nei path S3 (vedi minio_bucket_content sotto).
+    # breve usato come namespace nei path S3 (vedi s3_bucket_content sotto).
     instance_fqdn: str = "notturni.eu"
     site_slug: str = "notturni"
     # "solo": pensata per un singolo proprietario (blog/sito personale) — la
@@ -55,17 +55,37 @@ class Settings(BaseSettings):
     oauth_linkedin_client_id: str | None = None
     oauth_linkedin_client_secret: str | None = None
 
+    # Backend di storage per media/avatar/backup post: "s3" (default, vedi
+    # sotto — MinIO/AWS S3/Cloudflare R2, qualunque endpoint S3-compatible)
+    # oppure "localstorage" (filesystem locale, servito direttamente dal
+    # backend su /storage — pensato per installazioni "solo" self-hosted
+    # senza hardware/competenze per gestire uno storage S3-compatible).
+    storage_backend: Literal["s3", "localstorage"] = "s3"
+
     # Storage S3-compatible (CLAUDE.md #4: endpoint custom sempre iniettato,
-    # per compatibilità trasparente tra MinIO locale e AWS/Cloudflare in prod)
-    minio_endpoint_url: str = "http://localhost:9000"
+    # per compatibilità trasparente tra MinIO locale e AWS/Cloudflare in
+    # prod). Auth: access key + secret se entrambe valorizzate, altrimenti
+    # ruolo AWS (default credential chain di boto3: instance profile/IRSA,
+    # variabili AWS_* d'ambiente, ecc. — vedi get_s3_client in storage.py).
+    s3_endpoint_url: str | None = "http://localhost:9000"
     # URL usato per costruire i link pubblici agli oggetti: in locale coincide
     # con l'endpoint, in produzione può essere un dominio/CDN diverso davanti al bucket
-    minio_public_url: str | None = None
-    minio_root_user: str = "admin"
-    minio_root_password: str = "foo"
-    minio_bucket_avatars: str = "avatars"
+    s3_public_url: str | None = None
+    s3_region: str | None = None
+    s3_access_key_id: str | None = "admin"
+    s3_secret_access_key: str | None = "foo"
+    s3_bucket_avatars: str = "avatars"
     # media incorporati nei post + backup del markdown (path: {site_slug}/userdata/{user}/{blog}/...)
-    minio_bucket_content: str = "notturni-content"
+    s3_bucket_content: str = "notturni-content"
+
+    # Storage su filesystem locale, alternativa a "s3" sopra quando
+    # storage_backend="localstorage". base_path: radice su disco (montare un
+    # volume persistente se il container viene ricreato). public_url: base
+    # URL sotto cui il backend serve quei file (StaticFiles su /storage, vedi
+    # app/main.py) — deve essere raggiungibile dal browser, non solo in rete
+    # interna.
+    local_storage_base_path: str = "./data/storage"
+    local_storage_public_url: str = "http://localhost:8000/storage"
 
     # Servizio di moderazione automatica delle immagini (self-hosted, vedi
     # moderation/), chiamato da app/domain/moderation.py all'upload di un
@@ -80,8 +100,8 @@ class Settings(BaseSettings):
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
     @property
-    def minio_public_base_url(self) -> str:
-        return self.minio_public_url or self.minio_endpoint_url
+    def s3_public_base_url(self) -> str:
+        return self.s3_public_url or self.s3_endpoint_url or ""
 
     @property
     def database_url(self) -> str:

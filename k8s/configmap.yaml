@@ -16,14 +16,19 @@ data:
   NOCT_RABBITMQ_HOST: "rabbitmq"
   NOCT_RABBITMQ_PORT: "5672"
 
-  NOCT_MINIO_ROOT_USER: "admin"
+  # backend di storage: "s3" (default, questi manifest deployano MinIO come
+  # implementazione — vedi minio.yaml) oppure "localstorage" (filesystem
+  # locale, non cablato in questi manifest: richiede un volume dedicato per
+  # il backend e non è pensato per repliche multiple)
+  NOCT_STORAGE_BACKEND: "s3"
+  NOCT_S3_ACCESS_KEY_ID: "admin"
   # endpoint interno al cluster, usato dal backend per le chiamate S3
-  NOCT_MINIO_ENDPOINT_URL: "http://minio:9000"
+  NOCT_S3_ENDPOINT_URL: "http://minio:9000"
   # placeholder: MinIO non è ancora esposto pubblicamente da questi manifest
   # (nessuna regola Ingress dedicata) — da sostituire con un dominio/CDN reale
   # prima che gli avatar siano visibili dall'esterno del cluster
-  NOCT_MINIO_PUBLIC_URL: "https://storage.notturni.eu"
-  NOCT_MINIO_BUCKET_AVATARS: "avatars"
+  NOCT_S3_PUBLIC_URL: "https://storage.notturni.eu"
+  NOCT_S3_BUCKET_AVATARS: "avatars"
 
   # SSO: valorizzare (qui o in secret.yaml) solo i provider da abilitare
   NOCT_OAUTH_REDIRECT_BASE_URL: "https://notturni.eu"

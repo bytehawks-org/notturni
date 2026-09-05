@@ -96,9 +96,10 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     # lingue verso cui l'utente potrà eventualmente tradurre i propri
     # contenuti, oltre alla lingua madre — vedi app/domain/profile.py
     fallback_languages: Mapped[list[str]] = mapped_column(ARRAY(String(2)), default=list, nullable=False)
-    # object key su MinIO (bucket avatars), non l'URL: quello si genera al volo
-    # (app/core/storage.py) per restare compatibili tra MinIO locale e S3/R2 in
-    # produzione senza persistere un host specifico.
+    # object key sul backend di storage attivo (bucket avatars), non l'URL:
+    # quello si genera al volo (app/core/storage.py) per restare compatibile
+    # tra S3/MinIO e storage locale su filesystem senza persistere un host
+    # specifico.
     avatar_object_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     blogs: Mapped[list["Blog"]] = relationship(back_populates="owner")

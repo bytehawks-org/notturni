@@ -191,9 +191,12 @@ podman compose down -v       # ferma e cancella anche i dati (riparti da zero)
 - **Il frontend non riesce a chiamare il backend (errori di rete/CORS in
   console)** — succede se il frontend gira su un URL diverso da
   `http://localhost:3000`: `NOCT_CORS_ORIGINS` nel `.env` deve includerlo.
-- **Upload avatar/media/aspetto non funziona** — verifica che il container
-  `minio` sia `Up` (`podman ps`); i bucket si creano automaticamente al primo
-  upload.
+- **Upload avatar/media/aspetto non funziona** — con il backend di storage
+  di default (`NOCT_STORAGE_BACKEND=s3`) verifica che il container `minio`
+  sia `Up` (`podman ps`); i bucket si creano automaticamente al primo upload.
+  In alternativa esiste `NOCT_STORAGE_BACKEND=localstorage` (filesystem
+  locale servito dal backend stesso, senza bisogno di MinIO/S3 — vedi
+  `.env.example`), non usato di default in questo stack.
 - **Il codice MFA via email non arriva mai** — atteso: nessun provider email
   reale è configurato in questo progetto, il consumer (`worker-email-otp` nel
   `compose.yaml`) logga soltanto il codice invece di spedirlo — guardane i log

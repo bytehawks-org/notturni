@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.api.v1.admin import router as admin_router
@@ -55,3 +57,11 @@ app.include_router(pages_router, prefix="/api/v1/pages", tags=["pages"])
 app.include_router(users_router, prefix="/api/v1/users", tags=["users"])
 app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(link_preview_router, prefix="/api/v1/link-preview", tags=["link-preview"])
+
+# Backend di storage "localstorage" (alternativa a S3/MinIO, vedi
+# app/core/storage.py): serve media/avatar direttamente dal filesystem
+# locale sotto /storage, con lo stesso schema {bucket}/{key} usato per gli
+# URL pubblici generati da _public_url.
+if settings.storage_backend == "localstorage":
+    Path(settings.local_storage_base_path).mkdir(parents=True, exist_ok=True)
+    app.mount("/storage", StaticFiles(directory=settings.local_storage_base_path), name="storage")

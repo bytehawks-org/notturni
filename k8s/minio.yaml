@@ -37,10 +37,10 @@ spec:
           env:
             - name: MINIO_ROOT_USER
               valueFrom:
-                configMapKeyRef: {name: notturni-config, key: NOCT_MINIO_ROOT_USER}
+                configMapKeyRef: {name: notturni-config, key: NOCT_S3_ACCESS_KEY_ID}
             - name: MINIO_ROOT_PASSWORD
               valueFrom:
-                secretKeyRef: {name: notturni-secrets, key: NOCT_MINIO_ROOT_PASSWORD}
+                secretKeyRef: {name: notturni-secrets, key: NOCT_S3_SECRET_ACCESS_KEY}
           volumeMounts:
             - name: data
               mountPath: /data

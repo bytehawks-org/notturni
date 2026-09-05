@@ -13,7 +13,7 @@ export function FeedPostCard({ post }: { post: Post }) {
     <article className="flex gap-5 border-b border-border/60 py-6 first:pt-0 last:border-0">
       {post.cover_image_url && (
         <Link href={post.permalink} className="shrink-0">
-          {/* eslint-disable-next-line @next/next/no-img-element -- URL S3/MinIO esterno */}
+          {/* eslint-disable-next-line @next/next/no-img-element -- URL storage esterno */}
           <img
             src={post.cover_image_url}
             alt=""

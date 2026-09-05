@@ -49,7 +49,7 @@ export function CoverImageUpload({
     const blurred = isSensitive && !revealed;
     return (
       <div className="group relative aspect-[16/9] w-full overflow-hidden rounded-lg border border-border">
-        {/* eslint-disable-next-line @next/next/no-img-element -- URL S3/MinIO esterno, non ottimizzabile da next/image senza configurare i domini */}
+        {/* eslint-disable-next-line @next/next/no-img-element -- URL storage esterno, non ottimizzabile da next/image senza configurare i domini */}
         <img
           src={value}
           alt="Copertina del post"
