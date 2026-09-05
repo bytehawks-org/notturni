@@ -49,7 +49,7 @@ function ImageNodeView({ node, updateAttributes, deleteNode, selected }: NodeVie
       as="span"
       className={`relative my-2 inline-block max-w-full align-top ${selected ? "outline outline-2 outline-primary" : ""}`}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element -- URL S3/MinIO esterno, non ottimizzabile da next/image senza configurare i domini */}
+      {/* eslint-disable-next-line @next/next/no-img-element -- URL storage esterno, non ottimizzabile da next/image senza configurare i domini */}
       <img
         src={src}
         alt={alt}

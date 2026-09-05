@@ -47,8 +47,9 @@ class Post(Base, UUIDPKMixin, TimestampMixin):
     # Markdown. Nessun rendering lato backend: sanificazione/rendering a HTML
     # è responsabilità del frontend al momento della lettura.
     content: Mapped[str] = mapped_column(Text)
-    # Immagine di copertina (URL pubblico su MinIO/S3, stesso bucket/prefisso
-    # dei media incorporati nel contenuto — vedi POST /blogs/{slug}/media).
+    # Immagine di copertina (URL pubblico sul backend di storage attivo,
+    # stesso bucket/prefisso dei media incorporati nel contenuto — vedi
+    # POST /blogs/{slug}/media).
     cover_image_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     # Risultato della moderazione automatica (app/domain/moderation.py) al
     # momento dell'upload della cover — il client lo riceve già nella

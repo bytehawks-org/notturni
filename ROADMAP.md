@@ -67,7 +67,8 @@ Legenda stato:
 | Stack di base: Next.js, FastAPI, PostgreSQL 16+, Redis, RabbitMQ, MinIO | ✅ | Tutti i servizi presenti in `compose.yaml` e nei manifest `k8s/`. |
 | Redis per rate limiting e lock distribuiti | 🟡 | Servizio deployato ma **non ancora usato da nessuna logica applicativa** — nessun rate limiting né lock distribuito implementato oggi. |
 | Dockerfile/manifest agnostici rispetto all'architettura (x86_64/ARM64) | ✅ | Immagini multi-arch, nessuna dipendenza hard-coded da un'architettura. |
-| Compatibilità S3 con endpoint custom iniettato (MinIO/AWS/Cloudflare) | ✅ | `backend/app/core/storage.py`, sempre via `ENDPOINT_URL` configurabile. |
+| Compatibilità S3 con endpoint custom iniettato (MinIO/AWS/Cloudflare) | ✅ | `backend/app/core/storage.py`, sempre via `NOCT_S3_ENDPOINT_URL` configurabile (opzionale per AWS S3 vero). Auth via `NOCT_S3_ACCESS_KEY_ID`/`_SECRET_ACCESS_KEY` se entrambe valorizzate, altrimenti ruolo AWS (default credential chain di boto3); `NOCT_S3_REGION` opzionale. |
+| Backend di storage alternativo su filesystem locale (`NOCT_STORAGE_BACKEND=localstorage`) | ✅ | Pensato per installazioni `solo` self-hosted senza voler gestire uno storage S3-compatible: file scritti sotto `NOCT_LOCAL_STORAGE_BASE_PATH` e serviti dal backend stesso (`StaticFiles` su `/storage`, `app/main.py`). Non cablato in `compose.yaml`/`k8s/` come scelta attiva (resta MinIO/S3), solo documentato in `.env.example`. Nessun volume persistente dedicato nei manifest K8s per questa modalità. |
 | Prefisso env `NOCT_`/`noct_` | ✅ | |
 | Clusterizzazione dei componenti in produzione | ⚪ | Manifest K8s attuali sono un primo draft a singolo nodo; nessun lavoro di clustering/HA fatto. |
 | Traefik come ingress | 🟡 | `k8s/ingress.yaml` usa `ingressClassName: traefik`, ma è **routing path-based su un solo host** — manca l'`IngressRoute` dinamico per sottodominio-per-utente. |

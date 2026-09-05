@@ -83,10 +83,16 @@ Da rispettare sempre, indipendentemente dal blocco in corso:
   sviluppo, ARM64 in produzione): niente immagini di base con tag
   arch-specifico (es. `arm64v8/...`) fuori da un contesto che lo richieda
   esplicitamente.
-* **Compatibilità S3**: ogni interazione con lo storage (`boto3` o S3 SDK)
-  deve iniettare un endpoint custom configurabile via env — mai
+* **Compatibilità S3**: ogni interazione con lo storage S3-compatible
+  (`boto3`) deve iniettare un endpoint custom configurabile via env — mai
   `localhost`/l'endpoint AWS hard-coded — per restare intercambiabile tra
-  MinIO locale e S3/R2 in produzione. Vedi `backend/app/core/storage.py`.
+  MinIO locale e S3/R2 in produzione. Autenticazione via
+  `NOCT_S3_ACCESS_KEY_ID`/`NOCT_S3_SECRET_ACCESS_KEY` se entrambe valorizzate,
+  altrimenti ruolo AWS (default credential chain di boto3); `NOCT_S3_REGION`
+  opzionale. In alternativa a S3, `NOCT_STORAGE_BACKEND=localstorage` scrive
+  su filesystem locale, servito dal backend stesso — pensato per
+  installazioni `solo` senza hardware/competenze per gestire uno storage
+  S3-compatible. Vedi `backend/app/core/storage.py`.
 * **Prefisso env**: variabili Podman/Kubernetes con prefisso `NOCT_`/`noct_`
   (maiuscolo o minuscolo a seconda del contesto d'uso).
 * **Formato delle risposte in chat**: evitare intro o conclusioni

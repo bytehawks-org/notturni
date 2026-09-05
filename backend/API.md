@@ -737,12 +737,16 @@ Idempotente se già pubblicato e non si passa un nuovo `published_at`
 (`published_at` esistente non viene toccato); passare una nuova data lo
 sovrascrive sempre, anche per ripianificare un post già pubblicato.
 
-## Media e backup su S3
+## Media e backup
 
-Tutto sotto un unico bucket (`NOCT_MINIO_BUCKET_CONTENT`), con un prefisso
+Backend di storage selezionabile via `NOCT_STORAGE_BACKEND`: `s3` (default,
+MinIO/AWS S3/qualunque endpoint S3-compatible) oppure `localstorage`
+(filesystem locale, servito dal backend stesso su `/storage` — pensato per
+installazioni `solo` senza storage S3). Tutto sotto un unico bucket/namespace
+(`NOCT_S3_BUCKET_CONTENT`), con un prefisso
 `{NOCT_SITE_SLUG}/userdata/{user_uuid}/{blog_uuid}/...` — pensato per poter
-condividere lo stesso bucket fisico tra più installazioni/scopi senza
-collisioni.
+condividere lo stesso bucket fisico (o la stessa directory, sul backend
+`localstorage`) tra più installazioni/scopi senza collisioni.
 
 - **`.../media/{uuid}.{ext}`** — immagini caricate via `POST
   /blogs/{slug}/media` (sezione Blog sopra). Stesso endpoint sia per le
@@ -1025,7 +1029,8 @@ conteggio/elenco della singola entità, senza mai collegarli tra loro.
 
 **`POST /api/v1/users/me/avatar`** — richiede sessione, `multipart/form-data`
 con campo `file`. Formati ammessi: PNG, JPEG, WEBP; max 2 MiB (`400`
-altrimenti). Carica su MinIO/S3 (endpoint custom sempre iniettato, bucket
+altrimenti). Carica sul backend di storage configurato (S3/MinIO con
+endpoint custom sempre iniettato, o filesystem locale — bucket/namespace
 `avatars` reso pubblico in lettura), sostituisce ed elimina l'eventuale
 avatar precedente. Ritorna `{"avatar_url": "..."}`.
 

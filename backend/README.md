@@ -59,10 +59,14 @@ python -m app.workers.email_otp_consumer
 ```
 
 L'upload avatar (`POST /users/me/avatar`) e i media incorporati nei post
-(`POST /blogs/{slug}/media`) richiedono MinIO in esecuzione: i bucket
-(`avatars`, `notturni-content`) vengono creati automaticamente al primo
-upload, con policy pubblica in lettura (solo sul prefisso `.../media/...` per
-il bucket contenuti — i backup dei post restano privati).
+(`POST /blogs/{slug}/media`) richiedono il backend di storage configurato
+(`NOCT_STORAGE_BACKEND`, default `s3`) raggiungibile. Con `s3` (MinIO in
+locale): i bucket (`avatars`, `notturni-content`) vengono creati
+automaticamente al primo upload, con policy pubblica in lettura (solo sul
+prefisso `.../media/...` per il bucket contenuti — i backup dei post restano
+privati). Con `localstorage`: i file vengono scritti su
+`NOCT_LOCAL_STORAGE_BASE_PATH` e serviti direttamente dal backend su
+`/storage`, nessun bucket/policy da creare.
 
 Ogni post creato/modificato accoda anche un backup del suo Markdown su S3
 (RabbitMQ, coda `post_backup`): senza il worker seguente in esecuzione i
@@ -84,8 +88,8 @@ pip install -r requirements-dev.txt
 
 Serve un Postgres raggiungibile (stessa istanza di sviluppo va bene: i test
 usano un database separato, `notturni_test` di default — vedi `.env.test`,
-valori fissi e non sensibili, già pronto senza doverlo copiare). Non serve
-MinIO né RabbitMQ: nei test sono sostituiti da fake/mock (vedi
+valori fissi e non sensibili, già pronto senza doverlo copiare). Non serve né
+lo storage S3/MinIO né RabbitMQ: nei test sono sostituiti da fake/mock (vedi
 `tests/conftest.py`).
 
 ```bash

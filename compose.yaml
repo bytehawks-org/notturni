@@ -49,8 +49,8 @@ services:
     restart: on-failure
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${NOCT_MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${NOCT_MINIO_ROOT_PASSWORD}
+      MINIO_ROOT_USER: ${NOCT_S3_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${NOCT_S3_SECRET_ACCESS_KEY}
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -87,8 +87,8 @@ services:
       NOCT_RABBITMQ_HOST: rabbitmq
       # endpoint interno (il backend gira nella rete di compose) diverso
       # dall'URL pubblico (il browser risolve solo l'host esposto)
-      NOCT_MINIO_ENDPOINT_URL: http://minio:9000
-      NOCT_MINIO_PUBLIC_URL: http://localhost:9000
+      NOCT_S3_ENDPOINT_URL: http://minio:9000
+      NOCT_S3_PUBLIC_URL: http://localhost:9000
       NOCT_MODERATION_SERVICE_URL: http://moderation:8100
     ports:
       - "8000:8000"
@@ -110,8 +110,8 @@ services:
     environment:
       NOCT_POSTGRES_HOST: postgres
       NOCT_RABBITMQ_HOST: rabbitmq
-      NOCT_MINIO_ENDPOINT_URL: http://minio:9000
-      NOCT_MINIO_PUBLIC_URL: http://localhost:9000
+      NOCT_S3_ENDPOINT_URL: http://minio:9000
+      NOCT_S3_PUBLIC_URL: http://localhost:9000
     command: ["python", "-m", "app.workers.post_backup_consumer"]
     depends_on:
       rabbitmq:

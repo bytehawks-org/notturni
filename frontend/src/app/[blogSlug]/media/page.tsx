@@ -57,12 +57,12 @@ export default async function BlogMediaBibliographyPage({
                 {entry.categories.length > 0 ? (
                   <label className="sensitive-image-wrapper block max-w-sm">
                     <input type="checkbox" className="sensitive-image-toggle" />
-                    {/* eslint-disable-next-line @next/next/no-img-element -- URL S3/MinIO esterno */}
+                    {/* eslint-disable-next-line @next/next/no-img-element -- URL storage esterno */}
                     <img src={entry.url} alt={entry.alt_text} className="rounded-lg" />
                     <span className="sensitive-image-overlay">Contenuto sensibile — clicca per vedere</span>
                   </label>
                 ) : (
-                  // eslint-disable-next-line @next/next/no-img-element -- URL S3/MinIO esterno
+                  // eslint-disable-next-line @next/next/no-img-element -- URL storage esterno
                   <img src={entry.url} alt={entry.alt_text} className="max-w-sm rounded-lg" />
                 )}
                 {entry.alt_text && <p className="mt-2 text-sm text-foreground/80">{entry.alt_text}</p>}
