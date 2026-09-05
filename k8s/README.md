@@ -37,8 +37,13 @@ kubectl apply -k .
   build dell'immagine (`docker build --build-arg NEXT_PUBLIC_API_URL=...`),
   non letto a runtime: non basta un env/ConfigMap sul Deployment, l'immagine
   va ricostruita con l'URL pubblico reale dell'API prima del deploy.
-- I worker (`app/workers/post_backup_consumer.py`, `email_otp_consumer.py`)
-  non hanno ancora un Deployment dedicato in questi manifest — vedi
-  `compose.yaml` per l'equivalente locale funzionante; senza il worker di
-  backup, i post non vengono replicati su S3 anche se l'accodamento su
-  RabbitMQ continua a funzionare (i messaggi restano in coda).
+- I worker consumer di coda (`app/workers/post_backup_consumer.py`,
+  `email_otp_consumer.py`) non hanno ancora un Deployment dedicato in questi
+  manifest — vedi `compose.yaml` per l'equivalente locale funzionante; senza
+  il worker di backup, i post non vengono replicati su S3 anche se
+  l'accodamento su RabbitMQ continua a funzionare (i messaggi restano in coda).
+- `audit-maintenance.yaml` è invece un `CronJob` (non un consumer): archivia
+  su storage le settimane ISO chiuse di `audit_log` e cancella gli eventi
+  oltre `NOCT_AUDIT_RETENTION_DAYS`. Gira una volta al giorno; in locale
+  l'equivalente è il servizio `worker-audit-maintenance` di `compose.yaml`
+  (stesso modulo con `--loop`).

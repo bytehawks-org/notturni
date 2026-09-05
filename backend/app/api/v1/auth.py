@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.core.database import get_session
 from app.core.oauth import configured_providers, oauth
 from app.core.security import create_mfa_challenge_token, decode_mfa_challenge_token
+from app.domain import audit
 from app.domain.auth import (
     AuthError,
     authenticate_password,
@@ -26,6 +27,7 @@ from app.domain.mfa import (
     verify_totp_code,
 )
 from app.domain.sso import ExternalProfile, SsoLinkPending, complete_pending_link, link_or_create_user
+from app.models.audit_log import AuditActorType
 from app.models.sso_identity import SsoProvider
 from app.models.user import MfaMethod, PlatformRole, User
 
@@ -107,13 +109,25 @@ async def register(payload: RegisterRequest, session: AsyncSession = Depends(get
 
 
 @router.post("/login", response_model=SessionResponse | MfaRequiredResponse)
-async def login(payload: LoginRequest, session: AsyncSession = Depends(get_session)):
+async def login(payload: LoginRequest, request: Request, session: AsyncSession = Depends(get_session)):
     try:
         user = await authenticate_password(session, email=payload.email, password=payload.password)
     except AuthError as exc:
+        await audit.record(
+            session,
+            action="auth.login_failed",
+            actor_type=AuditActorType.ANONYMOUS,
+            actor_label=payload.email,
+            request=request,
+            payload={"email": payload.email, "reason": str(exc)},
+        )
+        await session.commit()
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
 
     if not user.mfa_enabled or user.mfa_method is None:
+        await audit.record(
+            session, action="auth.login", actor=user, request=request, payload={"method": "password"}
+        )
         access_token, refresh_token = await issue_session(session, user)
         return SessionResponse(access_token=access_token, refresh_token=refresh_token)
 
@@ -125,7 +139,9 @@ async def login(payload: LoginRequest, session: AsyncSession = Depends(get_sessi
 
 
 @router.post("/mfa/verify", response_model=SessionResponse)
-async def verify_mfa(payload: MfaVerifyRequest, session: AsyncSession = Depends(get_session)) -> SessionResponse:
+async def verify_mfa(
+    payload: MfaVerifyRequest, request: Request, session: AsyncSession = Depends(get_session)
+) -> SessionResponse:
     try:
         claims = decode_mfa_challenge_token(payload.challenge)
     except ValueError as exc:
@@ -153,6 +169,9 @@ async def verify_mfa(payload: MfaVerifyRequest, session: AsyncSession = Depends(
         )
         user = await complete_pending_link(session, user, profile)
 
+    await audit.record(
+        session, action="auth.login", actor=user, request=request, payload={"method": f"mfa_{method}"}
+    )
     access_token, refresh_token = await issue_session(session, user)
     return SessionResponse(access_token=access_token, refresh_token=refresh_token)
 
@@ -300,5 +319,8 @@ async def sso_callback(provider: str, request: Request, session: AsyncSession = 
             await send_email_otp(session, pending.user)
         return MfaRequiredResponse(method=pending.user.mfa_method.value, challenge=challenge)
 
+    await audit.record(
+        session, action="auth.login", actor=user, request=request, payload={"method": f"sso_{provider}"}
+    )
     access_token, refresh_token = await issue_session(session, user)
     return SessionResponse(access_token=access_token, refresh_token=refresh_token)

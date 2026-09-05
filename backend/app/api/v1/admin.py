@@ -1,14 +1,16 @@
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, field_validator
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import require_platform_admin
 from app.core.database import get_session
+from app.domain import audit
+from app.models.audit_log import AuditActorType, AuditLog
 from app.models.blog import Blog, BlogVisibility
 from app.models.post import Post, PostStatus
 from app.models.user import PlatformRole, User
@@ -55,6 +57,7 @@ async def list_users(
 async def update_user(
     user_id: uuid.UUID,
     payload: AdminUserUpdateRequest,
+    request: Request,
     current_user: User = Depends(require_platform_admin),
     session: AsyncSession = Depends(get_session),
 ) -> User:
@@ -71,11 +74,30 @@ async def update_user(
                 status.HTTP_403_FORBIDDEN,
                 "Solo un Super Admin può assegnare o rimuovere ruoli di amministrazione.",
             )
+        if payload.platform_role != target.platform_role:
+            await audit.record(
+                session,
+                action="user.role_change",
+                actor=current_user,
+                target_type="user",
+                target_id=target.id,
+                request=request,
+                payload={"from": target.platform_role.value, "to": payload.platform_role.value},
+            )
         target.platform_role = payload.platform_role
 
     if payload.is_active is not None:
         if target.id == current_user.id and not payload.is_active:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Non puoi disattivare il tuo stesso account.")
+        if payload.is_active != target.is_active:
+            await audit.record(
+                session,
+                action="user.activated" if payload.is_active else "user.deactivated",
+                actor=current_user,
+                target_type="user",
+                target_id=target.id,
+                request=request,
+            )
         target.is_active = payload.is_active
 
     await session.commit()
@@ -131,6 +153,7 @@ async def list_blogs(
 async def update_blog(
     blog_id: uuid.UUID,
     payload: AdminBlogUpdateRequest,
+    request: Request,
     current_user: User = Depends(require_platform_admin),
     session: AsyncSession = Depends(get_session),
 ) -> AdminBlogOut:
@@ -141,6 +164,17 @@ async def update_blog(
     if blog is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Blog non trovato.")
 
+    if payload.is_suspended != blog.is_suspended:
+        await audit.record(
+            session,
+            action="blog.suspended" if payload.is_suspended else "blog.unsuspended",
+            actor=current_user,
+            target_type="blog",
+            target_id=blog.id,
+            blog_id=blog.id,
+            request=request,
+            payload={"slug": blog.slug},
+        )
     blog.is_suspended = payload.is_suspended
     await session.commit()
     await session.refresh(blog, attribute_names=["owner"])
@@ -211,6 +245,7 @@ async def list_posts(
 async def update_post(
     post_id: uuid.UUID,
     payload: AdminPostUpdateRequest,
+    request: Request,
     current_user: User = Depends(require_platform_admin),
     session: AsyncSession = Depends(get_session),
 ) -> AdminPostOut:
@@ -225,7 +260,76 @@ async def update_post(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Post non trovato.")
     post, blog, author = row
 
+    if payload.is_hidden != post.is_hidden:
+        await audit.record(
+            session,
+            action="post.hidden" if payload.is_hidden else "post.unhidden",
+            actor=current_user,
+            target_type="post",
+            target_id=post.id,
+            blog_id=post.blog_id,
+            request=request,
+            payload={"slug": post.slug, "blog_slug": blog.slug},
+        )
     post.is_hidden = payload.is_hidden
     await session.commit()
     await session.refresh(post)
     return _to_admin_post_out(post, blog, author)
+
+
+class AuditLogOut(BaseModel):
+    id: uuid.UUID
+    occurred_at: datetime
+    actor_type: AuditActorType
+    actor_id: uuid.UUID | None
+    actor_label: str | None
+    action: str
+    target_type: str | None
+    target_id: uuid.UUID | None
+    blog_id: uuid.UUID | None
+    ip: str | None
+    user_agent: str | None
+    payload: dict
+
+    model_config = {"from_attributes": True}
+
+    @field_validator("ip", mode="before")
+    @classmethod
+    def _ip_to_str(cls, v: object) -> str | None:
+        # asyncpg restituisce la colonna INET come oggetto ipaddress, non str
+        return str(v) if v is not None else None
+
+
+@router.get("/audit-log", response_model=list[AuditLogOut])
+async def list_audit_log(
+    action: str | None = None,
+    actor_id: uuid.UUID | None = None,
+    target_id: uuid.UUID | None = None,
+    blog_id: uuid.UUID | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    current_user: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_session),
+) -> list[AuditLog]:
+    """Consultazione del registro di audit (append-only). Filtri opzionali per
+    azione, attore, oggetto, blog e intervallo temporale; ordine dal più
+    recente. Gli eventi oltre la retention non sono qui ma negli archivi su
+    storage (vedi `app/workers/audit_maintenance.py`)."""
+    stmt = select(AuditLog).order_by(AuditLog.occurred_at.desc())
+    if action is not None:
+        stmt = stmt.where(AuditLog.action == action)
+    if actor_id is not None:
+        stmt = stmt.where(AuditLog.actor_id == actor_id)
+    if target_id is not None:
+        stmt = stmt.where(AuditLog.target_id == target_id)
+    if blog_id is not None:
+        stmt = stmt.where(AuditLog.blog_id == blog_id)
+    if since is not None:
+        stmt = stmt.where(AuditLog.occurred_at >= since)
+    if until is not None:
+        stmt = stmt.where(AuditLog.occurred_at < until)
+    stmt = stmt.limit(min(max(limit, 1), 500)).offset(max(offset, 0))
+    result = await session.execute(stmt)
+    return list(result.scalars().all())

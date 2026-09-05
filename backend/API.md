@@ -1110,8 +1110,8 @@ token proprio, `404` se l'id non esiste.
 
 Tutti gli endpoint richiedono sessione con `platform_role` in
 `amministratore`/`super_admin` (`403` altrimenti). Consumati dalle sezioni
-`frontend/src/app/dashboard/{utenti,blog,moderazione}` — voci di menu del
-dashboard esistente, non un'app separata — vedi ROADMAP.md.
+`frontend/src/app/dashboard/{utenti,blog,moderazione,registro}` — voci di menu
+del dashboard esistente, non un'app separata — vedi ROADMAP.md.
 
 **`GET /api/v1/admin/users`** — lista tutti gli utenti della piattaforma
 (id, username, email, `platform_role`, `is_active`, `mfa_enabled`). Query
@@ -1160,9 +1160,33 @@ dell'autore (`ilike`, sottostringa).
 
 **`PATCH /api/v1/admin/posts/{post_id}`** — `{is_hidden: bool}`. Vedi
 `Post.is_hidden` nella sezione Post: nasconde/mostra un post indipendentemente
-da `status`, anche per l'autore. Nessun'altra conseguenza automatica (nessuna
-notifica all'autore, nessun log delle motivazioni — vedi ROADMAP.md per i
-dettagli di rifinitura non ancora fatti).
+da `status`, anche per l'autore. Nessuna notifica all'autore e nessun campo
+per la motivazione; il cambio di stato viene però registrato nel registro di
+audit (`post.hidden`/`post.unhidden`, vedi sotto).
+
+### Registro di audit
+
+Ogni azione sensibile lascia una riga in `audit_log` (append-only), scritta
+nella stessa transazione dell'azione: autenticazione (`auth.login` con
+`payload.method` `password`/`mfa_*`/`sso_*`, `auth.login_failed`),
+amministrazione (`user.role_change` con `payload {from,to}`,
+`user.activated`/`user.deactivated`, `blog.suspended`/`blog.unsuspended`,
+`post.hidden`/`post.unhidden`), API token (`api_token.created`/
+`api_token.revoked`). Ogni riga porta `actor_type`, `actor_label` (snapshot
+`username <email>` al momento del fatto), `actor_id`, `target_type`/
+`target_id`, `blog_id`, `ip`, `user_agent`, `payload` (JSON) e `occurred_at`.
+
+Gli eventi oltre `NOCT_AUDIT_RETENTION_DAYS` (default 105) vengono scaricati
+su storage in NDJSON gzippato per settimana ISO e poi rimossi dal database
+(`app/workers/audit_maintenance.py`); la cancellazione non tocca mai eventi
+non ancora archiviati.
+
+**`GET /api/v1/admin/audit-log`** — righe dal più recente. Query param
+opzionali: `action`, `actor_id`, `target_id`, `blog_id` (uguaglianza esatta),
+`since`/`until` (ISO 8601, intervallo `[since, until)` su `occurred_at`),
+`limit` (1–500, default 100), `offset` (default 0). Solo gli eventi ancora
+nel database: quelli già archiviati stanno su storage, reimportabili con
+`python -m app.workers.audit_maintenance --restore AAAAwSS`.
 
 ## Feed (homepage multi-blog)
 

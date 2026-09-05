@@ -1,4 +1,6 @@
 from app.models.api_token import ApiToken, ApiTokenOwnerType
+from app.models.audit_archive_run import AuditArchiveRun
+from app.models.audit_log import AuditActorType, AuditLog
 from app.models.base import Base
 from app.models.blog import (
     Blog,
@@ -49,6 +51,9 @@ __all__ = [
     "CommentStatus",
     "ApiToken",
     "ApiTokenOwnerType",
+    "AuditLog",
+    "AuditActorType",
+    "AuditArchiveRun",
     "UserSession",
     "MfaEmailCode",
     "SsoIdentity",

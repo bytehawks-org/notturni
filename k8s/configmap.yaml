@@ -29,6 +29,8 @@ data:
   # prima che gli avatar siano visibili dall'esterno del cluster
   NOCT_S3_PUBLIC_URL: "https://storage.notturni.eu"
   NOCT_S3_BUCKET_AVATARS: "avatars"
+  # bucket privato per gli archivi di audit (mai esposto pubblicamente)
+  NOCT_S3_BUCKET_AUDIT: "notturni-audit"
 
   # SSO: valorizzare (qui o in secret.yaml) solo i provider da abilitare
   NOCT_OAUTH_REDIRECT_BASE_URL: "https://notturni.eu"
