@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.blog import Blog, BlogMembership, BlogRole, BlogVisibility
@@ -98,3 +98,16 @@ def is_publicly_visible(post: Post) -> bool:
     if post.published_at is None:
         return True
     return post.published_at <= datetime.now(timezone.utc)
+
+
+def publicly_visible_clause() -> ColumnElement[bool]:
+    """Equivalente SQL di `is_publicly_visible`, da mettere nella `WHERE` degli
+    elenchi di post per chi non ha accesso in scrittura al blog — invece di
+    caricare tutte le righe e scartarle in Python. `func.now()` è l'istante di
+    inizio transazione lato Postgres (differenza trascurabile rispetto al
+    `datetime.now()` applicativo usato dalla versione Python)."""
+    return and_(
+        Post.is_hidden.is_(False),
+        Post.status == PostStatus.PUBLISHED,
+        or_(Post.published_at.is_(None), Post.published_at <= func.now()),
+    )

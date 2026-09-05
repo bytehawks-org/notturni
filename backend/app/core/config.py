@@ -110,6 +110,16 @@ class Settings(BaseSettings):
     # origini ammesse per le chiamate del frontend dal browser (CORS), separate da virgola
     cors_origins: str = "http://localhost:3000"
 
+    # Invalidazione on-demand della cache dei Server Component del frontend
+    # (Next.js) dopo una modifica a contenuti pubblici (post, config/impostazioni
+    # blog, pagine statiche). Il backend fa una POST fire-and-forget a
+    # `frontend_revalidate_url` con l'elenco dei tag da invalidare; il secret
+    # deve coincidere con `NOCT_REVALIDATE_SECRET` del servizio frontend. Se
+    # una delle due non è valorizzata la chiamata è disattivata e il frontend
+    # si affida alla sola rivalidazione a tempo. Vedi app/core/revalidation.py.
+    frontend_revalidate_url: str | None = None
+    revalidate_secret: str | None = None
+
     @property
     def cors_allowed_origins(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]

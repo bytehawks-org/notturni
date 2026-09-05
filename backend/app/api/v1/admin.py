@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import require_platform_admin
 from app.core.database import get_session
+from app.core.revalidation import blog_tag, feed_tag, post_tag, revalidate_frontend
 from app.domain import audit
 from app.models.audit_log import AuditActorType, AuditLog
 from app.models.blog import Blog, BlogVisibility
@@ -175,9 +176,14 @@ async def update_blog(
             request=request,
             payload={"slug": blog.slug},
         )
+    was_changed = payload.is_suspended != blog.is_suspended
     blog.is_suspended = payload.is_suspended
     await session.commit()
     await session.refresh(blog, attribute_names=["owner"])
+    if was_changed:
+        # la sospensione blocca lettura/scrittura pubbliche del blog: tutte le
+        # sue pagine e la homepage vanno rigenerate.
+        await revalidate_frontend([blog_tag(blog.slug), feed_tag()])
     return _to_admin_blog_out(blog)
 
 
@@ -271,9 +277,14 @@ async def update_post(
             request=request,
             payload={"slug": post.slug, "blog_slug": blog.slug},
         )
+    was_changed = payload.is_hidden != post.is_hidden
     post.is_hidden = payload.is_hidden
     await session.commit()
     await session.refresh(post)
+    if was_changed:
+        await revalidate_frontend(
+            [post_tag(blog.slug, post.slug), blog_tag(blog.slug), feed_tag()]
+        )
     return _to_admin_post_out(post, blog, author)
 
 

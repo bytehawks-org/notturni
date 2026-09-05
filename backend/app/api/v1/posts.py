@@ -4,18 +4,20 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import delete, insert, select
+from sqlalchemy import delete, insert, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_optional_current_user
 from app.core.broker import publish_post_backup
 from app.core.database import get_session
+from app.core.revalidation import blog_tag, feed_tag, post_tag, revalidate_frontend
 from app.domain.authorization import (
     can_review_posts,
     can_view_blog,
     can_write_posts,
     get_membership,
     is_publicly_visible,
+    publicly_visible_clause,
 )
 from app.domain.content_media import extract_links, extract_media
 from app.domain.display_names import resolve_personal_display_name
@@ -23,7 +25,7 @@ from app.domain.i18n import validate_locale
 from app.domain.notes import NoteInput, normalize_notes
 from app.domain.permalinks import build_permalink, is_valid_permalink_date, permalink_date
 from app.domain.tags import resolve_tags
-from app.models.blog import Blog
+from app.models.blog import Blog, BlogMembership
 from app.models.category import Category
 from app.models.post import Post, PostStatus
 from app.models.post_link import post_links
@@ -208,14 +210,16 @@ async def _require_write_access(session: AsyncSession, user: User, blog: Blog) -
         )
 
 
-async def _resolve_author_display_name(session: AsyncSession, user: User, blog: Blog) -> str:
+def _pick_author_display_name(
+    membership: BlogMembership | None, blog: Blog, user: User
+) -> str:
     """Nome pubblico dell'autore di un post (CLAUDE.md #1, todo/BLOG.md #4,
-    todo/USERS.md #2). Scritto sulla colonna `Post.author_display_name` alla
-    creazione/modifica del post, ma ricalcolato di nuovo ad ogni lettura in
-    `_post_out` — così un alias di membership o di blog cambiato dopo la
-    pubblicazione si riflette subito su tutti i post esistenti, non solo su
-    quelli risalvati dall'autore. Non c'è un valore per singolo post indicato
-    dal client.
+    todo/USERS.md #2), a partire da dati già in memoria. Scritto sulla colonna
+    `Post.author_display_name` alla creazione/modifica del post, ma ricalcolato
+    di nuovo ad ogni lettura in `_posts_out` — così un alias di membership o di
+    blog cambiato dopo la pubblicazione si riflette subito su tutti i post
+    esistenti, non solo su quelli risalvati dall'autore. Non c'è un valore per
+    singolo post indicato dal client.
 
     1. Alias dell'autore sulla propria membership di *questo* blog, se presente;
     2. nome pubblico predefinito del blog (`default_author_display_name`), se presente.
@@ -223,13 +227,18 @@ async def _resolve_author_display_name(session: AsyncSession, user: User, blog: 
     3. altrimenti la preferenza dell'utente (`post_author_name_style`):
        nome e cognome, alias globale del profilo, o username (default).
     """
-    membership = await get_membership(session, user_id=user.id, blog_id=blog.id)
     if membership is not None and membership.author_display_name:
         return membership.author_display_name
     if blog.default_author_display_name:
         return blog.default_author_display_name
-
     return resolve_personal_display_name(user)
+
+
+async def _resolve_author_display_name(session: AsyncSession, user: User, blog: Blog) -> str:
+    """Variante a singolo autore/blog, per i percorsi di scrittura (creazione
+    post/traduzione) che devono valorizzare la colonna `author_display_name`."""
+    membership = await get_membership(session, user_id=user.id, blog_id=blog.id)
+    return _pick_author_display_name(membership, blog, user)
 
 
 async def _validate_category(session: AsyncSession, blog: Blog, category_id: uuid.UUID | None) -> None:
@@ -241,54 +250,106 @@ async def _validate_category(session: AsyncSession, blog: Blog, category_id: uui
 
 
 async def _post_out(session: AsyncSession, post: Post, blog: Blog) -> PostOut:
-    # ricalcolato da colonne scalari già in memoria (manual_tags, content),
-    # non dalla relazione ORM `tags` — che richiederebbe un lazy load async
-    # non sempre già eseguito da chi chiama (vedi _sync_post_tags per dove
-    # quella relazione viene invece scritta). Stesso motivo per `category`:
-    # un session.get() esplicito qui, non la relazione ORM su Post.
-    _, effective_tags = resolve_tags(post.manual_tags, post.content)
-    category = await session.get(Category, post.category_id) if post.category_id else None
+    """Caso particolare di `_posts_out` per un solo post (percorsi di scrittura
+    e GET di dettaglio)."""
+    return (await _posts_out(session, [(post, blog)]))[0]
+
+
+async def _posts_out(
+    session: AsyncSession, pairs: list[tuple[Post, Blog]]
+) -> list[PostOut]:
+    """Serializza in blocco un elenco di `(post, blog)` evitando l'N+1 di una
+    chiamata a `_post_out` per riga: note, autori, categorie e membership sono
+    caricati con una query ciascuna (`IN (…)`), non una per post. Usato dal
+    feed della homepage e dall'elenco post di un blog.
+
+    Come già faceva `_post_out`, i campi calcolati partono da colonne scalari
+    già in memoria (`manual_tags`, `content`) e non dalle relazioni ORM su
+    `Post`, che richiederebbero un lazy-load async non sempre già eseguito da
+    chi chiama (vedi `_sync_post_tags`)."""
+    if not pairs:
+        return []
+
+    post_ids = [post.id for post, _ in pairs]
+    author_ids = {post.author_id for post, _ in pairs}
+    category_ids = {post.category_id for post, _ in pairs if post.category_id}
+    # coppie (autore, blog) per risolvere l'alias di membership del post giusto
+    membership_keys = {(post.author_id, blog.id) for post, blog in pairs}
+
+    notes_by_post: dict[uuid.UUID, list[NoteOut]] = {pid: [] for pid in post_ids}
     note_rows = await session.execute(
-        select(post_notes.c.idx, post_notes.c.content)
-        .where(post_notes.c.post_id == post.id)
-        .order_by(post_notes.c.idx)
+        select(post_notes.c.post_id, post_notes.c.idx, post_notes.c.content)
+        .where(post_notes.c.post_id.in_(post_ids))
+        .order_by(post_notes.c.post_id, post_notes.c.idx)
     )
-    notes = [NoteOut(idx=idx, content=content) for idx, content in note_rows.all()]
-    # Ricalcolato ad ogni lettura (non dalla colonna `author_display_name`,
-    # che resta solo l'ultimo valore scritto): un alias di blog/membership
-    # cambiato dopo la pubblicazione deve riflettersi subito su tutti i post
-    # già scritti, non solo su quelli risalvati dall'autore (CLAUDE.md #1).
-    author = await session.get(User, post.author_id)
-    author_display_name = (
-        await _resolve_author_display_name(session, author, blog)
-        if author is not None
-        else post.author_display_name
-    )
-    return PostOut(
-        id=post.id,
-        blog_id=post.blog_id,
-        author_id=post.author_id,
-        author_display_name=author_display_name,
-        locale=post.locale,
-        translation_group_id=post.translation_group_id,
-        title=post.title,
-        slug=post.slug,
-        content=post.content,
-        cover_image_url=post.cover_image_url,
-        cover_image_is_sensitive=post.cover_image_is_sensitive,
-        cover_image_categories=post.cover_image_categories,
-        status=post.status,
-        published_at=post.published_at,
-        created_at=post.created_at,
-        is_hidden=post.is_hidden,
-        blog_slug=blog.slug,
-        permalink=build_permalink(blog.slug, post),
-        mentions_enabled=blog.mentions_enabled,
-        notes=notes,
-        manual_tags=post.manual_tags,
-        tags=effective_tags,
-        category=CategorySummaryOut.model_validate(category) if category else None,
-    )
+    for pid, idx, content in note_rows.all():
+        notes_by_post[pid].append(NoteOut(idx=idx, content=content))
+
+    authors: dict[uuid.UUID, User] = {}
+    if author_ids:
+        rows = await session.execute(select(User).where(User.id.in_(author_ids)))
+        authors = {u.id: u for u in rows.scalars()}
+
+    categories: dict[uuid.UUID, Category] = {}
+    if category_ids:
+        rows = await session.execute(select(Category).where(Category.id.in_(category_ids)))
+        categories = {c.id: c for c in rows.scalars()}
+
+    memberships: dict[tuple[uuid.UUID, uuid.UUID], BlogMembership] = {}
+    if membership_keys:
+        rows = await session.execute(
+            select(BlogMembership).where(
+                tuple_(BlogMembership.user_id, BlogMembership.blog_id).in_(
+                    list(membership_keys)
+                )
+            )
+        )
+        memberships = {(m.user_id, m.blog_id): m for m in rows.scalars()}
+
+    out: list[PostOut] = []
+    for post, blog in pairs:
+        _, effective_tags = resolve_tags(post.manual_tags, post.content)
+        author = authors.get(post.author_id)
+        # Ricalcolato ad ogni lettura (non dalla colonna `author_display_name`,
+        # che resta solo l'ultimo valore scritto): un alias di blog/membership
+        # cambiato dopo la pubblicazione deve riflettersi subito su tutti i
+        # post già scritti, non solo su quelli risalvati dall'autore (CLAUDE.md #1).
+        author_display_name = (
+            _pick_author_display_name(
+                memberships.get((post.author_id, blog.id)), blog, author
+            )
+            if author is not None
+            else post.author_display_name
+        )
+        category = categories.get(post.category_id) if post.category_id else None
+        out.append(
+            PostOut(
+                id=post.id,
+                blog_id=post.blog_id,
+                author_id=post.author_id,
+                author_display_name=author_display_name,
+                locale=post.locale,
+                translation_group_id=post.translation_group_id,
+                title=post.title,
+                slug=post.slug,
+                content=post.content,
+                cover_image_url=post.cover_image_url,
+                cover_image_is_sensitive=post.cover_image_is_sensitive,
+                cover_image_categories=post.cover_image_categories,
+                status=post.status,
+                published_at=post.published_at,
+                created_at=post.created_at,
+                is_hidden=post.is_hidden,
+                blog_slug=blog.slug,
+                permalink=build_permalink(blog.slug, post),
+                mentions_enabled=blog.mentions_enabled,
+                notes=notes_by_post.get(post.id, []),
+                manual_tags=post.manual_tags,
+                tags=effective_tags,
+                category=CategorySummaryOut.model_validate(category) if category else None,
+            )
+        )
+    return out
 
 
 async def _sync_post_tags(session: AsyncSession, post: Post, effective_tags: list[str]) -> None:
@@ -376,6 +437,15 @@ async def _sync_post_links(session: AsyncSession, post: Post) -> None:
         )
 
 
+async def _revalidate_post(post: Post, blog: Blog) -> None:
+    """Invalida la cache del frontend per le pagine pubbliche toccate da una
+    modifica al post: il suo permalink, le pagine del blog (bibliografie,
+    ecc.) e il feed della homepage."""
+    await revalidate_frontend(
+        [feed_tag(), blog_tag(blog.slug), post_tag(blog.slug, post.slug)]
+    )
+
+
 def _backup_to_s3(blog: Blog, post: Post) -> None:
     """Fire-and-forget: accoda il backup su S3. Il database resta la fonte di
     verità del post, quindi un problema di RabbitMQ/S3 qui non deve mai far
@@ -445,6 +515,8 @@ async def create_post(
     await session.commit()
     await session.refresh(post, attribute_names=["created_at", "updated_at"])
     _backup_to_s3(blog, post)
+    if is_publicly_visible(post):
+        await _revalidate_post(post, blog)
     return await _post_out(session, post, blog)
 
 
@@ -519,6 +591,8 @@ async def add_post_translation(
     await session.commit()
     await session.refresh(translation, attribute_names=["created_at", "updated_at"])
     _backup_to_s3(blog, translation)
+    if is_publicly_visible(translation):
+        await _revalidate_post(translation, blog)
     return await _post_out(session, translation, blog)
 
 
@@ -529,9 +603,12 @@ async def list_post_translations(
     """Per costruire un selettore di lingua lato frontend."""
     original = await _get_post_or_404(session, post_id)
     result = await session.execute(
-        select(Post).where(Post.translation_group_id == original.translation_group_id)
+        select(Post).where(
+            Post.translation_group_id == original.translation_group_id,
+            publicly_visible_clause(),
+        )
     )
-    return [p for p in result.scalars().all() if is_publicly_visible(p)]
+    return list(result.scalars().all())
 
 
 @router.get("/blogs/{blog_slug}/posts", response_model=list[PostOut])
@@ -547,18 +624,21 @@ async def list_posts(
     blog = await _get_blog_or_404(session, blog_slug)
     await _require_blog_viewable(session, current_user, blog)
 
-    stmt = select(Post).where(Post.blog_id == blog.id)
-    if locale is not None:
-        stmt = stmt.where(Post.locale == locale)
-    result = await session.execute(stmt)
-    posts = list(result.scalars().all())
-
     has_write_access = current_user is not None and await can_write_posts(
         session, user_id=current_user.id, blog=blog
     )
+
+    stmt = select(Post).where(Post.blog_id == blog.id)
+    if locale is not None:
+        stmt = stmt.where(Post.locale == locale)
+    # Chi non ha accesso in scrittura vede solo i post effettivamente
+    # pubblicati: filtro in SQL, non caricando tutto e scartando in Python.
     if not has_write_access:
-        posts = [p for p in posts if is_publicly_visible(p)]
-    return [await _post_out(session, p, blog) for p in posts]
+        stmt = stmt.where(publicly_visible_clause())
+    result = await session.execute(stmt)
+    posts = list(result.scalars().all())
+
+    return await _posts_out(session, [(p, blog) for p in posts])
 
 
 @router.get("/posts/{post_id}", response_model=PostOut)
@@ -690,6 +770,8 @@ async def update_post(
     await session.commit()
     await session.refresh(post, attribute_names=["created_at", "updated_at"])
     _backup_to_s3(blog, post)
+    if is_publicly_visible(post):
+        await _revalidate_post(post, blog)
     return await _post_out(session, post, blog)
 
 
@@ -772,4 +854,6 @@ async def publish_post(
     post.published_at = scheduled_at or datetime.now(timezone.utc)
     await session.commit()
     await session.refresh(post)
+    if is_publicly_visible(post):
+        await _revalidate_post(post, blog)
     return await _post_out(session, post, blog)

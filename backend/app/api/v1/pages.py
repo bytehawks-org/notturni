@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import PLATFORM_ADMIN_ROLES, get_optional_current_user, require_platform_admin
 from app.core.database import get_session
+from app.core.revalidation import platform_page_tag, platform_pages_tag, revalidate_frontend
 from app.domain.i18n import validate_locale
 from app.domain.pages import build_platform_page_permalink
 from app.models.page import Page
@@ -95,6 +96,7 @@ async def create_page(
     session.add(page)
     await session.commit()
     await session.refresh(page)
+    await revalidate_frontend([platform_pages_tag(), platform_page_tag(page.slug)])
     return _to_out(page)
 
 
@@ -136,6 +138,9 @@ async def add_page_translation(
     session.add(translation)
     await session.commit()
     await session.refresh(translation)
+    await revalidate_frontend(
+        [platform_pages_tag(), platform_page_tag(translation.slug)]
+    )
     return _to_out(translation)
 
 
@@ -227,4 +232,5 @@ async def update_page(
 
     await session.commit()
     await session.refresh(page)
+    await revalidate_frontend([platform_pages_tag(), platform_page_tag(page.slug)])
     return _to_out(page)

@@ -113,3 +113,57 @@ async def test_reject_comment(client: AsyncClient, make_user: Callable) -> None:
 
     approved_list = await client.get(f"/api/v1/posts/{post_id}/comments")
     assert approved_list.json() == []
+
+
+async def test_blog_comments_aggregate_moderation(client: AsyncClient, make_user: Callable) -> None:
+    owner: AuthedUser = await make_user("owner-c6")
+    stranger: AuthedUser = await make_user("stranger-c6")
+    await client.post("/api/v1/blogs", json={"slug": "blog-commenti-6", "title": "x"}, headers=owner.headers)
+    await client.patch(
+        "/api/v1/blogs/blog-commenti-6", json={"allow_anonymous_comments": True}, headers=owner.headers
+    )
+
+    post_ids = []
+    for n in (1, 2):
+        res = await client.post(
+            "/api/v1/blogs/blog-commenti-6/posts",
+            json={"slug": f"post-agg-{n}", "title": f"Titolo {n}", "content": "y"},
+            headers=owner.headers,
+        )
+        pid = res.json()["id"]
+        await client.post(f"/api/v1/posts/{pid}/publish", headers=owner.headers)
+        post_ids.append(pid)
+        await client.post(
+            f"/api/v1/posts/{pid}/comments",
+            json={"content": f"pending {n}", "author_display_name": "V", "author_email": "v@example.com"},
+        )
+
+    # un commento già approvato (autore registrato) sul primo post
+    await client.post(
+        f"/api/v1/posts/{post_ids[0]}/comments", json={"content": "ok"}, headers=stranger.headers
+    )
+
+    # default: solo i pending di tutti i post, con titolo/slug del post
+    agg = await client.get("/api/v1/blogs/blog-commenti-6/comments", headers=owner.headers)
+    assert agg.status_code == 200
+    body = agg.json()
+    assert len(body) == 2
+    assert {c["status"] for c in body} == {"pending"}
+    assert {c["post_title"] for c in body} == {"Titolo 1", "Titolo 2"}
+    assert all("post_slug" in c for c in body)
+
+    # filtro esplicito su approved
+    approved = await client.get(
+        "/api/v1/blogs/blog-commenti-6/comments?status=approved", headers=owner.headers
+    )
+    assert [c["content"] for c in approved.json()] == ["ok"]
+
+    # chi non modera: 403
+    forbidden = await client.get(
+        "/api/v1/blogs/blog-commenti-6/comments", headers=stranger.headers
+    )
+    assert forbidden.status_code == 403
+
+    # blog inesistente: 404
+    missing = await client.get("/api/v1/blogs/non-esiste/comments", headers=owner.headers)
+    assert missing.status_code == 404

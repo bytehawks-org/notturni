@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.posts import PostOut, _post_out
+from app.api.v1.posts import PostOut, _posts_out
 from app.core.database import get_session
 from app.models.blog import Blog, BlogVisibility
 from app.models.category import Category
@@ -72,7 +72,7 @@ async def list_feed(
         stmt = stmt.join(Category, Category.id == Post.category_id).where(Category.slug == category)
 
     result = await session.execute(stmt)
-    return [await _post_out(session, post, blog) for post, blog in result.all()]
+    return await _posts_out(session, [(post, blog) for post, blog in result.all()])
 
 
 class TrendingTagOut(BaseModel):
