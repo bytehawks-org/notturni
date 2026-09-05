@@ -92,6 +92,21 @@ class Settings(BaseSettings):
     # media. None: moderazione disattivata (nessuna chiamata, mai bloccante).
     moderation_service_url: str | None = None
 
+    # Audit log (app/domain/audit.py + app/workers/audit_maintenance.py).
+    # retention_days: quanti giorni di eventi restano nel database prima della
+    # cancellazione periodica. Il job non cancella comunque mai eventi non
+    # ancora archiviati su storage (vedi audit_archive_enabled): la finestra
+    # non archiviata fa da limite duro, retention_days è solo l'obiettivo.
+    # Default 105 = ~15 settimane, così sono sempre presenti almeno 90 giorni.
+    audit_retention_days: int = 105
+    # Scarico periodico degli eventi su storage (S3/localstorage) per settimane
+    # ISO chiuse, in NDJSON gzippato, prima della cancellazione dal database.
+    # A False: nessun archivio, il job cancella solo in base a retention_days.
+    audit_archive_enabled: bool = True
+    # Bucket dedicato agli archivi di audit: sempre privato, mai servito ai
+    # visitatori (a differenza di s3_bucket_avatars/_content).
+    s3_bucket_audit: str = "notturni-audit"
+
     # origini ammesse per le chiamate del frontend dal browser (CORS), separate da virgola
     cors_origins: str = "http://localhost:3000"
 

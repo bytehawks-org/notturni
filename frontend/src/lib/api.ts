@@ -3,6 +3,7 @@ import type {
   AdminBlog,
   AdminPost,
   AdminUser,
+  AuditLogEntry,
   BibliographyEntry,
   Blog,
   BlogConfig,
@@ -488,5 +489,18 @@ export const api = {
       request<AdminPost[]>(withQuery("/api/v1/admin/posts", { q }), { token }),
     updatePost: (token: string, postId: string, payload: { is_hidden: boolean }) =>
       request<AdminPost>(`/api/v1/admin/posts/${postId}`, { method: "PATCH", token, body: payload }),
+    listAuditLog: (
+      token: string,
+      filters: Partial<{
+        action: string;
+        actor_id: string;
+        target_id: string;
+        blog_id: string;
+        since: string;
+        until: string;
+        limit: string;
+        offset: string;
+      }> = {}
+    ) => request<AuditLogEntry[]>(withQuery("/api/v1/admin/audit-log", filters), { token }),
   },
 };

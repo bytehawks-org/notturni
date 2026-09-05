@@ -1,15 +1,17 @@
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_token
 from app.core.database import get_session
+from app.domain import audit
 from app.domain.api_tokens import generate_api_token
 from app.models.api_token import ApiToken, ApiTokenOwnerType
+from app.models.audit_log import AuditActorType
 
 router = APIRouter()
 
@@ -41,6 +43,7 @@ class TokenOut(BaseModel):
 @router.post("", response_model=TokenCreateResponse, status_code=status.HTTP_201_CREATED)
 async def create_token(
     payload: TokenCreateRequest,
+    request: Request,
     current: ApiToken = Depends(get_current_token),
     session: AsyncSession = Depends(get_session),
 ) -> TokenCreateResponse:
@@ -55,6 +58,21 @@ async def create_token(
         token_hash=token_hash,
     )
     session.add(new_token)
+    await audit.record(
+        session,
+        action="api_token.created",
+        actor_type=(
+            AuditActorType.USER_TOKEN
+            if current.owner_type == ApiTokenOwnerType.USER
+            else AuditActorType.CORE_TOKEN
+        ),
+        actor_id=current.user_id,
+        actor_label=current.name,
+        target_type="api_token",
+        target_id=new_token.id,
+        request=request,
+        payload={"name": payload.name, "owner_type": current.owner_type.value},
+    )
     await session.commit()
     await session.refresh(new_token)
     return TokenCreateResponse(id=new_token.id, name=new_token.name, token=plaintext, token_prefix=prefix)
@@ -75,6 +93,7 @@ async def list_tokens(
 @router.delete("/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def revoke_token(
     token_id: uuid.UUID,
+    request: Request,
     current: ApiToken = Depends(get_current_token),
     session: AsyncSession = Depends(get_session),
 ) -> None:
@@ -91,4 +110,19 @@ async def revoke_token(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Non è possibile revocare questo token.")
 
     target.revoked_at = datetime.now(timezone.utc)
+    await audit.record(
+        session,
+        action="api_token.revoked",
+        actor_type=(
+            AuditActorType.USER_TOKEN
+            if current.owner_type == ApiTokenOwnerType.USER
+            else AuditActorType.CORE_TOKEN
+        ),
+        actor_id=current.user_id,
+        actor_label=current.name,
+        target_type="api_token",
+        target_id=target.id,
+        request=request,
+        payload={"name": target.name},
+    )
     await session.commit()

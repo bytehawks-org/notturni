@@ -86,6 +86,19 @@ def ensure_content_bucket(bucket: str) -> None:
     client.put_bucket_policy(Bucket=bucket, Policy=json.dumps(policy))
 
 
+def ensure_private_bucket(bucket: str) -> None:
+    """Crea il bucket se manca, senza alcuna policy di lettura pubblica: gli
+    archivi di audit non vanno mai serviti ai visitatori. No-op sul backend
+    "localstorage" (niente bucket/policy su filesystem)."""
+    if settings.storage_backend != "s3":
+        return
+    client = get_s3_client()
+    try:
+        client.head_bucket(Bucket=bucket)
+    except Exception:
+        client.create_bucket(Bucket=bucket)
+
+
 def _userdata_prefix(user_id: str, blog_id: str) -> str:
     return f"{settings.site_slug}/userdata/{user_id}/{blog_id}"
 
@@ -153,6 +166,34 @@ def upload_post_backup(*, user_id: str, blog_id: str, post_id: str, content: str
         content=content.encode("utf-8"),
         content_type="text/markdown; charset=utf-8",
     )
+
+
+def audit_archive_key(week_label: str) -> str:
+    """Chiave dell'oggetto per l'archivio di una settimana ISO (es.
+    "2026w36" -> "{site_slug}/audit-archive/2026w36.jsonl.gz")."""
+    return f"{settings.site_slug}/audit-archive/{week_label}.jsonl.gz"
+
+
+def upload_audit_archive(*, week_label: str, content: bytes) -> str:
+    """Scrive l'archivio NDJSON gzippato di una settimana di audit nel bucket
+    dedicato (privato). Ritorna la chiave dell'oggetto."""
+    key = audit_archive_key(week_label)
+    ensure_private_bucket(settings.s3_bucket_audit)
+    _put_object(
+        bucket=settings.s3_bucket_audit,
+        key=key,
+        content=content,
+        content_type="application/gzip",
+    )
+    return key
+
+
+def get_audit_archive(*, week_label: str) -> bytes:
+    """Rilegge l'archivio di una settimana (per il restore su database)."""
+    key = audit_archive_key(week_label)
+    if settings.storage_backend == "localstorage":
+        return (Path(settings.local_storage_base_path) / settings.s3_bucket_audit / key).read_bytes()
+    return get_s3_client().get_object(Bucket=settings.s3_bucket_audit, Key=key)["Body"].read()
 
 
 def upload_avatar(*, user_id: uuid.UUID, content: bytes, content_type: str) -> str:

@@ -1,0 +1,34 @@
+# image: come backend.yaml, riferimento a un'immagine costruita/caricata
+# localmente sul nodo finché non c'è un registro in CI/CD.
+#
+# Job schedulato (non un Deployment): archivia su storage le settimane ISO
+# chiuse di audit_log e cancella gli eventi oltre NOCT_AUDIT_RETENTION_DAYS,
+# senza mai toccare quelli non ancora archiviati. È il primo manifest di tipo
+# worker in questi file (i consumer di coda in compose.yaml non hanno ancora
+# un equivalente K8s — vedi README).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: audit-maintenance
+  namespace: notturni
+spec:
+  # ogni giorno alle 03:00 UTC; l'archiviazione è per settimana ISO chiusa,
+  # quindi la maggior parte dei giorni non trova nulla di nuovo da scaricare
+  schedule: "0 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: audit-maintenance
+              image: notturni-backend:latest
+              imagePullPolicy: IfNotPresent
+              command: ["python", "-m", "app.workers.audit_maintenance"]
+              envFrom:
+                - configMapRef: {name: notturni-config}
+                - secretRef: {name: notturni-secrets}

@@ -349,6 +349,48 @@ export const ADMIN_POST_STATUS_LABELS: Record<AdminPost["status"], string> = {
   published: "Pubblicato",
 };
 
+export type AuditActorType = "user" | "core_token" | "user_token" | "system" | "anonymous";
+
+/** `GET /api/v1/admin/audit-log` (dashboard/registro). Registro append-only
+ * delle azioni sensibili; solo gli eventi ancora nel database (quelli oltre
+ * la retention sono archiviati su storage). */
+export interface AuditLogEntry {
+  id: string;
+  occurred_at: string;
+  actor_type: AuditActorType;
+  actor_id: string | null;
+  actor_label: string | null;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  blog_id: string | null;
+  ip: string | null;
+  user_agent: string | null;
+  payload: Record<string, unknown>;
+}
+
+export const AUDIT_ACTION_LABELS: Record<string, string> = {
+  "auth.login": "Accesso",
+  "auth.login_failed": "Accesso fallito",
+  "user.role_change": "Cambio ruolo",
+  "user.activated": "Utente riattivato",
+  "user.deactivated": "Utente disattivato",
+  "blog.suspended": "Blog sospeso",
+  "blog.unsuspended": "Blog riattivato",
+  "post.hidden": "Post nascosto",
+  "post.unhidden": "Post mostrato",
+  "api_token.created": "API token creato",
+  "api_token.revoked": "API token revocato",
+};
+
+export const AUDIT_ACTOR_TYPE_LABELS: Record<AuditActorType, string> = {
+  user: "Utente",
+  core_token: "Token core",
+  user_token: "Token utente",
+  system: "Sistema",
+  anonymous: "Anonimo",
+};
+
 /** `GET /api/v1/config`, pubblico: per sapere se nascondere le sezioni
  * multi-utente (dashboard/utenti) in modalità "solo" senza dover già avere
  * una sessione. */

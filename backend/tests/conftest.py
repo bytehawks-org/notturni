@@ -1,3 +1,4 @@
+import io
 import itertools
 import os
 from collections.abc import AsyncIterator, Callable
@@ -182,6 +183,9 @@ class FakeS3Client:
 
     def put_object(self, Bucket: str, Key: str, Body: bytes, ContentType: str) -> None:  # noqa: N803
         self.objects[(Bucket, Key)] = Body
+
+    def get_object(self, Bucket: str, Key: str) -> dict:  # noqa: N803
+        return {"Body": io.BytesIO(self.objects[(Bucket, Key)])}
 
     def delete_object(self, Bucket: str, Key: str) -> None:  # noqa: N803
         self.objects.pop((Bucket, Key), None)

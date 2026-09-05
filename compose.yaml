@@ -131,6 +131,24 @@ services:
       rabbitmq:
         condition: service_healthy
 
+  worker-audit-maintenance:
+    build:
+      context: ./backend
+    restart: on-failure
+    env_file: .env
+    environment:
+      NOCT_POSTGRES_HOST: postgres
+      NOCT_S3_ENDPOINT_URL: http://minio:9000
+      NOCT_S3_PUBLIC_URL: http://localhost:9000
+    # non è un consumer di coda: archivia su storage le settimane ISO chiuse
+    # di audit_log e cancella gli eventi oltre la retention, un giro al giorno
+    command: ["python", "-m", "app.workers.audit_maintenance", "--loop", "--interval", "86400"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
   frontend:
     build:
       context: ./frontend
