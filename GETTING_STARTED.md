@@ -41,6 +41,10 @@ essere notate:
 - `NOCT_JWT_SECRET` / `NOCT_SESSION_SECRET` — vanno bene i default (`foo`) per
   un test locale; **non riusarli mai in un ambiente esposto** (vedi i commenti
   nel file per generarne di veri).
+- `NOCT_SUPER_ADMIN_USERNAME`/`_EMAIL`/`_PASSWORD` — se tutte e tre
+  valorizzate (i default in `.env.example` lo sono già), il backend crea
+  questo account come Super Admin al primo avvio: nessun passaggio manuale
+  per entrare nell'area di amministrazione (punto 4).
 
 ## 2. Avvio dello stack
 
@@ -51,9 +55,9 @@ podman-compose up -d --build
 ```
 
 La prima volta impiega qualche minuto (build delle immagini + download di
-Postgres/Redis/RabbitMQ/MinIO). Al termine dovresti avere 8 container su:
+Postgres/Redis/RabbitMQ/MinIO). Al termine dovresti avere 9 container su:
 
-- Frontend: <http://localhost:3000>
+- Frontend (dashboard e amministrazione incluse): <http://localhost:3000>
 - Backend — Swagger UI: <http://localhost:8000/docs>
 - Backend — health check: <http://localhost:8000/api/v1/health>
 - RabbitMQ — console: <http://localhost:15672> (admin/foo)
@@ -80,9 +84,15 @@ suffisso diverso: `podman ps` per controllare, o cerca quello con l'immagine
 
 ## 4. Primo utente
 
-In modalità `platform` non c'è un endpoint per creare il primo Super Admin:
-registra un utente normale dall'interfaccia (punto 5) o via API, poi
-promuovilo a mano:
+Con i default di `.env.example` non serve fare nulla: il backend crea da solo
+un Super Admin al primo avvio, da `NOCT_SUPER_ADMIN_USERNAME`/`_EMAIL`/
+`_PASSWORD` (idempotente — un riavvio successivo non lo tocca). Accedi
+direttamente su <http://localhost:3000> con quelle credenziali: le voci di
+amministrazione compaiono nel menu del dashboard.
+
+Se preferisci un tuo account invece del preset (o hai svuotato quelle
+variabili), registra un utente normale dall'interfaccia (punto 5) o via API,
+poi promuovilo a mano:
 
 ```bash
 podman exec -it $(podman ps -qf "name=postgres") \
@@ -111,9 +121,16 @@ script), vedi lo script di bootstrap in [backend/API.md](backend/API.md#come-ott
 6. Prova la tab **Aspetto** per cambiare la palette del blog, e **Impostazioni**
    per aprire i commenti anche a chi non è registrato.
 7. Vai su **Profilo** (menu in alto): imposta una bio, carica un avatar,
-   aggiungi un link social. Se hai promosso l'utente a Super Admin (punto 4),
-   trovi anche la voce **Amministrazione** → **Pagine** (crea "Chi siamo",
-   "Privacy", ecc.) e **Utenti** (ruoli/attivazione).
+   aggiungi un link social. Se l'utente con cui hai fatto login è Super
+   Admin/Amministratore (con i default del punto 4 è un account separato da
+   quello appena registrato: rifai login con le credenziali
+   `NOCT_SUPER_ADMIN_*`, o con l'utente promosso a mano se hai seguito
+   l'alternativa del punto 4), compaiono nello stesso menu anche **Pagine**
+   (crea "Chi siamo", "Privacy", ecc., stesso editor dei post), **Utenti**
+   (ruoli/attivazione — solo in modalità `platform`), **Tutti i blog**
+   (elenco di tutti i blog della piattaforma, con ricerca e sospensione) e
+   **Moderazione** (elenco di tutti i post della piattaforma, con ricerca e
+   nascondi/mostra il singolo post). Ogni sezione ha un campo di ricerca.
 8. Prova il selettore del tema (chiaro/scuro/automatico) in alto a destra —
    in automatico il browser chiederà il permesso di geolocalizzazione per
    calcolare alba/tramonto; se lo neghi, ripiega sulle preferenze di sistema.

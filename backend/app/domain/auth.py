@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
@@ -16,6 +17,8 @@ from app.models.user import PlatformRole, User
 from app.models.user_session import UserSession
 
 REFRESH_TOKEN_PREFIX = "noct_sess_"
+
+logger = logging.getLogger(__name__)
 
 
 class AuthError(ValueError):
@@ -112,3 +115,36 @@ async def revoke_session(session: AsyncSession, refresh_token: str) -> None:
     if user_session is not None and user_session.revoked_at is None:
         user_session.revoked_at = datetime.now(timezone.utc)
         await session.commit()
+
+
+async def bootstrap_super_admin(session: AsyncSession) -> None:
+    """Crea il Super Admin da NOCT_SUPER_ADMIN_USERNAME/EMAIL/PASSWORD se
+    configurato, eseguita ad ogni avvio del backend (CLAUDE.md #5: username e
+    password specificati alla creazione delle risorse, non più solo via
+    auto-promozione in modalità "solo" o UPDATE manuale al DB). Idempotente:
+    non fa nulla se una delle tre variabili manca o se username/email
+    risultano già in uso — non solleva mai, per non bloccare l'avvio del
+    backend su un conflitto di provisioning (es. redeploy con un .env
+    cambiato dopo che l'account è già stato creato o rinominato a mano)."""
+    if not (
+        settings.super_admin_username and settings.super_admin_email and settings.super_admin_password
+    ):
+        return
+
+    existing = await session.execute(
+        select(User).where(
+            (User.username == settings.super_admin_username) | (User.email == settings.super_admin_email)
+        )
+    )
+    if existing.scalar_one_or_none() is not None:
+        return
+
+    user = User(
+        username=settings.super_admin_username,
+        email=settings.super_admin_email,
+        hashed_password=hash_password(settings.super_admin_password),
+        platform_role=PlatformRole.SUPER_ADMIN,
+    )
+    session.add(user)
+    await session.commit()
+    logger.info("Super Admin creato da NOCT_SUPER_ADMIN_*: %s", settings.super_admin_username)

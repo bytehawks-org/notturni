@@ -517,6 +517,13 @@ serve anche per la pianificazione: un post con `status=published` e
 `published_at` nel futuro non è ancora pubblicamente visibile — vedi
 `is_publicly_visible` più sotto.
 
+`is_hidden` (`PostOut`): moderazione da parte di un admin di piattaforma
+(`dashboard/moderazione`, `PATCH /api/v1/admin/posts/{id}`) — se `true`, il
+post è irraggiungibile pubblicamente indipendentemente da `status`, per
+l'autore incluso (stesso trattamento 404 di un post inesistente per chi non
+ha accesso in scrittura — vedi `app/domain/authorization.py::is_publicly_visible`).
+Mai impostabile dall'autore.
+
 Ogni post ha un **permalink leggibile**, senza UUID: `blog_slug` e
 `permalink` sono calcolati ad ogni risposta (non colonne del modello) e
 inclusi in ogni `PostOut`:
@@ -943,7 +950,9 @@ inesistente). Con sessione admin, anche le bozze — per poterle rivedere
 prima di pubblicarle.
 
 **`GET /api/v1/pages?locale=it`** — pubblico (token opzionale): stessa
-distinzione pubblicate/tutte in base al ruolo del chiamante.
+distinzione pubblicate/tutte in base al ruolo del chiamante. Query param
+opzionale `q`: filtra per titolo o slug (`ilike`, sottostringa), usato dalla
+ricerca della sezione Pagine del dashboard (`frontend/src/app/dashboard/pagine`).
 
 **`PATCH /api/v1/pages/{page_id}`** — richiede ruolo admin. Aggiorna una
 singola traduzione (`slug`, `title`, `content`, `is_published`, tutti
@@ -1095,10 +1104,13 @@ token proprio, `404` se l'id non esiste.
 ## Amministrazione di piattaforma
 
 Tutti gli endpoint richiedono sessione con `platform_role` in
-`amministratore`/`super_admin` (`403` altrimenti).
+`amministratore`/`super_admin` (`403` altrimenti). Consumati dalle sezioni
+`frontend/src/app/dashboard/{utenti,blog,moderazione}` — voci di menu del
+dashboard esistente, non un'app separata — vedi ROADMAP.md.
 
 **`GET /api/v1/admin/users`** — lista tutti gli utenti della piattaforma
-(id, username, email, `platform_role`, `is_active`, `mfa_enabled`).
+(id, username, email, `platform_role`, `is_active`, `mfa_enabled`). Query
+param opzionale `q`: filtra per username o email (`ilike`, sottostringa).
 
 **`PATCH /api/v1/admin/users/{user_id}`** — `{platform_role?, is_active?}`.
 
@@ -1109,11 +1121,43 @@ Tutti gli endpoint richiedono sessione con `platform_role` in
   l'auto-blocco dell'unico Super Admin rimasto.
 - Un utente disattivato (`is_active=false`) non può più fare login.
 
-Non esiste (ancora) un endpoint per creare il primo Super Admin: va promosso
-manualmente sul database dopo la registrazione — task aperto, vedi
-[ROADMAP.md](../ROADMAP.md#1-prodotto-e-regole-di-dominio) (bootstrap via
-env/secret al momento della creazione delle risorse, non ancora
-automatizzato in questi script).
+Non esiste un endpoint per creare il primo Super Admin (nessuna sessione da
+cui autenticare la richiesta), ma non serve più promuoverlo a mano sul
+database: se `NOCT_SUPER_ADMIN_USERNAME`/`NOCT_SUPER_ADMIN_EMAIL`/
+`NOCT_SUPER_ADMIN_PASSWORD` sono tutte valorizzate (`.env`/`k8s/secret.yaml`),
+l'account viene creato automaticamente all'avvio del backend se non esiste
+già (`app/domain/auth.py::bootstrap_super_admin`, eseguita dalla `lifespan`
+di `app/main.py`) — idempotente: un riavvio successivo non lo ricrea né lo
+tocca. Restano comunque disponibili, come alternativa, l'auto-promozione del
+primo utente in modalità `solo` e l'`UPDATE` manuale a DB in modalità
+`platform`.
+
+**`GET /api/v1/admin/blogs`** — lista tutti i blog della piattaforma (id,
+slug, title, `owner_username`, `visibility`, `is_suspended`, `created_at`).
+Query param opzionale `q`: filtra per slug, titolo o username del
+proprietario (`ilike`, sottostringa).
+
+**`PATCH /api/v1/admin/blogs/{blog_id}`** — `{is_suspended: bool}`. Un blog
+sospeso diventa irraggiungibile pubblicamente (`GET /api/v1/blogs/{slug}` →
+`404`, stesso trattamento di un blog `private` a cui non si ha accesso) e non
+scrivibile — **anche per il proprietario stesso**, indipendentemente da
+`visibility` (`app/domain/authorization.py::can_view_blog`/`can_write_posts`).
+Riattivabile con lo stesso endpoint (`is_suspended: false`). Nessun'altra
+conseguenza automatica (i post restano nel database, nessuna notifica al
+proprietario).
+
+**`GET /api/v1/admin/posts`** — lista tutti i post della piattaforma, dal più
+recente (id, title, slug, `blog_slug`, `blog_title`, `author_username`,
+`status`, `is_hidden`, `published_at`, `created_at`) — bozze/in
+revisione/pianificati inclusi, non solo i pubblicati. Query param opzionale
+`q`: filtra per titolo o slug del post, slug del blog, o username
+dell'autore (`ilike`, sottostringa).
+
+**`PATCH /api/v1/admin/posts/{post_id}`** — `{is_hidden: bool}`. Vedi
+`Post.is_hidden` nella sezione Post: nasconde/mostra un post indipendentemente
+da `status`, anche per l'autore. Nessun'altra conseguenza automatica (nessuna
+notifica all'autore, nessun log delle motivazioni — vedi ROADMAP.md per i
+dettagli di rifinitura non ancora fatti).
 
 ## Feed (homepage multi-blog)
 
@@ -1154,6 +1198,11 @@ chiameranno l'API direttamente dal browser.
 **`GET /api/v1/health`** — pubblico, nessuna autenticazione. Esegue anche
 `SELECT 1` sul database. Pensato per probe di readiness/liveness (Kubernetes,
 compose healthcheck).
+
+**`GET /api/v1/config`** — pubblico, nessuna autenticazione. Espone
+`{"deployment_mode": "solo"|"platform"}` (`NOCT_DEPLOYMENT_MODE`). Usato dal
+dashboard (`frontend/src/app/dashboard/layout.tsx`) per nascondere la voce
+Utenti in modalità `solo`, senza dover già avere una sessione autenticata.
 
 ## Errori comuni
 

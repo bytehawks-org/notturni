@@ -16,9 +16,10 @@ kubectl apply -k .
 
 ## Note
 
-- `backend.yaml` / `frontend.yaml` referenziano immagini locali (`notturni-backend:latest`,
-  `notturni-frontend:latest`); vanno sostituite con un riferimento a registro una volta
-  disponibile un flusso di build/push.
+- `backend.yaml` / `frontend.yaml` referenziano immagini locali
+  (`notturni-backend:latest`, `notturni-frontend:latest`); vanno sostituite
+  con un riferimento a registro una volta disponibile un flusso di
+  build/push.
 - `redis.yaml` e `rabbitmq.yaml` non hanno persistenza in questo primo draft.
 - `ingress.yaml` gestisce un solo host path-based; il routing per sottodominio/blog
   e per dominio custom utente è demandato a un lavoro successivo (vedi

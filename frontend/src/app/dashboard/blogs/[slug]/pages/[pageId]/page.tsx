@@ -19,8 +19,8 @@ function errorMessage(err: unknown): string {
 }
 
 /** Editor di una pagina statica del blog — stessa interfaccia delle pagine
- * di piattaforma (frontend/src/app/admin/pages): niente tag/categorie,
- * editor senza il pulsante "Nota" (CLAUDE.md #1). */
+ * di piattaforma (dashboard/pagine, riservata ad Amministratore/Super
+ * Admin): niente tag/categorie, editor senza il pulsante "Nota" (CLAUDE.md #1). */
 export default function BlogPageEditorPage() {
   const params = useParams<{ slug: string; pageId: string }>();
   const router = useRouter();

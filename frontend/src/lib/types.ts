@@ -312,6 +312,50 @@ export interface AdminUser {
   created_at: string;
 }
 
+/** Elenco di piattaforma (dashboard/blog, riservato ad Amministratore/Super
+ * Admin) — distinto da `Blog`, che include tutti i campi di gestione del
+ * proprio blog non necessari qui. */
+export interface AdminBlog {
+  id: string;
+  slug: string;
+  title: string;
+  owner_username: string;
+  visibility: BlogVisibility;
+  is_suspended: boolean;
+  created_at: string;
+}
+
+/** Elenco di piattaforma (dashboard/moderazione, riservato ad
+ * Amministratore/Super Admin) — a differenza di `Post`, include i tre stati
+ * possibili (`PostStatus` sopra ne definisce solo due, per l'uso corrente
+ * negli altri punti dell'app) e i soli campi utili a moderare, non l'intero
+ * contenuto del post. */
+export interface AdminPost {
+  id: string;
+  title: string;
+  slug: string;
+  blog_slug: string;
+  blog_title: string;
+  author_username: string;
+  status: "draft" | "pending_review" | "published";
+  is_hidden: boolean;
+  published_at: string | null;
+  created_at: string;
+}
+
+export const ADMIN_POST_STATUS_LABELS: Record<AdminPost["status"], string> = {
+  draft: "Bozza",
+  pending_review: "In revisione",
+  published: "Pubblicato",
+};
+
+/** `GET /api/v1/config`, pubblico: per sapere se nascondere le sezioni
+ * multi-utente (dashboard/utenti) in modalità "solo" senza dover già avere
+ * una sessione. */
+export interface InstanceConfig {
+  deployment_mode: "solo" | "platform";
+}
+
 export interface ApiError {
   detail: string;
 }

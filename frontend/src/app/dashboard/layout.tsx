@@ -2,22 +2,31 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/Button";
+import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { PLATFORM_ADMIN_ROLES } from "@/lib/types";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, loading, logout } = useAuth();
+  const [deploymentMode, setDeploymentMode] = useState<"solo" | "platform" | null>(null);
 
   useEffect(() => {
     if (!loading && !user) {
       router.replace("/login");
     }
   }, [loading, user, router]);
+
+  useEffect(() => {
+    api.config
+      .get()
+      .then((config) => setDeploymentMode(config.deployment_mode))
+      .catch(() => setDeploymentMode("platform"));
+  }, []);
 
   if (loading || !user) {
     return (
@@ -47,8 +56,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               Frammenti
             </Link>
             {isAdmin && (
-              <Link href="/admin" className="text-sm text-muted hover:text-foreground">
-                Amministrazione
+              <Link href="/dashboard/pagine" className="text-sm text-muted hover:text-foreground">
+                Pagine
+              </Link>
+            )}
+            {isAdmin && deploymentMode !== "solo" && (
+              <Link href="/dashboard/utenti" className="text-sm text-muted hover:text-foreground">
+                Utenti
+              </Link>
+            )}
+            {isAdmin && (
+              <Link href="/dashboard/blog" className="text-sm text-muted hover:text-foreground">
+                Tutti i blog
+              </Link>
+            )}
+            {isAdmin && (
+              <Link href="/dashboard/moderazione" className="text-sm text-muted hover:text-foreground">
+                Moderazione
               </Link>
             )}
           </nav>

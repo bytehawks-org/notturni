@@ -2,6 +2,13 @@
 
 Next.js (App Router) + Tailwind CSS.
 
+Il pannello di amministrazione è parte di questa stessa app, non un
+progetto a sé: `dashboard/pagine`, `dashboard/utenti`, `dashboard/blog`
+(voci di menu visibili solo ad Amministratore/Super Admin — riusano
+`RichTextEditor` e gli altri componenti già usati per i post, nessuna
+duplicazione). Vedi [backend/API.md](../backend/API.md#amministrazione-di-piattaforma)
+per gli endpoint usati.
+
 ## Setup
 
 ```bash
@@ -28,8 +35,8 @@ src/
 ├── app/
 │   ├── login/, register/          # autenticazione (con step MFA)
 │   ├── dashboard/                  # area autore: blog, post, profilo
-│   │   └── blogs/[slug]/            # dettaglio blog: tab post/commenti/aspetto/impostazioni
-│   ├── admin/                       # area amministrativa (super_admin/amministratore)
+│   │   ├── blogs/[slug]/            # dettaglio blog: tab post/commenti/aspetto/impostazioni
+│   │   ├── pagine/, utenti/, blog/, moderazione/  # amministrazione (solo Amministratore/Super Admin): pagine statiche, utenti, elenco blog di piattaforma, moderazione post
 │   └── u/[username]/                # profilo pubblico + follow
 ├── lib/
 │   ├── api.ts                       # client HTTP tipizzato verso il backend
@@ -38,6 +45,7 @@ src/
 │   └── sun.ts                       # calcolo alba/tramonto (locale, nessuna chiamata esterna)
 └── components/
     ├── ui/                          # Button, Input, Card, Alert, ...
+    ├── SearchInput.tsx               # campo di ricerca con debounce, usato dalle sezioni di amministrazione
     └── ThemeToggle.tsx
 ```
 

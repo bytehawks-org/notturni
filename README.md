@@ -106,13 +106,20 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   di gestione del proprietario. Chi possiede un blog vede, solo nel proprio
   profilo, il totale dei follower sommato tra username e alias, oltre al
   conteggio separato per ciascuna entità.
-- **Amministrazione:** gestione utenti (ruolo, attivazione) — l'assegnazione
-  dei ruoli di amministrazione è riservata al Super Admin.
+- **Amministrazione:** voci del dashboard esistente, visibili solo ad
+  Amministratore/Super Admin, con un campo di ricerca in ogni sezione —
+  Utenti (ruolo, attivazione; l'assegnazione dei ruoli di amministrazione è
+  riservata al Super Admin; nascosta in modalità `solo`), Pagine statiche
+  (stesso editor Tiptap dei post), Tutti i blog (elenco piattaforma con
+  proprietario/visibilità, sospensione di un blog — blocca lettura e
+  scrittura pubbliche, anche per il proprietario), Moderazione (elenco di
+  tutti i post della piattaforma, nascondi/mostra il singolo post
+  indipendentemente dal suo stato).
 - **API token:** accesso diretto per il motore core, predisposto per il futuro
   utilizzo diretto da parte degli utenti.
-- **Frontend:** interfaccia autore (dashboard, editor, profilo) e
-  amministrativa (pagine statiche, utenti), tema chiaro/scuro/automatico
-  (alba-tramonto in base alla posizione, calcolata solo lato client).
+- **Frontend:** interfaccia autore (dashboard, editor, profilo), tema
+  chiaro/scuro/automatico (alba-tramonto in base alla posizione, calcolata
+  solo lato client).
 - **Self-hosting:** hostname/FQDN e modalità di installazione configurabili
   (`NOCT_INSTANCE_FQDN`, `NOCT_DEPLOYMENT_MODE=solo|platform`) — "solo" per un
   blog/sito personale a singolo proprietario (il primo utente registrato
@@ -178,11 +185,11 @@ In sintesi, ad alto livello (l'elenco completo, specifica per specifica, è in
 ├── moderation/          # microservizio FastAPI di moderazione automatica delle immagini
 │   ├── app/                # modello self-hosted (Falconsai/nsfw_image_detection via transformers)
 │   └── Dockerfile           # pesi del modello inclusi nell'immagine in fase di build
-├── frontend/            # applicazione Next.js
+├── frontend/            # applicazione Next.js (pubblica + dashboard + amministrazione)
 │   ├── src/
-│   │   ├── app/            # login/register, dashboard (autore), admin, homepage, pagina pubblica del post, profilo pubblico
+│   │   ├── app/            # login/register, dashboard (autore + amministrazione: pagine/utenti/blog), homepage, pagina pubblica del post, profilo pubblico
 │   │   ├── lib/             # client API, sessione (auth-context), tema (theme-context, sun.ts), Markdown/social/lingue
-│   │   └── components/       # UI condivisa (Button, Card, ...), editor/ (Tiptap, tag, categorie, copertina, traduzioni), ThemeToggle
+│   │   └── components/       # UI condivisa (Button, Card, SearchInput, ...), editor/ (Tiptap, tag, categorie, copertina, traduzioni), ThemeToggle
 │   └── Dockerfile
 ├── k8s/                  # manifest Kubernetes (primo draft)
 ├── compose.yaml         # stack locale via Podman/Docker compose (include il servizio moderation)
@@ -198,7 +205,7 @@ podman compose up -d --build
 
 Servizi esposti:
 
-- Frontend: <http://localhost:3000>
+- Frontend (dashboard e amministrazione incluse): <http://localhost:3000>
 - Backend (API docs): <http://localhost:8000/docs>
 - Backend (health): <http://localhost:8000/api/v1/health>
 - Moderazione immagini (health): <http://localhost:8100/health>

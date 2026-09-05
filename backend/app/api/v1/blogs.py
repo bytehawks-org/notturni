@@ -630,6 +630,7 @@ async def get_blog_bibliography(
             Post.blog_id == blog.id,
             Post.status == PostStatus.PUBLISHED,
             Post.published_at <= datetime.now(timezone.utc),
+            Post.is_hidden.is_(False),
         )
         .order_by(Post.published_at.desc(), post_notes.c.idx.asc())
     )
@@ -688,6 +689,7 @@ async def get_blog_media_bibliography(
             Post.blog_id == blog.id,
             Post.status == PostStatus.PUBLISHED,
             Post.published_at <= datetime.now(timezone.utc),
+            Post.is_hidden.is_(False),
         )
         .order_by(Post.published_at.desc(), post_media.c.position.asc())
     )
@@ -734,6 +736,7 @@ async def get_blog_links_bibliography(
             Post.blog_id == blog.id,
             Post.status == PostStatus.PUBLISHED,
             Post.published_at <= datetime.now(timezone.utc),
+            Post.is_hidden.is_(False),
         )
         .order_by(Post.published_at.desc(), post_links.c.position.asc())
     )

@@ -8,6 +8,7 @@ import { Card, CardTitle } from "@/components/ui/Card";
 import { FieldGroup, Input, Label } from "@/components/ui/Field";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
 import { TranslationsBar } from "@/components/editor/TranslationsBar";
+import { SearchInput } from "@/components/SearchInput";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import type { Page, PageTranslationSummary } from "@/lib/types";
@@ -16,9 +17,10 @@ function errorMessage(err: unknown): string {
   return err instanceof ApiClientError ? err.message : "Errore imprevisto.";
 }
 
-export default function AdminPagesPage() {
+export default function DashboardPagesPage() {
   const { accessToken } = useAuth();
   const [locale, setLocale] = useState("it");
+  const [q, setQ] = useState("");
   const [pages, setPages] = useState<Page[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -26,18 +28,19 @@ export default function AdminPagesPage() {
 
   const load = useCallback(() => {
     api.pages
-      .list(accessToken, locale)
+      .list(accessToken, locale, q)
       .then(setPages)
       .catch((err) => setError(errorMessage(err)));
-  }, [accessToken, locale]);
+  }, [accessToken, locale, q]);
 
   useEffect(load, [load]);
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-serif text-2xl text-foreground">Pagine statiche</h1>
         <div className="flex items-center gap-3">
+          <SearchInput value={q} onChange={setQ} placeholder="Cerca per titolo o slug…" />
           <Label htmlFor="locale-filter">Lingua</Label>
           <Input
             id="locale-filter"
@@ -80,7 +83,7 @@ export default function AdminPagesPage() {
           </Card>
         ))}
         {pages !== null && pages.length === 0 && (
-          <p className="text-sm text-muted">Nessuna pagina per la lingua &quot;{locale}&quot;.</p>
+          <p className="text-sm text-muted">Nessuna pagina trovata per la lingua &quot;{locale}&quot;.</p>
         )}
       </div>
     </div>
@@ -215,7 +218,7 @@ function EditPageForm({ page, onSaved }: { page: Page; onSaved: () => void }) {
         currentId={page.id}
         currentLocale={page.locale}
         translations={translations}
-        hrefFor={() => "/admin/pages"}
+        hrefFor={() => "/dashboard/pagine"}
         suggestedLocales={[]}
         authFetch={authFetch}
         withNotes={false}
