@@ -19,19 +19,9 @@ from typing import Any
 from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.http import client_ip
 from app.models.audit_log import AuditActorType, AuditLog
 from app.models.user import User
-
-
-def _client_ip(request: Request | None) -> str | None:
-    if request is None:
-        return None
-    # in produzione il backend sta dietro Traefik: l'IP reale del client è nel
-    # primo hop di X-Forwarded-For, non in request.client (che sarebbe l'ingress)
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip() or None
-    return request.client.host if request.client else None
 
 
 def actor_label_for(user: User) -> str:
@@ -73,7 +63,7 @@ async def record(
             target_type=target_type,
             target_id=target_id,
             blog_id=blog_id,
-            ip=_client_ip(request),
+            ip=client_ip(request),
             user_agent=(request.headers.get("user-agent") if request is not None else None),
             payload=payload or {},
         )

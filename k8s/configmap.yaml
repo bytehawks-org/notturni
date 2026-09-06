@@ -16,6 +16,9 @@ data:
   NOCT_RABBITMQ_HOST: "rabbitmq"
   NOCT_RABBITMQ_PORT: "5672"
 
+  NOCT_REDIS_HOST: "redis"
+  NOCT_REDIS_PORT: "6379"
+
   # backend di storage: "s3" (default, questi manifest deployano MinIO come
   # implementazione — vedi minio.yaml) oppure "localstorage" (filesystem
   # locale, non cablato in questi manifest: richiede un volume dedicato per

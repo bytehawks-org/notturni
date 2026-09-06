@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     rabbitmq_host: str = "localhost"
     rabbitmq_port: int = 5672
 
+    # Rate limiting (app/domain/rate_limit.py): nessuna autenticazione, in
+    # locale coincide di norma con un'istanza Redis dedicata/condivisa senza
+    # persistenza sensibile, quindi nessuna password richiesta di default.
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_db: int = 0
+
     # sessioni utente (JWT access token + refresh token opaco, vedi app/core/security.py)
     jwt_secret: str
     jwt_access_token_ttl_minutes: int = 15

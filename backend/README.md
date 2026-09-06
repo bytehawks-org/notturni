@@ -90,7 +90,10 @@ Serve un Postgres raggiungibile (stessa istanza di sviluppo va bene: i test
 usano un database separato, `notturni_test` di default — vedi `.env.test`,
 valori fissi e non sensibili, già pronto senza doverlo copiare). Non serve né
 lo storage S3/MinIO né RabbitMQ: nei test sono sostituiti da fake/mock (vedi
-`tests/conftest.py`).
+`tests/conftest.py`). Redis è opzionale (il rate limiting, vedi sotto, fallisce
+aperto se irraggiungibile) ma se presente va usato con un DB dedicato diverso
+da quello di sviluppo (`NOCT_REDIS_DB=1` in `.env.test`): i contatori vengono
+azzerati automaticamente prima di ogni test (`tests/conftest.py::_flush_redis`).
 
 ```bash
 python -m pytest

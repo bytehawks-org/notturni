@@ -53,6 +53,22 @@ async def _prepare_schema() -> None:
     await engine.dispose()
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def _flush_redis() -> None:
+    """Azzera i contatori di rate limiting (app/domain/rate_limit.py) prima di
+    ogni test: senza questo, i limiti per IP/email persisterebbero tra test
+    diversi nello stesso DB Redis (NOCT_REDIS_DB, .env.test) e farebbero
+    scattare 429 inattesi su test successivi che riusano la stessa email/IP
+    di test. Se Redis non è raggiungibile non blocca comunque nulla (stesso
+    fail-open del rate limiting stesso)."""
+    from app.core.redis import get_redis
+
+    try:
+        await get_redis().flushdb()
+    except Exception:
+        pass
+
+
 @pytest_asyncio.fixture
 async def db_session() -> AsyncIterator[AsyncSession]:
     engine = create_async_engine(settings.database_url)

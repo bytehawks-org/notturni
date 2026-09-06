@@ -93,7 +93,10 @@ registrazione successiva ritorna `409`. Con `NOCT_DEPLOYMENT_MODE=platform`
   Se `method` è `"email"`, a questo punto è già stato accodato l'invio del
   codice (vedi limitazione email più sotto).
 
-`401` su credenziali errate o utente disattivato.
+`401` su credenziali errate o utente disattivato. `429` oltre 20 tentativi/5
+minuti dallo stesso IP o oltre 5 tentativi/5 minuti sulla stessa email
+(protezione brute-force via Redis, `app/domain/rate_limit.py` — se Redis non
+è raggiungibile il limite è semplicemente disattivato, fail open).
 
 **`POST /api/v1/auth/mfa/verify`** — completa il login dopo una risposta
 `mfa_required`.
@@ -828,9 +831,12 @@ risolve a un indirizzo privato/loopback/link-local/riservato (mitigazione
 SSRF — `app/domain/link_preview.py::validate_previewable_url`; non è una
 barriera assoluta, stesso principio di "aiuto best-effort" già in atto per
 la moderazione automatica delle immagini sopra). **Nessuna cache**: ogni
-chiamata rifà il fetch (timeout 5s, corpo troncato a 512 KB) — un buon primo
-caso d'uso per Redis quando verrà usato per la prima volta nel progetto
-(oggi deployato ma non ancora sfruttato, vedi ROADMAP.md).
+chiamata rifà il fetch (timeout 5s, corpo troncato a 512 KB). `429` oltre 30
+richieste/minuto dallo stesso IP (rate limiting via Redis,
+`app/domain/rate_limit.py` — mitiga l'uso di questo endpoint come
+proxy/scanner verso terzi vista l'assenza di autenticazione; fail open se
+Redis non è raggiungibile). Una cache resta un possibile passo successivo,
+non fatto qui.
 
 Usato dall'editor (`frontend/src/components/editor/LinkPreviewCard.tsx`)
 quando si incolla un URL da solo: il link resta testo semplice/cancellabile,
