@@ -12,6 +12,11 @@ import type { PostNote } from "./types";
 const BACKEND_INTERNAL_URL =
   process.env.NOCT_BACKEND_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+// La fetch dell'anteprima di un link è verso un sito esterno arbitrario: un
+// timeout esplicito evita che un host lento tenga bloccato tutto il rendering
+// della pagina del post. Allo scadere, la card degrada (solo hostname/URL).
+const LINK_PREVIEW_TIMEOUT_MS = 2000;
+
 // Il backend salva Markdown grezzo, non fidato (può arrivare anche da
 // chiamate dirette all'API, non solo dall'editor WYSIWYG) — vedi API.md:
 // "conversione a HTML (con sanificazione) è responsabilità del frontend al
@@ -26,10 +31,11 @@ const renderer = new MarkdownIt({ html: false, linkify: true, breaks: false });
  * title "sensitive" è la convenzione con cui il Markdown porta con sé
  * l'informazione, senza bisogno di una tabella dedicata. Qui la trasformiamo
  * in un blocco sfocato, cliccabile per rivelarla — un puro trucco CSS
- * (checkbox nascosto + selettore ~), niente JavaScript lato client. */
-function wrapSensitiveImages(html: string): string {
-  const dom = new JSDOM(`<body>${html}</body>`);
-  const document = dom.window.document;
+ * (checkbox nascosto + selettore ~), niente JavaScript lato client.
+ *
+ * Muta `document` in place: fa parte della pipeline di `renderMarkdown`, che
+ * fa un solo parse DOM per tutte le trasformazioni. */
+function wrapSensitiveImages(document: Document): void {
   document.querySelectorAll('img[title^="sensitive"]').forEach((img) => {
     const wrapper = document.createElement("label");
     wrapper.className = "sensitive-image-wrapper";
@@ -42,7 +48,6 @@ function wrapSensitiveImages(html: string): string {
     img.replaceWith(wrapper);
     wrapper.append(toggle, img, overlay);
   });
-  return document.body.innerHTML;
 }
 
 interface LinkPreviewData {
@@ -56,13 +61,13 @@ interface LinkPreviewData {
  * "sensitive" sulle immagini. Qui recuperiamo l'anteprima (sempre dal vivo,
  * mai una copia salvata: vedi frontend/src/components/editor/LinkPreviewCard.tsx)
  * e sostituiamo il link semplice con la card. Se il fetch fallisce (sito
- * irraggiungibile, timeout) resta un link semplice, mai un errore di
- * rendering della pagina. */
-async function resolveLinkCards(html: string): Promise<string> {
-  const dom = new JSDOM(`<body>${html}</body>`);
-  const { document } = dom.window;
+ * irraggiungibile, timeout) la card degrada a solo hostname/URL, mai un
+ * errore di rendering della pagina.
+ *
+ * Muta `document` in place (vedi `wrapSensitiveImages`). */
+async function resolveLinkCards(document: Document): Promise<void> {
   const cardLinks = Array.from(document.querySelectorAll('a[title="card"]'));
-  if (cardLinks.length === 0) return html;
+  if (cardLinks.length === 0) return;
 
   await Promise.all(
     cardLinks.map(async (a) => {
@@ -73,6 +78,7 @@ async function resolveLinkCards(html: string): Promise<string> {
       try {
         const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/link-preview?url=${encodeURIComponent(href)}`, {
           cache: "no-store",
+          signal: AbortSignal.timeout(LINK_PREVIEW_TIMEOUT_MS),
         });
         if (res.ok) preview = (await res.json()) as LinkPreviewData;
       } catch {
@@ -117,8 +123,6 @@ async function resolveLinkCards(html: string): Promise<string> {
       a.replaceWith(card);
     })
   );
-
-  return document.body.innerHTML;
 }
 
 // Stessa sintassi di app/domain/mentions.py (backend): `@` non preceduto da
@@ -128,11 +132,13 @@ const MENTION_RE = /(^|[^\w@])@([a-z0-9]+(?:[-_][a-z0-9]+)*)/g;
 
 /** todo/USERS.md #1, todo/EDITOR.md: trasforma le @menzioni nel testo in link
  * al profilo pubblico dell'utente citato. Opera solo sui nodi di testo,
- * saltando quelli già dentro un link, `code` o `pre`. */
-function linkifyMentions(html: string): string {
-  const dom = new JSDOM(`<body>${html}</body>`);
-  const { document } = dom.window;
-  const NodeFilter = dom.window.NodeFilter;
+ * saltando quelli già dentro un link, `code` o `pre`.
+ *
+ * Muta `document` in place (vedi `wrapSensitiveImages`). */
+function linkifyMentions(document: Document): void {
+  const view = document.defaultView;
+  if (!view) return;
+  const NodeFilter = view.NodeFilter;
   const skip = new Set(["A", "CODE", "PRE"]);
 
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -172,8 +178,6 @@ function linkifyMentions(html: string): string {
     if (lastIndex < text.length) frag.append(document.createTextNode(text.slice(lastIndex)));
     node.replaceWith(frag);
   }
-
-  return document.body.innerHTML;
 }
 
 /** Rende il Markdown *inline* di una singola nota (nessun wrapper di blocco),
@@ -193,12 +197,14 @@ const BARE_NOTE_REF_RE = /\[\^(\d{1,3})\]/g;
 
 /** todo/EDITOR.md: trasforma i marcatori di nota nel testo in riferimenti in
  * apice (con il testo della nota come tooltip) e accoda l'elenco numerato a
- * piè di pagina. La sorgente è l'elenco strutturato `notes`, non il corpo. */
-function renderFootnotes(html: string, notes: PostNote[]): string {
-  if (notes.length === 0) return html;
-  const dom = new JSDOM(`<body>${html}</body>`);
-  const { document } = dom.window;
-  const NodeFilter = dom.window.NodeFilter;
+ * piè di pagina. La sorgente è l'elenco strutturato `notes`, non il corpo.
+ *
+ * Muta `document` in place (vedi `wrapSensitiveImages`). */
+function renderFootnotes(document: Document, notes: PostNote[]): void {
+  if (notes.length === 0) return;
+  const view = document.defaultView;
+  if (!view) return;
+  const NodeFilter = view.NodeFilter;
 
   const byIdx = new Map(notes.map((n) => [n.idx, n]));
   const titleOf = (idx: number) => plainText(renderNoteInline(byIdx.get(idx)?.content ?? ""));
@@ -271,8 +277,6 @@ function renderFootnotes(html: string, notes: PostNote[]): string {
   }
   section.append(heading, ol);
   document.body.append(section);
-
-  return document.body.innerHTML;
 }
 
 export interface RenderOptions {
@@ -287,12 +291,19 @@ export interface RenderOptions {
 export async function renderMarkdown(markdown: string, options: RenderOptions = {}): Promise<string> {
   const rawHtml = renderer.render(markdown);
   const cleanHtml = DOMPurify.sanitize(rawHtml);
-  const withImages = wrapSensitiveImages(cleanHtml);
-  const withCards = await resolveLinkCards(withImages);
-  const withMentions = options.mentions === false ? withCards : linkifyMentions(withCards);
-  return options.notes && options.notes.length > 0
-    ? renderFootnotes(withMentions, options.notes)
-    : withMentions;
+
+  // Un solo parse DOM per l'intera pipeline: prima ogni passo faceva
+  // `new JSDOM(...)` e ri-serializzava (4 parse per render, ripetuti a ogni
+  // pagina). Ora le trasformazioni mutano lo stesso `document` in place.
+  const dom = new JSDOM(`<body>${cleanHtml}</body>`);
+  const { document } = dom.window;
+
+  wrapSensitiveImages(document);
+  await resolveLinkCards(document);
+  if (options.mentions !== false) linkifyMentions(document);
+  if (options.notes && options.notes.length > 0) renderFootnotes(document, options.notes);
+
+  return document.body.innerHTML;
 }
 
 /** Estratto in solo testo per anteprime (card del feed, meta description):

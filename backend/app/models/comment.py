@@ -20,7 +20,7 @@ class Comment(Base, UUIDPKMixin, TimestampMixin):
 
     __tablename__ = "comments"
 
-    post_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("posts.id"), nullable=False)
+    post_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("posts.id"), nullable=False, index=True)
     # nullable: valorizzato solo se il blog consente commenti a utenti non registrati
     author_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     author_display_name: Mapped[str] = mapped_column(String(255))

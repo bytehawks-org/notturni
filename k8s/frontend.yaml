@@ -20,6 +20,11 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
+          # NOCT_BACKEND_INTERNAL_URL (SSR) e NOCT_REVALIDATE_SECRET
+          # (route /api/revalidate) arrivano da configmap/secret condivisi.
+          envFrom:
+            - configMapRef: {name: notturni-config}
+            - secretRef: {name: notturni-secrets}
           readinessProbe:
             httpGet: {path: /, port: 3000}
             initialDelaySeconds: 5

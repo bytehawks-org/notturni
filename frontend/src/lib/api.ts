@@ -6,6 +6,7 @@ import type {
   AuditLogEntry,
   BibliographyEntry,
   Blog,
+  BlogComment,
   BlogConfig,
   BlogInvitation,
   BlogMember,
@@ -13,6 +14,7 @@ import type {
   BlogVisibility,
   Category,
   Comment,
+  CommentStatus,
   CurrentUser,
   FollowStats,
   FragmentCollectionEntry,
@@ -361,6 +363,10 @@ export const api = {
     listApproved: (postId: string) => request<Comment[]>(`/api/v1/posts/${postId}/comments`),
     listPending: (token: string, postId: string) =>
       request<Comment[]>(`/api/v1/posts/${postId}/comments/pending`, { token }),
+    /** Moderazione trasversale: commenti di tutti i post del blog in una sola
+     * richiesta (default `pending`), invece di una fetch per post. */
+    listForBlog: (token: string, blogSlug: string, status: CommentStatus = "pending") =>
+      request<BlogComment[]>(`/api/v1/blogs/${blogSlug}/comments?status=${status}`, { token }),
     create: (
       token: string | null,
       postId: string,

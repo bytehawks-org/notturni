@@ -2,7 +2,17 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ARRAY, Boolean, DateTime, Enum, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import (
+    ARRAY,
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,8 +30,11 @@ class PostStatus(str, enum.Enum):
 class Post(Base, UUIDPKMixin, TimestampMixin):
     __tablename__ = "posts"
 
+    # blog_id: nessun index=True dedicato — è già la colonna di testa dello
+    # UniqueConstraint (blog_id, slug, locale) qui sotto, che Postgres usa
+    # anche per i soli lookup per blog_id.
     blog_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("blogs.id"), nullable=False)
-    author_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    author_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     # Categoria (tassonomia del blog, vedi app/models/category.py): al più
     # una per post, a differenza dei tag. Colonna semplice, non una
     # relationship — stesso motivo di `tags` sotto: evitare assegnazioni
@@ -29,7 +42,7 @@ class Post(Base, UUIDPKMixin, TimestampMixin):
     # async non awaited. ondelete SET NULL: cancellare la categoria non
     # cancella i post, li lascia solo senza categoria.
     category_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("categories.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("categories.id", ondelete="SET NULL"), nullable=True, index=True
     )
     # nome pubblico dell'autore per questo post, può differire da User.username (CLAUDE.md #1)
     author_display_name: Mapped[str] = mapped_column(String(255))
@@ -107,4 +120,8 @@ class Post(Base, UUIDPKMixin, TimestampMixin):
     __table_args__ = (
         UniqueConstraint("blog_id", "slug", "locale", name="uq_post_blog_slug_locale"),
         UniqueConstraint("translation_group_id", "locale", name="uq_post_translation_group_locale"),
+        # Feed della homepage e tendenze: WHERE status='published' AND
+        # published_at <= now() ORDER BY published_at DESC — vedi
+        # app/api/v1/feed.py.
+        Index("ix_posts_status_published_at", "status", "published_at"),
     )

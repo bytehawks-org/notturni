@@ -244,6 +244,13 @@ export interface Comment {
   created_at: string;
 }
 
+/** GET /blogs/{slug}/comments — moderazione trasversale nel dashboard:
+ * commenti di tutti i post del blog, ciascuno con titolo/slug del post. */
+export interface BlogComment extends Comment {
+  post_title: string;
+  post_slug: string;
+}
+
 /** Solo per il proprietario (GET /users/me/follow-stats, CLAUDE.md #8):
  * l'unico posto dove identità reale e alias di blog compaiono insieme, per
  * sapere quante persone lo seguono in tutto sotto qualunque identità. */

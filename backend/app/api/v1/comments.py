@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -136,6 +136,73 @@ async def list_pending_comments(
         select(Comment).where(Comment.post_id == post_id, Comment.status == CommentStatus.PENDING)
     )
     return [await _comment_out(session, c) for c in result.scalars().all()]
+
+
+class BlogCommentOut(CommentOut):
+    """Come CommentOut, con il titolo/slug del post di appartenenza: la
+    moderazione per-blog (dashboard/blog) mostra i commenti di tutti i post
+    insieme e deve sapere a quale post si riferisce ciascuno."""
+
+    post_title: str
+    post_slug: str
+
+
+@router.get("/blogs/{blog_slug}/comments", response_model=list[BlogCommentOut])
+async def list_blog_comments(
+    blog_slug: str,
+    status_filter: CommentStatus = Query(CommentStatus.PENDING, alias="status"),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[BlogCommentOut]:
+    """Commenti di *tutti* i post di un blog con lo stato indicato (default
+    `pending`), dal più recente — per la moderazione trasversale nel
+    dashboard senza una fetch per ogni post (N+1). Riservato a
+    proprietario/mediatore del blog."""
+    blog = (
+        await session.execute(select(Blog).where(Blog.slug == blog_slug))
+    ).scalar_one_or_none()
+    if blog is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Blog non trovato.")
+    if not await can_moderate_comments(session, user_id=current_user.id, blog=blog):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Serve essere proprietario del blog o mediatore.")
+
+    rows = (
+        await session.execute(
+            select(Comment, Post.title, Post.slug)
+            .join(Post, Post.id == Comment.post_id)
+            .where(Post.blog_id == blog.id, Comment.status == status_filter)
+            .order_by(Comment.created_at.desc())
+        )
+    ).all()
+
+    # display name degli autori registrati ricalcolato in blocco (un solo
+    # SELECT invece di uno per commento — stesso principio di _posts_out).
+    author_ids = {c.author_id for c, _t, _s in rows if c.author_id is not None}
+    authors: dict[uuid.UUID, User] = {}
+    if author_ids:
+        res = await session.execute(select(User).where(User.id.in_(author_ids)))
+        authors = {u.id: u for u in res.scalars()}
+
+    out: list[BlogCommentOut] = []
+    for comment, post_title, post_slug in rows:
+        display_name = comment.author_display_name
+        author = authors.get(comment.author_id) if comment.author_id is not None else None
+        if author is not None:
+            display_name = resolve_personal_display_name(author)
+        out.append(
+            BlogCommentOut(
+                id=comment.id,
+                post_id=comment.post_id,
+                author_id=comment.author_id,
+                author_display_name=display_name,
+                status=comment.status,
+                content=comment.content,
+                created_at=comment.created_at,
+                post_title=post_title,
+                post_slug=post_slug,
+            )
+        )
+    return out
 
 
 async def _moderate(

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { REVALIDATE_SECONDS, revalidateTags } from "./revalidate";
 import type {
   BibliographyEntry,
   Blog,
@@ -27,9 +28,17 @@ export async function getPublicPostByPermalink(
   postSlug: string
 ): Promise<Post | null> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${blogSlug}/posts/${date}/${postSlug}`, {
-    // niente cache tra una request e l'altra: un post appena pubblicato deve
-    // essere visibile subito, non serve una strategia di revalidate qui.
-    cache: "no-store",
+    // Cacheato con finestra a tempo + tag: il backend invalida `post:…` e
+    // `blog:…` al publish/update (vedi lib/revalidate.ts). Senza il webhook,
+    // il post torna coerente comunque entro REVALIDATE_SECONDS.
+    next: {
+      revalidate: REVALIDATE_SECONDS,
+      tags: [
+        revalidateTags.post(blogSlug, postSlug),
+        revalidateTags.blog(blogSlug),
+        revalidateTags.feed(),
+      ],
+    },
   });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero del post.`);
@@ -46,7 +55,12 @@ export async function getPublicPage(
 ): Promise<Page | null> {
   const res = await fetch(
     `${BACKEND_INTERNAL_URL}/api/v1/blogs/${blogSlug}/pages/${pageSlug}?locale=${locale}`,
-    { cache: "no-store" }
+    {
+      next: {
+        revalidate: REVALIDATE_SECONDS,
+        tags: [revalidateTags.blogPage(blogSlug, pageSlug), revalidateTags.blog(blogSlug)],
+      },
+    }
   );
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero della pagina.`);
@@ -58,7 +72,10 @@ export async function getPublicPage(
  * trovata/non pubblicata (404). */
 export async function getPublicPlatformPage(slug: string, locale: string): Promise<Page | null> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/pages/${slug}?locale=${locale}`, {
-    cache: "no-store",
+    next: {
+      revalidate: REVALIDATE_SECONDS,
+      tags: [revalidateTags.platformPage(slug), revalidateTags.platformPages()],
+    },
   });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero della pagina.`);
@@ -67,7 +84,9 @@ export async function getPublicPlatformPage(slug: string, locale: string): Promi
 
 /** Dettaglio pubblico di un blog. `null` se non trovato o non visibile (404). */
 export async function getPublicBlog(slug: string): Promise<Blog | null> {
-  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}`, { cache: "no-store" });
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}`, {
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.blog(slug)] },
+  });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero del blog.`);
   return (await res.json()) as Blog;
@@ -76,7 +95,7 @@ export async function getPublicBlog(slug: string): Promise<Blog | null> {
 /** Bibliografia automatica del blog: tutte le note dei post pubblicati. */
 export async function getBlogBibliography(slug: string): Promise<BibliographyEntry[] | null> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}/bibliography`, {
-    cache: "no-store",
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.blog(slug)] },
   });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero della bibliografia.`);
@@ -86,7 +105,7 @@ export async function getBlogBibliography(slug: string): Promise<BibliographyEnt
 /** CLAUDE.md #4: come sopra, per i media (immagini) citati nei post pubblicati. */
 export async function getBlogMediaBibliography(slug: string): Promise<MediaBibliographyEntry[] | null> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}/media-bibliography`, {
-    cache: "no-store",
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.blog(slug)] },
   });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero della bibliografia dei media.`);
@@ -96,7 +115,7 @@ export async function getBlogMediaBibliography(slug: string): Promise<MediaBibli
 /** CLAUDE.md #4: come sopra, per i link citati nei post pubblicati. */
 export async function getBlogLinksBibliography(slug: string): Promise<LinkBibliographyEntry[] | null> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}/links-bibliography`, {
-    cache: "no-store",
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.blog(slug)] },
   });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero della bibliografia dei link.`);
@@ -114,7 +133,7 @@ export async function getPublicFeed(
   if (options.limit) params.set("limit", String(options.limit));
   const qs = params.toString();
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/feed/posts${qs ? `?${qs}` : ""}`, {
-    cache: "no-store",
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.feed()] },
   });
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero del feed.`);
   return (await res.json()) as Post[];
@@ -129,7 +148,7 @@ export async function getTrendingTags(
   if (options.limit) params.set("limit", String(options.limit));
   const qs = params.toString();
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/feed/trending${qs ? `?${qs}` : ""}`, {
-    cache: "no-store",
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.feed()] },
   });
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero delle tendenze.`);
   return (await res.json()) as TrendingTag[];

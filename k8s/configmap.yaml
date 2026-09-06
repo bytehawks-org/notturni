@@ -39,3 +39,12 @@ data:
   # (nomeutente.notturni.eu) — da rivedere con un match a wildcard quando le
   # pagine pubbliche dei blog chiameranno l'API dal browser.
   NOCT_CORS_ORIGINS: "https://notturni.eu"
+
+  # URL interno al cluster del backend, usato dai Server Component del
+  # frontend per l'SSR (il browser usa invece l'host pubblico).
+  NOCT_BACKEND_INTERNAL_URL: "http://backend:8000"
+  # invalidazione on-demand della cache del frontend dopo publish/update di
+  # contenuti pubblici (vedi backend/app/core/revalidation.py). Il secret
+  # corrispondente è in secret.yaml (NOCT_REVALIDATE_SECRET), condiviso tra
+  # backend e frontend; se assente la funzione è disattivata (solo cache a tempo).
+  NOCT_FRONTEND_REVALIDATE_URL: "http://frontend:3000/api/revalidate"

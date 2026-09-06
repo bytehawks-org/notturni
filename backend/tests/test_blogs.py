@@ -323,7 +323,7 @@ async def test_media_upload_flagged_by_moderation(
     async def _fake_classify(content: bytes, filename: str, content_type: str) -> bool:
         return True
 
-    monkeypatch.setattr("app.api.v1.blogs.classify_image", _fake_classify)
+    monkeypatch.setattr("app.api.v1.blogs.media.classify_image", _fake_classify)
 
     owner: AuthedUser = await make_user("owner-media-flagged")
     await client.post("/api/v1/blogs", json={"slug": "blog-media-flagged", "title": "x"}, headers=owner.headers)

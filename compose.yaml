@@ -90,6 +90,11 @@ services:
       NOCT_S3_ENDPOINT_URL: http://minio:9000
       NOCT_S3_PUBLIC_URL: http://localhost:9000
       NOCT_MODERATION_SERVICE_URL: http://moderation:8100
+      # invalidazione on-demand della cache del frontend dopo publish/update
+      # di contenuti pubblici (vedi backend/app/core/revalidation.py). Il
+      # frontend si raggiunge per nome servizio nella rete di compose.
+      NOCT_FRONTEND_REVALIDATE_URL: http://frontend:3000/api/revalidate
+      NOCT_REVALIDATE_SECRET: ${NOCT_REVALIDATE_SECRET:-dev-revalidate-secret}
     ports:
       - "8000:8000"
     depends_on:
@@ -163,6 +168,10 @@ services:
       # Variabile normale, non build-arg: letta a runtime, non inglobata nel
       # bundle — non richiede un rebuild dell'immagine per essere cambiata.
       NOCT_BACKEND_INTERNAL_URL: http://backend:8000
+      # secret condiviso con il backend per la route /api/revalidate: deve
+      # coincidere con NOCT_REVALIDATE_SECRET del servizio backend. Se assente
+      # da entrambi, la cache si affida solo alla rivalidazione a tempo.
+      NOCT_REVALIDATE_SECRET: ${NOCT_REVALIDATE_SECRET:-dev-revalidate-secret}
     restart: on-failure
     ports:
       - "3000:3000"

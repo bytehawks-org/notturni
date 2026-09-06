@@ -862,7 +862,14 @@ registrati ma con moderazione obbligatoria in quel caso.
 
 **`GET /api/v1/posts/{post_id}/comments/pending`** — richiede sessione ed
 essere proprietario del blog o avere membership con ruolo `mediatore` (`403`
-altrimenti). Coda di moderazione.
+altrimenti). Coda di moderazione del singolo post.
+
+**`GET /api/v1/blogs/{blog_slug}/comments`** — stessa autorizzazione di
+`pending`. Commenti di *tutti* i post del blog con lo stato indicato dal
+parametro opzionale `status` (`pending` di default, oppure `approved` /
+`rejected`), dal più recente. Ogni elemento ha in più `post_title` e
+`post_slug`. Serve alla moderazione trasversale nel dashboard senza una
+richiesta per ogni post.
 
 **`POST /api/v1/comments/{comment_id}/approve`** / **`.../reject`** — stessa
 autorizzazione di `pending`. Cambiano lo stato del commento.
