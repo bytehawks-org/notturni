@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 
 import { getCrawlDirectives } from "@/lib/server-api";
+import { SITE_URL } from "@/lib/site";
 
 // Senza questo, Next prova a pre-renderizzare /robots.txt in fase di build
 // (route "cacheata di default" per le route speciali, vedi doc Next.js) e la
@@ -27,5 +28,5 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
     }
   }
 
-  return { rules };
+  return { rules, sitemap: `${SITE_URL}/sitemap.xml` };
 }

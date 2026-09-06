@@ -3,6 +3,7 @@ import { Inter, Lora } from "next/font/google";
 import Script from "next/script";
 
 import { AuthProvider } from "@/lib/auth-context";
+import { SITE_URL } from "@/lib/site";
 import { ThemeProvider } from "@/lib/theme-context";
 
 import "./globals.css";
@@ -17,10 +18,25 @@ const headingFont = Lora({
   subsets: ["latin"],
 });
 
+const DEFAULT_DESCRIPTION =
+  "Piattaforma opensource di microblogging e newsletter, multilingua ed EU-centrica.";
+
 export const metadata: Metadata = {
-  title: "Notturni",
-  description:
-    "Piattaforma opensource di microblogging e newsletter, multilingua ed EU-centrica.",
+  // Risolve i percorsi relativi passati a `openGraph.images`/`alternates.canonical`
+  // dalle pagine figlie — senza questo, Next li lascerebbe relativi anche nell'HTML
+  // finale (invalidi per i consumer esterni di Open Graph/canonical).
+  metadataBase: new URL(SITE_URL),
+  title: { default: "Notturni", template: "%s · Notturni" },
+  description: DEFAULT_DESCRIPTION,
+  openGraph: {
+    siteName: "Notturni",
+    type: "website",
+    locale: "it_IT",
+    description: DEFAULT_DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+  },
 };
 
 // Applica subito il tema salvato (o la preferenza di sistema come primissima

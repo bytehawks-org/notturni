@@ -36,7 +36,12 @@ kubectl apply -k .
 - `NEXT_PUBLIC_API_URL` (frontend) viene inglobato nel bundle in fase di
   build dell'immagine (`docker build --build-arg NEXT_PUBLIC_API_URL=...`),
   non letto a runtime: non basta un env/ConfigMap sul Deployment, l'immagine
-  va ricostruita con l'URL pubblico reale dell'API prima del deploy.
+  va ricostruita con l'URL pubblico reale dell'API prima del deploy. Stesso
+  discorso per `NEXT_PUBLIC_SITE_URL` (SEO: `metadataBase`/canonical/
+  `sitemap.xml`/`robots.txt`, `frontend/src/lib/site.ts`) — va ricostruita con
+  il dominio pubblico reale del sito (es. `https://notturni.eu`), non
+  `localhost`, altrimenti canonical/sitemap/robots puntano tutti all'host
+  sbagliato.
 - I worker consumer di coda (`app/workers/post_backup_consumer.py`,
   `email_otp_consumer.py`) non hanno ancora un Deployment dedicato in questi
   manifest — vedi `compose.yaml` per l'equivalente locale funzionante; senza

@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_session
-from app.domain.seo import AI_CRAWLER_USER_AGENTS, build_crawl_directives
+from app.domain.seo import AI_CRAWLER_USER_AGENTS, build_crawl_directives, build_sitemap_entries
 
 router = APIRouter()
 
@@ -37,3 +37,12 @@ async def crawl_directives(session: AsyncSession = Depends(get_session)) -> dict
     tradizionali restano sul gruppo `User-agent: *` con `search_disallow`."""
     directives = await build_crawl_directives(session)
     return {**directives, "ai_user_agents": AI_CRAWLER_USER_AGENTS}
+
+
+@router.get("/seo/sitemap-entries")
+async def sitemap_entries(session: AsyncSession = Depends(get_session)) -> dict[str, list[dict[str, str]]]:
+    """Pubblico, nessuna auth: usato da `frontend/src/app/sitemap.ts` per
+    generare `/sitemap.xml` (app/domain/seo.py::build_sitemap_entries) — solo
+    contenuto effettivamente indicizzabile (coerente con `search_disallow` di
+    /seo/crawl-directives sopra)."""
+    return await build_sitemap_entries(session)

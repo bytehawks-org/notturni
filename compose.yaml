@@ -231,6 +231,9 @@ services:
         # il browser gira sull'host, non nella rete di compose: deve
         # raggiungere il backend sulla porta pubblicata, non per nome servizio
         NEXT_PUBLIC_API_URL: http://localhost:8000
+        # SEO (metadataBase/canonical/sitemap.xml/robots.txt) — vedi
+        # frontend/src/lib/site.ts.
+        NEXT_PUBLIC_SITE_URL: http://localhost:3000
     environment:
       # le pagine renderizzate lato server (Server Component, es. la pagina
       # pubblica del post) girano nel processo Node.js del container: a

@@ -81,6 +81,17 @@ export async function getPublicPlatformPage(slug: string, locale: string): Promi
   return (await res.json()) as Page;
 }
 
+/** Tutte le pagine statiche pubblicate del sito principale, lingua di
+ * default — usato da `app/sitemap.ts`. Il routing i18n non è ancora
+ * costruito lato frontend (CLAUDE.md #1), da cui la lingua fissa. */
+export async function getPublicPlatformPages(): Promise<Page[]> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/pages?locale=it`, {
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.platformPages()] },
+  });
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero delle pagine di piattaforma.`);
+  return (await res.json()) as Page[];
+}
+
 /** Dettaglio pubblico di un blog. `null` se non trovato o non visibile (404). */
 export async function getPublicBlog(slug: string): Promise<Blog | null> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}`, {
@@ -183,4 +194,20 @@ export async function getCrawlDirectives(): Promise<CrawlDirectives> {
   });
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero delle direttive crawler.`);
   return (await res.json()) as CrawlDirectives;
+}
+
+export interface SitemapEntries {
+  blogs: { slug: string; updated_at: string }[];
+  posts: { permalink: string; updated_at: string }[];
+}
+
+/** Voci per `sitemap.xml` (`app/sitemap.ts`): solo blog/post effettivamente
+ * indicizzabili — stesso criterio di `getCrawlDirectives` sopra (vedi
+ * backend/app/domain/seo.py::build_sitemap_entries). */
+export async function getSitemapEntries(): Promise<SitemapEntries> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/seo/sitemap-entries`, {
+    next: { revalidate: REVALIDATE_SECONDS },
+  });
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero delle voci della sitemap.`);
+  return (await res.json()) as SitemapEntries;
 }

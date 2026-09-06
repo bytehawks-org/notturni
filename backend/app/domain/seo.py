@@ -100,3 +100,38 @@ async def build_crawl_directives(session: AsyncSession) -> dict[str, list[str]]:
     search_disallow = sorted(set(search_disallow))
     ai_disallow = sorted(set(ai_disallow) | set(search_disallow))
     return {"search_disallow": search_disallow, "ai_disallow": ai_disallow}
+
+
+async def build_sitemap_entries(session: AsyncSession) -> dict[str, list[dict[str, str]]]:
+    """Voci per `sitemap.xml` (`frontend/src/app/sitemap.ts`): solo blog/post
+    che i motori di ricerca possono comunque indicizzare
+    (`search_indexing_enabled` effettivo) — un contenuto in `search_disallow`
+    non ha senso elencarlo anche nella sitemap."""
+    blogs_result = await session.execute(
+        select(Blog).where(
+            Blog.visibility == BlogVisibility.PUBLIC,
+            Blog.is_suspended.is_(False),
+            Blog.search_indexing_enabled.is_(True),
+        )
+    )
+    blogs = list(blogs_result.scalars().all())
+    blogs_by_id = {blog.id: blog for blog in blogs}
+
+    blog_entries = [
+        {"slug": blog.slug, "updated_at": blog.updated_at.isoformat()} for blog in blogs
+    ]
+    if not blogs_by_id:
+        return {"blogs": blog_entries, "posts": []}
+
+    posts_result = await session.execute(
+        select(Post).where(Post.blog_id.in_(blogs_by_id.keys()), publicly_visible_clause())
+    )
+    post_entries = []
+    for post in posts_result.scalars().all():
+        blog = blogs_by_id[post.blog_id]
+        if not effective_search_indexing(post, blog):
+            continue
+        post_entries.append(
+            {"permalink": build_permalink(blog.slug, post), "updated_at": post.updated_at.isoformat()}
+        )
+    return {"blogs": blog_entries, "posts": post_entries}

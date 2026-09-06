@@ -1430,6 +1430,14 @@ non sospesi e post pubblicamente visibili (`is_publicly_visible`) — un blog
 Consumato da `frontend/src/app/robots.ts` (route speciale Next.js, genera
 `/robots.txt`).
 
+**`GET /api/v1/seo/sitemap-entries`** — pubblico, nessuna autenticazione.
+Espone `{"blogs": [{"slug", "updated_at"}, ...], "posts": [{"permalink",
+"updated_at"}, ...]}` (`app/domain/seo.py::build_sitemap_entries`) — solo
+contenuto effettivamente indicizzabile (stesso criterio di
+`search_disallow` sopra: un blog/post con `search_indexing_enabled`
+effettivo a `false` non compare). Consumato da
+`frontend/src/app/sitemap.ts` per generare `/sitemap.xml`.
+
 ## Errori comuni
 
 | Caso                                        | Status |

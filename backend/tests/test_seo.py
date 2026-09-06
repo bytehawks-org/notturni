@@ -80,3 +80,23 @@ async def test_crawl_directives_public_blog_default_not_disallowed(
     assert f"/{slug}" not in body["search_disallow"]
     assert f"/{slug}/post-seo-default" not in body["search_disallow"]
     assert f"/{slug}" not in body["ai_disallow"]
+
+
+async def test_sitemap_entries_excludes_noindex_content(client: AsyncClient, make_user: Callable) -> None:
+    owner: AuthedUser = await make_user("owner-seo-sitemap")
+    slug = await _create_blog(client, owner, "blog-seo-sitemap")
+    await _create_and_publish_post(client, owner, slug, "post-seo-sitemap-visible")
+    excluded_post_id = await _create_and_publish_post(client, owner, slug, "post-seo-sitemap-escluso")
+    await client.patch(
+        f"/api/v1/posts/{excluded_post_id}",
+        json={"search_indexing_enabled": False},
+        headers=owner.headers,
+    )
+
+    res = await client.get("/api/v1/seo/sitemap-entries")
+    assert res.status_code == 200
+    body = res.json()
+    assert any(b["slug"] == slug for b in body["blogs"])
+    permalinks = {p["permalink"] for p in body["posts"]}
+    assert f"/{slug}/post-seo-sitemap-visible" in permalinks
+    assert f"/{slug}/post-seo-sitemap-escluso" not in permalinks

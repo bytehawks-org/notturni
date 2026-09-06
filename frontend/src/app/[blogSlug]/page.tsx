@@ -13,9 +13,13 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
   const { blogSlug } = await params;
   const blog = await getPublicBlog(blogSlug);
   if (!blog) return {};
+  const description = blog.description ?? blog.subtitle ?? undefined;
   return {
     title: blog.title,
-    description: blog.description ?? blog.subtitle ?? undefined,
+    description,
+    alternates: { canonical: `/${blogSlug}` },
+    robots: blog.search_indexing_enabled ? undefined : { index: false, follow: false },
+    openGraph: { title: blog.title, description, type: "website", url: `/${blogSlug}` },
   };
 }
 
