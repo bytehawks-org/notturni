@@ -6,12 +6,11 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_token
+from app.api.deps import TokenActor, get_token_actor
 from app.core.database import get_session
 from app.domain import audit
 from app.domain.api_tokens import generate_api_token
 from app.models.api_token import ApiToken, ApiTokenOwnerType
-from app.models.audit_log import AuditActorType
 
 router = APIRouter()
 
@@ -44,16 +43,18 @@ class TokenOut(BaseModel):
 async def create_token(
     payload: TokenCreateRequest,
     request: Request,
-    current: ApiToken = Depends(get_current_token),
+    actor: TokenActor = Depends(get_token_actor),
     session: AsyncSession = Depends(get_session),
 ) -> TokenCreateResponse:
     """Emette un nuovo token con lo stesso owner_type (e, se applicabile, lo
-    stesso utente) del token usato per l'autenticazione della richiesta."""
+    stesso utente) dell'attore che ha autenticato la richiesta — un ApiToken
+    esistente o, per il primo token utente, una sessione JWT (vedi
+    get_token_actor)."""
     plaintext, prefix, token_hash = generate_api_token()
     new_token = ApiToken(
         name=payload.name,
-        owner_type=current.owner_type,
-        user_id=current.user_id,
+        owner_type=actor.owner_type,
+        user_id=actor.user_id,
         token_prefix=prefix,
         token_hash=token_hash,
     )
@@ -61,17 +62,13 @@ async def create_token(
     await audit.record(
         session,
         action="api_token.created",
-        actor_type=(
-            AuditActorType.USER_TOKEN
-            if current.owner_type == ApiTokenOwnerType.USER
-            else AuditActorType.CORE_TOKEN
-        ),
-        actor_id=current.user_id,
-        actor_label=current.name,
+        actor_type=actor.actor_type,
+        actor_id=actor.user_id,
+        actor_label=actor.actor_label,
         target_type="api_token",
         target_id=new_token.id,
         request=request,
-        payload={"name": payload.name, "owner_type": current.owner_type.value},
+        payload={"name": payload.name, "owner_type": actor.owner_type.value},
     )
     await session.commit()
     await session.refresh(new_token)
@@ -80,12 +77,12 @@ async def create_token(
 
 @router.get("", response_model=list[TokenOut])
 async def list_tokens(
-    current: ApiToken = Depends(get_current_token),
+    actor: TokenActor = Depends(get_token_actor),
     session: AsyncSession = Depends(get_session),
 ) -> list[ApiToken]:
-    stmt = select(ApiToken).where(ApiToken.owner_type == current.owner_type)
-    if current.owner_type == ApiTokenOwnerType.USER:
-        stmt = stmt.where(ApiToken.user_id == current.user_id)
+    stmt = select(ApiToken).where(ApiToken.owner_type == actor.owner_type)
+    if actor.owner_type == ApiTokenOwnerType.USER:
+        stmt = stmt.where(ApiToken.user_id == actor.user_id)
     result = await session.execute(stmt)
     return list(result.scalars().all())
 
@@ -94,7 +91,7 @@ async def list_tokens(
 async def revoke_token(
     token_id: uuid.UUID,
     request: Request,
-    current: ApiToken = Depends(get_current_token),
+    actor: TokenActor = Depends(get_token_actor),
     session: AsyncSession = Depends(get_session),
 ) -> None:
     result = await session.execute(select(ApiToken).where(ApiToken.id == token_id))
@@ -103,8 +100,8 @@ async def revoke_token(
     if target is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Token non trovato.")
 
-    is_own_token = target.owner_type == current.owner_type and (
-        current.owner_type == ApiTokenOwnerType.CORE or target.user_id == current.user_id
+    is_own_token = target.owner_type == actor.owner_type and (
+        actor.owner_type == ApiTokenOwnerType.CORE or target.user_id == actor.user_id
     )
     if not is_own_token:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Non è possibile revocare questo token.")
@@ -113,13 +110,9 @@ async def revoke_token(
     await audit.record(
         session,
         action="api_token.revoked",
-        actor_type=(
-            AuditActorType.USER_TOKEN
-            if current.owner_type == ApiTokenOwnerType.USER
-            else AuditActorType.CORE_TOKEN
-        ),
-        actor_id=current.user_id,
-        actor_label=current.name,
+        actor_type=actor.actor_type,
+        actor_id=actor.user_id,
+        actor_label=actor.actor_label,
         target_type="api_token",
         target_id=target.id,
         request=request,

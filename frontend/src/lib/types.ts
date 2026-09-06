@@ -398,6 +398,27 @@ export const AUDIT_ACTOR_TYPE_LABELS: Record<AuditActorType, string> = {
   anonymous: "Anonimo",
 };
 
+/** `/api/v1/tokens` (dashboard/token). Non include mai il valore in chiaro né
+ * l'hash: quello arriva solo nella risposta di creazione (`token`), una
+ * sola volta. */
+export interface ApiToken {
+  id: string;
+  name: string;
+  token_prefix: string;
+  owner_type: "core" | "user";
+  created_at: string;
+  last_used_at: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+}
+
+export interface ApiTokenCreated {
+  id: string;
+  name: string;
+  token: string;
+  token_prefix: string;
+}
+
 /** `GET /api/v1/config`, pubblico: per sapere se nascondere le sezioni
  * multi-utente (dashboard/utenti) in modalità "solo" senza dover già avere
  * una sessione. */

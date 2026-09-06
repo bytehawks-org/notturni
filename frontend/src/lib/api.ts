@@ -3,6 +3,8 @@ import type {
   AdminBlog,
   AdminPost,
   AdminUser,
+  ApiToken,
+  ApiTokenCreated,
   AuditLogEntry,
   BibliographyEntry,
   Blog,
@@ -508,5 +510,13 @@ export const api = {
         offset: string;
       }> = {}
     ) => request<AuditLogEntry[]>(withQuery("/api/v1/admin/audit-log", filters), { token }),
+  },
+
+  tokens: {
+    list: (token: string) => request<ApiToken[]>("/api/v1/tokens", { token }),
+    create: (token: string, name: string) =>
+      request<ApiTokenCreated>("/api/v1/tokens", { method: "POST", token, body: { name } }),
+    revoke: (token: string, tokenId: string) =>
+      request<void>(`/api/v1/tokens/${tokenId}`, { method: "DELETE", token }),
   },
 };

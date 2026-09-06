@@ -55,6 +55,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <Link href="/dashboard/frammenti" className="text-sm text-muted hover:text-foreground">
               Frammenti
             </Link>
+            <Link href="/dashboard/token" className="text-sm text-muted hover:text-foreground">
+              Token API
+            </Link>
             {isAdmin && (
               <Link href="/dashboard/pagine" className="text-sm text-muted hover:text-foreground">
                 Pagine

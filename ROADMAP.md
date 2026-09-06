@@ -98,7 +98,7 @@ Legenda stato:
 | MFA Email OTP asincrono | 🟡 | Accodato su RabbitMQ e funzionante end-to-end lato coda; il consumer (`app/workers/email_otp_consumer.py`) è ancora un placeholder che **logga il codice invece di inviarlo** — nessun provider SMTP/transazionale collegato. |
 | SSO Google/Microsoft/GitHub/LinkedIn (OAuth2/OIDC via Authlib) | 🟡 | Implementato a livello di codice; **non testabile end-to-end** senza credenziali OAuth reali per ciascun provider — verificato solo a livello di logica di dominio. |
 | Account linking basato su email, con gate 2FA | ✅ | |
-| Token API (`api_tokens`, prefisso `noct_`, hash sha256) | 🟡 | Tabella e logica di dominio pronte per token "core" (motore, machine-to-machine) e token "utente", ma **manca ancora l'interfaccia utente** per generare/revocare un proprio token: oggi è raggiungibile solo via API diretta o script di bootstrap. |
+| Token API (`api_tokens`, prefisso `noct_`, hash sha256) | ✅ | Token "core" (motore, machine-to-machine) e "utente" pieni: `POST/GET/DELETE /api/v1/tokens` accettano sia un ApiToken opaco esistente (bootstrap/rotazione core) sia una sessione JWT (per il *primo* token utente, dalla dashboard — `app/api/deps.py::get_token_actor`). UI in `frontend/src/app/dashboard/token`. |
 | GDPR: MFA/2FA come rafforzamento sicurezza account | ✅ | Vedi sopra; nessuna funzionalità GDPR-specifica oltre a questo (vedi riga dedicata in [1](#1-prodotto-e-regole-di-dominio)). |
 | Sessione in `localStorage` | 🟡 | Scelta pragmatica per la fase attuale di sviluppo; da sostituire con cookie `httpOnly` + CSRF prima di un uso in produzione. |
 

@@ -1063,9 +1063,7 @@ si prova a seguire se stessi.
 **`GET /api/v1/users/{username}/followers`** / **`.../following`** —
 pubblici. Liste `{username}`.
 
-## API token (motore core / accesso diretto)
-
-Sezione invariata rispetto alla versione precedente di questo documento.
+## API token (motore core / accesso diretto utente)
 
 Il token è un valore opaco (non un JWT decodificabile), generato con prefisso
 `noct_`; solo il suo hash sha256 è persistito in database (tabella
@@ -1075,26 +1073,42 @@ Il token è un valore opaco (non un JWT decodificabile), generato con prefisso
 - **`core`** — token del motore/servizio, non legato a un utente. Pensato per
   chiamate machine-to-machine: worker interni, script di manutenzione, task
   pianificati.
-- **`user`** — (predisposto per il futuro) token legato a uno `User`
-  specifico, per permettere all'utente di interfacciarsi con l'API senza
-  passare dall'editor del frontend o dall'admin del proprio blog.
+- **`user`** — token legato a uno `User` specifico, per permettere
+  all'utente di interfacciarsi con l'API senza passare dall'editor del
+  frontend o dall'admin del proprio blog. Gestibile dalla dashboard
+  (`frontend/src/app/dashboard/token`).
 
-Un token può generare altri token solo con lo stesso `owner_type` (e, se
-`user`, per lo stesso utente).
+Gli endpoint `/api/v1/tokens` accettano **due schemi di autenticazione**
+diversi sullo stesso header `Authorization: Bearer`:
 
-### Come ottenere il primo token
+- un **ApiToken opaco** (`noct_...`) — inerita `owner_type` (e utente, se
+  applicabile) del token stesso; è il meccanismo di bootstrap/rotazione per i
+  token `core`.
+- un **access token JWT di sessione** (login utente) — necessario per
+  emettere il *primo* token `user` dalla dashboard, dove per definizione non
+  esiste ancora nessun ApiToken con cui autenticare la richiesta. Con questa
+  autenticazione `owner_type` è sempre `user`, legato all'utente della
+  sessione.
+
+`app/api/deps.py::get_token_actor` distingue i due casi in base al prefisso
+del valore ricevuto (`noct_` vs JWT) e normalizza l'attore per gli endpoint
+sotto e per l'audit log.
+
+### Come ottenere il primo token core
 
 ```bash
 cd backend && source .venv/bin/activate
 python -m scripts.create_api_token --name "core-engine"
 ```
 
-Il valore in chiaro viene stampato una sola volta.
+Il valore in chiaro viene stampato una sola volta. Un utente non ha bisogno
+dello script: crea il proprio primo token `user` direttamente dalla dashboard
+(sessione JWT, vedi sopra).
 
 ### `POST /api/v1/tokens`
 
-Crea un nuovo token con lo stesso `owner_type` (e utente, se applicabile) del
-token usato per autenticare la richiesta.
+Crea un nuovo token con lo stesso `owner_type` (e utente, se applicabile)
+dell'attore che ha autenticato la richiesta (ApiToken o sessione JWT).
 
 ```json
 {"name": "descrizione-libera"}
