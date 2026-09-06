@@ -36,6 +36,8 @@ export function SettingsTab({
   const [commentsMode, setCommentsMode] = useState<CommentsMode>(blog.comments_mode);
   const [mentionsEnabled, setMentionsEnabled] = useState(blog.mentions_enabled);
   const [staticPagesEnabled, setStaticPagesEnabled] = useState(blog.static_pages_enabled);
+  const [searchIndexingEnabled, setSearchIndexingEnabled] = useState(blog.search_indexing_enabled);
+  const [aiCrawlingEnabled, setAiCrawlingEnabled] = useState(blog.ai_crawling_enabled);
   const [defaultAuthorName, setDefaultAuthorName] = useState(blog.default_author_display_name ?? "");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -54,6 +56,8 @@ export function SettingsTab({
           comments_mode: commentsMode,
           mentions_enabled: mentionsEnabled,
           static_pages_enabled: staticPagesEnabled,
+          search_indexing_enabled: searchIndexingEnabled,
+          ai_crawling_enabled: aiCrawlingEnabled,
           default_author_display_name: defaultAuthorName,
         })
       );
@@ -175,6 +179,33 @@ export function SettingsTab({
             />
             Pagine statiche (Chi sono, Contattami, ...) — disattiva di default
           </label>
+        </FieldGroup>
+        <FieldGroup>
+          <label className="flex items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={searchIndexingEnabled}
+              onChange={(e) => setSearchIndexingEnabled(e.target.checked)}
+              disabled={!canEdit}
+            />
+            Consenti l&apos;indicizzazione da parte dei motori di ricerca
+          </label>
+          <label className="mt-2 flex items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={aiCrawlingEnabled}
+              onChange={(e) => setAiCrawlingEnabled(e.target.checked)}
+              disabled={!canEdit}
+            />
+            Consenti la scansione da parte di crawler IA/LLM (addestramento e assistenti)
+          </label>
+          <p className="mt-1 text-xs text-muted">
+            Entrambe attive di default. Applicate tramite robots.txt (Disallow mirato per i
+            crawler noti — GPTBot, ClaudeBot, CCBot, ...): una richiesta di rispetto, non un
+            blocco tecnico garantito. Disattivare i motori di ricerca esclude anche i crawler IA;
+            puoi anche lasciare i motori di ricerca attivi ed escludere solo l&apos;IA. Un singolo
+            post può restringere ulteriormente (mai riaprire) dall&apos;editor.
+          </p>
         </FieldGroup>
         <p className="mb-4 text-sm text-muted">Lingua di default: {blog.default_locale}</p>
         {error && (

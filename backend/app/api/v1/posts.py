@@ -25,6 +25,7 @@ from app.domain.display_names import resolve_personal_display_name
 from app.domain.i18n import validate_locale
 from app.domain.notes import NoteInput, normalize_notes
 from app.domain.permalinks import build_permalink, validate_post_slug_not_reserved
+from app.domain.seo import effective_ai_crawling, effective_search_indexing
 from app.domain.tags import resolve_tags
 from app.models.blog import Blog, BlogMembership
 from app.models.comment import CommentsMode
@@ -121,6 +122,11 @@ class PostUpdateRequest(BaseModel):
     # torna a ereditare dal blog, assente non tocca — stesso schema di
     # category_id sopra (model_fields_set in update_post).
     comments_mode: CommentsMode | None = None
+    # Override di Blog.search_indexing_enabled/ai_crawling_enabled per questo
+    # solo post (app/domain/seo.py); `null` esplicito torna a ereditare dal
+    # blog, assente non tocca — stesso schema tri-state di category_id sopra.
+    search_indexing_enabled: bool | None = None
+    ai_crawling_enabled: bool | None = None
 
 
 class PublishRequest(BaseModel):
@@ -179,6 +185,13 @@ class PostOut(BaseModel):
     # dover guardare anche il blog quando questo campo è None.
     comments_mode: CommentsMode | None
     effective_comments_mode: CommentsMode
+    # None: eredita da Blog.search_indexing_enabled/ai_crawling_enabled. Gli
+    # effective_* sono sempre valorizzati (app/domain/seo.py) e già tengono
+    # conto del blocco a cascata se il blog stesso è escluso.
+    search_indexing_enabled: bool | None
+    ai_crawling_enabled: bool | None
+    effective_search_indexing_enabled: bool
+    effective_ai_crawling_enabled: bool
 
     model_config = {"from_attributes": True}
 
@@ -361,6 +374,10 @@ async def _posts_out(
                 category=CategorySummaryOut.model_validate(category) if category else None,
                 comments_mode=post.comments_mode,
                 effective_comments_mode=post.comments_mode or blog.comments_mode,
+                search_indexing_enabled=post.search_indexing_enabled,
+                ai_crawling_enabled=post.ai_crawling_enabled,
+                effective_search_indexing_enabled=effective_search_indexing(post, blog),
+                effective_ai_crawling_enabled=effective_ai_crawling(post, blog),
             )
         )
     return out
@@ -771,6 +788,11 @@ async def update_post(
                 "configurato (NOCT_TURNSTILE_SITE_KEY/_SECRET_KEY).",
             )
         post.comments_mode = payload.comments_mode
+
+    if "search_indexing_enabled" in payload.model_fields_set:
+        post.search_indexing_enabled = payload.search_indexing_enabled
+    if "ai_crawling_enabled" in payload.model_fields_set:
+        post.ai_crawling_enabled = payload.ai_crawling_enabled
 
     # note: assente lascia invariato; lista (anche `[]`) sostituisce.
     if payload.notes is not None:

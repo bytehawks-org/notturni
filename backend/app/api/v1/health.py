@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_session
+from app.domain.seo import AI_CRAWLER_USER_AGENTS, build_crawl_directives
 
 router = APIRouter()
 
@@ -26,3 +27,13 @@ async def public_config() -> dict[str, str | None]:
         "deployment_mode": settings.deployment_mode,
         "turnstile_site_key": settings.turnstile_site_key,
     }
+
+
+@router.get("/seo/crawl-directives")
+async def crawl_directives(session: AsyncSession = Depends(get_session)) -> dict[str, list[str]]:
+    """Pubblico, nessuna auth: usato da `frontend/src/app/robots.ts` per
+    generare robots.txt (app/domain/seo.py). `ai_user_agents` è l'elenco fisso
+    di crawler IA/LLM noti da abbinare a `ai_disallow`; i motori di ricerca
+    tradizionali restano sul gruppo `User-agent: *` con `search_disallow`."""
+    directives = await build_crawl_directives(session)
+    return {**directives, "ai_user_agents": AI_CRAWLER_USER_AGENTS}

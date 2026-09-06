@@ -381,6 +381,57 @@ async def test_create_post_rejects_reserved_slug(client: AsyncClient, make_user:
         assert res.status_code == 400
 
 
+async def test_post_crawler_override_cannot_reopen_excluded_blog(
+    client: AsyncClient, make_user: Callable
+) -> None:
+    owner: AuthedUser = await make_user("owner-crawler-post")
+    slug = await _create_blog(client, owner, "blog-crawler-post")
+
+    create_res = await client.post(
+        f"/api/v1/blogs/{slug}/posts",
+        json={"slug": "post-crawler", "title": "x", "content": "y"},
+        headers=owner.headers,
+    )
+    post_id = create_res.json()["id"]
+    assert create_res.json()["effective_search_indexing_enabled"] is True
+    assert create_res.json()["effective_ai_crawling_enabled"] is True
+
+    # override esplicito sul singolo post: il blog resta indicizzabile,
+    # questo post no.
+    override_res = await client.patch(
+        f"/api/v1/posts/{post_id}",
+        json={"search_indexing_enabled": False, "ai_crawling_enabled": False},
+        headers=owner.headers,
+    )
+    assert override_res.json()["effective_search_indexing_enabled"] is False
+    assert override_res.json()["effective_ai_crawling_enabled"] is False
+
+    # il blog stesso opta fuori dal crawling: l'override del post che diceva
+    # "sì" non può riaprirlo.
+    await client.patch(
+        f"/api/v1/blogs/{slug}",
+        json={"search_indexing_enabled": False, "ai_crawling_enabled": False},
+        headers=owner.headers,
+    )
+    reopen_res = await client.patch(
+        f"/api/v1/posts/{post_id}",
+        json={"search_indexing_enabled": True, "ai_crawling_enabled": True},
+        headers=owner.headers,
+    )
+    assert reopen_res.json()["search_indexing_enabled"] is True
+    assert reopen_res.json()["effective_search_indexing_enabled"] is False
+    assert reopen_res.json()["effective_ai_crawling_enabled"] is False
+
+    # torna a ereditare dal blog (null esplicito)
+    inherit_res = await client.patch(
+        f"/api/v1/posts/{post_id}",
+        json={"search_indexing_enabled": None, "ai_crawling_enabled": None},
+        headers=owner.headers,
+    )
+    assert inherit_res.json()["search_indexing_enabled"] is None
+    assert inherit_res.json()["effective_search_indexing_enabled"] is False
+
+
 async def test_permalink_draft_preview_only_for_write_access(
     client: AsyncClient, make_user: Callable
 ) -> None:

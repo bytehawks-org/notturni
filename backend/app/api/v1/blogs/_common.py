@@ -52,6 +52,11 @@ class BlogUpdateRequest(BaseModel):
     mentions_enabled: bool | None = None
     # CLAUDE.md #1: pagine statiche del blog, opt-in e disattive di default.
     static_pages_enabled: bool | None = None
+    # Opt-in per crawler (app/domain/seo.py), attivi di default: escluderli a
+    # livello di blog esclude anche tutti i post, indipendentemente da un
+    # eventuale override di Post.search_indexing_enabled/ai_crawling_enabled.
+    search_indexing_enabled: bool | None = None
+    ai_crawling_enabled: bool | None = None
     # "" per tornare al default (username di chi scrive), qualsiasi altro
     # valore lo imposta; assente lascia invariato — stesso schema di
     # Post.cover_image_url in PATCH /posts/{id}.
@@ -69,6 +74,8 @@ class BlogOut(BaseModel):
     comments_mode: CommentsMode
     mentions_enabled: bool
     static_pages_enabled: bool
+    search_indexing_enabled: bool
+    ai_crawling_enabled: bool
     default_locale: str
     default_author_display_name: str | None
     # CLAUDE.md #8: presente solo per il proprietario stesso (usato lato

@@ -93,6 +93,11 @@ export interface Blog {
   mentions_enabled: boolean;
   /** Pagine statiche del blog: feature opt-in, disattiva di default. */
   static_pages_enabled: boolean;
+  /** Opt-in per crawler (backend/app/domain/seo.py), attivi di default.
+   * Escludere il blog esclude anche tutti i suoi post, indipendentemente da
+   * un eventuale override di Post.search_indexing_enabled/ai_crawling_enabled. */
+  search_indexing_enabled: boolean;
+  ai_crawling_enabled: boolean;
   default_locale: string;
   /** Nome pubblico predefinito per i testi scritti su questo blog — vedi Post.author_display_name. */
   default_author_display_name: string | null;
@@ -181,6 +186,14 @@ export interface Post {
   comments_mode: CommentsMode | null;
   /** Sempre valorizzato: comments_mode se impostato, altrimenti quello del blog. */
   effective_comments_mode: CommentsMode;
+  /** Override di Blog.search_indexing_enabled/ai_crawling_enabled per questo
+   * post: `null` eredita dal blog (backend/app/domain/seo.py). */
+  search_indexing_enabled: boolean | null;
+  ai_crawling_enabled: boolean | null;
+  /** Sempre valorizzati: tengono già conto del blocco a cascata se il blog
+   * stesso è escluso — un override "true" sul post non può riaprirlo. */
+  effective_search_indexing_enabled: boolean;
+  effective_ai_crawling_enabled: boolean;
 }
 
 export interface Category {

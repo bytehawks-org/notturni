@@ -84,6 +84,14 @@ class Blog(Base, UUIDPKMixin, TimestampMixin):
     # per blog, disattive di default — sempre attive invece per le pagine di
     # piattaforma (vedi app/models/page.py, app/api/v1/pages.py).
     static_pages_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Opt-out per crawler (app/domain/seo.py), attivi di default: chi vuole
+    # restare fuori dai motori di ricerca e/o dall'addestramento di IA/LLM lo
+    # sceglie esplicitamente. Un singolo post può avere un proprio override
+    # (vedi Post.search_indexing_enabled/ai_crawling_enabled) — se il blog è
+    # già escluso, l'override del post non può "riaprirlo" (vedi
+    # app/domain/seo.py::effective_search_indexing/effective_ai_crawling).
+    search_indexing_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    ai_crawling_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # Sospensione da parte di un admin di piattaforma (dashboard/blog): blog
     # irraggiungibile pubblicamente e non scrivibile finché non viene
     # riattivato, indipendentemente da `visibility` — vedi app/domain/authorization.py.

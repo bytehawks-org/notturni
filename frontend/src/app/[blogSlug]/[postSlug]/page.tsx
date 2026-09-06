@@ -25,6 +25,10 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
   return {
     title: post.title,
     description: excerpt(post.content),
+    // Opt-out per crawler (app/domain/seo.py::effective_search_indexing) —
+    // il blocco dei crawler IA/LLM specifici passa invece da robots.txt
+    // (frontend/src/app/robots.ts), non da questo meta tag.
+    robots: post.effective_search_indexing_enabled ? undefined : { index: false, follow: false },
   };
 }
 

@@ -167,3 +167,20 @@ export async function getTrendingTags(
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero delle tendenze.`);
   return (await res.json()) as TrendingTag[];
 }
+
+export interface CrawlDirectives {
+  search_disallow: string[];
+  ai_disallow: string[];
+  ai_user_agents: string[];
+}
+
+/** Percorsi da escludere in robots.txt (`app/robots.ts`), calcolati dal
+ * backend (backend/app/domain/seo.py) a partire dagli opt-in per crawler di
+ * blog/post — vedi Blog.search_indexing_enabled/ai_crawling_enabled. */
+export async function getCrawlDirectives(): Promise<CrawlDirectives> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/seo/crawl-directives`, {
+    next: { revalidate: REVALIDATE_SECONDS },
+  });
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero delle direttive crawler.`);
+  return (await res.json()) as CrawlDirectives;
+}

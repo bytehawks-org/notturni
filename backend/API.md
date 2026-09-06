@@ -266,6 +266,11 @@ non deve permettere di risalirvi (vedi "Profilo utente e follow" più sotto).
 Commenti; `everyone` richiede `NOCT_TURNSTILE_SITE_KEY`/`_SECRET_KEY`
 configurate sull'istanza, altrimenti `400`), `mentions_enabled` (bool —
 trasforma le `@username` nei post in link, vedi sezione Post),
+`search_indexing_enabled` / `ai_crawling_enabled` (bool, default `true` —
+opt-out per crawler dei motori di ricerca e, separatamente, dei crawler
+IA/LLM: vedi `GET /api/v1/seo/crawl-directives` sopra; escludere il blog
+esclude anche tutti i suoi post, indipendentemente da un eventuale override
+per singolo post),
 `default_author_display_name` — nome pubblico degli autori sui post di
 questo blog. Se valorizzato è **imposto** (nessun override per singolo
 autore o post — todo/USERS.md #2), a meno che il collaboratore non abbia un
@@ -706,7 +711,16 @@ ricaricare. Per `tags`, vedi sezione "Tag" sopra. Per `category_id`: campo
 assente lascia la categoria invariata, `null` esplicito la rimuove, un UUID
 valido la sostituisce (`404` se non appartiene a questo blog) — a
 differenza di `cover_image_url` non esiste un valore "vuoto" per un UUID, da
-cui la distinzione esplicita assente/`null`/valore.
+cui la distinzione esplicita assente/`null`/valore. Accetta anche
+`search_indexing_enabled`/`ai_crawling_enabled` (bool, tri-stato come
+`comments_mode`: campo assente non tocca, `null` esplicito torna a ereditare
+da `Blog.search_indexing_enabled`/`ai_crawling_enabled`, un valore imposta un
+override per questo solo post) — non può "riaprire" un crawler già escluso a
+livello di blog, solo restringerlo ulteriormente (vedi
+`app/domain/seo.py::effective_search_indexing`/`effective_ai_crawling`).
+`PostOut` riporta sia il valore grezzo (`null` = eredita) sia
+`effective_search_indexing_enabled`/`effective_ai_crawling_enabled` (sempre
+valorizzati, già tengono conto del blocco a cascata).
 
 ### Avviso sui contenuti
 
@@ -1402,6 +1416,19 @@ in modalità `solo`; `turnstile_site_key` da `CommentsSection` per sapere se
 mostrare il widget captcha sui commenti aperti a tutti (`null` se l'istanza
 non ne ha uno configurato) — entrambi senza dover già avere una sessione
 autenticata. Site key, mai la secret key: pensata per essere pubblica.
+
+**`GET /api/v1/seo/crawl-directives`** — pubblico, nessuna autenticazione.
+Espone `{"search_disallow": ["/blog", "/blog/post", ...], "ai_disallow":
+[...], "ai_user_agents": ["GPTBot", "ClaudeBot", ...]}` — percorsi relativi
+da mettere in `Disallow` in robots.txt, calcolati da
+`app/domain/seo.py::build_crawl_directives` a partire dagli opt-in per
+crawler di blog/post (vedi sotto). `ai_disallow` include sempre anche tutto
+`search_disallow`: un gruppo user-agent specifico in robots.txt sostituisce
+interamente `User-agent: *` per quel bot, non lo integra. Solo blog `public`
+non sospesi e post pubblicamente visibili (`is_publicly_visible`) — un blog
+`members`/`private` non è comunque raggiungibile da un crawler anonimo.
+Consumato da `frontend/src/app/robots.ts` (route speciale Next.js, genera
+`/robots.txt`).
 
 ## Errori comuni
 

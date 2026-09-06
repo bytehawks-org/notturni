@@ -581,5 +581,21 @@ ALTER TABLE post_fragments ADD COLUMN is_public BOOLEAN DEFAULT false NOT NULL;
 
 UPDATE alembic_version SET version_num='c5c5ea3b5cf6' WHERE alembic_version.version_num = '7981bf8eb571';
 
+-- Running upgrade c5c5ea3b5cf6 -> 139cf285ee44
+
+ALTER TABLE blogs ADD COLUMN search_indexing_enabled BOOLEAN DEFAULT true NOT NULL;
+
+ALTER TABLE blogs ADD COLUMN ai_crawling_enabled BOOLEAN DEFAULT true NOT NULL;
+
+ALTER TABLE blogs ALTER COLUMN search_indexing_enabled DROP DEFAULT;
+
+ALTER TABLE blogs ALTER COLUMN ai_crawling_enabled DROP DEFAULT;
+
+ALTER TABLE posts ADD COLUMN search_indexing_enabled BOOLEAN;
+
+ALTER TABLE posts ADD COLUMN ai_crawling_enabled BOOLEAN;
+
+UPDATE alembic_version SET version_num='139cf285ee44' WHERE alembic_version.version_num = 'c5c5ea3b5cf6';
+
 COMMIT;
 

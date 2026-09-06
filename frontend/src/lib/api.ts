@@ -161,6 +161,8 @@ export const api = {
         comments_mode?: CommentsMode;
         mentions_enabled?: boolean;
         static_pages_enabled?: boolean;
+        search_indexing_enabled?: boolean;
+        ai_crawling_enabled?: boolean;
         /** "" azzera (torna allo username di chi scrive); assente non tocca. */
         default_author_display_name?: string;
       }
@@ -344,6 +346,10 @@ export const api = {
         /** assente: non tocca; null: torna a ereditare da Blog.comments_mode;
          * valore: imposta un override per questo solo post. */
         comments_mode?: CommentsMode | null;
+        /** assente: non tocca; null: torna a ereditare da Blog.search_indexing_enabled/
+         * ai_crawling_enabled; valore: imposta un override per questo solo post. */
+        search_indexing_enabled?: boolean | null;
+        ai_crawling_enabled?: boolean | null;
       }
     ) => request<Post>(`/api/v1/posts/${postId}`, { method: "PATCH", token, body: payload }),
     publish: (token: string, postId: string) =>

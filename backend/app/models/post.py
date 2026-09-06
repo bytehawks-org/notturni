@@ -50,6 +50,12 @@ class Post(Base, UUIDPKMixin, TimestampMixin):
     # Override per questo singolo post di Blog.comments_mode. None: eredita
     # dal blog (caso comune). Vedi app/api/v1/comments.py per la risoluzione.
     comments_mode: Mapped["CommentsMode | None"] = comments_mode_column(nullable=True, default=None)
+    # Override per questo singolo post di Blog.search_indexing_enabled/
+    # ai_crawling_enabled. None: eredita dal blog. Vedi app/domain/seo.py per
+    # la risoluzione (un blog già escluso non può essere "riaperto" da un
+    # singolo post).
+    search_indexing_enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=None)
+    ai_crawling_enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=None)
 
     # i18n: le traduzioni di uno stesso contenuto condividono translation_group_id
     # (di default = id del post stesso, quando non è traduzione di nient'altro)

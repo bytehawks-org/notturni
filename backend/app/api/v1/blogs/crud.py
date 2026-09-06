@@ -153,6 +153,10 @@ async def update_blog(
         blog.mentions_enabled = payload.mentions_enabled
     if payload.static_pages_enabled is not None:
         blog.static_pages_enabled = payload.static_pages_enabled
+    if payload.search_indexing_enabled is not None:
+        blog.search_indexing_enabled = payload.search_indexing_enabled
+    if payload.ai_crawling_enabled is not None:
+        blog.ai_crawling_enabled = payload.ai_crawling_enabled
     if payload.default_author_display_name is not None:
         blog.default_author_display_name = payload.default_author_display_name or None
 
