@@ -469,7 +469,7 @@ export const api = {
     get: () => request<InstanceConfig>("/api/v1/config"),
   },
 
-  /** Pagine statiche del sito principale (dashboard/pagine, riservato ad
+  /** Pagine statiche del sito principale (admin/pagine, riservato ad
    * Amministratore/Super Admin) — non le pagine di un blog (vedi `blogs.pages` sopra). */
   pages: {
     /** Pubblico: solo pubblicate. Con token admin: anche le bozze. Parametro

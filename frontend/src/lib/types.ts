@@ -342,7 +342,7 @@ export interface AdminBlog {
   created_at: string;
 }
 
-/** Elenco di piattaforma (dashboard/moderazione, riservato ad
+/** Elenco di piattaforma (admin/moderazione, riservato ad
  * Amministratore/Super Admin) — a differenza di `Post`, include i tre stati
  * possibili (`PostStatus` sopra ne definisce solo due, per l'uso corrente
  * negli altri punti dell'app) e i soli campi utili a moderare, non l'intero
@@ -366,7 +366,7 @@ export const ADMIN_POST_STATUS_LABELS: Record<AdminPost["status"], string> = {
   published: "Pubblicato",
 };
 
-/** GET /admin/comments (dashboard/moderazione-commenti, ROADMAP.md §1):
+/** GET /admin/comments (admin/moderazione-commenti, ROADMAP.md §1):
  * come `BlogComment`, ma su tutti i blog della piattaforma — riservato ad
  * Amministratore/Super Admin/Moderatore, non solo a proprietario/mediatore
  * del singolo blog. */
@@ -381,7 +381,7 @@ export type AuditActorType = "user" | "core_token" | "user_token" | "system" | "
  * (nessuna colonna dedicata, vedi `backend/app/api/v1/admin.py`). */
 export type AuditChannel = "web" | "api" | "system";
 
-/** `GET /api/v1/admin/audit-log` (dashboard/registro). Registro append-only
+/** `GET /api/v1/admin/audit-log` (admin/registro). Registro append-only
  * delle azioni sensibili; solo gli eventi ancora nel database (quelli oltre
  * la retention sono archiviati su storage). */
 export interface AuditLogEntry {
@@ -453,7 +453,7 @@ export interface ApiTokenCreated {
 }
 
 /** `GET /api/v1/config`, pubblico: per sapere se nascondere le sezioni
- * multi-utente (dashboard/utenti) in modalità "solo" senza dover già avere
+ * multi-utente (admin/utenti) in modalità "solo" senza dover già avere
  * una sessione. */
 export interface InstanceConfig {
   deployment_mode: "solo" | "platform";

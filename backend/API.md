@@ -533,7 +533,7 @@ serve anche per la pianificazione: un post con `status=published` e
 `is_publicly_visible` più sotto.
 
 `is_hidden` (`PostOut`): moderazione da parte di un admin di piattaforma
-(`dashboard/moderazione`, `PATCH /api/v1/admin/posts/{id}`) — se `true`, il
+(`admin/moderazione`, `PATCH /api/v1/admin/posts/{id}`) — se `true`, il
 post è irraggiungibile pubblicamente indipendentemente da `status`, per
 l'autore incluso (stesso trattamento 404 di un post inesistente per chi non
 ha accesso in scrittura — vedi `app/domain/authorization.py::is_publicly_visible`).
@@ -986,7 +986,7 @@ prima di pubblicarle.
 **`GET /api/v1/pages?locale=it`** — pubblico (token opzionale): stessa
 distinzione pubblicate/tutte in base al ruolo del chiamante. Query param
 opzionale `q`: filtra per titolo o slug (`ilike`, sottostringa), usato dalla
-ricerca della sezione Pagine del dashboard (`frontend/src/app/dashboard/pagine`).
+ricerca della sezione Pagine del dashboard (`frontend/src/app/admin/pagine`).
 
 **`PATCH /api/v1/pages/{page_id}`** — richiede ruolo admin. Aggiorna una
 singola traduzione (`slug`, `title`, `content`, `is_published`, tutti
@@ -1196,8 +1196,9 @@ Tutti gli endpoint richiedono sessione con `platform_role` in
 `amministratore`/`super_admin` (`403` altrimenti), **eccetto**
 `GET /api/v1/admin/comments` più sotto, che accetta anche `moderatore`.
 Consumati dalle sezioni
-`frontend/src/app/dashboard/{utenti,blog,moderazione,moderazione-commenti,registro}`
-— voci di menu del dashboard esistente, non un'app separata — vedi ROADMAP.md.
+`frontend/src/app/admin/{utenti,blog,moderazione,moderazione-commenti,registro}`
+— sotto il prefisso `/admin/*`, separato da `/dashboard/*` (sezioni
+personali), non un'app a parte — vedi ROADMAP.md.
 
 **`GET /api/v1/admin/users`** — lista tutti gli utenti della piattaforma
 (id, username, email, `platform_role`, `is_active`, `mfa_enabled`). Query
