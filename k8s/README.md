@@ -47,3 +47,14 @@ kubectl apply -k .
   oltre `NOCT_AUDIT_RETENTION_DAYS`. Gira una volta al giorno; in locale
   l'equivalente è il servizio `worker-audit-maintenance` di `compose.yaml`
   (stesso modulo con `--loop`).
+- `backup.yaml` è un altro `CronJob`: backup infrastrutturale di Postgres
+  (`pg_dump`) e mirror di tutti i bucket MinIO/S3 applicativi verso uno
+  storage S3 **esterno** (`app/workers/backup.py`, distinto dal backup
+  applicativo dei singoli post di `worker-post-backup`, che resta nello
+  stesso bucket applicativo). Senza `NOCT_BACKUP_S3_BUCKET` configurato
+  (placeholder in `configmap.yaml`) il job termina subito senza fare nulla —
+  va puntato a un provider S3 realmente esterno e separato da quello dei
+  contenuti prima della produzione. In locale l'equivalente è il servizio
+  `worker-backup` di `compose.yaml` (stesso modulo con `--loop`, verso lo
+  stesso MinIO locale su un bucket dedicato solo per avere qualcosa di
+  verificabile in sviluppo).

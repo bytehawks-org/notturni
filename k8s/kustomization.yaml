@@ -11,5 +11,6 @@ resources:
   - minio.yaml
   - backend.yaml
   - audit-maintenance.yaml
+  - backup.yaml
   - frontend.yaml
   - ingress.yaml

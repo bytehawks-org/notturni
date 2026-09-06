@@ -126,6 +126,20 @@ class Settings(BaseSettings):
     # visitatori (a differenza di s3_bucket_avatars/_content).
     s3_bucket_audit: str = "notturni-audit"
 
+    # Backup infrastrutturale periodico di Postgres e MinIO/S3 verso uno
+    # storage S3 **esterno**, distinto da quello applicativo sopra (ROADMAP.md
+    # §3) — in produzione deve poter essere un provider diverso da quello che
+    # ospita i contenuti, così un incidente su quest'ultimo non porta via
+    # anche i backup. Stessa convenzione di endpoint/credenziali iniettabili
+    # di s3_endpoint_url sopra (app/workers/backup.py). `backup_s3_bucket`
+    # assente (default) disattiva il backup: nessun giro, nessun tentativo di
+    # scrivere su un bucket non configurato.
+    backup_s3_bucket: str | None = None
+    backup_s3_endpoint_url: str | None = None
+    backup_s3_region: str | None = None
+    backup_s3_access_key_id: str | None = None
+    backup_s3_secret_access_key: str | None = None
+
     # origini ammesse per le chiamate del frontend dal browser (CORS), separate da virgola
     cors_origins: str = "http://localhost:3000"
 

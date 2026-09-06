@@ -1,0 +1,33 @@
+# image: come backend.yaml, riferimento a un'immagine costruita/caricata
+# localmente sul nodo finché non c'è un registro in CI/CD.
+#
+# Job schedulato (non un Deployment), come audit-maintenance.yaml: backup
+# infrastrutturale di Postgres e MinIO verso uno storage S3 esterno
+# (app/workers/backup.py, ROADMAP.md §3). Senza NOCT_BACKUP_S3_BUCKET
+# configurato (configmap.yaml) il job termina immediatamente senza fare
+# nulla — placeholder finché non si punta a un provider S3 realmente esterno.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup
+  namespace: notturni
+spec:
+  # ogni notte alle 02:00 UTC, un'ora prima di audit-maintenance
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: backup
+              image: notturni-backend:latest
+              imagePullPolicy: IfNotPresent
+              command: ["python", "-m", "app.workers.backup"]
+              envFrom:
+                - configMapRef: {name: notturni-config}
+                - secretRef: {name: notturni-secrets}

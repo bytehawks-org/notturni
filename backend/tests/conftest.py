@@ -200,12 +200,38 @@ async def core_api_token(db_session: AsyncSession) -> str:
     return plaintext
 
 
+class FakeClientError(Exception):
+    """Sostituisce botocore.exceptions.ClientError: stesso accesso a
+    `.response["Error"]["Code"]` usato da app/workers/backup.py."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.response = {"Error": {"Code": code}}
+
+
+class _FakePaginator:
+    def __init__(self, client: "FakeS3Client", operation_name: str) -> None:
+        self._client = client
+        self._operation_name = operation_name
+
+    def paginate(self, Bucket: str):  # noqa: N803
+        if Bucket not in self._client.buckets:
+            raise FakeClientError("NoSuchBucket")
+        keys = [k for (b, k) in self._client.objects if b == Bucket]
+        yield {"Contents": [{"Key": k} for k in keys]}
+
+
+class _FakeExceptions:
+    ClientError = FakeClientError
+
+
 class FakeS3Client:
     """Sostituisce boto3 in-memory: stessa interfaccia usata da app.core.storage."""
 
     def __init__(self) -> None:
         self.objects: dict[tuple[str, str], bytes] = {}
         self.buckets: set[str] = set()
+        self.exceptions = _FakeExceptions()
 
     def head_bucket(self, Bucket: str) -> None:  # noqa: N803 (nomi boto3)
         if Bucket not in self.buckets:
@@ -217,7 +243,8 @@ class FakeS3Client:
     def put_bucket_policy(self, Bucket: str, Policy: str) -> None:  # noqa: N803
         pass
 
-    def put_object(self, Bucket: str, Key: str, Body: bytes, ContentType: str) -> None:  # noqa: N803
+    def put_object(self, Bucket: str, Key: str, Body: bytes, ContentType: str = "") -> None:  # noqa: N803
+        self.buckets.add(Bucket)
         self.objects[(Bucket, Key)] = Body
 
     def get_object(self, Bucket: str, Key: str) -> dict:  # noqa: N803
@@ -225,6 +252,9 @@ class FakeS3Client:
 
     def delete_object(self, Bucket: str, Key: str) -> None:  # noqa: N803
         self.objects.pop((Bucket, Key), None)
+
+    def get_paginator(self, operation_name: str) -> _FakePaginator:
+        return _FakePaginator(self, operation_name)
 
 
 @pytest.fixture

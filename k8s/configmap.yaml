@@ -35,6 +35,16 @@ data:
   # bucket privato per gli archivi di audit (mai esposto pubblicamente)
   NOCT_S3_BUCKET_AUDIT: "notturni-audit"
 
+  # Backup infrastrutturale di Postgres e MinIO (app/workers/backup.py,
+  # backup-cronjob.yaml) verso uno storage S3 **esterno** — placeholder,
+  # da sostituire con un provider realmente esterno e separato da quello dei
+  # contenuti prima della produzione (credenziali in secret.yaml:
+  # NOCT_BACKUP_S3_ACCESS_KEY_ID/_SECRET_ACCESS_KEY). Vuoto: il job resta
+  # inattivo.
+  NOCT_BACKUP_S3_BUCKET: ""
+  NOCT_BACKUP_S3_ENDPOINT_URL: ""
+  NOCT_BACKUP_S3_REGION: ""
+
   # SMTP per l'invio del codice MFA via email (app/core/mail.py) — placeholder,
   # da sostituire con un provider SMTP/transazionale reale prima della
   # produzione (credenziali in secret.yaml: NOCT_SMTP_USER/_PASSWORD).

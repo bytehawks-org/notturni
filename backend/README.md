@@ -81,6 +81,18 @@ mai per questo:
 python -m app.workers.post_backup_consumer
 ```
 
+Distinto da quest'ultimo, il backup **infrastrutturale** periodico di
+Postgres (`pg_dump`) e di tutti i bucket MinIO/S3 verso uno storage S3
+esterno (`NOCT_BACKUP_S3_BUCKET`, vuoto per disattivarlo) si avvia con:
+
+```bash
+python -m app.workers.backup            # un giro e termina
+python -m app.workers.backup --loop     # un giro ogni --interval secondi (default 86400)
+```
+
+Richiede `pg_dump` nel `PATH` (incluso nell'immagine Docker via
+`postgresql-client`, non necessariamente nel proprio venv locale).
+
 Endpoint disponibili, esempi di richiesta/risposta e regole di autorizzazione
 sono documentati in [API.md](API.md).
 

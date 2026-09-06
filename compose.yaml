@@ -176,6 +176,32 @@ services:
       minio:
         condition: service_started
 
+  # Backup infrastrutturale di Postgres e MinIO verso uno storage S3
+  # "esterno" (app/workers/backup.py, ROADMAP.md §3) — qui la destinazione è
+  # lo stesso MinIO locale, su un bucket dedicato, solo per avere qualcosa di
+  # verificabile in sviluppo: in produzione NOCT_BACKUP_S3_ENDPOINT_URL/
+  # _ACCESS_KEY_ID/_SECRET_ACCESS_KEY vanno sovrascritti con un provider S3
+  # realmente esterno e separato.
+  worker-backup:
+    build:
+      context: ./backend
+    restart: on-failure
+    env_file: .env
+    environment:
+      NOCT_POSTGRES_HOST: postgres
+      NOCT_S3_ENDPOINT_URL: http://minio:9000
+      NOCT_S3_PUBLIC_URL: http://localhost:9000
+      NOCT_BACKUP_S3_ENDPOINT_URL: http://minio:9000
+      NOCT_BACKUP_S3_ACCESS_KEY_ID: ${NOCT_S3_ACCESS_KEY_ID}
+      NOCT_BACKUP_S3_SECRET_ACCESS_KEY: ${NOCT_S3_SECRET_ACCESS_KEY}
+      NOCT_BACKUP_S3_BUCKET: notturni-backups
+    command: ["python", "-m", "app.workers.backup", "--loop", "--interval", "86400"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
   frontend:
     build:
       context: ./frontend
