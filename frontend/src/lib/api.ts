@@ -1,6 +1,7 @@
 import type { SensitivityCategory } from "./content-media";
 import type {
   AdminBlog,
+  AdminComment,
   AdminPost,
   AdminUser,
   ApiToken,
@@ -510,6 +511,8 @@ export const api = {
         offset: string;
       }> = {}
     ) => request<AuditLogEntry[]>(withQuery("/api/v1/admin/audit-log", filters), { token }),
+    listComments: (token: string, filters: Partial<{ status: CommentStatus; q: string }> = {}) =>
+      request<AdminComment[]>(withQuery("/api/v1/admin/comments", filters), { token }),
   },
 
   tokens: {

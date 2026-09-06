@@ -24,6 +24,10 @@ export const POST_AUTHOR_NAME_STYLE_LABELS: Record<PostAuthorNameStyle, string> 
 };
 
 export const PLATFORM_ADMIN_ROLES: PlatformRole[] = ["super_admin", "amministratore"];
+/** Ruoli con accesso al pannello di moderazione commenti trasversale
+ * (ROADMAP.md §1): gli admin di piattaforma più il ruolo Moderatore, che
+ * non vede invece le altre sezioni di amministrazione. */
+export const PLATFORM_MODERATION_ROLES: PlatformRole[] = ["super_admin", "amministratore", "moderatore"];
 
 export interface SessionResponse {
   access_token: string;
@@ -361,6 +365,16 @@ export const ADMIN_POST_STATUS_LABELS: Record<AdminPost["status"], string> = {
   pending_review: "In revisione",
   published: "Pubblicato",
 };
+
+/** GET /admin/comments (dashboard/moderazione-commenti, ROADMAP.md §1):
+ * come `BlogComment`, ma su tutti i blog della piattaforma — riservato ad
+ * Amministratore/Super Admin/Moderatore, non solo a proprietario/mediatore
+ * del singolo blog. */
+export interface AdminComment extends BlogComment {
+  blog_id: string;
+  blog_slug: string;
+  blog_title: string;
+}
 
 export type AuditActorType = "user" | "core_token" | "user_token" | "system" | "anonymous";
 

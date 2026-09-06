@@ -8,7 +8,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/Button";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { PLATFORM_ADMIN_ROLES } from "@/lib/types";
+import { PLATFORM_ADMIN_ROLES, PLATFORM_MODERATION_ROLES } from "@/lib/types";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -37,6 +37,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   const isAdmin = PLATFORM_ADMIN_ROLES.includes(user.platform_role);
+  const isModerator = PLATFORM_MODERATION_ROLES.includes(user.platform_role);
 
   return (
     <div className="flex flex-1 flex-col">
@@ -76,6 +77,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {isAdmin && (
               <Link href="/dashboard/moderazione" className="text-sm text-muted hover:text-foreground">
                 Moderazione
+              </Link>
+            )}
+            {isModerator && (
+              <Link
+                href="/dashboard/moderazione-commenti"
+                className="text-sm text-muted hover:text-foreground"
+              >
+                Moderazione commenti
               </Link>
             )}
             {isAdmin && (

@@ -218,3 +218,52 @@ async def test_admin_hides_post_and_blocks_public_access(
     assert res.status_code == 200
     assert res.json()["is_hidden"] is False
     assert (await client.get(f"/api/v1/posts/{post_id}")).status_code == 200
+
+
+async def test_list_all_comments_requires_moderator(client: AsyncClient, make_user: Callable) -> None:
+    user: AuthedUser = await make_user()
+    res = await client.get("/api/v1/admin/comments", headers=user.headers)
+    assert res.status_code == 403
+
+
+async def test_moderator_role_sees_comments_across_blogs(
+    client: AsyncClient, make_moderator: Callable, make_user: Callable
+) -> None:
+    """ROADMAP.md §1: il ruolo Moderatore non ha nessuna membership sui blog
+    coinvolti, ma deve comunque vedere (ed eventualmente moderare) i
+    commenti in attesa su tutta la piattaforma."""
+    moderator: AuthedUser = await make_moderator()
+    owner_a: AuthedUser = await make_user("owner-admcm-a")
+    owner_b: AuthedUser = await make_user("owner-admcm-b")
+
+    for slug, owner in (("blog-admcm-a", owner_a), ("blog-admcm-b", owner_b)):
+        await client.post("/api/v1/blogs", json={"slug": slug, "title": "x"}, headers=owner.headers)
+        await client.patch(
+            f"/api/v1/blogs/{slug}", json={"allow_anonymous_comments": True}, headers=owner.headers
+        )
+        post_res = await client.post(
+            f"/api/v1/blogs/{slug}/posts",
+            json={"slug": f"post-{slug}", "title": f"Titolo {slug}", "content": "y"},
+            headers=owner.headers,
+        )
+        post_id = post_res.json()["id"]
+        await client.post(f"/api/v1/posts/{post_id}/publish", headers=owner.headers)
+        await client.post(
+            f"/api/v1/posts/{post_id}/comments",
+            json={"content": f"pending su {slug}", "author_display_name": "V", "author_email": "v@example.com"},
+        )
+
+    # il moderatore non è proprietario né mediatore di nessuno dei due blog,
+    # ma il pannello trasversale li mostra comunque entrambi
+    res = await client.get("/api/v1/admin/comments", headers=moderator.headers)
+    assert res.status_code == 200
+    body = res.json()
+    assert len(body) == 2
+    assert {c["blog_slug"] for c in body} == {"blog-admcm-a", "blog-admcm-b"}
+    assert {c["status"] for c in body} == {"pending"}
+
+    # e può approvarli tramite gli stessi endpoint della moderazione per-blog
+    comment_id = body[0]["id"]
+    approve_res = await client.post(f"/api/v1/comments/{comment_id}/approve", headers=moderator.headers)
+    assert approve_res.status_code == 200
+    assert approve_res.json()["status"] == "approved"

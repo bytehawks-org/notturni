@@ -875,18 +875,23 @@ registrati ma con moderazione obbligatoria in quel caso.
 `approved`.
 
 **`GET /api/v1/posts/{post_id}/comments/pending`** — richiede sessione ed
-essere proprietario del blog o avere membership con ruolo `mediatore` (`403`
-altrimenti). Coda di moderazione del singolo post.
+essere proprietario del blog, avere membership con ruolo `mediatore`, oppure
+avere `platform_role` Amministratore/Super Admin/Moderatore (`403`
+altrimenti — `app/domain/authorization.py::can_moderate_comments`). Coda di
+moderazione del singolo post.
 
 **`GET /api/v1/blogs/{blog_slug}/comments`** — stessa autorizzazione di
 `pending`. Commenti di *tutti* i post del blog con lo stato indicato dal
 parametro opzionale `status` (`pending` di default, oppure `approved` /
 `rejected`), dal più recente. Ogni elemento ha in più `post_title` e
-`post_slug`. Serve alla moderazione trasversale nel dashboard senza una
-richiesta per ogni post.
+`post_slug`. Serve alla moderazione per-blog nel dashboard senza una
+richiesta per ogni post — per la versione trasversale su tutti i blog vedi
+`GET /api/v1/admin/comments` più sotto.
 
 **`POST /api/v1/comments/{comment_id}/approve`** / **`.../reject`** — stessa
-autorizzazione di `pending`. Cambiano lo stato del commento.
+autorizzazione di `pending` (quindi utilizzabili anche da Amministratore/
+Super Admin/Moderatore su un commento di un blog di cui non hanno nessuna
+membership). Cambiano lo stato del commento.
 
 ## Frammenti
 
@@ -1144,9 +1149,11 @@ token proprio, `404` se l'id non esiste.
 ## Amministrazione di piattaforma
 
 Tutti gli endpoint richiedono sessione con `platform_role` in
-`amministratore`/`super_admin` (`403` altrimenti). Consumati dalle sezioni
-`frontend/src/app/dashboard/{utenti,blog,moderazione,registro}` — voci di menu
-del dashboard esistente, non un'app separata — vedi ROADMAP.md.
+`amministratore`/`super_admin` (`403` altrimenti), **eccetto**
+`GET /api/v1/admin/comments` più sotto, che accetta anche `moderatore`.
+Consumati dalle sezioni
+`frontend/src/app/dashboard/{utenti,blog,moderazione,moderazione-commenti,registro}`
+— voci di menu del dashboard esistente, non un'app separata — vedi ROADMAP.md.
 
 **`GET /api/v1/admin/users`** — lista tutti gli utenti della piattaforma
 (id, username, email, `platform_role`, `is_active`, `mfa_enabled`). Query
@@ -1198,6 +1205,18 @@ dell'autore (`ilike`, sottostringa).
 da `status`, anche per l'autore. Nessuna notifica all'autore e nessun campo
 per la motivazione; il cambio di stato viene però registrato nel registro di
 audit (`post.hidden`/`post.unhidden`, vedi sotto).
+
+**`GET /api/v1/admin/comments`** — richiede `platform_role` in
+`amministratore`/`super_admin`/**`moderatore`** (unico endpoint di questa
+sezione aperto anche al ruolo Moderatore, ROADMAP.md §1). Commenti di *tutti*
+i blog della piattaforma nello stato indicato dal parametro opzionale
+`status` (`pending` di default, oppure `approved`/`rejected`), dal più
+recente — stessa forma di `GET /api/v1/blogs/{slug}/comments` ma senza
+restrizione a un singolo blog, con in più `blog_id`/`blog_slug`/`blog_title`.
+Query param opzionale `q`: filtra per contenuto del commento, nome
+dell'autore, titolo del post o slug del blog (`ilike`, sottostringa).
+Approvazione/rifiuto restano i `POST /api/v1/comments/{comment_id}/approve`/
+`reject` già descritti sopra (stessa autorizzazione).
 
 ### Registro di audit
 

@@ -1,18 +1,20 @@
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, field_validator
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import require_platform_admin
+from app.api.deps import require_platform_admin, require_platform_moderator
 from app.core.database import get_session
 from app.core.revalidation import blog_tag, feed_tag, post_tag, revalidate_frontend
 from app.domain import audit
+from app.domain.display_names import resolve_personal_display_name
 from app.models.audit_log import AuditActorType, AuditLog
 from app.models.blog import Blog, BlogVisibility
+from app.models.comment import Comment, CommentStatus
 from app.models.post import Post, PostStatus
 from app.models.user import PlatformRole, User
 
@@ -344,3 +346,89 @@ async def list_audit_log(
     stmt = stmt.limit(min(max(limit, 1), 500)).offset(max(offset, 0))
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+class AdminCommentOut(BaseModel):
+    """Come `BlogCommentOut` (`app/api/v1/comments.py`, moderazione per-blog),
+    con anche blog di appartenenza: qui i commenti attraversano *tutti* i
+    blog della piattaforma (ROADMAP.md §1 — pannello di moderazione
+    trasversale, finora mancante)."""
+
+    id: uuid.UUID
+    post_id: uuid.UUID
+    post_title: str
+    post_slug: str
+    blog_id: uuid.UUID
+    blog_slug: str
+    blog_title: str
+    author_id: uuid.UUID | None
+    author_display_name: str
+    status: CommentStatus
+    content: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/comments", response_model=list[AdminCommentOut])
+async def list_all_comments(
+    status_filter: CommentStatus = Query(CommentStatus.PENDING, alias="status"),
+    q: str | None = None,
+    current_user: User = Depends(require_platform_moderator),
+    session: AsyncSession = Depends(get_session),
+) -> list[AdminCommentOut]:
+    """Commenti di *tutti* i blog della piattaforma nello stato indicato
+    (default `pending`), dal più recente. Riservato ad Amministratore/Super
+    Admin/Moderatore (`require_platform_moderator`) — a differenza di
+    `GET /api/v1/blogs/{slug}/comments`, che resta per-blog ad opera del
+    proprietario/mediatore di quel singolo blog."""
+    stmt = (
+        select(Comment, Post.title, Post.slug, Blog.id, Blog.slug, Blog.title)
+        .join(Post, Post.id == Comment.post_id)
+        .join(Blog, Blog.id == Post.blog_id)
+        .where(Comment.status == status_filter)
+        .order_by(Comment.created_at.desc())
+    )
+    if q:
+        needle = f"%{q}%"
+        stmt = stmt.where(
+            or_(
+                Comment.content.ilike(needle),
+                Comment.author_display_name.ilike(needle),
+                Post.title.ilike(needle),
+                Blog.slug.ilike(needle),
+            )
+        )
+    rows = (await session.execute(stmt)).all()
+
+    # display name degli autori registrati ricalcolato in blocco, stesso
+    # principio di list_blog_comments (un solo SELECT invece di uno per commento).
+    author_ids = {c.author_id for c, *_ in rows if c.author_id is not None}
+    authors: dict[uuid.UUID, User] = {}
+    if author_ids:
+        res = await session.execute(select(User).where(User.id.in_(author_ids)))
+        authors = {u.id: u for u in res.scalars()}
+
+    out: list[AdminCommentOut] = []
+    for comment, post_title, post_slug, blog_id, blog_slug, blog_title in rows:
+        display_name = comment.author_display_name
+        author = authors.get(comment.author_id) if comment.author_id is not None else None
+        if author is not None:
+            display_name = resolve_personal_display_name(author)
+        out.append(
+            AdminCommentOut(
+                id=comment.id,
+                post_id=comment.post_id,
+                post_title=post_title,
+                post_slug=post_slug,
+                blog_id=blog_id,
+                blog_slug=blog_slug,
+                blog_title=blog_title,
+                author_id=comment.author_id,
+                author_display_name=display_name,
+                status=comment.status,
+                content=comment.content,
+                created_at=comment.created_at,
+            )
+        )
+    return out

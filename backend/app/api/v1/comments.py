@@ -129,7 +129,7 @@ async def list_pending_comments(
     session: AsyncSession = Depends(get_session),
 ) -> list[CommentOut]:
     _post, blog = await _get_post_and_blog_or_404(session, post_id)
-    if not await can_moderate_comments(session, user_id=current_user.id, blog=blog):
+    if not await can_moderate_comments(session, user=current_user, blog=blog):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Serve essere proprietario del blog o mediatore.")
 
     result = await session.execute(
@@ -163,7 +163,7 @@ async def list_blog_comments(
     ).scalar_one_or_none()
     if blog is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Blog non trovato.")
-    if not await can_moderate_comments(session, user_id=current_user.id, blog=blog):
+    if not await can_moderate_comments(session, user=current_user, blog=blog):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Serve essere proprietario del blog o mediatore.")
 
     rows = (
@@ -219,7 +219,7 @@ async def _moderate(
     blog = await session.get(Blog, post.blog_id)
     assert blog is not None
 
-    if not await can_moderate_comments(session, user_id=current_user.id, blog=blog):
+    if not await can_moderate_comments(session, user=current_user, blog=blog):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Serve essere proprietario del blog o mediatore.")
 
     comment.status = new_status

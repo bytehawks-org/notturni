@@ -116,6 +116,10 @@ async def get_token_actor(
 
 
 PLATFORM_ADMIN_ROLES = {PlatformRole.SUPER_ADMIN, PlatformRole.AMMINISTRATORE}
+# Il ruolo Moderatore (CLAUDE.md #5) vede solo la moderazione commenti
+# trasversale (ROADMAP.md §1): non la gestione utenti/blog/post riservata a
+# PLATFORM_ADMIN_ROLES.
+PLATFORM_MODERATION_ROLES = PLATFORM_ADMIN_ROLES | {PlatformRole.MODERATORE}
 
 
 async def require_platform_admin(current_user: User = Depends(get_current_user)) -> User:
@@ -123,4 +127,13 @@ async def require_platform_admin(current_user: User = Depends(get_current_user))
     statiche del sito principale): CLAUDE.md #1, ruoli Super Admin/Amministratore."""
     if current_user.platform_role not in PLATFORM_ADMIN_ROLES:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Richiesto ruolo di amministratore.")
+    return current_user
+
+
+async def require_platform_moderator(current_user: User = Depends(get_current_user)) -> User:
+    """Per il pannello di moderazione commenti trasversale (dashboard/
+    moderazione): Super Admin/Amministratore, più il ruolo Moderatore,
+    finora definito ma senza nessuna capacità reale collegata."""
+    if current_user.platform_role not in PLATFORM_MODERATION_ROLES:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Richiesto ruolo di amministratore o moderatore.")
     return current_user

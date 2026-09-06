@@ -164,6 +164,26 @@ async def make_admin(make_user: Callable, db_session: AsyncSession) -> Callable:
 
 
 @pytest_asyncio.fixture
+async def make_moderator(make_user: Callable, db_session: AsyncSession) -> Callable:
+    """Come make_admin, ma promuove l'utente a Moderatore di piattaforma
+    (ROADMAP.md §1: ruolo con visibilità solo sulla moderazione commenti
+    trasversale, non sulla gestione utenti/blog/post)."""
+    from sqlalchemy import select
+
+    from app.models.user import PlatformRole, User
+
+    async def _make(username: str | None = None) -> AuthedUser:
+        authed = await make_user(username)
+        result = await db_session.execute(select(User).where(User.username == authed.username))
+        user = result.scalar_one()
+        user.platform_role = PlatformRole.MODERATORE
+        await db_session.commit()
+        return authed
+
+    return _make
+
+
+@pytest_asyncio.fixture
 async def core_api_token(db_session: AsyncSession) -> str:
     """Un token core valido, senza passare dallo script di bootstrap (che
     scrive su un processo/DB separato) — inserimento diretto, stessa logica."""
