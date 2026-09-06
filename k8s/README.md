@@ -58,3 +58,13 @@ kubectl apply -k .
   `worker-backup` di `compose.yaml` (stesso modulo con `--loop`, verso lo
   stesso MinIO locale su un bucket dedicato solo per avere qualcosa di
   verificabile in sviluppo).
+- `smtp-relay.yaml` è invece un Deployment+Service, sempre attivo: un
+  servizio SMTP containerizzato (`boky/postfix`) come alternativa a puntare
+  `NOCT_SMTP_HOST` direttamente a un provider esterno per l'invio del
+  codice MFA via email. `NOCT_SMTP_RELAY_HOST` vuoto (default): il
+  container spedisce direttamente (richiede comunque un dominio con SPF/
+  DKIM/reverse DNS a posto per una buona deliverability); valorizzato:
+  inoltra verso quello smarthost esterno con le credenziali in
+  `secret.yaml`. Non collegato di default a `NOCT_SMTP_HOST` — resta una
+  scelta esplicita quale dei due usare. In locale l'equivalente è il
+  servizio `smtp-relay` di `compose.yaml`.

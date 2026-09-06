@@ -1,0 +1,51 @@
+# Servizio SMTP containerizzato "di produzione" (ROADMAP.md §4/§12): boky/postfix,
+# configurabile sia per l'invio diretto (nessun NOCT_SMTP_RELAY_HOST — richiede
+# comunque un dominio con SPF/DKIM/reverse DNS a posto per una buona
+# deliverability, cosa che il container da solo non risolve) sia per l'inoltro
+# verso uno smarthost esterno con autenticazione (un provider transazionale
+# reale). Non è collegato di default a NOCT_SMTP_HOST in configmap.yaml — resta
+# una scelta esplicita tra questo servizio, un provider esterno diretto, o
+# nessun invio reale (comportamento di solo-log del consumer OTP email).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: smtp-relay
+  namespace: notturni
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: smtp-relay
+  template:
+    metadata:
+      labels:
+        app: smtp-relay
+    spec:
+      containers:
+        - name: smtp-relay
+          image: docker.io/boky/postfix:latest
+          env:
+            - name: ALLOWED_SENDER_DOMAINS
+              valueFrom: {configMapKeyRef: {name: notturni-config, key: NOCT_INSTANCE_FQDN}}
+            - name: RELAYHOST
+              valueFrom: {configMapKeyRef: {name: notturni-config, key: NOCT_SMTP_RELAY_HOST}}
+            - name: RELAYHOST_USERNAME
+              valueFrom: {secretKeyRef: {name: notturni-secrets, key: NOCT_SMTP_RELAY_USERNAME}}
+            - name: RELAYHOST_PASSWORD
+              valueFrom: {secretKeyRef: {name: notturni-secrets, key: NOCT_SMTP_RELAY_PASSWORD}}
+          ports:
+            # l'immagine espone di proposito solo la porta submission (587),
+            # non la 25
+            - containerPort: 587
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: smtp-relay
+  namespace: notturni
+spec:
+  selector:
+    app: smtp-relay
+  ports:
+    - port: 587
+      targetPort: 587

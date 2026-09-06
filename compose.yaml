@@ -55,6 +55,27 @@ services:
       - "1025:1025"
       - "8025:8025"
 
+  # Servizio SMTP containerizzato "di produzione", accanto a mailhog sopra
+  # (che invece cattura soltanto, pensato solo per lo sviluppo locale):
+  # boky/postfix, configurabile sia per l'invio diretto (nessun RELAYHOST —
+  # richiede comunque un dominio con SPF/DKIM/reverse DNS a posto per una
+  # buona deliverability, cosa che il container da solo non risolve) sia per
+  # l'inoltro verso uno smarthost esterno con autenticazione (un provider
+  # transazionale reale). Non è il default di worker-email-otp, che resta
+  # puntato a mailhog per non richiedere credenziali reali in sviluppo — per
+  # usarlo, impostare NOCT_SMTP_HOST=smtp-relay/NOCT_SMTP_PORT=587 lì sotto
+  # (porta submission: l'immagine non espone la 25 di proposito).
+  smtp-relay:
+    image: docker.io/boky/postfix:latest
+    restart: on-failure
+    environment:
+      ALLOWED_SENDER_DOMAINS: ${NOCT_INSTANCE_FQDN:-notturni.eu}
+      RELAYHOST: ${NOCT_SMTP_RELAY_HOST:-}
+      RELAYHOST_USERNAME: ${NOCT_SMTP_RELAY_USERNAME:-}
+      RELAYHOST_PASSWORD: ${NOCT_SMTP_RELAY_PASSWORD:-}
+    ports:
+      - "1587:587"
+
   minio:
     image: docker.io/minio/minio:latest
     restart: on-failure
@@ -147,7 +168,8 @@ services:
       NOCT_RABBITMQ_HOST: rabbitmq
       # MailHog in locale: nessuna autenticazione, nessun TLS (vedi servizio
       # mailhog sopra). In produzione questi tre vengono sovrascritti da un
-      # provider SMTP/transazionale reale, non da .env.
+      # provider SMTP/transazionale reale o dal servizio smtp-relay di questo
+      # stesso file (NOCT_SMTP_HOST=smtp-relay, NOCT_SMTP_PORT=587), non da .env.
       NOCT_SMTP_HOST: mailhog
       NOCT_SMTP_PORT: "1025"
       NOCT_SMTP_USE_TLS: "false"

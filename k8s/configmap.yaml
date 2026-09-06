@@ -5,6 +5,10 @@ metadata:
   namespace: notturni
 data:
   NOCT_APP_ENV: "production"
+  # placeholder: sostituire con il dominio reale prima del deploy — usato
+  # anche da smtp-relay.yaml come dominio mittenti consentito.
+  NOCT_INSTANCE_FQDN: "notturni.eu"
+  NOCT_SITE_SLUG: "notturni"
 
   # nomi dei servizi Kubernetes: risolvibili via DNS interno del cluster
   NOCT_POSTGRES_HOST: "postgres"
@@ -52,6 +56,15 @@ data:
   NOCT_SMTP_PORT: "587"
   NOCT_SMTP_USE_TLS: "true"
   NOCT_SMTP_FROM_EMAIL: "no-reply@notturni.eu"
+
+  # Servizio SMTP containerizzato alternativo (smtp-relay.yaml) — un'opzione
+  # in più oltre a puntare NOCT_SMTP_HOST/_PORT/_USE_TLS sopra direttamente a
+  # un provider esterno. Per usarlo come invio reale: NOCT_SMTP_HOST=
+  # "smtp-relay", NOCT_SMTP_PORT="587", NOCT_SMTP_USE_TLS="false" (rete
+  # interna al cluster). RELAY_HOST vuoto: il container spedisce
+  # direttamente; valorizzato: inoltra verso quello smarthost (credenziali
+  # in secret.yaml: NOCT_SMTP_RELAY_USERNAME/_PASSWORD).
+  NOCT_SMTP_RELAY_HOST: ""
 
   # SSO: valorizzare (qui o in secret.yaml) solo i provider da abilitare
   NOCT_OAUTH_REDIRECT_BASE_URL: "https://notturni.eu"
