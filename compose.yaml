@@ -44,6 +44,17 @@ services:
       retries: 10
       start_period: 10s
 
+  # Catcher SMTP per lo sviluppo locale (app/core/mail.py, MFA email OTP):
+  # nessuna email lascia la macchina, tutto è ispezionabile dalla UI web
+  # su :8025 o dalla sua API (GET /api/v2/messages). Non usato in produzione,
+  # dove NOCT_SMTP_HOST punta a un provider SMTP/transazionale reale.
+  mailhog:
+    image: docker.io/mailhog/mailhog:latest
+    restart: on-failure
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
   minio:
     image: docker.io/minio/minio:latest
     restart: on-failure
@@ -134,10 +145,18 @@ services:
     env_file: .env
     environment:
       NOCT_RABBITMQ_HOST: rabbitmq
+      # MailHog in locale: nessuna autenticazione, nessun TLS (vedi servizio
+      # mailhog sopra). In produzione questi tre vengono sovrascritti da un
+      # provider SMTP/transazionale reale, non da .env.
+      NOCT_SMTP_HOST: mailhog
+      NOCT_SMTP_PORT: "1025"
+      NOCT_SMTP_USE_TLS: "false"
     command: ["python", "-m", "app.workers.email_otp_consumer"]
     depends_on:
       rabbitmq:
         condition: service_healthy
+      mailhog:
+        condition: service_started
 
   worker-audit-maintenance:
     build:

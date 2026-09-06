@@ -95,7 +95,7 @@ Legenda stato:
 |---|---|---|
 | Login password + sessione JWT (access + refresh con rotation) | ✅ | |
 | MFA TOTP (app authenticator) | ✅ | Via `pyotp`. |
-| MFA Email OTP asincrono | 🟡 | Accodato su RabbitMQ e funzionante end-to-end lato coda; il consumer (`app/workers/email_otp_consumer.py`) è ancora un placeholder che **logga il codice invece di inviarlo** — nessun provider SMTP/transazionale collegato. |
+| MFA Email OTP asincrono | ✅ | Accodato su RabbitMQ, il consumer (`app/workers/email_otp_consumer.py`) invia davvero il codice via SMTP (`app/core/mail.py`, solo stdlib `smtplib`) con `NOCT_SMTP_HOST`/`_PORT`/`_USER`/`_PASSWORD`/`_USE_TLS`/`_FROM_EMAIL`. In locale punta al servizio `mailhog` di `compose.yaml` (nessuna email reale, ispezionabile su `http://localhost:8025`); senza `NOCT_SMTP_HOST` configurato l'OTP resta solo loggato (comodo in sviluppo, mai il caso in produzione). Un errore SMTP genuino fa nack/requeue del messaggio, come il consumer del backup post. |
 | SSO Google/Microsoft/GitHub/LinkedIn (OAuth2/OIDC via Authlib) | 🟡 | Implementato a livello di codice; **non testabile end-to-end** senza credenziali OAuth reali per ciascun provider — verificato solo a livello di logica di dominio. |
 | Account linking basato su email, con gate 2FA | ✅ | |
 | Token API (`api_tokens`, prefisso `noct_`, hash sha256) | ✅ | Token "core" (motore, machine-to-machine) e "utente" pieni: `POST/GET/DELETE /api/v1/tokens` accettano sia un ApiToken opaco esistente (bootstrap/rotazione core) sia una sessione JWT (per il *primo* token utente, dalla dashboard — `app/api/deps.py::get_token_actor`). UI in `frontend/src/app/dashboard/token`. |

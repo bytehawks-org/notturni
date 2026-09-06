@@ -50,13 +50,17 @@ Il primo API token va creato con lo script di bootstrap:
 python -m scripts.create_api_token --name "core-engine"
 ```
 
-Per l'MFA via email serve RabbitMQ in esecuzione; il consumer che "invia" il
-codice (in realtà solo lo logga: nessun provider email reale è configurato) si
-avvia con:
+Per l'MFA via email serve RabbitMQ in esecuzione; il consumer che invia
+davvero il codice via SMTP (`app/core/mail.py`) si avvia con:
 
 ```bash
 python -m app.workers.email_otp_consumer
 ```
+
+Senza `NOCT_SMTP_HOST` configurato il codice resta solo loggato (comodo se
+non si ha un SMTP a disposizione in locale). Con `podman compose up`, il
+worker punta di default al servizio `mailhog` incluso in `compose.yaml`: le
+email non lasciano la macchina, sono ispezionabili su `http://localhost:8025`.
 
 L'upload avatar (`POST /users/me/avatar`) e i media incorporati nei post
 (`POST /blogs/{slug}/media`) richiedono il backend di storage configurato

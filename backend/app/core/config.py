@@ -52,6 +52,18 @@ class Settings(BaseSettings):
     # richiesta da Authlib/Starlette per il flow OAuth2 (state/nonce in sessione firmata)
     session_secret: str
 
+    # SMTP per l'invio reale dell'OTP via email (app/core/mail.py,
+    # app/workers/email_otp_consumer.py). Se None (default) l'OTP resta solo
+    # loggato, comportamento di sviluppo comodo senza SMTP configurato — mai
+    # il caso in produzione, dove va sempre valorizzato. In locale punta al
+    # servizio "mailhog" di compose.yaml (nessuna auth, nessun TLS).
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    smtp_use_tls: bool = True
+    smtp_from_email: str = "no-reply@notturni.eu"
+
     oauth_redirect_base_url: str = "http://localhost:8000"
     oauth_google_client_id: str | None = None
     oauth_google_client_secret: str | None = None

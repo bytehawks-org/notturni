@@ -130,8 +130,7 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   ATProto in prima battuta).
 
 Dettagli, esempi di richiesta/risposta e limitazioni note (SSO non testabile
-end-to-end senza credenziali reali, invio email OTP non collegato a un
-provider SMTP) sono in [backend/API.md](backend/API.md). Per lo stato di
+end-to-end senza credenziali reali) sono in [backend/API.md](backend/API.md). Per lo stato di
 avanzamento di ogni funzionalità, incluse quelle ancora parziali o non
 iniziate, vedi [ROADMAP.md](ROADMAP.md).
 
@@ -145,22 +144,13 @@ In sintesi, ad alto livello (l'elenco completo, specifica per specifica, è in
   sottodominio, via permalink su `notturni.eu`.
 - **"Pubblicazioni"**: raggruppare una serie di post in ordine cronologico,
   come i capitoli di un libro o di un saggio — non ancora iniziato.
-- **Interfaccia utente per i token API** (oggi generabili solo via API
-  diretta o script di bootstrap) e **bootstrap del Super Admin via
-  env/secret** in fase di deploy (oggi: auto-promozione del primo utente in
-  modalità "solo", o `UPDATE` manuale a DB in modalità "platform").
-- **Pannello di moderazione trasversale** in amministrazione (oggi la
-  moderazione commenti è solo per-blog) e ruolo piattaforma Moderatore non
-  ancora collegato a nessuna capacità reale.
-- **Consumer SMTP reale** per l'invio dell'OTP via email (oggi accodato su
-  RabbitMQ ma solo loggato, non spedito) e **sessione utente più robusta**
-  (cookie `httpOnly` + CSRF al posto di `localStorage`) prima di un uso in
-  produzione.
+- **Sessione utente più robusta** (cookie `httpOnly` + CSRF al posto di
+  `localStorage`) prima di un uso in produzione.
 - **Funzionalità GDPR dedicate** (export/cancellazione dati account, registro
   consensi) oltre al rafforzamento via MFA già presente.
-- **Rate limiting e lock distribuiti** su Redis (servizio già deployato, non
-  ancora usato da nessuna logica applicativa) e **clusterizzazione** dei
-  componenti in produzione (oggi Kubernetes a nodo singolo).
+- **Lock distribuiti** su Redis (il rate limiting invece è già in uso, su
+  login e anteprima link) e **clusterizzazione** dei componenti in produzione
+  (oggi Kubernetes a nodo singolo).
 - **Conteggio di like, citazioni e condivisioni**, e **federazione** con altre
   istanze/piattaforme (AT Protocol/Bluesky in prima battuta, poi
   ActivityPub/Mastodon) — esplicitamente fuori dall'ambito attuale, con
@@ -176,7 +166,7 @@ In sintesi, ad alto livello (l'elenco completo, specifica per specifica, è in
 │   │   ├── models/         # entità SQLAlchemy (User, Blog, Post, Category, Tag, Page, Comment, Follow, ...)
 │   │   ├── domain/          # regole di business (auth, mfa, sso, i18n, autorizzazione, tag, categorie, permalink, moderazione, ...)
 │   │   ├── api/v1/            # router FastAPI (auth, blogs, posts, comments, pages, users, tokens, feed, admin)
-│   │   └── workers/            # consumer RabbitMQ (backup post su S3; invio OTP email — placeholder)
+│   │   └── workers/            # consumer RabbitMQ (backup post su S3; invio OTP email via SMTP)
 │   ├── scripts/            # script di bootstrap (primo API token)
 │   ├── tests/               # suite pytest (vedi sotto)
 │   ├── alembic/              # migrazioni del database

@@ -35,6 +35,14 @@ data:
   # bucket privato per gli archivi di audit (mai esposto pubblicamente)
   NOCT_S3_BUCKET_AUDIT: "notturni-audit"
 
+  # SMTP per l'invio del codice MFA via email (app/core/mail.py) — placeholder,
+  # da sostituire con un provider SMTP/transazionale reale prima della
+  # produzione (credenziali in secret.yaml: NOCT_SMTP_USER/_PASSWORD).
+  NOCT_SMTP_HOST: ""
+  NOCT_SMTP_PORT: "587"
+  NOCT_SMTP_USE_TLS: "true"
+  NOCT_SMTP_FROM_EMAIL: "no-reply@notturni.eu"
+
   # SSO: valorizzare (qui o in secret.yaml) solo i provider da abilitare
   NOCT_OAUTH_REDIRECT_BASE_URL: "https://notturni.eu"
 

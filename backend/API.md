@@ -91,7 +91,7 @@ registrazione successiva ritorna `409`. Con `NOCT_DEPLOYMENT_MODE=platform`
   {"mfa_required": true, "method": "totp", "challenge": "..."}
   ```
   Se `method` è `"email"`, a questo punto è già stato accodato l'invio del
-  codice (vedi limitazione email più sotto).
+  codice (vedi dettagli Email OTP più sotto).
 
 `401` su credenziali errate o utente disattivato. `429` oltre 20 tentativi/5
 minuti dallo stesso IP o oltre 5 tentativi/5 minuti sulla stessa email
@@ -143,7 +143,7 @@ attiva l'MFA (`mfa_enabled=true`, `mfa_method="totp"`). `400` se il codice non
 corrisponde al secret generato dal setup.
 
 **`POST /api/v1/auth/mfa/email/setup`** → `202`, genera e accoda (RabbitMQ)
-l'invio di un codice all'email dell'utente (vedi limitazione più sotto).
+l'invio di un codice all'email dell'utente (vedi dettagli Email OTP più sotto).
 
 **`POST /api/v1/auth/mfa/email/confirm`** — `{"code": "123456"}` → `204` e
 attiva l'MFA (`mfa_method="email"`). `400` se il codice non corrisponde o è
@@ -183,13 +183,17 @@ con credenziali reali prima di un uso in produzione — in particolare per
 LinkedIn, i cui dettagli esatti dell'endpoint userinfo potrebbero richiedere
 aggiustamenti.
 
-**Limitazione nota (Email OTP):** il codice viene generato, salvato (hash) e
-pubblicato su RabbitMQ (coda `email_otp`) correttamente, ma **non esiste
-ancora un invio email reale** — nessun provider SMTP/transazionale è
-configurato nel progetto. Il consumer in
-`app/workers/email_otp_consumer.py` è un placeholder che logga il codice
-invece di spedirlo. Da collegare a un provider reale prima di usare l'MFA via
-email in produzione.
+**Email OTP:** il codice viene generato, salvato (hash) e pubblicato su
+RabbitMQ (coda `email_otp`); il consumer (`app/workers/email_otp_consumer.py`)
+lo invia via SMTP (`app/core/mail.py`, solo `smtplib` di libreria standard —
+`NOCT_SMTP_HOST`/`_PORT`/`_USER`/`_PASSWORD`/`_USE_TLS`/`_FROM_EMAIL`, vedi
+`.env.example`). In locale punta al servizio `mailhog` di `compose.yaml`
+(nessuna email reale in uscita, ispezionabile su `http://localhost:8025` o
+`GET http://localhost:8025/api/v2/messages`); in produzione va sempre
+puntato a un provider SMTP/transazionale reale. Senza `NOCT_SMTP_HOST`
+configurato l'OTP resta solo loggato dal consumer (comodo per sviluppo senza
+SMTP a disposizione, mai il caso in produzione). Un errore SMTP genuino
+(host irraggiungibile, credenziali sbagliate) fa nack/requeue del messaggio.
 
 ## Blog
 
