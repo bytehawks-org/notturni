@@ -57,8 +57,8 @@ Legenda stato:
 |---|---|---|
 | Palette di massimo 5 colori | ✅ | Validato server-side in `backend/app/domain/blog_config.py`. |
 | Massimo 3 font | ✅ | Idem. |
-| Titoli in serif, testo/link in sans-serif | 🟡 | Applicato nel tema di default del frontend; non ancora imposto come vincolo quando l'utente personalizza la tipografia del proprio blog. |
-| Toni calmi, non aggressivi | 🟡 | Scelta soggettiva applicata al tema di default; nessun vincolo automatico sulla palette scelta dall'utente oltre al numero massimo di colori. |
+| Titoli in serif, testo/link in sans-serif | ✅ | Applicato nel tema di default del frontend **e** imposto come vincolo sulla personalizzazione: `backend/app/domain/blog_config.py` valida `heading_font`/`body_font` contro due elenchi curati di Google Fonts (`SERIF_FONTS`/`SANS_SERIF_FONTS`), `AppearanceTab.tsx` mostra solo quei font in un menu a tendina invece del campo libero. Altre chiavi di `typography` restano libere. **Nota**: la personalizzazione di palette/tipografia non è ancora applicata al rendering pubblico del blog (solo salvata/validata) — gap preesistente, non affrontato qui. |
+| Toni calmi, non aggressivi | ✅ | Guardrail automatico in `validate_blog_config`: ogni colore della palette è convertito in HLS, saturazione oltre il 90% (`MAX_SATURATION`) viene rifiutata con `400` — oltre al solo limite sul numero massimo di colori già presente. |
 
 ## 3. Architettura, stack e infrastruttura
 

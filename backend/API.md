@@ -280,9 +280,17 @@ piattaforma:
 
 **`PUT /api/v1/blogs/{slug}/config`** — richiede sessione, solo il
 proprietario (`403` altrimenti). Sostituisce l'intera configurazione (non è
-un merge). Uniche regole imposte: `palette` al massimo 5 colori, al massimo 3
-font distinti in `typography` (`400` altrimenti) — il resto della struttura
-(`layout` e qualsiasi altra chiave) è libero.
+un merge). Regole imposte (`400` altrimenti), resto della struttura (`layout`
+e qualsiasi altra chiave) libero:
+
+- `palette`: al massimo 5 colori; ogni colore esadecimale non può superare il
+  90% di saturazione HLS (palette "calma", CLAUDE.md § Estetica).
+- `typography`: al massimo 3 font distinti; se presenti, `heading_font` deve
+  essere uno dei font serif curati (`Lora`, `Merriweather`, `Playfair
+  Display`, `Source Serif 4`, `Crimson Pro`) e `body_font` uno dei font
+  sans-serif curati (`Inter`, `Nunito Sans`, `Work Sans`, `Source Sans 3`,
+  `Karla`) — vedi `backend/app/domain/blog_config.py`. Altre chiavi restano
+  libere.
 
 **`POST /api/v1/blogs/{slug}/media`** — richiede sessione e accesso in
 scrittura al blog (proprietario/autore/co-autore). `multipart/form-data`,

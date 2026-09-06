@@ -26,7 +26,7 @@ async def test_update_config_owner_only(client: AsyncClient, make_user: Callable
 
     ok_res = await client.put(
         "/api/v1/blogs/blog-cfg-2/config",
-        json={"palette": {"primary": "#ff0000"}, "layout": "magazine"},
+        json={"palette": {"primary": "#3e6259"}, "layout": "magazine"},
         headers=owner.headers,
     )
     assert ok_res.status_code == 200
@@ -57,3 +57,43 @@ async def test_config_rejects_too_many_fonts(client: AsyncClient, make_user: Cal
         headers=owner.headers,
     )
     assert res.status_code == 400
+
+
+async def test_config_rejects_too_saturated_color(client: AsyncClient, make_user: Callable) -> None:
+    owner: AuthedUser = await make_user()
+    await client.post("/api/v1/blogs", json={"slug": "blog-cfg-5", "title": "x"}, headers=owner.headers)
+
+    res = await client.put(
+        "/api/v1/blogs/blog-cfg-5/config",
+        json={"palette": {"primary": "#ff0000"}},
+        headers=owner.headers,
+    )
+    assert res.status_code == 400
+
+
+async def test_config_enforces_serif_heading_sans_serif_body(
+    client: AsyncClient, make_user: Callable
+) -> None:
+    owner: AuthedUser = await make_user()
+    await client.post("/api/v1/blogs", json={"slug": "blog-cfg-6", "title": "x"}, headers=owner.headers)
+
+    wrong_heading = await client.put(
+        "/api/v1/blogs/blog-cfg-6/config",
+        json={"typography": {"heading_font": "Inter", "body_font": "Inter"}},
+        headers=owner.headers,
+    )
+    assert wrong_heading.status_code == 400
+
+    wrong_body = await client.put(
+        "/api/v1/blogs/blog-cfg-6/config",
+        json={"typography": {"heading_font": "Lora", "body_font": "Lora"}},
+        headers=owner.headers,
+    )
+    assert wrong_body.status_code == 400
+
+    ok_res = await client.put(
+        "/api/v1/blogs/blog-cfg-6/config",
+        json={"typography": {"heading_font": "Playfair Display", "body_font": "Karla"}},
+        headers=owner.headers,
+    )
+    assert ok_res.status_code == 200

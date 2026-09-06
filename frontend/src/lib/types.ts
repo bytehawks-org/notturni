@@ -124,6 +124,12 @@ export interface BlogConfig {
   [key: string]: unknown;
 }
 
+/** Stessi elenchi curati di `backend/app/domain/blog_config.py` (CLAUDE.md
+ * §5 Estetica: titoli in serif, corpo/link in sans-serif) — tenerli in
+ * sincronia se cambia uno dei due lati. */
+export const SERIF_FONTS = ["Lora", "Merriweather", "Playfair Display", "Source Serif 4", "Crimson Pro"];
+export const SANS_SERIF_FONTS = ["Inter", "Nunito Sans", "Work Sans", "Source Sans 3", "Karla"];
+
 export type PostStatus = "draft" | "published";
 
 export interface Post {
