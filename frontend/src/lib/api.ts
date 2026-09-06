@@ -117,10 +117,10 @@ export const api = {
       request<void>("/api/v1/auth/logout", { method: "POST", body: { refresh_token } }),
     me: (token: string) => request<CurrentUser>("/api/v1/auth/me", { token }),
     totpSetup: (token: string) =>
-      request<{ secret: string; provisioning_uri: string }>("/api/v1/auth/mfa/totp/setup", {
-        method: "POST",
-        token,
-      }),
+      request<{ secret: string; provisioning_uri: string; qr_code_data_uri: string }>(
+        "/api/v1/auth/mfa/totp/setup",
+        { method: "POST", token }
+      ),
     totpConfirm: (token: string, code: string) =>
       request<void>("/api/v1/auth/mfa/totp/confirm", { method: "POST", token, body: { code } }),
     emailSetup: (token: string) =>

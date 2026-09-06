@@ -98,7 +98,7 @@ Legenda stato:
 | Specifica | Stato | Note / task residuo |
 |---|---|---|
 | Login password + sessione JWT (access + refresh con rotation) | ✅ | |
-| MFA TOTP (app authenticator) | ✅ | Via `pyotp`. |
+| MFA TOTP (app authenticator) | ✅ | Via `pyotp`. Setup con **QR code** generato interamente lato backend come SVG inline (`qrcode`, `app/domain/mfa.py::totp_qr_code_data_uri` — nessuna dipendenza da Pillow, solo l'image factory SVG; nessun servizio di generazione QR di terze parti: il secret non deve mai lasciarlo), restituito come data URI da `POST /api/v1/auth/mfa/totp/setup` insieme al secret in chiaro (rimasto disponibile per l'inserimento manuale, dietro un dettaglio a scomparsa). |
 | MFA Email OTP asincrono | ✅ | Accodato su RabbitMQ, il consumer (`app/workers/email_otp_consumer.py`) invia davvero il codice via SMTP (`app/core/mail.py`, solo stdlib `smtplib`) con `NOCT_SMTP_HOST`/`_PORT`/`_USER`/`_PASSWORD`/`_USE_TLS`/`_FROM_EMAIL`. In locale punta al servizio `mailhog` di `compose.yaml` (nessuna email reale, ispezionabile su `http://localhost:8025`); senza `NOCT_SMTP_HOST` configurato l'OTP resta solo loggato (comodo in sviluppo, mai il caso in produzione). Un errore SMTP genuino fa nack/requeue del messaggio, come il consumer del backup post. |
 | SSO Google/Microsoft/GitHub/LinkedIn (OAuth2/OIDC via Authlib) | 🟡 | Implementato a livello di codice; **non testabile end-to-end** senza credenziali OAuth reali per ciascun provider — verificato solo a livello di logica di dominio. |
 | Account linking basato su email, con gate 2FA | ✅ | |

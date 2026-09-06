@@ -25,6 +25,7 @@ from app.domain.mfa import (
     generate_totp_secret,
     send_email_otp,
     totp_provisioning_uri,
+    totp_qr_code_data_uri,
     verify_email_otp,
     verify_totp_code,
 )
@@ -97,6 +98,9 @@ class LogoutRequest(BaseModel):
 class TotpSetupResponse(BaseModel):
     secret: str
     provisioning_uri: str
+    # SVG inline come data URI (mai generato da un servizio di terze parti:
+    # il secret non deve lasciare il backend) — vedi app/domain/mfa.py.
+    qr_code_data_uri: str
 
 
 class MfaCodeRequest(BaseModel):
@@ -233,8 +237,11 @@ async def setup_totp(
     secret = generate_totp_secret()
     current_user.mfa_totp_secret = secret
     await session.commit()
+    provisioning_uri = totp_provisioning_uri(secret, current_user.email)
     return TotpSetupResponse(
-        secret=secret, provisioning_uri=totp_provisioning_uri(secret, current_user.email)
+        secret=secret,
+        provisioning_uri=provisioning_uri,
+        qr_code_data_uri=totp_qr_code_data_uri(provisioning_uri),
     )
 
 

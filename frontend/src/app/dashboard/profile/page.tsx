@@ -58,7 +58,11 @@ export default function ProfilePage() {
 
   const [mfaMessage, setMfaMessage] = useState<string | null>(null);
   const [mfaError, setMfaError] = useState<string | null>(null);
-  const [totpSetup, setTotpSetup] = useState<{ secret: string; provisioning_uri: string } | null>(null);
+  const [totpSetup, setTotpSetup] = useState<{
+    secret: string;
+    provisioning_uri: string;
+    qr_code_data_uri: string;
+  } | null>(null);
   const [totpCode, setTotpCode] = useState("");
   const [emailCode, setEmailCode] = useState("");
   const [emailSetupSent, setEmailSetupSent] = useState(false);
@@ -511,12 +515,22 @@ export default function ProfilePage() {
                 </Button>
               ) : (
                 <form onSubmit={handleTotpConfirm} className="space-y-3">
-                  <p className="break-all rounded-md border border-border bg-foreground/5 p-3 font-mono text-xs">
-                    {totpSetup.secret}
-                  </p>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- SVG generato dal backend come data URI */}
+                  <img
+                    src={totpSetup.qr_code_data_uri}
+                    alt="QR code per configurare l'app di autenticazione"
+                    className="h-40 w-40 rounded-md border border-border bg-white p-2"
+                  />
+                  <details>
+                    <summary className="cursor-pointer text-xs text-muted">
+                      Non riesci a scansionare il QR? Inserisci il codice a mano
+                    </summary>
+                    <p className="mt-2 break-all rounded-md border border-border bg-foreground/5 p-3 font-mono text-xs">
+                      {totpSetup.secret}
+                    </p>
+                  </details>
                   <p className="text-xs text-muted">
-                    Aggiungi questo secret alla tua app di autenticazione, poi inserisci il codice
-                    generato.
+                    Inquadra il QR con la tua app di autenticazione, poi inserisci il codice generato.
                   </p>
                   <div className="flex items-end gap-3">
                     <Input

@@ -131,11 +131,17 @@ revocato (rotation): riusarlo dà `401`.
 ### MFA — gestione (richiede una sessione attiva, cioè un login già fatto)
 
 **`POST /api/v1/auth/mfa/totp/setup`** → genera un secret TOTP (non ancora
-attivo) e lo ritorna insieme a un `provisioning_uri` (`otpauth://...`) da
-mostrare come QR code:
+attivo) e lo ritorna insieme a un `provisioning_uri` (`otpauth://...`) e un
+QR già pronto da mostrare (`qr_code_data_uri`, SVG generato interamente lato
+backend — `qrcode`, `app/domain/mfa.py::totp_qr_code_data_uri` — mai da un
+servizio di terze parti: il secret non deve lasciare il backend):
 
 ```json
-{"secret": "BASE32...", "provisioning_uri": "otpauth://totp/Notturni:mario%40example.com?..."}
+{
+  "secret": "BASE32...",
+  "provisioning_uri": "otpauth://totp/Notturni:mario%40example.com?...",
+  "qr_code_data_uri": "data:image/svg+xml;base64,..."
+}
 ```
 
 **`POST /api/v1/auth/mfa/totp/confirm`** — `{"code": "123456"}` → `204` e
