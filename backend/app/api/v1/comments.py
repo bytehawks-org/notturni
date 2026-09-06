@@ -1,13 +1,14 @@
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_optional_current_user
 from app.core.database import get_session
+from app.domain import audit
 from app.domain.authorization import can_moderate_comments
 from app.domain.display_names import resolve_personal_display_name
 from app.models.blog import Blog
@@ -209,6 +210,7 @@ async def _moderate(
     comment_id: uuid.UUID,
     new_status: CommentStatus,
     current_user: User,
+    request: Request,
     session: AsyncSession,
 ) -> CommentOut:
     comment = await session.get(Comment, comment_id)
@@ -223,6 +225,26 @@ async def _moderate(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Serve essere proprietario del blog o mediatore.")
 
     comment.status = new_status
+    # tracciato in audit log (ROADMAP.md §3): prima un gap noto, la
+    # moderazione commenti — per-blog o trasversale via /admin/comments — non
+    # lasciava nessuna traccia. blog_alias: alias pubblico del blog in
+    # questione (non dell'attore), utile a capire sotto quale identità
+    # pubblica è comparso il commento moderato.
+    await audit.record(
+        session,
+        action=f"comment.{new_status.value}",
+        actor=current_user,
+        target_type="comment",
+        target_id=comment.id,
+        blog_id=blog.id,
+        request=request,
+        payload={
+            "post_id": str(post.id),
+            "post_slug": post.slug,
+            "blog_slug": blog.slug,
+            "blog_alias": blog.default_author_display_name,
+        },
+    )
     await session.commit()
     await session.refresh(comment)
     return await _comment_out(session, comment)
@@ -231,16 +253,18 @@ async def _moderate(
 @router.post("/comments/{comment_id}/approve", response_model=CommentOut)
 async def approve_comment(
     comment_id: uuid.UUID,
+    request: Request,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> CommentOut:
-    return await _moderate(comment_id, CommentStatus.APPROVED, current_user, session)
+    return await _moderate(comment_id, CommentStatus.APPROVED, current_user, request, session)
 
 
 @router.post("/comments/{comment_id}/reject", response_model=CommentOut)
 async def reject_comment(
     comment_id: uuid.UUID,
+    request: Request,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> CommentOut:
-    return await _moderate(comment_id, CommentStatus.REJECTED, current_user, session)
+    return await _moderate(comment_id, CommentStatus.REJECTED, current_user, request, session)

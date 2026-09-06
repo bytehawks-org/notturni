@@ -377,6 +377,9 @@ export interface AdminComment extends BlogComment {
 }
 
 export type AuditActorType = "user" | "core_token" | "user_token" | "system" | "anonymous";
+/** Canale da cui è partita l'azione, calcolato server-side da `actor_type`
+ * (nessuna colonna dedicata, vedi `backend/app/api/v1/admin.py`). */
+export type AuditChannel = "web" | "api" | "system";
 
 /** `GET /api/v1/admin/audit-log` (dashboard/registro). Registro append-only
  * delle azioni sensibili; solo gli eventi ancora nel database (quelli oltre
@@ -385,6 +388,7 @@ export interface AuditLogEntry {
   id: string;
   occurred_at: string;
   actor_type: AuditActorType;
+  channel: AuditChannel;
   actor_id: string | null;
   actor_label: string | null;
   action: string;
@@ -406,6 +410,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "blog.unsuspended": "Blog riattivato",
   "post.hidden": "Post nascosto",
   "post.unhidden": "Post mostrato",
+  "comment.approved": "Commento approvato",
+  "comment.rejected": "Commento rifiutato",
   "api_token.created": "API token creato",
   "api_token.revoked": "API token revocato",
   "user.account_deleted": "Account eliminato (GDPR)",
@@ -417,6 +423,12 @@ export const AUDIT_ACTOR_TYPE_LABELS: Record<AuditActorType, string> = {
   user_token: "Token utente",
   system: "Sistema",
   anonymous: "Anonimo",
+};
+
+export const AUDIT_CHANNEL_LABELS: Record<AuditChannel, string> = {
+  web: "Web",
+  api: "API",
+  system: "Sistema",
 };
 
 /** `/api/v1/tokens` (dashboard/token). Non include mai il valore in chiaro né

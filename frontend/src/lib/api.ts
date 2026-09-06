@@ -6,6 +6,7 @@ import type {
   AdminUser,
   ApiToken,
   ApiTokenCreated,
+  AuditChannel,
   AuditLogEntry,
   BibliographyEntry,
   Blog,
@@ -516,6 +517,7 @@ export const api = {
         actor_id: string;
         target_id: string;
         blog_id: string;
+        channel: AuditChannel;
         since: string;
         until: string;
         limit: string;

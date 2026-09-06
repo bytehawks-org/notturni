@@ -1269,10 +1269,33 @@ nella stessa transazione dell'azione: autenticazione (`auth.login` con
 `payload.method` `password`/`mfa_*`/`sso_*`, `auth.login_failed`),
 amministrazione (`user.role_change` con `payload {from,to}`,
 `user.activated`/`user.deactivated`, `blog.suspended`/`blog.unsuspended`,
-`post.hidden`/`post.unhidden`), API token (`api_token.created`/
-`api_token.revoked`). Ogni riga porta `actor_type`, `actor_label` (snapshot
-`username <email>` al momento del fatto), `actor_id`, `target_type`/
-`target_id`, `blog_id`, `ip`, `user_agent`, `payload` (JSON) e `occurred_at`.
+`post.hidden`/`post.unhidden`, `comment.approved`/`comment.rejected`), API
+token (`api_token.created`/`api_token.revoked`), account (`user.
+account_deleted`, GDPR). Ogni riga porta:
+
+- `actor_type`/`actor_id`/`actor_label` — chi: tipo di attore, il suo id (se
+  applicabile) e uno snapshot leggibile `username <email>` al momento del
+  fatto (resta valido anche se l'account viene poi rinominato o cancellato).
+- `ip`/`user_agent` — indirizzo IP sorgente della richiesta (primo hop di
+  `X-Forwarded-For` dietro Traefik, altrimenti l'IP di connessione diretta —
+  `app/core/http.py::client_ip`) e user agent.
+- `target_type`/`target_id`/`blog_id` — su cosa: tipo e id dell'oggetto
+  coinvolto, più il blog di contesto quando applicabile (denormalizzato per
+  filtrare senza join).
+- `payload` (JSON) — dettagli specifici dell'azione; per le azioni con un
+  blog di contesto include anche `blog_alias`, l'alias pubblico sotto cui
+  compare quel blog (`Blog.default_author_display_name`, `null` se il blog
+  non ne ha uno) — in aggiunta all'identità reale in `actor_label`, mai al
+  posto.
+- `occurred_at`.
+
+**Canale** (web/api/system): non una colonna a sé, ma un campo calcolato da
+`actor_type` sia nella risposta di `GET /api/v1/admin/audit-log` sia nel suo
+filtro (vedi sotto) — `user`/`anonymous` sono sempre passati da una sessione
+autenticata via browser/app o non ancora autenticata (login), mai da un
+ApiToken; `core_token`/`user_token` sono sempre un accesso diretto via token
+opaco; `system` un processo interno senza richiesta HTTP (bootstrap, job
+schedulati). Mappa in `app/api/v1/admin.py::_CHANNEL_BY_ACTOR_TYPE`.
 
 Gli eventi oltre `NOCT_AUDIT_RETENTION_DAYS` (default 105) vengono scaricati
 su storage in NDJSON gzippato per settimana ISO e poi rimossi dal database
@@ -1281,9 +1304,10 @@ non ancora archiviati.
 
 **`GET /api/v1/admin/audit-log`** — righe dal più recente. Query param
 opzionali: `action`, `actor_id`, `target_id`, `blog_id` (uguaglianza esatta),
-`since`/`until` (ISO 8601, intervallo `[since, until)` su `occurred_at`),
-`limit` (1–500, default 100), `offset` (default 0). Solo gli eventi ancora
-nel database: quelli già archiviati stanno su storage, reimportabili con
+`channel` (`web`/`api`/`system`, vedi sopra), `since`/`until` (ISO 8601,
+intervallo `[since, until)` su `occurred_at`), `limit` (1–500, default 100),
+`offset` (default 0). Solo gli eventi ancora nel database: quelli già
+archiviati stanno su storage, reimportabili con
 `python -m app.workers.audit_maintenance --restore AAAAwSS`.
 
 ## Feed (homepage multi-blog)
