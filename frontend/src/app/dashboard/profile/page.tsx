@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
 import { LanguagePicker } from "@/components/LanguagePicker";
@@ -23,7 +24,8 @@ function errorMessage(err: unknown): string {
 }
 
 export default function ProfilePage() {
-  const { user, authFetch, refreshUser } = useAuth();
+  const router = useRouter();
+  const { user, authFetch, refreshUser, logout } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,6 +48,13 @@ export default function ProfilePage() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const [followStats, setFollowStats] = useState<FollowStats | null>(null);
+
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmUsername, setDeleteConfirmUsername] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const [mfaMessage, setMfaMessage] = useState<string | null>(null);
   const [mfaError, setMfaError] = useState<string | null>(null);
@@ -209,6 +218,39 @@ export default function ProfilePage() {
       setMfaMessage("Autenticazione a due fattori disattivata.");
     } catch (err) {
       setMfaError(errorMessage(err));
+    }
+  }
+
+  async function handleExportData() {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const data = await authFetch((token) => api.users.exportData(token));
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `notturni-dati-${user?.username}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError(errorMessage(err));
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleDeleteAccount(event: FormEvent) {
+    event.preventDefault();
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await authFetch((token) => api.users.deleteAccount(token, deleteConfirmUsername));
+      await logout();
+      router.push("/login");
+    } catch (err) {
+      setDeleteError(errorMessage(err));
+      setDeleting(false);
     }
   }
 
@@ -520,6 +562,75 @@ export default function ProfilePage() {
             <Alert kind="error">{mfaError}</Alert>
           </div>
         )}
+      </Card>
+
+      <Card>
+        <CardTitle>Dati e privacy</CardTitle>
+        <div className="space-y-6">
+          <div>
+            <p className="mb-2 text-sm text-muted">
+              Scarica una copia di tutti i dati collegati al tuo account: profilo, blog di cui sei
+              proprietario, post e commenti scritti, frammenti salvati, follow e token API.
+            </p>
+            <Button variant="secondary" onClick={handleExportData} disabled={exporting}>
+              {exporting ? "Preparazione…" : "Scarica i miei dati"}
+            </Button>
+            {exportError && (
+              <div className="mt-3">
+                <Alert kind="error">{exportError}</Alert>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="mb-2 text-sm text-muted">
+              Eliminare l&apos;account rimuove definitivamente sessioni, token API, link social,
+              frammenti salvati e collegamenti SSO. I blog di cui sei proprietario e i post/commenti
+              già scritti (anche sui blog altrui) restano, ma d&apos;ora in poi appariranno con
+              l&apos;autore &quot;Utente eliminato&quot;. L&apos;operazione non è reversibile.
+            </p>
+            {!showDeleteConfirm ? (
+              <Button variant="danger" onClick={() => setShowDeleteConfirm(true)}>
+                Elimina il mio account
+              </Button>
+            ) : (
+              <form onSubmit={handleDeleteAccount} className="space-y-3">
+                <FieldGroup>
+                  <Label htmlFor="confirm-delete-username">
+                    Per confermare, scrivi il tuo username (<strong>{user.username}</strong>)
+                  </Label>
+                  <Input
+                    id="confirm-delete-username"
+                    required
+                    value={deleteConfirmUsername}
+                    onChange={(e) => setDeleteConfirmUsername(e.target.value)}
+                  />
+                </FieldGroup>
+                <div className="flex gap-3">
+                  <Button type="submit" variant="danger" disabled={deleting}>
+                    {deleting ? "Eliminazione…" : "Conferma eliminazione"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      setShowDeleteConfirm(false);
+                      setDeleteConfirmUsername("");
+                      setDeleteError(null);
+                    }}
+                  >
+                    Annulla
+                  </Button>
+                </div>
+              </form>
+            )}
+            {deleteError && (
+              <div className="mt-3">
+                <Alert kind="error">{deleteError}</Alert>
+              </div>
+            )}
+          </div>
+        </div>
       </Card>
     </div>
   );

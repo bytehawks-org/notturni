@@ -434,6 +434,17 @@ export const api = {
       request<{ username: string }[]>(`/api/v1/users/${username}/followers`),
     following: (username: string) =>
       request<{ username: string }[]>(`/api/v1/users/${username}/following`),
+    /** GDPR Art. 20: istantanea di tutti i dati collegati all'account,
+     * struttura libera (vedi backend/app/domain/gdpr.py::export_user_data). */
+    exportData: (token: string) => request<Record<string, unknown>>("/api/v1/users/me/export-data", { token }),
+    /** GDPR Art. 17: anonimizza l'account (non lo cancella fisicamente — vedi
+     * backend/app/domain/gdpr.py). Richiede di ridigitare il proprio username. */
+    deleteAccount: (token: string, confirmUsername: string) =>
+      request<void>("/api/v1/users/me", {
+        method: "DELETE",
+        token,
+        body: { confirm_username: confirmUsername },
+      }),
   },
 
   fragments: {

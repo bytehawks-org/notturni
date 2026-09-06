@@ -1086,6 +1086,46 @@ si prova a seguire se stessi.
 **`GET /api/v1/users/{username}/followers`** / **`.../following`** —
 pubblici. Liste `{username}`.
 
+### GDPR (ROADMAP.md §1)
+
+**`GET /api/v1/users/me/export-data`** — richiede sessione. Diritto di
+accesso/portabilità (Art. 20): istantanea JSON di tutti i dati collegati
+all'account — profilo, blog di proprietà, post e commenti scritti (ovunque,
+non solo sui propri blog — restano comunque parole scritte dall'utente),
+frammenti salvati, follow (in entrambe le direzioni, solo gli id), token API
+(nome/prefisso/date, mai il segreto o l'hash) ed eventi di audit di cui è
+l'attore (fino a 1000, i più recenti). Struttura libera, non un
+`response_model` tipizzato: vedi `app/domain/gdpr.py::export_user_data` per
+i campi esatti.
+
+**`DELETE /api/v1/users/me`** — richiede sessione.
+`{"confirm_username": "il-proprio-username"}` → `204`, `400` se non
+corrisponde esattamente allo username corrente (nessuna conferma via
+password: il flusso è pensato per essere lanciato da un form di conferma già
+autenticato in dashboard, non da un client automatizzato).
+
+**Importante**: non cancella la riga `users` — la **anonimizza**. Un utente
+può essere proprietario di blog pubblici con collaboratori o aver commentato
+su blog altrui: cancellare la riga richiederebbe bloccare l'operazione finché
+non esistono più blog/post/commenti collegati (nessuna funzionalità di
+trasferimento/cancellazione blog esiste oggi) oppure cancellare a cascata
+anche quel contenuto, danneggiando terzi che non hanno chiesto nulla —
+approccio comunque ammesso dal GDPR quando l'erasure in senso stretto
+confligge con diritti di terzi (Art. 17.3).
+
+Cancellati per intero (dati puramente personali): sessioni (logout ovunque),
+token API, codici MFA email pendenti, identità SSO, link social, frammenti
+salvati, follow (in entrambe le direzioni) e le membership come collaboratore
+su blog altrui. `username`/`email` sostituiti con valori anonimi univoci,
+`is_active=false` (blocca subito login e riutilizzo di token/sessioni
+esistenti, `app/api/deps.py::get_current_user`), `display_name="Utente
+eliminato"` con `post_author_name_style="display_name"`: blog di proprietà,
+post e commenti restano, ma da subito con questo autore ovunque (stessa
+risoluzione dinamica degli alias già in uso per la privacy dei blog,
+`app/domain/display_names.py`). Evento `user.account_deleted` in audit log,
+registrato **prima** dell'anonimizzazione (l'`actor_label` conserva quindi
+username/email originali). Vedi `app/domain/gdpr.py` per i dettagli.
+
 ## API token (motore core / accesso diretto utente)
 
 Il token è un valore opaco (non un JWT decodificabile), generato con prefisso

@@ -408,6 +408,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "post.unhidden": "Post mostrato",
   "api_token.created": "API token creato",
   "api_token.revoked": "API token revocato",
+  "user.account_deleted": "Account eliminato (GDPR)",
 };
 
 export const AUDIT_ACTOR_TYPE_LABELS: Record<AuditActorType, string> = {
