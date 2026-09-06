@@ -288,7 +288,7 @@ export interface Page {
   content: string;
   is_published: boolean;
   created_at: string;
-  /** Permalink pubblico: `/pages/{slug}` (piattaforma) o `/{blog_slug}/pagina/{slug}` (blog). */
+  /** Permalink pubblico: `/p/{slug}` (piattaforma) o `/{blog_slug}/pagina/{slug}` (blog). */
   permalink: string | null;
   /** Mirror di Blog.mentions_enabled (sempre true per le pagine di piattaforma). */
   mentions_enabled: boolean;

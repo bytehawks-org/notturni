@@ -422,7 +422,7 @@ di dashboard — a differenza della rotta per slug sopra, pensata per la
 risoluzione del permalink pubblico.
 
 Tutte le risposte (`PageOut`) includono `permalink` (calcolato,
-`/{blog_slug}/pagina/{slug}` per le pagine di blog o `/pages/{slug}` per
+`/{blog_slug}/pagina/{slug}` per le pagine di blog o `/p/{slug}` per
 quelle di piattaforma) e `mentions_enabled` (mirror di `Blog.mentions_enabled`,
 sempre `true` per le pagine di piattaforma) — utili al rendering pubblico
 lato frontend senza una fetch separata del blog.
@@ -956,7 +956,7 @@ Pagine come Chi siamo, Contatti, Privacy — non legate a un blog utente
 (`blog_id: null` nella risposta), gestite dal team della piattaforma, sempre
 attive (a differenza delle pagine di blog, opt-in — vedi "Pagine statiche del
 blog" più sotto). Stesso schema di traduzione dei post (sezione Multilingua
-sopra). Permalink pubblico `/pages/{slug}` (prefisso dedicato per non
+sopra). Permalink pubblico `/p/{slug}` (prefisso dedicato per non
 collidere con gli slug dei blog raggiungibili senza sottodominio su
 `/{blog_slug}/...`), riportato anche nel campo `permalink` della risposta.
 
@@ -978,7 +978,7 @@ senza `locale` implicito: va sempre indicato esplicitamente).
 `{id, locale, slug, is_published}` delle sole traduzioni pubblicate della
 stessa famiglia, stesso pattern delle pagine di blog sopra e dei post.
 
-**`GET /api/v1/pages/{slug}?locale=it`** — pubblico (token opzionale): senza
+**`GET /api/v1/p/{slug}?locale=it`** — pubblico (token opzionale): senza
 sessione admin, solo pagine `is_published=true` (`404` altrimenti, bozza o
 inesistente). Con sessione admin, anche le bozze — per poterle rivedere
 prima di pubblicarle.

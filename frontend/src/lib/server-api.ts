@@ -68,7 +68,7 @@ export async function getPublicPage(
 }
 
 /** Pagina statica pubblica del sito principale, permalink dedicato
- * /pages/{slug} (non legata a un blog — vedi backend/API.md). `null` se non
+ * /p/{slug} (non legata a un blog — vedi backend/API.md). `null` se non
  * trovata/non pubblicata (404). */
 export async function getPublicPlatformPage(slug: string, locale: string): Promise<Page | null> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/pages/${slug}?locale=${locale}`, {

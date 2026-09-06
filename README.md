@@ -86,7 +86,7 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   path).
 - **Pagine statiche:** Chi siamo, Contatti, Privacy, ecc. del sito
   principale, gestite da Amministratore/Super Admin (sempre attive,
-  permalink `/pages/{slug}`); estese anche ai singoli blog come feature
+  permalink `/p/{slug}`); estese anche ai singoli blog come feature
   opt-in per il proprietario (disattiva di default), stessa interfaccia di
   editing, permalink `/{blog}/pagina/{slug}`.
 - **Aspetto personalizzabile per blog:** palette/tipografia/layout in JSON
@@ -106,7 +106,7 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   di gestione del proprietario. Chi possiede un blog vede, solo nel proprio
   profilo, il totale dei follower sommato tra username e alias, oltre al
   conteggio separato per ciascuna entità.
-- **Amministrazione:** voci del dashboard esistente, visibili solo ad
+- **Amministrazione:** sezioni sotto `/admin`, visibili solo ad
   Amministratore/Super Admin, con un campo di ricerca in ogni sezione —
   Utenti (ruolo, attivazione; l'assegnazione dei ruoli di amministrazione è
   riservata al Super Admin; nascosta in modalità `solo`), Pagine statiche
@@ -177,7 +177,7 @@ In sintesi, ad alto livello (l'elenco completo, specifica per specifica, è in
 │   └── Dockerfile           # pesi del modello inclusi nell'immagine in fase di build
 ├── frontend/            # applicazione Next.js (pubblica + dashboard + amministrazione)
 │   ├── src/
-│   │   ├── app/            # login/register, dashboard (autore + amministrazione: pagine/utenti/blog), homepage, pagina pubblica del post, profilo pubblico
+│   │   ├── app/            # login/register, dashboard (sezioni personali), admin (pagine/utenti/blog/moderazione), homepage, pagina pubblica del post e del blog, profilo pubblico
 │   │   ├── lib/             # client API, sessione (auth-context), tema (theme-context, sun.ts), Markdown/social/lingue
 │   │   └── components/       # UI condivisa (Button, Card, SearchInput, ...), editor/ (Tiptap, tag, categorie, copertina, traduzioni), ThemeToggle
 │   └── Dockerfile
