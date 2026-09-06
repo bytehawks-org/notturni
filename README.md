@@ -72,7 +72,7 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   un problema del servizio di moderazione non blocca mai l'upload.
 - **Permalink leggibili e homepage aggregata:** ogni post è raggiungibile
   anche senza sottodominio, con un permalink stile WordPress
-  (`/{blog}/{YYYYMMDD}/{slug}`, senza UUID nell'URL). La homepage della
+  (`/{blog}/{slug}`, senza UUID nell'URL). La homepage della
   piattaforma mostra il feed cronologico di tutti i blog, con una sezione
   "di tendenza" basata sui tag più usati.
 - **Media e backup su S3:** immagini incorporabili nei post (pubbliche) e una

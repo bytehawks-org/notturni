@@ -1,34 +1,27 @@
 """Permalink leggibili per i post, senza UUID nell'URL pubblico.
 
-Formato: /{blog_slug}/{YYYYMMDD}/{post_slug} (stile WordPress). La data è
-solo un elemento di disambiguazione/leggibilità nell'URL — l'unicità reale
-è già garantita a livello di dominio da (blog_id, slug, locale) su Post
-(vedi app/models/post.py). Non sostituisce l'UUID come chiave primaria,
-che resta invariata (CLAUDE.md #1).
+Formato: /{blog_slug}/{post_slug}. Unicità garantita a livello di dominio da
+(blog_id, slug, locale) su Post (vedi app/models/post.py) — non serve altro
+nell'URL per disambiguare. Non sostituisce l'UUID come chiave primaria, che
+resta invariata (CLAUDE.md #1).
 """
-
-import re
-from datetime import date
 
 from app.models.post import Post
 
-PERMALINK_DATE_FORMAT = "%Y%m%d"
-_DATE_RE = re.compile(r"^\d{8}$")
-
-
-def permalink_date(post: Post) -> date:
-    """Data usata nel permalink: quella di pubblicazione se pubblicato,
-    altrimenti quella di creazione (permette comunque un link di anteprima
-    per una bozza, visibile solo a chi ha accesso in scrittura al blog)."""
-    if post.published_at is not None:
-        return post.published_at.date()
-    return post.created_at.date()
+# Segmenti statici già usati sotto /{blog_slug}/... dal frontend (pagina di
+# bibliografia/media/link del blog, elenco pagine statiche) — tolta la data
+# dal permalink, uno slug di post identico a uno di questi resterebbe
+# irraggiungibile (il segmento statico vince sempre su quello dinamico).
+RESERVED_POST_SLUGS = {"bibliografia", "link", "media", "pagina"}
 
 
 def build_permalink(blog_slug: str, post: Post) -> str:
-    d = permalink_date(post)
-    return f"/{blog_slug}/{d.strftime(PERMALINK_DATE_FORMAT)}/{post.slug}"
+    return f"/{blog_slug}/{post.slug}"
 
 
-def is_valid_permalink_date(value: str) -> bool:
-    return bool(_DATE_RE.fullmatch(value))
+def validate_post_slug_not_reserved(slug: str) -> None:
+    if slug in RESERVED_POST_SLUGS:
+        raise ValueError(
+            f"'{slug}' è riservato dal frontend (bibliografia/media/link/pagina) e non può essere "
+            "usato come slug di un post."
+        )

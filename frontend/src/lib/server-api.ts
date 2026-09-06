@@ -19,15 +19,14 @@ import type {
 const BACKEND_INTERNAL_URL =
   process.env.NOCT_BACKEND_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-/** Recupera un post pubblico dal suo permalink /{blogSlug}/{date}/{postSlug}.
+/** Recupera un post pubblico dal suo permalink /{blogSlug}/{postSlug}.
  * Ritorna null se non trovato/non pubblicamente visibile (404 dal backend) —
  * qualsiasi altro errore viene propagato. */
 export async function getPublicPostByPermalink(
   blogSlug: string,
-  date: string,
   postSlug: string
 ): Promise<Post | null> {
-  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${blogSlug}/posts/${date}/${postSlug}`, {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${blogSlug}/posts/${postSlug}`, {
     // Cacheato con finestra a tempo + tag: il backend invalida `post:…` e
     // `blog:…` al publish/update (vedi lib/revalidate.ts). Senza il webhook,
     // il post torna coerente comunque entro REVALIDATE_SECONDS.

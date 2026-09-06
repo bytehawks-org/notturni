@@ -23,7 +23,7 @@ from app.domain.content_media import extract_links, extract_media
 from app.domain.display_names import resolve_personal_display_name
 from app.domain.i18n import validate_locale
 from app.domain.notes import NoteInput, normalize_notes
-from app.domain.permalinks import build_permalink, is_valid_permalink_date, permalink_date
+from app.domain.permalinks import build_permalink, validate_post_slug_not_reserved
 from app.domain.tags import resolve_tags
 from app.models.blog import Blog, BlogMembership
 from app.models.category import Category
@@ -476,6 +476,7 @@ async def create_post(
     locale = payload.locale or blog.default_locale
     try:
         validate_locale(locale)
+        validate_post_slug_not_reserved(payload.slug)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
@@ -536,6 +537,7 @@ async def add_post_translation(
 
     try:
         validate_locale(payload.locale)
+        validate_post_slug_not_reserved(payload.slug)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
@@ -661,33 +663,27 @@ async def get_post(
     return await _post_out(session, post, blog)
 
 
-@router.get("/blogs/{blog_slug}/posts/{permalink_date_str}/{post_slug}", response_model=PostOut)
+@router.get("/blogs/{blog_slug}/posts/{post_slug}", response_model=PostOut)
 async def get_post_by_permalink(
     blog_slug: str,
-    permalink_date_str: str,
     post_slug: str,
     current_user: User | None = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> PostOut:
-    """Risoluzione del permalink pubblico /{blog_slug}/{YYYYMMDD}/{post_slug}
-    (CLAUDE.md #2): nessun UUID nell'URL. La data è quella di pubblicazione,
-    o di creazione per l'anteprima di una bozza (vedi domain/permalinks.py)."""
-    if not is_valid_permalink_date(permalink_date_str):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Formato data non valido, atteso YYYYMMDD.")
-
+    """Risoluzione del permalink pubblico /{blog_slug}/{post_slug} (CLAUDE.md
+    #2): nessun UUID nell'URL, unicità garantita da (blog_id, slug, locale)
+    — vedi domain/permalinks.py."""
     blog = await _get_blog_or_404(session, blog_slug)
     await _require_blog_viewable(session, current_user, blog)
     result = await session.execute(
         select(Post).where(Post.blog_id == blog.id, Post.slug == post_slug)
     )
-    candidates = [
-        p for p in result.scalars().all() if permalink_date(p).strftime("%Y%m%d") == permalink_date_str
-    ]
+    candidates = list(result.scalars().all())
     if not candidates:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Post non trovato.")
     # Lo slug è unico solo per (blog, locale): due traduzioni diverse
-    # potrebbero in teoria condividere slug+data. Caso raro, non impedito a
-    # livello di vincolo DB — si preferisce la lingua di default del blog.
+    # potrebbero in teoria condividere lo stesso slug. Caso raro, non impedito
+    # a livello di vincolo DB — si preferisce la lingua di default del blog.
     post = next((p for p in candidates if p.locale == blog.default_locale), candidates[0])
 
     if not is_publicly_visible(post):

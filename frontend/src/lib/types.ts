@@ -154,7 +154,7 @@ export interface Post {
   status: PostStatus;
   published_at: string | null;
   created_at: string;
-  /** Permalink leggibile /{blog_slug}/{YYYYMMDD}/{slug}, senza UUID. */
+  /** Permalink leggibile /{blog_slug}/{slug}, senza UUID. */
   blog_slug: string;
   permalink: string;
   /** Se il blog ha le @menzioni attive: il rendering le trasforma in link. */

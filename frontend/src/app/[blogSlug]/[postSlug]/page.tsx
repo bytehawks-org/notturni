@@ -10,7 +10,6 @@ import { getPublicPostByPermalink } from "@/lib/server-api";
 
 interface PageParams {
   blogSlug: string;
-  date: string;
   postSlug: string;
 }
 
@@ -19,8 +18,8 @@ function formatDate(iso: string): string {
 }
 
 export async function generateMetadata({ params }: { params: Promise<PageParams> }): Promise<Metadata> {
-  const { blogSlug, date, postSlug } = await params;
-  const post = await getPublicPostByPermalink(blogSlug, date, postSlug);
+  const { blogSlug, postSlug } = await params;
+  const post = await getPublicPostByPermalink(blogSlug, postSlug);
   if (!post) return {};
   return {
     title: post.title,
@@ -29,8 +28,8 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
 }
 
 export default async function PublicPostPage({ params }: { params: Promise<PageParams> }) {
-  const { blogSlug, date, postSlug } = await params;
-  const post = await getPublicPostByPermalink(blogSlug, date, postSlug);
+  const { blogSlug, postSlug } = await params;
+  const post = await getPublicPostByPermalink(blogSlug, postSlug);
   if (!post) notFound();
 
   const html = await renderMarkdown(post.content, {

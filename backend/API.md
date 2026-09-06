@@ -328,7 +328,7 @@ maiuscole/spaziatura) e ordinate per recency del primo post che le cita:
   {
     "content": "Testo della nota, Markdown inline.",
     "citations": [
-      {"post_title": "...", "post_slug": "...", "permalink": "/{blog}/{YYYYMMDD}/{slug}", "locale": "it", "idx": 1}
+      {"post_title": "...", "post_slug": "...", "permalink": "/{blog}/{slug}", "locale": "it", "idx": 1}
     ]
   }
 ]
@@ -345,7 +345,7 @@ citati nel corpo dei post **pubblicati**, raggruppati per URL identico:
     "alt_text": "Descrizione dell'immagine",
     "categories": ["nudity", "explicit"],
     "citations": [
-      {"post_title": "...", "post_slug": "...", "permalink": "/{blog}/{YYYYMMDD}/{slug}", "locale": "it", "used_at": "2026-01-01T00:00:00Z"}
+      {"post_title": "...", "post_slug": "...", "permalink": "/{blog}/{slug}", "locale": "it", "used_at": "2026-01-01T00:00:00Z"}
     ]
   }
 ]
@@ -365,7 +365,7 @@ link citati nel corpo dei post pubblicati:
     "url": "https://esempio.org/articolo",
     "link_text": "testo del link",
     "citations": [
-      {"post_title": "...", "post_slug": "...", "permalink": "/{blog}/{YYYYMMDD}/{slug}", "locale": "it", "used_at": "2026-01-01T00:00:00Z"}
+      {"post_title": "...", "post_slug": "...", "permalink": "/{blog}/{slug}", "locale": "it", "used_at": "2026-01-01T00:00:00Z"}
     ]
   }
 ]
@@ -544,7 +544,7 @@ Ogni post ha un **permalink leggibile**, senza UUID: `blog_slug` e
 inclusi in ogni `PostOut`:
 
 ```text
-permalink = /{blog_slug}/{YYYYMMDD}/{slug}
+permalink = /{blog_slug}/{slug}
 ```
 
 La data è quella di pubblicazione (`published_at`) se il post è pubblicato,
@@ -666,14 +666,13 @@ della creazione); `404` (non `403`, per non rivelarne l'esistenza) se non
 autorizzato. Uso interno (dashboard/editor): identifica il post per UUID,
 non per il permalink pubblico.
 
-**`GET /api/v1/blogs/{blog_slug}/posts/{YYYYMMDD}/{post_slug}`** — pubblico
+**`GET /api/v1/blogs/{blog_slug}/posts/{post_slug}`** — pubblico
 (token opzionale), stesse regole di visibilità di `GET /posts/{post_id}`
 sopra. Risolve il permalink leggibile (vedi sopra) verso il post: è
 l'endpoint pensato per la pagina pubblica del post (es.
-`https://notturni.eu/{blog_slug}/{YYYYMMDD}/{post_slug}`), che così non deve
-mai esporre l'UUID nell'URL. `400` se la data non è nel formato `YYYYMMDD`,
-`404` se blog/slug/data non corrispondono a nessun post (o a un post non
-visibile per il chiamante).
+`https://notturni.eu/{blog_slug}/{post_slug}`), che così non deve mai
+esporre l'UUID nell'URL. `404` se blog/slug non corrispondono a nessun post
+(o a un post non visibile per il chiamante).
 
 **`PATCH /api/v1/posts/{post_id}`** — stessa autorizzazione della creazione.
 Aggiorna
