@@ -243,6 +243,33 @@ Serve solo Postgres raggiungibile (usa un database separato, `notturni_test`
 di default); MinIO e RabbitMQ sono sostituiti da fake/mock nei test, non
 servono in esecuzione. Dettagli in [backend/README.md](backend/README.md#test).
 
+## CI e sicurezza
+
+Tre GitHub Actions in [.github/workflows/](.github/workflows/):
+
+- [codeql.yml](.github/workflows/codeql.yml) — SAST (analisi statica) via
+  CodeQL su backend/moderation (Python) e frontend (TypeScript/JavaScript).
+  Report nella tab **Security → Code scanning** del repository, non come
+  artifact. Su push/PR verso `main`/`develop`, avvio manuale e schedule
+  settimanale.
+- [sbom.yml](.github/workflows/sbom.yml) — SBOM (Software Bill of Materials,
+  formato CycloneDX): un inventario delle dipendenze, non un'analisi di
+  vulnerabilità. Un livello dai sorgenti (backend/frontend/moderation, sempre
+  veloce) e uno dalle immagini container effettivamente costruite
+  (backend/frontend). Report come artifact del workflow. Stessi trigger di
+  `codeql.yml`.
+- [dast.yml](.github/workflows/dast.yml) — DAST (analisi dinamica): avvia
+  l'intero stack da `compose.yaml` (con Docker invece di Podman — nessuna
+  sintassi specifica di Podman nel file) ed esegue OWASP ZAP contro le pagine
+  pubbliche del frontend e l'API del backend (da `/openapi.json`). Più
+  pesante degli altri due: solo avvio manuale e schedule settimanale, mai su
+  ogni push/PR. Report come artifact del workflow.
+
+Nessuno dei tre fallisce la build in presenza di segnalazioni (`fail_action:
+false`/nessun controllo di soglia): sono pensati per produrre un report da
+consultare, non un gate che blocca il merge — da rivedere se in futuro si
+vorrà imporre una soglia.
+
 ## Backend e frontend in locale (senza container)
 
 Vedi [backend/README.md](backend/README.md) e [frontend/README.md](frontend/README.md).

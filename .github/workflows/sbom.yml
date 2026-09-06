@@ -1,0 +1,111 @@
+name: SBOM
+
+# Software Bill of Materials, formato CycloneDX: un inventario delle
+# dipendenze, non un'analisi di vulnerabilità (per quello vedi SAST/DAST negli
+# altri due workflow). Due livelli distinti:
+#   - "sorgenti": da requirements.txt/package-lock.json, un file per
+#     sotto-progetto (backend, frontend, moderation) — veloce, sempre eseguito.
+#   - "immagini": dal contenuto reale delle immagini container backend/
+#     frontend effettivamente costruite — più preciso (include anche
+#     dipendenze di sistema installate nel Dockerfile), ma più lento.
+#     "moderation" (immagine pesante, dipendenze ML torch/transformers) è
+#     escluso da questo livello: la SBOM sorgenti la copre comunque.
+on:
+  push:
+    branches:
+      - main
+      - develop
+      # TEMPORANEO: solo per il primo test di questo workflow appena aggiunto
+      # (nessun modo di lanciarlo a mano da questo ambiente) — rimuovere questa
+      # riga dopo aver verificato che gira correttamente.
+      - feat/roadmap-workout
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  sbom-sorgenti:
+    name: SBOM sorgenti
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: SBOM backend (Python)
+        uses: anchore/sbom-action@v0
+        with:
+          path: ./backend
+          format: cyclonedx-json
+          output-file: sbom-backend.cyclonedx.json
+          upload-artifact: false
+
+      - name: SBOM frontend (Node)
+        uses: anchore/sbom-action@v0
+        with:
+          path: ./frontend
+          format: cyclonedx-json
+          output-file: sbom-frontend.cyclonedx.json
+          upload-artifact: false
+
+      - name: SBOM moderation (Python)
+        uses: anchore/sbom-action@v0
+        with:
+          path: ./moderation
+          format: cyclonedx-json
+          output-file: sbom-moderation.cyclonedx.json
+          upload-artifact: false
+
+      - name: Carica i report SBOM sorgenti
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-sorgenti
+          path: |
+            sbom-backend.cyclonedx.json
+            sbom-frontend.cyclonedx.json
+            sbom-moderation.cyclonedx.json
+          retention-days: 90
+
+  sbom-immagini:
+    name: SBOM immagini container
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build immagine backend
+        run: docker build -t notturni-backend:ci ./backend
+
+      - name: Build immagine frontend
+        run: docker build -t notturni-frontend:ci ./frontend
+
+      - name: SBOM immagine backend
+        uses: anchore/sbom-action@v0
+        with:
+          image: notturni-backend:ci
+          format: cyclonedx-json
+          output-file: sbom-image-backend.cyclonedx.json
+          upload-artifact: false
+
+      - name: SBOM immagine frontend
+        uses: anchore/sbom-action@v0
+        with:
+          image: notturni-frontend:ci
+          format: cyclonedx-json
+          output-file: sbom-image-frontend.cyclonedx.json
+          upload-artifact: false
+
+      - name: Carica i report SBOM immagini
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-immagini
+          path: |
+            sbom-image-backend.cyclonedx.json
+            sbom-image-frontend.cyclonedx.json
+          retention-days: 90
