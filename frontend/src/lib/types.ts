@@ -492,6 +492,9 @@ export interface PostFragment {
   id: string;
   post_id: string;
   text: string;
+  /** Scelto al salvataggio, modificabile ex-post: pubblico = visibile ad
+   * altri utenti iscritti alla piattaforma, mai a visitatori anonimi. */
+  is_public: boolean;
   created_at: string;
 }
 
@@ -500,9 +503,10 @@ export const MAX_FRAGMENT_RATIO = 0.15;
 export interface FragmentCollectionEntry {
   id: string;
   text: string;
+  is_public: boolean;
   created_at: string;
   post_title: string;
   author_display_name: string;
-  /** Permalink pubblico /{blog}/{data}/{slug} del post di provenienza. */
+  /** Permalink pubblico /{blog}/{slug} del post di provenienza. */
   permalink: string;
 }

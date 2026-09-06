@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import ForeignKey, Text, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
@@ -20,6 +20,12 @@ class PostFragment(Base, UUIDPKMixin, TimestampMixin):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     post_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("posts.id"), nullable=False, index=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)
+    # Scelto al salvataggio, modificabile anche ex-post (ROADMAP.md §1):
+    # default privato (comportamento storico, prima che questo campo
+    # esistesse). "Pubblico" = visibile ad altri utenti iscritti alla
+    # piattaforma, mai a visitatori anonimi — a livello di utente, non di
+    # blog: chi salva decide, non l'autore del post.
+    is_public: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     user: Mapped["User"] = relationship()
     post: Mapped["Post"] = relationship()

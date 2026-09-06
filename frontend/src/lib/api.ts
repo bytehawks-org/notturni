@@ -465,14 +465,21 @@ export const api = {
      * ri-evidenziarli ad ogni lettura. */
     listForPost: (token: string, postId: string) =>
       request<PostFragment[]>(`/api/v1/posts/${postId}/fragments`, { token }),
-    create: (token: string, postId: string, text: string) =>
+    create: (token: string, postId: string, text: string, isPublic: boolean = false) =>
       request<PostFragment>(`/api/v1/posts/${postId}/fragments`, {
         method: "POST",
         token,
-        body: { text },
+        body: { text, is_public: isPublic },
       }),
     /** Raccolta unificata di tutti i frammenti salvati dall'utente. */
     listMine: (token: string) => request<FragmentCollectionEntry[]>("/api/v1/users/me/fragments", { token }),
+    /** Cambia la visibilità di un frammento già salvato, anche ex-post. */
+    setPublic: (token: string, fragmentId: string, isPublic: boolean) =>
+      request<PostFragment>(`/api/v1/fragments/${fragmentId}`, {
+        method: "PATCH",
+        token,
+        body: { is_public: isPublic },
+      }),
     remove: (token: string, fragmentId: string) =>
       request<void>(`/api/v1/fragments/${fragmentId}`, { method: "DELETE", token }),
   },

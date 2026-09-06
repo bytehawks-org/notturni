@@ -575,5 +575,11 @@ ALTER TABLE posts ADD COLUMN comments_mode comments_mode;
 
 UPDATE alembic_version SET version_num='7981bf8eb571' WHERE alembic_version.version_num = 'b1c2d3e4f5a6';
 
+-- Running upgrade 7981bf8eb571 -> c5c5ea3b5cf6
+
+ALTER TABLE post_fragments ADD COLUMN is_public BOOLEAN DEFAULT false NOT NULL;
+
+UPDATE alembic_version SET version_num='c5c5ea3b5cf6' WHERE alembic_version.version_num = '7981bf8eb571';
+
 COMMIT;
 

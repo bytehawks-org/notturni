@@ -30,6 +30,8 @@ async def test_save_fragment(client: AsyncClient, make_user: Callable) -> None:
     assert res.status_code == 201, res.text
     assert res.json()["post_id"] == post_id
     assert res.json()["text"] == "un pezzo di testo"
+    # privato di default, comportamento storico prima che is_public esistesse
+    assert res.json()["is_public"] is False
 
     mine = await client.get(f"/api/v1/posts/{post_id}/fragments", headers=reader.headers)
     assert len(mine.json()) == 1
@@ -123,3 +125,47 @@ async def test_collection_and_delete(client: AsyncClient, make_user: Callable) -
 
     after = await client.get("/api/v1/users/me/fragments", headers=reader.headers)
     assert after.json() == []
+
+
+async def test_save_fragment_as_public(client: AsyncClient, make_user: Callable) -> None:
+    owner: AuthedUser = await make_user("owner-f6")
+    reader: AuthedUser = await make_user("reader-f6")
+    post_id = await _published_post(client, owner, "blog-frammenti-6")
+
+    res = await client.post(
+        f"/api/v1/posts/{post_id}/fragments",
+        json={"text": "un pezzo pubblico", "is_public": True},
+        headers=reader.headers,
+    )
+    assert res.status_code == 201
+    assert res.json()["is_public"] is True
+
+
+async def test_toggle_fragment_visibility_ex_post(client: AsyncClient, make_user: Callable) -> None:
+    owner: AuthedUser = await make_user("owner-f7")
+    reader: AuthedUser = await make_user("reader-f7")
+    other: AuthedUser = await make_user("other-f7")
+    post_id = await _published_post(client, owner, "blog-frammenti-7")
+
+    create_res = await client.post(
+        f"/api/v1/posts/{post_id}/fragments", json={"text": "cambio idea"}, headers=reader.headers
+    )
+    fragment_id = create_res.json()["id"]
+    assert create_res.json()["is_public"] is False
+
+    # solo il proprietario del frammento può cambiarne la visibilità
+    forbidden = await client.patch(
+        f"/api/v1/fragments/{fragment_id}", json={"is_public": True}, headers=other.headers
+    )
+    assert forbidden.status_code == 404
+
+    made_public = await client.patch(
+        f"/api/v1/fragments/{fragment_id}", json={"is_public": True}, headers=reader.headers
+    )
+    assert made_public.status_code == 200
+    assert made_public.json()["is_public"] is True
+
+    made_private = await client.patch(
+        f"/api/v1/fragments/{fragment_id}", json={"is_public": False}, headers=reader.headers
+    )
+    assert made_private.json()["is_public"] is False
