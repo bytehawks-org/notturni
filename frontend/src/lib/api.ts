@@ -1,12 +1,17 @@
 import type { SensitivityCategory } from "./content-media";
 import type {
   AdminBlog,
+  AdminComment,
   AdminPost,
   AdminUser,
+  ApiToken,
+  ApiTokenCreated,
+  AuditChannel,
   AuditLogEntry,
   BibliographyEntry,
   Blog,
   BlogComment,
+  CommentsMode,
   BlogConfig,
   BlogInvitation,
   BlogMember,
@@ -112,10 +117,10 @@ export const api = {
       request<void>("/api/v1/auth/logout", { method: "POST", body: { refresh_token } }),
     me: (token: string) => request<CurrentUser>("/api/v1/auth/me", { token }),
     totpSetup: (token: string) =>
-      request<{ secret: string; provisioning_uri: string }>("/api/v1/auth/mfa/totp/setup", {
-        method: "POST",
-        token,
-      }),
+      request<{ secret: string; provisioning_uri: string; qr_code_data_uri: string }>(
+        "/api/v1/auth/mfa/totp/setup",
+        { method: "POST", token }
+      ),
     totpConfirm: (token: string, code: string) =>
       request<void>("/api/v1/auth/mfa/totp/confirm", { method: "POST", token, body: { code } }),
     emailSetup: (token: string) =>
@@ -153,9 +158,11 @@ export const api = {
         subtitle?: string;
         description?: string;
         visibility?: BlogVisibility;
-        allow_anonymous_comments?: boolean;
+        comments_mode?: CommentsMode;
         mentions_enabled?: boolean;
         static_pages_enabled?: boolean;
+        search_indexing_enabled?: boolean;
+        ai_crawling_enabled?: boolean;
         /** "" azzera (torna allo username di chi scrive); assente non tocca. */
         default_author_display_name?: string;
       }
@@ -300,9 +307,9 @@ export const api = {
     list: (token: string | null, blogSlug: string, locale?: string) =>
       request<Post[]>(`/api/v1/blogs/${blogSlug}/posts${locale ? `?locale=${locale}` : ""}`, { token }),
     get: (token: string | null, postId: string) => request<Post>(`/api/v1/posts/${postId}`, { token }),
-    /** Risolve il permalink pubblico /{blogSlug}/{date}/{postSlug} (niente UUID nell'URL). */
-    getByPermalink: (token: string | null, blogSlug: string, date: string, postSlug: string) =>
-      request<Post>(`/api/v1/blogs/${blogSlug}/posts/${date}/${postSlug}`, { token }),
+    /** Risolve il permalink pubblico /{blogSlug}/{postSlug} (niente UUID nell'URL). */
+    getByPermalink: (token: string | null, blogSlug: string, postSlug: string) =>
+      request<Post>(`/api/v1/blogs/${blogSlug}/posts/${postSlug}`, { token }),
     create: (
       token: string,
       blogSlug: string,
@@ -336,6 +343,13 @@ export const api = {
         category_id?: string | null;
         /** assente: non tocca le note; lista (anche []): le sostituisce. */
         notes?: PostNote[];
+        /** assente: non tocca; null: torna a ereditare da Blog.comments_mode;
+         * valore: imposta un override per questo solo post. */
+        comments_mode?: CommentsMode | null;
+        /** assente: non tocca; null: torna a ereditare da Blog.search_indexing_enabled/
+         * ai_crawling_enabled; valore: imposta un override per questo solo post. */
+        search_indexing_enabled?: boolean | null;
+        ai_crawling_enabled?: boolean | null;
       }
     ) => request<Post>(`/api/v1/posts/${postId}`, { method: "PATCH", token, body: payload }),
     publish: (token: string, postId: string) =>
@@ -370,7 +384,15 @@ export const api = {
     create: (
       token: string | null,
       postId: string,
-      payload: { content: string; author_display_name?: string; author_email?: string }
+      payload: {
+        content: string;
+        parent_id?: string;
+        author_display_name?: string;
+        author_email?: string;
+        /** Richiesto solo per un commento anonimo su un post/blog con
+         * comments_mode "everyone" — token del widget Cloudflare Turnstile. */
+        captcha_token?: string;
+      }
     ) => request<Comment>(`/api/v1/posts/${postId}/comments`, { method: "POST", token, body: payload }),
     approve: (token: string, commentId: string) =>
       request<Comment>(`/api/v1/comments/${commentId}/approve`, { method: "POST", token }),
@@ -431,6 +453,17 @@ export const api = {
       request<{ username: string }[]>(`/api/v1/users/${username}/followers`),
     following: (username: string) =>
       request<{ username: string }[]>(`/api/v1/users/${username}/following`),
+    /** GDPR Art. 20: istantanea di tutti i dati collegati all'account,
+     * struttura libera (vedi backend/app/domain/gdpr.py::export_user_data). */
+    exportData: (token: string) => request<Record<string, unknown>>("/api/v1/users/me/export-data", { token }),
+    /** GDPR Art. 17: anonimizza l'account (non lo cancella fisicamente — vedi
+     * backend/app/domain/gdpr.py). Richiede di ridigitare il proprio username. */
+    deleteAccount: (token: string, confirmUsername: string) =>
+      request<void>("/api/v1/users/me", {
+        method: "DELETE",
+        token,
+        body: { confirm_username: confirmUsername },
+      }),
   },
 
   fragments: {
@@ -438,14 +471,21 @@ export const api = {
      * ri-evidenziarli ad ogni lettura. */
     listForPost: (token: string, postId: string) =>
       request<PostFragment[]>(`/api/v1/posts/${postId}/fragments`, { token }),
-    create: (token: string, postId: string, text: string) =>
+    create: (token: string, postId: string, text: string, isPublic: boolean = false) =>
       request<PostFragment>(`/api/v1/posts/${postId}/fragments`, {
         method: "POST",
         token,
-        body: { text },
+        body: { text, is_public: isPublic },
       }),
     /** Raccolta unificata di tutti i frammenti salvati dall'utente. */
     listMine: (token: string) => request<FragmentCollectionEntry[]>("/api/v1/users/me/fragments", { token }),
+    /** Cambia la visibilità di un frammento già salvato, anche ex-post. */
+    setPublic: (token: string, fragmentId: string, isPublic: boolean) =>
+      request<PostFragment>(`/api/v1/fragments/${fragmentId}`, {
+        method: "PATCH",
+        token,
+        body: { is_public: isPublic },
+      }),
     remove: (token: string, fragmentId: string) =>
       request<void>(`/api/v1/fragments/${fragmentId}`, { method: "DELETE", token }),
   },
@@ -454,7 +494,7 @@ export const api = {
     get: () => request<InstanceConfig>("/api/v1/config"),
   },
 
-  /** Pagine statiche del sito principale (dashboard/pagine, riservato ad
+  /** Pagine statiche del sito principale (admin/pagine, riservato ad
    * Amministratore/Super Admin) — non le pagine di un blog (vedi `blogs.pages` sopra). */
   pages: {
     /** Pubblico: solo pubblicate. Con token admin: anche le bozze. Parametro
@@ -502,11 +542,22 @@ export const api = {
         actor_id: string;
         target_id: string;
         blog_id: string;
+        channel: AuditChannel;
         since: string;
         until: string;
         limit: string;
         offset: string;
       }> = {}
     ) => request<AuditLogEntry[]>(withQuery("/api/v1/admin/audit-log", filters), { token }),
+    listComments: (token: string, filters: Partial<{ status: CommentStatus; q: string }> = {}) =>
+      request<AdminComment[]>(withQuery("/api/v1/admin/comments", filters), { token }),
+  },
+
+  tokens: {
+    list: (token: string) => request<ApiToken[]>("/api/v1/tokens", { token }),
+    create: (token: string, name: string) =>
+      request<ApiTokenCreated>("/api/v1/tokens", { method: "POST", token, body: { name } }),
+    revoke: (token: string, tokenId: string) =>
+      request<void>(`/api/v1/tokens/${tokenId}`, { method: "DELETE", token }),
   },
 };

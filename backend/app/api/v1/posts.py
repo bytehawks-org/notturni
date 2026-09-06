@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_optional_current_user
 from app.core.broker import publish_post_backup
+from app.core.captcha import turnstile_configured
 from app.core.database import get_session
 from app.core.revalidation import blog_tag, feed_tag, post_tag, revalidate_frontend
 from app.domain.authorization import (
@@ -23,9 +24,11 @@ from app.domain.content_media import extract_links, extract_media
 from app.domain.display_names import resolve_personal_display_name
 from app.domain.i18n import validate_locale
 from app.domain.notes import NoteInput, normalize_notes
-from app.domain.permalinks import build_permalink, is_valid_permalink_date, permalink_date
+from app.domain.permalinks import build_permalink, validate_post_slug_not_reserved
+from app.domain.seo import effective_ai_crawling, effective_search_indexing
 from app.domain.tags import resolve_tags
 from app.models.blog import Blog, BlogMembership
+from app.models.comment import CommentsMode
 from app.models.category import Category
 from app.models.post import Post, PostStatus
 from app.models.post_link import post_links
@@ -115,6 +118,15 @@ class PostUpdateRequest(BaseModel):
     category_id: uuid.UUID | None = None
     # assente: lascia invariate le note; lista (anche vuota `[]`): le sostituisce.
     notes: list[NoteIn] | None = None
+    # Override di Blog.comments_mode per questo solo post; `null` esplicito
+    # torna a ereditare dal blog, assente non tocca — stesso schema di
+    # category_id sopra (model_fields_set in update_post).
+    comments_mode: CommentsMode | None = None
+    # Override di Blog.search_indexing_enabled/ai_crawling_enabled per questo
+    # solo post (app/domain/seo.py); `null` esplicito torna a ereditare dal
+    # blog, assente non tocca — stesso schema tri-state di category_id sopra.
+    search_indexing_enabled: bool | None = None
+    ai_crawling_enabled: bool | None = None
 
 
 class PublishRequest(BaseModel):
@@ -150,7 +162,7 @@ class PostOut(BaseModel):
     # (dashboard/moderazione), indipendentemente da `status`. L'autore lo
     # vede qui per sapere perché il post non è raggiungibile pubblicamente.
     is_hidden: bool
-    # permalink leggibile /{blog_slug}/{YYYYMMDD}/{slug} (CLAUDE.md #2: niente
+    # permalink leggibile /{blog_slug}/{slug} (CLAUDE.md #2: niente
     # UUID negli URL pubblici) — non colonne del modello, calcolati da
     # _post_out() ad ogni risposta, serve perciò anche blog_slug qui.
     blog_slug: str
@@ -167,6 +179,19 @@ class PostOut(BaseModel):
     manual_tags: list[str]
     tags: list[str]
     category: CategorySummaryOut | None
+    # None: eredita da Blog.comments_mode (vedi PATCH sopra per il tri-state
+    # di scrittura). effective_comments_mode è invece sempre valorizzato: il
+    # modo comodo per il frontend di sapere subito chi può commentare, senza
+    # dover guardare anche il blog quando questo campo è None.
+    comments_mode: CommentsMode | None
+    effective_comments_mode: CommentsMode
+    # None: eredita da Blog.search_indexing_enabled/ai_crawling_enabled. Gli
+    # effective_* sono sempre valorizzati (app/domain/seo.py) e già tengono
+    # conto del blocco a cascata se il blog stesso è escluso.
+    search_indexing_enabled: bool | None
+    ai_crawling_enabled: bool | None
+    effective_search_indexing_enabled: bool
+    effective_ai_crawling_enabled: bool
 
     model_config = {"from_attributes": True}
 
@@ -347,6 +372,12 @@ async def _posts_out(
                 manual_tags=post.manual_tags,
                 tags=effective_tags,
                 category=CategorySummaryOut.model_validate(category) if category else None,
+                comments_mode=post.comments_mode,
+                effective_comments_mode=post.comments_mode or blog.comments_mode,
+                search_indexing_enabled=post.search_indexing_enabled,
+                ai_crawling_enabled=post.ai_crawling_enabled,
+                effective_search_indexing_enabled=effective_search_indexing(post, blog),
+                effective_ai_crawling_enabled=effective_ai_crawling(post, blog),
             )
         )
     return out
@@ -476,6 +507,7 @@ async def create_post(
     locale = payload.locale or blog.default_locale
     try:
         validate_locale(locale)
+        validate_post_slug_not_reserved(payload.slug)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
@@ -536,6 +568,7 @@ async def add_post_translation(
 
     try:
         validate_locale(payload.locale)
+        validate_post_slug_not_reserved(payload.slug)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
@@ -661,33 +694,27 @@ async def get_post(
     return await _post_out(session, post, blog)
 
 
-@router.get("/blogs/{blog_slug}/posts/{permalink_date_str}/{post_slug}", response_model=PostOut)
+@router.get("/blogs/{blog_slug}/posts/{post_slug}", response_model=PostOut)
 async def get_post_by_permalink(
     blog_slug: str,
-    permalink_date_str: str,
     post_slug: str,
     current_user: User | None = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> PostOut:
-    """Risoluzione del permalink pubblico /{blog_slug}/{YYYYMMDD}/{post_slug}
-    (CLAUDE.md #2): nessun UUID nell'URL. La data è quella di pubblicazione,
-    o di creazione per l'anteprima di una bozza (vedi domain/permalinks.py)."""
-    if not is_valid_permalink_date(permalink_date_str):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Formato data non valido, atteso YYYYMMDD.")
-
+    """Risoluzione del permalink pubblico /{blog_slug}/{post_slug} (CLAUDE.md
+    #2): nessun UUID nell'URL, unicità garantita da (blog_id, slug, locale)
+    — vedi domain/permalinks.py."""
     blog = await _get_blog_or_404(session, blog_slug)
     await _require_blog_viewable(session, current_user, blog)
     result = await session.execute(
         select(Post).where(Post.blog_id == blog.id, Post.slug == post_slug)
     )
-    candidates = [
-        p for p in result.scalars().all() if permalink_date(p).strftime("%Y%m%d") == permalink_date_str
-    ]
+    candidates = list(result.scalars().all())
     if not candidates:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Post non trovato.")
     # Lo slug è unico solo per (blog, locale): due traduzioni diverse
-    # potrebbero in teoria condividere slug+data. Caso raro, non impedito a
-    # livello di vincolo DB — si preferisce la lingua di default del blog.
+    # potrebbero in teoria condividere lo stesso slug. Caso raro, non impedito
+    # a livello di vincolo DB — si preferisce la lingua di default del blog.
     post = next((p for p in candidates if p.locale == blog.default_locale), candidates[0])
 
     if not is_publicly_visible(post):
@@ -752,6 +779,20 @@ async def update_post(
     if "category_id" in payload.model_fields_set:
         await _validate_category(session, blog, payload.category_id)
         post.category_id = payload.category_id
+
+    if "comments_mode" in payload.model_fields_set:
+        if payload.comments_mode == CommentsMode.EVERYONE and not turnstile_configured():
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Commenti aperti a tutti non disponibili: questa istanza non ha un captcha "
+                "configurato (NOCT_TURNSTILE_SITE_KEY/_SECRET_KEY).",
+            )
+        post.comments_mode = payload.comments_mode
+
+    if "search_indexing_enabled" in payload.model_fields_set:
+        post.search_indexing_enabled = payload.search_indexing_enabled
+    if "ai_crawling_enabled" in payload.model_fields_set:
+        post.ai_crawling_enabled = payload.ai_crawling_enabled
 
     # note: assente lascia invariato; lista (anche `[]`) sostituisce.
     if payload.notes is not None:

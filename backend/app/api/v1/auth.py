@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import get_session
+from app.core.http import client_ip
 from app.core.oauth import configured_providers, oauth
 from app.core.security import create_mfa_challenge_token, decode_mfa_challenge_token
 from app.domain import audit
@@ -19,10 +20,12 @@ from app.domain.auth import (
     revoke_session,
     rotate_refresh_token,
 )
+from app.domain.rate_limit import enforce_rate_limit
 from app.domain.mfa import (
     generate_totp_secret,
     send_email_otp,
     totp_provisioning_uri,
+    totp_qr_code_data_uri,
     verify_email_otp,
     verify_totp_code,
 )
@@ -32,6 +35,14 @@ from app.models.sso_identity import SsoProvider
 from app.models.user import MfaMethod, PlatformRole, User
 
 router = APIRouter()
+
+# Protezione brute-force sul login (ROADMAP.md §3, Redis rate limiting): due
+# limiti indipendenti, per IP (contiene bot che provano molte email diverse)
+# e per email (contiene tentativi mirati su un singolo account anche da IP
+# diversi/rotanti). Applicati prima di verificare la password.
+LOGIN_IP_RATE_LIMIT = 20
+LOGIN_EMAIL_RATE_LIMIT = 5
+LOGIN_RATE_LIMIT_WINDOW_SECONDS = 300
 
 
 # ---- schemi ----------------------------------------------------------------
@@ -87,6 +98,9 @@ class LogoutRequest(BaseModel):
 class TotpSetupResponse(BaseModel):
     secret: str
     provisioning_uri: str
+    # SVG inline come data URI (mai generato da un servizio di terze parti:
+    # il secret non deve lasciare il backend) — vedi app/domain/mfa.py.
+    qr_code_data_uri: str
 
 
 class MfaCodeRequest(BaseModel):
@@ -110,6 +124,21 @@ async def register(payload: RegisterRequest, session: AsyncSession = Depends(get
 
 @router.post("/login", response_model=SessionResponse | MfaRequiredResponse)
 async def login(payload: LoginRequest, request: Request, session: AsyncSession = Depends(get_session)):
+    ip = client_ip(request)
+    if ip is not None:
+        await enforce_rate_limit(
+            f"ratelimit:login:ip:{ip}",
+            limit=LOGIN_IP_RATE_LIMIT,
+            window_seconds=LOGIN_RATE_LIMIT_WINDOW_SECONDS,
+            message="Troppi tentativi di accesso da questo indirizzo. Riprova tra qualche minuto.",
+        )
+    await enforce_rate_limit(
+        f"ratelimit:login:email:{payload.email.lower()}",
+        limit=LOGIN_EMAIL_RATE_LIMIT,
+        window_seconds=LOGIN_RATE_LIMIT_WINDOW_SECONDS,
+        message="Troppi tentativi di accesso per questo account. Riprova tra qualche minuto.",
+    )
+
     try:
         user = await authenticate_password(session, email=payload.email, password=payload.password)
     except AuthError as exc:
@@ -208,8 +237,11 @@ async def setup_totp(
     secret = generate_totp_secret()
     current_user.mfa_totp_secret = secret
     await session.commit()
+    provisioning_uri = totp_provisioning_uri(secret, current_user.email)
     return TotpSetupResponse(
-        secret=secret, provisioning_uri=totp_provisioning_uri(secret, current_user.email)
+        secret=secret,
+        provisioning_uri=provisioning_uri,
+        qr_code_data_uri=totp_qr_code_data_uri(provisioning_uri),
     )
 
 

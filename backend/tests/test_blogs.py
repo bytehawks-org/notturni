@@ -78,12 +78,30 @@ async def test_update_blog_owner_only(client: AsyncClient, make_user: Callable) 
 
     ok_res = await client.patch(
         "/api/v1/blogs/proprieta-blog",
-        json={"title": "nuovo titolo", "allow_anonymous_comments": True},
+        json={"title": "nuovo titolo", "comments_mode": "closed"},
         headers=owner.headers,
     )
     assert ok_res.status_code == 200
     assert ok_res.json()["title"] == "nuovo titolo"
-    assert ok_res.json()["allow_anonymous_comments"] is True
+    assert ok_res.json()["comments_mode"] == "closed"
+
+
+async def test_blog_crawler_opt_out(client: AsyncClient, make_user: Callable) -> None:
+    owner: AuthedUser = await make_user("owner-crawler")
+    await client.post("/api/v1/blogs", json={"slug": "blog-crawler", "title": "x"}, headers=owner.headers)
+
+    default_res = await client.get("/api/v1/blogs/blog-crawler")
+    assert default_res.json()["search_indexing_enabled"] is True
+    assert default_res.json()["ai_crawling_enabled"] is True
+
+    patched = await client.patch(
+        "/api/v1/blogs/blog-crawler",
+        json={"search_indexing_enabled": False, "ai_crawling_enabled": False},
+        headers=owner.headers,
+    )
+    assert patched.status_code == 200
+    assert patched.json()["search_indexing_enabled"] is False
+    assert patched.json()["ai_crawling_enabled"] is False
 
 
 async def test_default_author_display_name_used_when_post_omits_it(

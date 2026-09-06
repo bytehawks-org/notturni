@@ -354,24 +354,82 @@ async def test_permalink_published_post(client: AsyncClient, make_user: Callable
     post_id = create_res.json()["id"]
 
     publish_res = await client.post(f"/api/v1/posts/{post_id}/publish", headers=owner.headers)
-    published_at = datetime.fromisoformat(publish_res.json()["published_at"])
-    expected_date = published_at.strftime("%Y%m%d")
     permalink = publish_res.json()["permalink"]
-    assert permalink == f"/{slug}/{expected_date}/post-permalink"
+    assert permalink == f"/{slug}/post-permalink"
     assert publish_res.json()["blog_slug"] == slug
 
     # risoluzione pubblica del permalink, senza autenticazione
-    anon_res = await client.get(f"/api/v1/blogs/{slug}/posts/{expected_date}/post-permalink")
+    anon_res = await client.get(f"/api/v1/blogs/{slug}/posts/post-permalink")
     assert anon_res.status_code == 200
     assert anon_res.json()["id"] == post_id
 
-    # data sbagliata: non trovato, anche se blog e slug sono corretti
-    wrong_date_res = await client.get(f"/api/v1/blogs/{slug}/posts/19990101/post-permalink")
-    assert wrong_date_res.status_code == 404
+    # slug inesistente su questo blog
+    missing_res = await client.get(f"/api/v1/blogs/{slug}/posts/non-esiste")
+    assert missing_res.status_code == 404
 
-    # formato data non valido
-    bad_format_res = await client.get(f"/api/v1/blogs/{slug}/posts/2026-01-01/post-permalink")
-    assert bad_format_res.status_code == 400
+
+async def test_create_post_rejects_reserved_slug(client: AsyncClient, make_user: Callable) -> None:
+    owner: AuthedUser = await make_user("owner-permalink-reserved")
+    slug = await _create_blog(client, owner, "blog-permalink-reserved")
+
+    for reserved in ("bibliografia", "link", "media", "pagina"):
+        res = await client.post(
+            f"/api/v1/blogs/{slug}/posts",
+            json={"slug": reserved, "title": "x", "content": "y"},
+            headers=owner.headers,
+        )
+        assert res.status_code == 400
+
+
+async def test_post_crawler_override_cannot_reopen_excluded_blog(
+    client: AsyncClient, make_user: Callable
+) -> None:
+    owner: AuthedUser = await make_user("owner-crawler-post")
+    slug = await _create_blog(client, owner, "blog-crawler-post")
+
+    create_res = await client.post(
+        f"/api/v1/blogs/{slug}/posts",
+        json={"slug": "post-crawler", "title": "x", "content": "y"},
+        headers=owner.headers,
+    )
+    post_id = create_res.json()["id"]
+    assert create_res.json()["effective_search_indexing_enabled"] is True
+    assert create_res.json()["effective_ai_crawling_enabled"] is True
+
+    # override esplicito sul singolo post: il blog resta indicizzabile,
+    # questo post no.
+    override_res = await client.patch(
+        f"/api/v1/posts/{post_id}",
+        json={"search_indexing_enabled": False, "ai_crawling_enabled": False},
+        headers=owner.headers,
+    )
+    assert override_res.json()["effective_search_indexing_enabled"] is False
+    assert override_res.json()["effective_ai_crawling_enabled"] is False
+
+    # il blog stesso opta fuori dal crawling: l'override del post che diceva
+    # "sì" non può riaprirlo.
+    await client.patch(
+        f"/api/v1/blogs/{slug}",
+        json={"search_indexing_enabled": False, "ai_crawling_enabled": False},
+        headers=owner.headers,
+    )
+    reopen_res = await client.patch(
+        f"/api/v1/posts/{post_id}",
+        json={"search_indexing_enabled": True, "ai_crawling_enabled": True},
+        headers=owner.headers,
+    )
+    assert reopen_res.json()["search_indexing_enabled"] is True
+    assert reopen_res.json()["effective_search_indexing_enabled"] is False
+    assert reopen_res.json()["effective_ai_crawling_enabled"] is False
+
+    # torna a ereditare dal blog (null esplicito)
+    inherit_res = await client.patch(
+        f"/api/v1/posts/{post_id}",
+        json={"search_indexing_enabled": None, "ai_crawling_enabled": None},
+        headers=owner.headers,
+    )
+    assert inherit_res.json()["search_indexing_enabled"] is None
+    assert inherit_res.json()["effective_search_indexing_enabled"] is False
 
 
 async def test_permalink_draft_preview_only_for_write_access(
@@ -387,21 +445,19 @@ async def test_permalink_draft_preview_only_for_write_access(
         headers=owner.headers,
     )
     permalink = create_res.json()["permalink"]
-    # per una bozza il permalink usa la data di creazione, non di pubblicazione
-    created_date = datetime.fromisoformat(create_res.json()["created_at"]).strftime("%Y%m%d")
-    assert permalink == f"/{slug}/{created_date}/bozza-permalink"
+    assert permalink == f"/{slug}/bozza-permalink"
 
-    date_str, post_slug = permalink.split("/")[2], permalink.split("/")[3]
+    post_slug = permalink.split("/")[2]
 
-    anon_res = await client.get(f"/api/v1/blogs/{slug}/posts/{date_str}/{post_slug}")
+    anon_res = await client.get(f"/api/v1/blogs/{slug}/posts/{post_slug}")
     assert anon_res.status_code == 404
 
     stranger_res = await client.get(
-        f"/api/v1/blogs/{slug}/posts/{date_str}/{post_slug}", headers=stranger.headers
+        f"/api/v1/blogs/{slug}/posts/{post_slug}", headers=stranger.headers
     )
     assert stranger_res.status_code == 404
 
     owner_res = await client.get(
-        f"/api/v1/blogs/{slug}/posts/{date_str}/{post_slug}", headers=owner.headers
+        f"/api/v1/blogs/{slug}/posts/{post_slug}", headers=owner.headers
     )
     assert owner_res.status_code == 200

@@ -50,13 +50,17 @@ Il primo API token va creato con lo script di bootstrap:
 python -m scripts.create_api_token --name "core-engine"
 ```
 
-Per l'MFA via email serve RabbitMQ in esecuzione; il consumer che "invia" il
-codice (in realtà solo lo logga: nessun provider email reale è configurato) si
-avvia con:
+Per l'MFA via email serve RabbitMQ in esecuzione; il consumer che invia
+davvero il codice via SMTP (`app/core/mail.py`) si avvia con:
 
 ```bash
 python -m app.workers.email_otp_consumer
 ```
+
+Senza `NOCT_SMTP_HOST` configurato il codice resta solo loggato (comodo se
+non si ha un SMTP a disposizione in locale). Con `podman compose up`, il
+worker punta di default al servizio `mailhog` incluso in `compose.yaml`: le
+email non lasciano la macchina, sono ispezionabili su `http://localhost:8025`.
 
 L'upload avatar (`POST /users/me/avatar`) e i media incorporati nei post
 (`POST /blogs/{slug}/media`) richiedono il backend di storage configurato
@@ -77,6 +81,18 @@ mai per questo:
 python -m app.workers.post_backup_consumer
 ```
 
+Distinto da quest'ultimo, il backup **infrastrutturale** periodico di
+Postgres (`pg_dump`) e di tutti i bucket MinIO/S3 verso uno storage S3
+esterno (`NOCT_BACKUP_S3_BUCKET`, vuoto per disattivarlo) si avvia con:
+
+```bash
+python -m app.workers.backup            # un giro e termina
+python -m app.workers.backup --loop     # un giro ogni --interval secondi (default 86400)
+```
+
+Richiede `pg_dump` nel `PATH` (incluso nell'immagine Docker via
+`postgresql-client`, non necessariamente nel proprio venv locale).
+
 Endpoint disponibili, esempi di richiesta/risposta e regole di autorizzazione
 sono documentati in [API.md](API.md).
 
@@ -90,7 +106,10 @@ Serve un Postgres raggiungibile (stessa istanza di sviluppo va bene: i test
 usano un database separato, `notturni_test` di default — vedi `.env.test`,
 valori fissi e non sensibili, già pronto senza doverlo copiare). Non serve né
 lo storage S3/MinIO né RabbitMQ: nei test sono sostituiti da fake/mock (vedi
-`tests/conftest.py`).
+`tests/conftest.py`). Redis è opzionale (il rate limiting, vedi sotto, fallisce
+aperto se irraggiungibile) ma se presente va usato con un DB dedicato diverso
+da quello di sviluppo (`NOCT_REDIS_DB=1` in `.env.test`): i contatori vengono
+azzerati automaticamente prima di ogni test (`tests/conftest.py::_flush_redis`).
 
 ```bash
 python -m pytest

@@ -5,6 +5,10 @@ metadata:
   namespace: notturni
 data:
   NOCT_APP_ENV: "production"
+  # placeholder: sostituire con il dominio reale prima del deploy — usato
+  # anche da smtp-relay.yaml come dominio mittenti consentito.
+  NOCT_INSTANCE_FQDN: "notturni.eu"
+  NOCT_SITE_SLUG: "notturni"
 
   # nomi dei servizi Kubernetes: risolvibili via DNS interno del cluster
   NOCT_POSTGRES_HOST: "postgres"
@@ -15,6 +19,9 @@ data:
   NOCT_RABBITMQ_USER: "admin"
   NOCT_RABBITMQ_HOST: "rabbitmq"
   NOCT_RABBITMQ_PORT: "5672"
+
+  NOCT_REDIS_HOST: "redis"
+  NOCT_REDIS_PORT: "6379"
 
   # backend di storage: "s3" (default, questi manifest deployano MinIO come
   # implementazione — vedi minio.yaml) oppure "localstorage" (filesystem
@@ -32,8 +39,41 @@ data:
   # bucket privato per gli archivi di audit (mai esposto pubblicamente)
   NOCT_S3_BUCKET_AUDIT: "notturni-audit"
 
+  # Backup infrastrutturale di Postgres e MinIO (app/workers/backup.py,
+  # backup-cronjob.yaml) verso uno storage S3 **esterno** — placeholder,
+  # da sostituire con un provider realmente esterno e separato da quello dei
+  # contenuti prima della produzione (credenziali in secret.yaml:
+  # NOCT_BACKUP_S3_ACCESS_KEY_ID/_SECRET_ACCESS_KEY). Vuoto: il job resta
+  # inattivo.
+  NOCT_BACKUP_S3_BUCKET: ""
+  NOCT_BACKUP_S3_ENDPOINT_URL: ""
+  NOCT_BACKUP_S3_REGION: ""
+
+  # SMTP per l'invio del codice MFA via email (app/core/mail.py) — placeholder,
+  # da sostituire con un provider SMTP/transazionale reale prima della
+  # produzione (credenziali in secret.yaml: NOCT_SMTP_USER/_PASSWORD).
+  NOCT_SMTP_HOST: ""
+  NOCT_SMTP_PORT: "587"
+  NOCT_SMTP_USE_TLS: "true"
+  NOCT_SMTP_FROM_EMAIL: "no-reply@notturni.eu"
+
+  # Servizio SMTP containerizzato alternativo (smtp-relay.yaml) — un'opzione
+  # in più oltre a puntare NOCT_SMTP_HOST/_PORT/_USE_TLS sopra direttamente a
+  # un provider esterno. Per usarlo come invio reale: NOCT_SMTP_HOST=
+  # "smtp-relay", NOCT_SMTP_PORT="587", NOCT_SMTP_USE_TLS="false" (rete
+  # interna al cluster). RELAY_HOST vuoto: il container spedisce
+  # direttamente; valorizzato: inoltra verso quello smarthost (credenziali
+  # in secret.yaml: NOCT_SMTP_RELAY_USERNAME/_PASSWORD).
+  NOCT_SMTP_RELAY_HOST: ""
+
   # SSO: valorizzare (qui o in secret.yaml) solo i provider da abilitare
   NOCT_OAUTH_REDIRECT_BASE_URL: "https://notturni.eu"
+
+  # Cloudflare Turnstile (app/core/captcha.py): captcha per i commenti aperti
+  # a tutti. Site key pubblica (safe da esporre, letta anche dal frontend via
+  # GET /api/v1/config) — la secret key sta in secret.yaml. Vuota: quella
+  # modalità di commenti non è selezionabile su questa istanza.
+  NOCT_TURNSTILE_SITE_KEY: ""
 
   # placeholder: CORS ad origine esatta non copre i sottodomini per-blog
   # (nomeutente.notturni.eu) — da rivedere con un match a wildcard quando le

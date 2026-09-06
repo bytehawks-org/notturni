@@ -13,6 +13,30 @@ class CommentStatus(str, enum.Enum):
     REJECTED = "rejected"
 
 
+class CommentsMode(str, enum.Enum):
+    """Chi può commentare (blog-level default, con override per singolo post
+    — vedi Post.comments_mode). CLAUDE.md #1: `members` è il default di
+    piattaforma; `everyone` richiede la verifica captcha lato client per gli
+    autori non registrati (app/core/captcha.py)."""
+
+    EVERYONE = "everyone"
+    MEMBERS = "members"
+    CLOSED = "closed"
+
+
+def comments_mode_column(*, nullable: bool, default: CommentsMode | None):
+    return mapped_column(
+        Enum(
+            CommentsMode,
+            name="comments_mode",
+            native_enum=True,
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+        ),
+        nullable=nullable,
+        default=default,
+    )
+
+
 class Comment(Base, UUIDPKMixin, TimestampMixin):
     """CLAUDE.md #1: commenti solo utenti registrati di default; il proprietario del
     blog può aprirli anche ai non registrati, con moderazione obbligatoria in quel caso.
@@ -37,5 +61,16 @@ class Comment(Base, UUIDPKMixin, TimestampMixin):
         default=CommentStatus.PENDING,
         nullable=False,
     )
+    # Risposta a un altro commento dello stesso post (thread): nullable, un
+    # commento di primo livello non ne ha. Nessun limite di profondità — il
+    # frontend rende comunque tutto su un solo livello di indentazione
+    # visiva per restare leggibile.
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("comments.id", ondelete="CASCADE"), nullable=True, index=True
+    )
 
     post: Mapped["Post"] = relationship(back_populates="comments")
+    replies: Mapped[list["Comment"]] = relationship(
+        back_populates="parent", cascade="all, delete-orphan"
+    )
+    parent: Mapped["Comment | None"] = relationship(back_populates="replies", remote_side="Comment.id")

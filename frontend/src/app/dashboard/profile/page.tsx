@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
 import { LanguagePicker } from "@/components/LanguagePicker";
@@ -23,7 +24,8 @@ function errorMessage(err: unknown): string {
 }
 
 export default function ProfilePage() {
-  const { user, authFetch, refreshUser } = useAuth();
+  const router = useRouter();
+  const { user, authFetch, refreshUser, logout } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,9 +49,20 @@ export default function ProfilePage() {
 
   const [followStats, setFollowStats] = useState<FollowStats | null>(null);
 
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmUsername, setDeleteConfirmUsername] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const [mfaMessage, setMfaMessage] = useState<string | null>(null);
   const [mfaError, setMfaError] = useState<string | null>(null);
-  const [totpSetup, setTotpSetup] = useState<{ secret: string; provisioning_uri: string } | null>(null);
+  const [totpSetup, setTotpSetup] = useState<{
+    secret: string;
+    provisioning_uri: string;
+    qr_code_data_uri: string;
+  } | null>(null);
   const [totpCode, setTotpCode] = useState("");
   const [emailCode, setEmailCode] = useState("");
   const [emailSetupSent, setEmailSetupSent] = useState(false);
@@ -209,6 +222,39 @@ export default function ProfilePage() {
       setMfaMessage("Autenticazione a due fattori disattivata.");
     } catch (err) {
       setMfaError(errorMessage(err));
+    }
+  }
+
+  async function handleExportData() {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const data = await authFetch((token) => api.users.exportData(token));
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `notturni-dati-${user?.username}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError(errorMessage(err));
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleDeleteAccount(event: FormEvent) {
+    event.preventDefault();
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await authFetch((token) => api.users.deleteAccount(token, deleteConfirmUsername));
+      await logout();
+      router.push("/login");
+    } catch (err) {
+      setDeleteError(errorMessage(err));
+      setDeleting(false);
     }
   }
 
@@ -469,12 +515,22 @@ export default function ProfilePage() {
                 </Button>
               ) : (
                 <form onSubmit={handleTotpConfirm} className="space-y-3">
-                  <p className="break-all rounded-md border border-border bg-foreground/5 p-3 font-mono text-xs">
-                    {totpSetup.secret}
-                  </p>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- SVG generato dal backend come data URI */}
+                  <img
+                    src={totpSetup.qr_code_data_uri}
+                    alt="QR code per configurare l'app di autenticazione"
+                    className="h-40 w-40 rounded-md border border-border bg-white p-2"
+                  />
+                  <details>
+                    <summary className="cursor-pointer text-xs text-muted">
+                      Non riesci a scansionare il QR? Inserisci il codice a mano
+                    </summary>
+                    <p className="mt-2 break-all rounded-md border border-border bg-foreground/5 p-3 font-mono text-xs">
+                      {totpSetup.secret}
+                    </p>
+                  </details>
                   <p className="text-xs text-muted">
-                    Aggiungi questo secret alla tua app di autenticazione, poi inserisci il codice
-                    generato.
+                    Inquadra il QR con la tua app di autenticazione, poi inserisci il codice generato.
                   </p>
                   <div className="flex items-end gap-3">
                     <Input
@@ -520,6 +576,75 @@ export default function ProfilePage() {
             <Alert kind="error">{mfaError}</Alert>
           </div>
         )}
+      </Card>
+
+      <Card>
+        <CardTitle>Dati e privacy</CardTitle>
+        <div className="space-y-6">
+          <div>
+            <p className="mb-2 text-sm text-muted">
+              Scarica una copia di tutti i dati collegati al tuo account: profilo, blog di cui sei
+              proprietario, post e commenti scritti, frammenti salvati, follow e token API.
+            </p>
+            <Button variant="secondary" onClick={handleExportData} disabled={exporting}>
+              {exporting ? "Preparazione…" : "Scarica i miei dati"}
+            </Button>
+            {exportError && (
+              <div className="mt-3">
+                <Alert kind="error">{exportError}</Alert>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="mb-2 text-sm text-muted">
+              Eliminare l&apos;account rimuove definitivamente sessioni, token API, link social,
+              frammenti salvati e collegamenti SSO. I blog di cui sei proprietario e i post/commenti
+              già scritti (anche sui blog altrui) restano, ma d&apos;ora in poi appariranno con
+              l&apos;autore &quot;Utente eliminato&quot;. L&apos;operazione non è reversibile.
+            </p>
+            {!showDeleteConfirm ? (
+              <Button variant="danger" onClick={() => setShowDeleteConfirm(true)}>
+                Elimina il mio account
+              </Button>
+            ) : (
+              <form onSubmit={handleDeleteAccount} className="space-y-3">
+                <FieldGroup>
+                  <Label htmlFor="confirm-delete-username">
+                    Per confermare, scrivi il tuo username (<strong>{user.username}</strong>)
+                  </Label>
+                  <Input
+                    id="confirm-delete-username"
+                    required
+                    value={deleteConfirmUsername}
+                    onChange={(e) => setDeleteConfirmUsername(e.target.value)}
+                  />
+                </FieldGroup>
+                <div className="flex gap-3">
+                  <Button type="submit" variant="danger" disabled={deleting}>
+                    {deleting ? "Eliminazione…" : "Conferma eliminazione"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      setShowDeleteConfirm(false);
+                      setDeleteConfirmUsername("");
+                      setDeleteError(null);
+                    }}
+                  >
+                    Annulla
+                  </Button>
+                </div>
+              </form>
+            )}
+            {deleteError && (
+              <div className="mt-3">
+                <Alert kind="error">{deleteError}</Alert>
+              </div>
+            )}
+          </div>
+        </div>
       </Card>
     </div>
   );

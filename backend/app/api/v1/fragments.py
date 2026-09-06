@@ -22,12 +22,21 @@ router = APIRouter()
 
 class FragmentCreateRequest(BaseModel):
     text: str
+    # Scelto al salvataggio (ROADMAP.md §1): default privato. "Pubblico" =
+    # visibile ad altri utenti iscritti alla piattaforma, mai a visitatori
+    # anonimi. Modificabile anche dopo, vedi PATCH sotto.
+    is_public: bool = False
+
+
+class FragmentUpdateRequest(BaseModel):
+    is_public: bool
 
 
 class FragmentOut(BaseModel):
     id: uuid.UUID
     post_id: uuid.UUID
     text: str
+    is_public: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -36,6 +45,7 @@ class FragmentOut(BaseModel):
 class FragmentCollectionOut(BaseModel):
     id: uuid.UUID
     text: str
+    is_public: bool
     created_at: datetime
     post_title: str
     author_display_name: str
@@ -90,7 +100,7 @@ async def create_fragment(
         # un doppio click sul menu contestuale del frontend produca un 409).
         return FragmentOut.model_validate(fragment)
 
-    fragment = PostFragment(user_id=current_user.id, post_id=post_id, text=text)
+    fragment = PostFragment(user_id=current_user.id, post_id=post_id, text=text, is_public=payload.is_public)
     session.add(fragment)
     try:
         await session.commit()
@@ -137,6 +147,7 @@ async def list_my_fragments(
         FragmentCollectionOut(
             id=fragment.id,
             text=fragment.text,
+            is_public=fragment.is_public,
             created_at=fragment.created_at,
             post_title=post.title,
             # Colonna già risolta al salvataggio/ultima modifica del post
@@ -148,6 +159,24 @@ async def list_my_fragments(
         )
         for fragment, post, blog in result.all()
     ]
+
+
+@router.patch("/fragments/{fragment_id}", response_model=FragmentOut)
+async def update_fragment(
+    fragment_id: uuid.UUID,
+    payload: FragmentUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> FragmentOut:
+    """Cambia la visibilità di un frammento già salvato (ROADMAP.md §1: la
+    scelta al salvataggio è anche modificabile ex-post, dalla raccolta)."""
+    fragment = await session.get(PostFragment, fragment_id)
+    if fragment is None or fragment.user_id != current_user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Frammento non trovato.")
+    fragment.is_public = payload.is_public
+    await session.commit()
+    await session.refresh(fragment)
+    return FragmentOut.model_validate(fragment)
 
 
 @router.delete("/fragments/{fragment_id}", status_code=status.HTTP_204_NO_CONTENT)

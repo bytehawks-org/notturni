@@ -11,8 +11,9 @@ interface PageParams {
 
 /** Pagina statica pubblica del sito principale (Chi siamo, Contatti,
  * Privacy, ...), gestita da Amministratore/Super Admin (CLAUDE.md #1).
- * Permalink dedicato `/pages/{slug}`, non alla radice, per non collidere con
- * gli slug dei blog raggiungibili senza sottodominio su `/{blog_slug}/...`. */
+ * Permalink dedicato `/p/{slug}`: un solo carattere, già sotto la lunghezza
+ * minima per gli slug dei blog, quindi nessun blog può mai collidere con
+ * questo prefisso (vedi backend/app/domain/blog_rules.py). */
 export async function generateMetadata({
   params,
   searchParams,
@@ -27,6 +28,7 @@ export async function generateMetadata({
   return {
     title: page.title,
     description: excerpt(page.content),
+    alternates: { canonical: `/p/${slug}` },
   };
 }
 

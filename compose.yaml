@@ -44,6 +44,38 @@ services:
       retries: 10
       start_period: 10s
 
+  # Catcher SMTP per lo sviluppo locale (app/core/mail.py, MFA email OTP):
+  # nessuna email lascia la macchina, tutto è ispezionabile dalla UI web
+  # su :8025 o dalla sua API (GET /api/v2/messages). Non usato in produzione,
+  # dove NOCT_SMTP_HOST punta a un provider SMTP/transazionale reale.
+  mailhog:
+    image: docker.io/mailhog/mailhog:latest
+    restart: on-failure
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  # Servizio SMTP containerizzato "di produzione", accanto a mailhog sopra
+  # (che invece cattura soltanto, pensato solo per lo sviluppo locale):
+  # boky/postfix, configurabile sia per l'invio diretto (nessun RELAYHOST —
+  # richiede comunque un dominio con SPF/DKIM/reverse DNS a posto per una
+  # buona deliverability, cosa che il container da solo non risolve) sia per
+  # l'inoltro verso uno smarthost esterno con autenticazione (un provider
+  # transazionale reale). Non è il default di worker-email-otp, che resta
+  # puntato a mailhog per non richiedere credenziali reali in sviluppo — per
+  # usarlo, impostare NOCT_SMTP_HOST=smtp-relay/NOCT_SMTP_PORT=587 lì sotto
+  # (porta submission: l'immagine non espone la 25 di proposito).
+  smtp-relay:
+    image: docker.io/boky/postfix:latest
+    restart: on-failure
+    environment:
+      ALLOWED_SENDER_DOMAINS: ${NOCT_INSTANCE_FQDN:-notturni.eu}
+      RELAYHOST: ${NOCT_SMTP_RELAY_HOST:-}
+      RELAYHOST_USERNAME: ${NOCT_SMTP_RELAY_USERNAME:-}
+      RELAYHOST_PASSWORD: ${NOCT_SMTP_RELAY_PASSWORD:-}
+    ports:
+      - "1587:587"
+
   minio:
     image: docker.io/minio/minio:latest
     restart: on-failure
@@ -85,6 +117,7 @@ services:
       # in rete di compose i servizi si raggiungono per nome, non per localhost
       NOCT_POSTGRES_HOST: postgres
       NOCT_RABBITMQ_HOST: rabbitmq
+      NOCT_REDIS_HOST: redis
       # endpoint interno (il backend gira nella rete di compose) diverso
       # dall'URL pubblico (il browser risolve solo l'host esposto)
       NOCT_S3_ENDPOINT_URL: http://minio:9000
@@ -102,6 +135,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      redis:
+        condition: service_started
       minio:
         condition: service_started
       moderation:
@@ -131,10 +166,19 @@ services:
     env_file: .env
     environment:
       NOCT_RABBITMQ_HOST: rabbitmq
+      # MailHog in locale: nessuna autenticazione, nessun TLS (vedi servizio
+      # mailhog sopra). In produzione questi tre vengono sovrascritti da un
+      # provider SMTP/transazionale reale o dal servizio smtp-relay di questo
+      # stesso file (NOCT_SMTP_HOST=smtp-relay, NOCT_SMTP_PORT=587), non da .env.
+      NOCT_SMTP_HOST: mailhog
+      NOCT_SMTP_PORT: "1025"
+      NOCT_SMTP_USE_TLS: "false"
     command: ["python", "-m", "app.workers.email_otp_consumer"]
     depends_on:
       rabbitmq:
         condition: service_healthy
+      mailhog:
+        condition: service_started
 
   worker-audit-maintenance:
     build:
@@ -154,6 +198,32 @@ services:
       minio:
         condition: service_started
 
+  # Backup infrastrutturale di Postgres e MinIO verso uno storage S3
+  # "esterno" (app/workers/backup.py, ROADMAP.md §3) — qui la destinazione è
+  # lo stesso MinIO locale, su un bucket dedicato, solo per avere qualcosa di
+  # verificabile in sviluppo: in produzione NOCT_BACKUP_S3_ENDPOINT_URL/
+  # _ACCESS_KEY_ID/_SECRET_ACCESS_KEY vanno sovrascritti con un provider S3
+  # realmente esterno e separato.
+  worker-backup:
+    build:
+      context: ./backend
+    restart: on-failure
+    env_file: .env
+    environment:
+      NOCT_POSTGRES_HOST: postgres
+      NOCT_S3_ENDPOINT_URL: http://minio:9000
+      NOCT_S3_PUBLIC_URL: http://localhost:9000
+      NOCT_BACKUP_S3_ENDPOINT_URL: http://minio:9000
+      NOCT_BACKUP_S3_ACCESS_KEY_ID: ${NOCT_S3_ACCESS_KEY_ID}
+      NOCT_BACKUP_S3_SECRET_ACCESS_KEY: ${NOCT_S3_SECRET_ACCESS_KEY}
+      NOCT_BACKUP_S3_BUCKET: notturni-backups
+    command: ["python", "-m", "app.workers.backup", "--loop", "--interval", "86400"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
   frontend:
     build:
       context: ./frontend
@@ -161,6 +231,9 @@ services:
         # il browser gira sull'host, non nella rete di compose: deve
         # raggiungere il backend sulla porta pubblicata, non per nome servizio
         NEXT_PUBLIC_API_URL: http://localhost:8000
+        # SEO (metadataBase/canonical/sitemap.xml/robots.txt) — vedi
+        # frontend/src/lib/site.ts.
+        NEXT_PUBLIC_SITE_URL: http://localhost:3000
     environment:
       # le pagine renderizzate lato server (Server Component, es. la pagina
       # pubblica del post) girano nel processo Node.js del container: a

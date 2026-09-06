@@ -2,31 +2,22 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/Button";
-import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { PLATFORM_ADMIN_ROLES } from "@/lib/types";
+import { PLATFORM_ADMIN_ROLES, PLATFORM_MODERATION_ROLES } from "@/lib/types";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, loading, logout } = useAuth();
-  const [deploymentMode, setDeploymentMode] = useState<"solo" | "platform" | null>(null);
 
   useEffect(() => {
     if (!loading && !user) {
       router.replace("/login");
     }
   }, [loading, user, router]);
-
-  useEffect(() => {
-    api.config
-      .get()
-      .then((config) => setDeploymentMode(config.deployment_mode))
-      .catch(() => setDeploymentMode("platform"));
-  }, []);
 
   if (loading || !user) {
     return (
@@ -37,6 +28,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   const isAdmin = PLATFORM_ADMIN_ROLES.includes(user.platform_role);
+  const isModerator = PLATFORM_MODERATION_ROLES.includes(user.platform_role);
 
   return (
     <div className="flex flex-1 flex-col">
@@ -55,29 +47,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <Link href="/dashboard/frammenti" className="text-sm text-muted hover:text-foreground">
               Frammenti
             </Link>
-            {isAdmin && (
-              <Link href="/dashboard/pagine" className="text-sm text-muted hover:text-foreground">
-                Pagine
-              </Link>
-            )}
-            {isAdmin && deploymentMode !== "solo" && (
-              <Link href="/dashboard/utenti" className="text-sm text-muted hover:text-foreground">
-                Utenti
-              </Link>
-            )}
-            {isAdmin && (
-              <Link href="/dashboard/blog" className="text-sm text-muted hover:text-foreground">
-                Tutti i blog
-              </Link>
-            )}
-            {isAdmin && (
-              <Link href="/dashboard/moderazione" className="text-sm text-muted hover:text-foreground">
-                Moderazione
-              </Link>
-            )}
-            {isAdmin && (
-              <Link href="/dashboard/registro" className="text-sm text-muted hover:text-foreground">
-                Registro
+            <Link href="/dashboard/token" className="text-sm text-muted hover:text-foreground">
+              Token API
+            </Link>
+            {(isAdmin || isModerator) && (
+              <Link href="/admin" className="text-sm text-muted hover:text-foreground">
+                Amministrazione
               </Link>
             )}
           </nav>

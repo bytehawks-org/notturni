@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { CommentsSection } from "@/components/CommentsSection";
 import { FragmentReader } from "@/components/FragmentReader";
 import { SiteHeader } from "@/components/SiteHeader";
 import { TagPills } from "@/components/TagPills";
@@ -10,7 +11,6 @@ import { getPublicPostByPermalink } from "@/lib/server-api";
 
 interface PageParams {
   blogSlug: string;
-  date: string;
   postSlug: string;
 }
 
@@ -19,18 +19,33 @@ function formatDate(iso: string): string {
 }
 
 export async function generateMetadata({ params }: { params: Promise<PageParams> }): Promise<Metadata> {
-  const { blogSlug, date, postSlug } = await params;
-  const post = await getPublicPostByPermalink(blogSlug, date, postSlug);
+  const { blogSlug, postSlug } = await params;
+  const post = await getPublicPostByPermalink(blogSlug, postSlug);
   if (!post) return {};
+  const description = excerpt(post.content);
   return {
     title: post.title,
-    description: excerpt(post.content),
+    description,
+    alternates: { canonical: post.permalink },
+    // Opt-out per crawler (app/domain/seo.py::effective_search_indexing) —
+    // il blocco dei crawler IA/LLM specifici passa invece da robots.txt
+    // (frontend/src/app/robots.ts), non da questo meta tag.
+    robots: post.effective_search_indexing_enabled ? undefined : { index: false, follow: false },
+    openGraph: {
+      title: post.title,
+      description,
+      type: "article",
+      url: post.permalink,
+      publishedTime: post.published_at ?? undefined,
+      authors: [post.author_display_name],
+      images: post.cover_image_url && !post.cover_image_is_sensitive ? [post.cover_image_url] : undefined,
+    },
   };
 }
 
 export default async function PublicPostPage({ params }: { params: Promise<PageParams> }) {
-  const { blogSlug, date, postSlug } = await params;
-  const post = await getPublicPostByPermalink(blogSlug, date, postSlug);
+  const { blogSlug, postSlug } = await params;
+  const post = await getPublicPostByPermalink(blogSlug, postSlug);
   if (!post) notFound();
 
   const html = await renderMarkdown(post.content, {
@@ -96,6 +111,8 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
             <TagPills tags={post.tags} label="Tag:" />
           </div>
         )}
+
+        <CommentsSection postId={post.id} mode={post.effective_comments_mode} />
       </main>
     </div>
   );

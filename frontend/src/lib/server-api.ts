@@ -19,15 +19,14 @@ import type {
 const BACKEND_INTERNAL_URL =
   process.env.NOCT_BACKEND_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-/** Recupera un post pubblico dal suo permalink /{blogSlug}/{date}/{postSlug}.
+/** Recupera un post pubblico dal suo permalink /{blogSlug}/{postSlug}.
  * Ritorna null se non trovato/non pubblicamente visibile (404 dal backend) —
  * qualsiasi altro errore viene propagato. */
 export async function getPublicPostByPermalink(
   blogSlug: string,
-  date: string,
   postSlug: string
 ): Promise<Post | null> {
-  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${blogSlug}/posts/${date}/${postSlug}`, {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${blogSlug}/posts/${postSlug}`, {
     // Cacheato con finestra a tempo + tag: il backend invalida `post:…` e
     // `blog:…` al publish/update (vedi lib/revalidate.ts). Senza il webhook,
     // il post torna coerente comunque entro REVALIDATE_SECONDS.
@@ -68,7 +67,7 @@ export async function getPublicPage(
 }
 
 /** Pagina statica pubblica del sito principale, permalink dedicato
- * /pages/{slug} (non legata a un blog — vedi backend/API.md). `null` se non
+ * /p/{slug} (non legata a un blog — vedi backend/API.md). `null` se non
  * trovata/non pubblicata (404). */
 export async function getPublicPlatformPage(slug: string, locale: string): Promise<Page | null> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/pages/${slug}?locale=${locale}`, {
@@ -82,6 +81,17 @@ export async function getPublicPlatformPage(slug: string, locale: string): Promi
   return (await res.json()) as Page;
 }
 
+/** Tutte le pagine statiche pubblicate del sito principale, lingua di
+ * default — usato da `app/sitemap.ts`. Il routing i18n non è ancora
+ * costruito lato frontend (CLAUDE.md #1), da cui la lingua fissa. */
+export async function getPublicPlatformPages(): Promise<Page[]> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/pages?locale=it`, {
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.platformPages()] },
+  });
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero delle pagine di piattaforma.`);
+  return (await res.json()) as Page[];
+}
+
 /** Dettaglio pubblico di un blog. `null` se non trovato o non visibile (404). */
 export async function getPublicBlog(slug: string): Promise<Blog | null> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}`, {
@@ -90,6 +100,21 @@ export async function getPublicBlog(slug: string): Promise<Blog | null> {
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero del blog.`);
   return (await res.json()) as Blog;
+}
+
+/** Post pubblicati di un blog, dal più recente — per la sua homepage
+ * pubblica (`/{blogSlug}`). Come `getPublicBlog`, nessun header di sessione:
+ * un blog `members`/`private` risulterà quindi vuoto/404 anche per un
+ * visitatore autenticato, stesso limite già presente sulle altre pagine
+ * pubbliche renderizzate server-side (nessun modo di inoltrare il JWT, che
+ * vive in `localStorage`, a un Server Component). */
+export async function getPublicBlogPosts(slug: string): Promise<Post[] | null> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}/posts`, {
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.blog(slug)] },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero dei post del blog.`);
+  return (await res.json()) as Post[];
 }
 
 /** Bibliografia automatica del blog: tutte le note dei post pubblicati. */
@@ -152,4 +177,37 @@ export async function getTrendingTags(
   });
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero delle tendenze.`);
   return (await res.json()) as TrendingTag[];
+}
+
+export interface CrawlDirectives {
+  search_disallow: string[];
+  ai_disallow: string[];
+  ai_user_agents: string[];
+}
+
+/** Percorsi da escludere in robots.txt (`app/robots.ts`), calcolati dal
+ * backend (backend/app/domain/seo.py) a partire dagli opt-in per crawler di
+ * blog/post — vedi Blog.search_indexing_enabled/ai_crawling_enabled. */
+export async function getCrawlDirectives(): Promise<CrawlDirectives> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/seo/crawl-directives`, {
+    next: { revalidate: REVALIDATE_SECONDS },
+  });
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero delle direttive crawler.`);
+  return (await res.json()) as CrawlDirectives;
+}
+
+export interface SitemapEntries {
+  blogs: { slug: string; updated_at: string }[];
+  posts: { permalink: string; updated_at: string }[];
+}
+
+/** Voci per `sitemap.xml` (`app/sitemap.ts`): solo blog/post effettivamente
+ * indicizzabili — stesso criterio di `getCrawlDirectives` sopra (vedi
+ * backend/app/domain/seo.py::build_sitemap_entries). */
+export async function getSitemapEntries(): Promise<SitemapEntries> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/seo/sitemap-entries`, {
+    next: { revalidate: REVALIDATE_SECONDS },
+  });
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero delle voci della sitemap.`);
+  return (await res.json()) as SitemapEntries;
 }

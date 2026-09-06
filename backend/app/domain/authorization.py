@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.blog import Blog, BlogMembership, BlogRole, BlogVisibility
 from app.models.post import Post, PostStatus
+from app.models.user import PlatformRole, User
 
 WRITE_ROLES = {BlogRole.AUTORE, BlogRole.CO_AUTORE}
 MODERATE_ROLES = {BlogRole.MEDIATORE}
@@ -72,10 +73,19 @@ async def can_view_blog(
     return await get_membership_role(session, user_id=user_id, blog_id=blog.id) is not None
 
 
-async def can_moderate_comments(session: AsyncSession, *, user_id: uuid.UUID, blog: Blog) -> bool:
-    if blog.owner_id == user_id:
+PLATFORM_MODERATION_ROLES = {PlatformRole.SUPER_ADMIN, PlatformRole.AMMINISTRATORE, PlatformRole.MODERATORE}
+
+
+async def can_moderate_comments(session: AsyncSession, *, user: User, blog: Blog) -> bool:
+    """Proprietario o Mediatore del blog, **oppure** un utente con ruolo di
+    piattaforma Amministratore/Super Admin/Moderatore (ROADMAP.md §1: il
+    ruolo Moderatore era definito ma senza capacità reale collegata — questa
+    è quella capacità, a livello di tutta la piattaforma)."""
+    if user.platform_role in PLATFORM_MODERATION_ROLES:
         return True
-    role = await get_membership_role(session, user_id=user_id, blog_id=blog.id)
+    if blog.owner_id == user.id:
+        return True
+    role = await get_membership_role(session, user_id=user.id, blog_id=blog.id)
     return role in MODERATE_ROLES
 
 

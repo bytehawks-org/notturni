@@ -36,7 +36,12 @@ kubectl apply -k .
 - `NEXT_PUBLIC_API_URL` (frontend) viene inglobato nel bundle in fase di
   build dell'immagine (`docker build --build-arg NEXT_PUBLIC_API_URL=...`),
   non letto a runtime: non basta un env/ConfigMap sul Deployment, l'immagine
-  va ricostruita con l'URL pubblico reale dell'API prima del deploy.
+  va ricostruita con l'URL pubblico reale dell'API prima del deploy. Stesso
+  discorso per `NEXT_PUBLIC_SITE_URL` (SEO: `metadataBase`/canonical/
+  `sitemap.xml`/`robots.txt`, `frontend/src/lib/site.ts`) — va ricostruita con
+  il dominio pubblico reale del sito (es. `https://notturni.eu`), non
+  `localhost`, altrimenti canonical/sitemap/robots puntano tutti all'host
+  sbagliato.
 - I worker consumer di coda (`app/workers/post_backup_consumer.py`,
   `email_otp_consumer.py`) non hanno ancora un Deployment dedicato in questi
   manifest — vedi `compose.yaml` per l'equivalente locale funzionante; senza
@@ -47,3 +52,24 @@ kubectl apply -k .
   oltre `NOCT_AUDIT_RETENTION_DAYS`. Gira una volta al giorno; in locale
   l'equivalente è il servizio `worker-audit-maintenance` di `compose.yaml`
   (stesso modulo con `--loop`).
+- `backup.yaml` è un altro `CronJob`: backup infrastrutturale di Postgres
+  (`pg_dump`) e mirror di tutti i bucket MinIO/S3 applicativi verso uno
+  storage S3 **esterno** (`app/workers/backup.py`, distinto dal backup
+  applicativo dei singoli post di `worker-post-backup`, che resta nello
+  stesso bucket applicativo). Senza `NOCT_BACKUP_S3_BUCKET` configurato
+  (placeholder in `configmap.yaml`) il job termina subito senza fare nulla —
+  va puntato a un provider S3 realmente esterno e separato da quello dei
+  contenuti prima della produzione. In locale l'equivalente è il servizio
+  `worker-backup` di `compose.yaml` (stesso modulo con `--loop`, verso lo
+  stesso MinIO locale su un bucket dedicato solo per avere qualcosa di
+  verificabile in sviluppo).
+- `smtp-relay.yaml` è invece un Deployment+Service, sempre attivo: un
+  servizio SMTP containerizzato (`boky/postfix`) come alternativa a puntare
+  `NOCT_SMTP_HOST` direttamente a un provider esterno per l'invio del
+  codice MFA via email. `NOCT_SMTP_RELAY_HOST` vuoto (default): il
+  container spedisce direttamente (richiede comunque un dominio con SPF/
+  DKIM/reverse DNS a posto per una buona deliverability); valorizzato:
+  inoltra verso quello smarthost esterno con le credenziali in
+  `secret.yaml`. Non collegato di default a `NOCT_SMTP_HOST` — resta una
+  scelta esplicita quale dei due usare. In locale l'equivalente è il
+  servizio `smtp-relay` di `compose.yaml`.

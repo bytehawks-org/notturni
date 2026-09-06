@@ -26,6 +26,7 @@ def build_page_permalink(blog_slug: str, page: Page) -> str:
 
 def build_platform_page_permalink(page: Page) -> str:
     """Permalink pubblico di una pagina di piattaforma: prefisso dedicato
-    `/pages/` per non collidere con gli slug dei blog raggiungibili senza
-    sottodominio su `/{blog_slug}/...` (vedi app/domain/blog_rules.py)."""
-    return f"/pages/{page.slug}"
+    `/p/` (un solo carattere, già sotto `MIN_SLUG_LENGTH` per gli slug dei
+    blog — vedi app/domain/blog_rules.py — quindi nessun blog può mai
+    collidere con questo prefisso)."""
+    return f"/p/{page.slug}"

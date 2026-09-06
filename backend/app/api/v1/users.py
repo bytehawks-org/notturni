@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +10,8 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import get_current_user
 from app.core.database import get_session
 from app.core.storage import avatar_public_url, delete_avatar, upload_avatar
+from app.domain import audit
+from app.domain.gdpr import anonymize_and_deactivate_user, export_user_data
 from app.domain.i18n import validate_locale
 from app.domain.profile import validate_country_code, validate_fallback_languages
 from app.domain.usernames import validate_username
@@ -379,3 +381,48 @@ async def my_follow_stats(
 
     total = (user_followers or 0) + sum(b.followers for b in blogs)
     return FollowStatsOut(user_followers=user_followers or 0, blogs=blogs, total_followers=total)
+
+
+class AccountDeleteRequest(BaseModel):
+    # richiede di ridigitare il proprio username, non solo un booleano
+    # generico "confirm: true": un'azione distruttiva e irreversibile merita
+    # una conferma che costringa a un gesto deliberato, coerente con il
+    # dialogo di conferma lato dashboard (frontend/src/app/dashboard/profile).
+    confirm_username: str
+
+
+@router.get("/me/export-data")
+async def export_my_data(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Diritto di accesso/portabilità (GDPR Art. 20, ROADMAP.md §1): copia dei
+    dati collegati all'account in un unico JSON scaricabile — profilo, blog di
+    proprietà, post e commenti scritti (ovunque), frammenti salvati, follow,
+    token API (mai i segreti) ed eventi di audit di cui è l'attore."""
+    return await export_user_data(session, current_user)
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_my_account(
+    payload: AccountDeleteRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Diritto di cancellazione (GDPR Art. 17, ROADMAP.md §1). Vedi
+    app/domain/gdpr.py per cosa viene davvero cancellato e perché blog/post/
+    commenti restano (anonimizzati, non un DELETE della riga utente)."""
+    if payload.confirm_username != current_user.username:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Username di conferma non corretto.")
+
+    await audit.record(
+        session,
+        action="user.account_deleted",
+        actor=current_user,
+        target_type="user",
+        target_id=current_user.id,
+        request=request,
+    )
+    await anonymize_and_deactivate_user(session, current_user)
+    await session.commit()

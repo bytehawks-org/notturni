@@ -35,13 +35,26 @@ export default function FragmentsPage() {
     }
   }
 
+  async function handleToggleVisibility(id: string, isPublic: boolean) {
+    try {
+      const updated = await authFetch((token) => api.fragments.setPublic(token, id, isPublic));
+      setFragments(
+        (prev) => prev?.map((f) => (f.id === id ? { ...f, is_public: updated.is_public } : f)) ?? null
+      );
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Impossibile cambiare la visibilità.");
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="font-serif text-2xl text-foreground">Frammenti</h1>
         <p className="mt-1 text-sm text-muted">
           Porzioni di testo evidenziate durante la lettura: salvate qui, e ri-evidenziate ogni volta che
-          torni sul post originale.
+          torni sul post originale. Ogni frammento è <strong>privato</strong> (visibile solo a te) o{" "}
+          <strong>pubblico</strong> (visibile ad altri utenti iscritti alla piattaforma, mai a chi non ha
+          un account) — puoi cambiarlo in qualsiasi momento con il pulsante accanto a &quot;Rimuovi&quot;.
         </p>
       </div>
 
@@ -69,13 +82,19 @@ export default function FragmentsPage() {
                     {fragment.post_title} · {fragment.author_display_name} · {formatDate(fragment.created_at)}
                   </p>
                 </Link>
-                <button
-                  type="button"
-                  onClick={() => handleRemove(fragment.id)}
-                  className="absolute right-6 top-6 text-sm text-muted hover:text-foreground"
-                >
-                  Rimuovi
-                </button>
+                <div className="absolute right-6 top-6 flex items-center gap-3 text-sm">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleVisibility(fragment.id, !fragment.is_public)}
+                    className={fragment.is_public ? "text-primary hover:underline" : "text-muted hover:text-foreground"}
+                    title="Cambia visibilità"
+                  >
+                    {fragment.is_public ? "Pubblico" : "Privato"}
+                  </button>
+                  <button type="button" onClick={() => handleRemove(fragment.id)} className="text-muted hover:text-foreground">
+                    Rimuovi
+                  </button>
+                </div>
               </Card>
             </li>
           ))}

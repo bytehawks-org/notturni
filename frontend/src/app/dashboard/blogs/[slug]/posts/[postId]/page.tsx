@@ -14,7 +14,7 @@ import { TranslationsBar } from "@/components/editor/TranslationsBar";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import type { SensitivityCategory } from "@/lib/content-media";
-import type { Post, PostNote, PostTranslationSummary } from "@/lib/types";
+import { COMMENTS_MODE_LABELS, type CommentsMode, type Post, type PostNote, type PostTranslationSummary } from "@/lib/types";
 
 const FORM_ID = "edit-post-form";
 
@@ -45,6 +45,63 @@ function PostStatusSelect({ status, onPublish }: { status: Post["status"]; onPub
   );
 }
 
+/** Override di Blog.comments_mode per il solo post corrente; "" = eredita
+ * dal blog (valore locale del <select>, tradotto in null verso l'API). */
+function PostCommentsModeSelect({
+  value,
+  onChange,
+}: {
+  value: CommentsMode | null;
+  onChange: (value: CommentsMode | null) => void;
+}) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-[11px] font-medium uppercase tracking-wide text-muted">Commenti</span>
+      <select
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value === "" ? null : (e.target.value as CommentsMode))}
+        className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/40"
+      >
+        <option value="">Come il blog</option>
+        {(Object.keys(COMMENTS_MODE_LABELS) as CommentsMode[]).map((m) => (
+          <option key={m} value={m}>
+            {COMMENTS_MODE_LABELS[m]}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/** Override di Blog.search_indexing_enabled/ai_crawling_enabled per il solo
+ * post corrente; "" = eredita dal blog (valore locale del <select>, tradotto
+ * in null verso l'API) — non può riaprire un crawler già escluso dal blog
+ * (backend/app/domain/seo.py), solo restringerlo ulteriormente. */
+function PostCrawlingSelect({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: boolean | null;
+  onChange: (value: boolean | null) => void;
+}) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-[11px] font-medium uppercase tracking-wide text-muted">{label}</span>
+      <select
+        value={value === null ? "" : value ? "true" : "false"}
+        onChange={(e) => onChange(e.target.value === "" ? null : e.target.value === "true")}
+        className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/40"
+      >
+        <option value="">Come il blog</option>
+        <option value="true">Consenti</option>
+        <option value="false">Blocca</option>
+      </select>
+    </label>
+  );
+}
+
 export default function PostEditorPage() {
   const params = useParams<{ slug: string; postId: string }>();
   const router = useRouter();
@@ -58,6 +115,9 @@ export default function PostEditorPage() {
   const [coverImageCategories, setCoverImageCategories] = useState<SensitivityCategory[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [commentsMode, setCommentsMode] = useState<CommentsMode | null>(null);
+  const [searchIndexingEnabled, setSearchIndexingEnabled] = useState<boolean | null>(null);
+  const [aiCrawlingEnabled, setAiCrawlingEnabled] = useState<boolean | null>(null);
   const [notes, setNotes] = useState<PostNote[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -78,6 +138,9 @@ export default function PostEditorPage() {
         setCoverImageCategories(p.cover_image_categories);
         setTags(p.manual_tags);
         setCategoryId(p.category?.id ?? null);
+        setCommentsMode(p.comments_mode);
+        setSearchIndexingEnabled(p.search_indexing_enabled);
+        setAiCrawlingEnabled(p.ai_crawling_enabled);
         setNotes(p.notes);
       })
       .catch((err) => setError(errorMessage(err)));
@@ -110,6 +173,9 @@ export default function PostEditorPage() {
           cover_image_categories: coverImageCategories,
           tags,
           category_id: categoryId,
+          comments_mode: commentsMode,
+          search_indexing_enabled: searchIndexingEnabled,
+          ai_crawling_enabled: aiCrawlingEnabled,
           notes,
         })
       );
@@ -202,6 +268,13 @@ export default function PostEditorPage() {
           toolbarEnd={
             <>
               <CategorySelect blogSlug={params.slug} value={categoryId} onChange={setCategoryId} />
+              <PostCommentsModeSelect value={commentsMode} onChange={setCommentsMode} />
+              <PostCrawlingSelect
+                label="Motori di ricerca"
+                value={searchIndexingEnabled}
+                onChange={setSearchIndexingEnabled}
+              />
+              <PostCrawlingSelect label="Crawler IA/LLM" value={aiCrawlingEnabled} onChange={setAiCrawlingEnabled} />
               <PostStatusSelect status={post.status} onPublish={handlePublish} />
             </>
           }

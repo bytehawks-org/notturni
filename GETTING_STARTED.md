@@ -197,10 +197,11 @@ podman compose down -v       # ferma e cancella anche i dati (riparti da zero)
   In alternativa esiste `NOCT_STORAGE_BACKEND=localstorage` (filesystem
   locale servito dal backend stesso, senza bisogno di MinIO/S3 — vedi
   `.env.example`), non usato di default in questo stack.
-- **Il codice MFA via email non arriva mai** — atteso: nessun provider email
-  reale è configurato in questo progetto, il consumer (`worker-email-otp` nel
-  `compose.yaml`) logga soltanto il codice invece di spedirlo — guardane i log
-  con `podman logs -f $(podman ps -qf "name=worker-email-otp")`.
+- **Il codice MFA via email non arriva mai per email vera** — atteso in
+  locale: il consumer (`worker-email-otp` nel `compose.yaml`) invia davvero
+  via SMTP, ma punta al catcher locale `mailhog` (nessuna email reale in
+  uscita) — guardalo su `http://localhost:8025` invece della tua casella di
+  posta, o nei log con `podman logs -f $(podman ps -qf "name=worker-email-otp")`.
 - **Voglio essere sicuro che il backup dei post su S3 funzioni** — controlla i
   log del worker dedicato: `podman logs -f $(podman ps -qf "name=worker-post-backup")`.
 

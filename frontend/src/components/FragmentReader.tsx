@@ -102,12 +102,12 @@ export function FragmentReader({
     };
   }, [handleMouseUp]);
 
-  async function handleSave() {
+  async function handleSave(isPublic: boolean) {
     if (!menu || menu.mode !== "save" || menu.tooLong) return;
     setSaving(true);
     setError(null);
     try {
-      const fragment = await authFetch((token) => api.fragments.create(token, postId, menu.text));
+      const fragment = await authFetch((token) => api.fragments.create(token, postId, menu.text, isPublic));
       setFragments((prev) => (prev.some((f) => f.id === fragment.id) ? prev : [...prev, fragment]));
       window.getSelection()?.removeAllRanges();
       setMenu(null);
@@ -164,9 +164,24 @@ export function FragmentReader({
           ) : menu.tooLong ? (
             <span className="fragment-menu-hint">Seleziona una porzione più breve (max 15% del post)</span>
           ) : (
-            <button type="button" className="fragment-menu-button" onClick={handleSave} disabled={saving}>
-              {saving ? "Salvo…" : "Salva frammento"}
-            </button>
+            <div className="fragment-menu-actions">
+              <button
+                type="button"
+                className="fragment-menu-button"
+                onClick={() => handleSave(false)}
+                disabled={saving}
+              >
+                {saving ? "Salvo…" : "Salva (privato)"}
+              </button>
+              <button
+                type="button"
+                className="fragment-menu-button"
+                onClick={() => handleSave(true)}
+                disabled={saving}
+              >
+                Salva (pubblico)
+              </button>
+            </div>
           )}
         </div>
       )}

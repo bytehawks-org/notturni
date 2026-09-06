@@ -1,18 +1,21 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, field_validator
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel, field_validator, model_validator
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import require_platform_admin
+from app.api.deps import require_platform_admin, require_platform_moderator
 from app.core.database import get_session
 from app.core.revalidation import blog_tag, feed_tag, post_tag, revalidate_frontend
 from app.domain import audit
+from app.domain.display_names import resolve_personal_display_name
 from app.models.audit_log import AuditActorType, AuditLog
 from app.models.blog import Blog, BlogVisibility
+from app.models.comment import Comment, CommentStatus
 from app.models.post import Post, PostStatus
 from app.models.user import PlatformRole, User
 
@@ -174,7 +177,7 @@ async def update_blog(
             target_id=blog.id,
             blog_id=blog.id,
             request=request,
-            payload={"slug": blog.slug},
+            payload={"slug": blog.slug, "blog_alias": blog.default_author_display_name},
         )
     was_changed = payload.is_suspended != blog.is_suspended
     blog.is_suspended = payload.is_suspended
@@ -275,7 +278,7 @@ async def update_post(
             target_id=post.id,
             blog_id=post.blog_id,
             request=request,
-            payload={"slug": post.slug, "blog_slug": blog.slug},
+            payload={"slug": post.slug, "blog_slug": blog.slug, "blog_alias": blog.default_author_display_name},
         )
     was_changed = payload.is_hidden != post.is_hidden
     post.is_hidden = payload.is_hidden
@@ -288,10 +291,36 @@ async def update_post(
     return _to_admin_post_out(post, blog, author)
 
 
+AuditChannel = Literal["web", "api", "system"]
+
+# Canale da cui è partita l'azione, derivato da actor_type (nessuna colonna
+# dedicata: la mappa è deterministica e stabile, vedi app/domain/audit.py —
+# `user`/`anonymous` passano sempre da una richiesta HTTP autenticata via
+# sessione o non ancora autenticata (login), mai da un ApiToken; `core_token`/
+# `user_token` sono sempre un accesso diretto via token opaco; `system` un
+# processo interno senza richiesta HTTP (bootstrap, job schedulati).
+_CHANNEL_BY_ACTOR_TYPE: dict[AuditActorType, AuditChannel] = {
+    AuditActorType.USER: "web",
+    AuditActorType.ANONYMOUS: "web",
+    AuditActorType.CORE_TOKEN: "api",
+    AuditActorType.USER_TOKEN: "api",
+    AuditActorType.SYSTEM: "system",
+}
+_ACTOR_TYPES_BY_CHANNEL: dict[AuditChannel, list[AuditActorType]] = {
+    "web": [AuditActorType.USER, AuditActorType.ANONYMOUS],
+    "api": [AuditActorType.CORE_TOKEN, AuditActorType.USER_TOKEN],
+    "system": [AuditActorType.SYSTEM],
+}
+
+
 class AuditLogOut(BaseModel):
     id: uuid.UUID
     occurred_at: datetime
     actor_type: AuditActorType
+    # calcolato da actor_type dopo la validazione, non una colonna a sé:
+    # vedi _CHANNEL_BY_ACTOR_TYPE sopra. Il default è solo un placeholder,
+    # sempre sovrascritto dal model_validator qui sotto.
+    channel: AuditChannel = "system"
     actor_id: uuid.UUID | None
     actor_label: str | None
     action: str
@@ -310,6 +339,11 @@ class AuditLogOut(BaseModel):
         # asyncpg restituisce la colonna INET come oggetto ipaddress, non str
         return str(v) if v is not None else None
 
+    @model_validator(mode="after")
+    def _compute_channel(self) -> "AuditLogOut":
+        self.channel = _CHANNEL_BY_ACTOR_TYPE[self.actor_type]
+        return self
+
 
 @router.get("/audit-log", response_model=list[AuditLogOut])
 async def list_audit_log(
@@ -317,6 +351,7 @@ async def list_audit_log(
     actor_id: uuid.UUID | None = None,
     target_id: uuid.UUID | None = None,
     blog_id: uuid.UUID | None = None,
+    channel: AuditChannel | None = None,
     since: datetime | None = None,
     until: datetime | None = None,
     limit: int = 100,
@@ -325,9 +360,10 @@ async def list_audit_log(
     session: AsyncSession = Depends(get_session),
 ) -> list[AuditLog]:
     """Consultazione del registro di audit (append-only). Filtri opzionali per
-    azione, attore, oggetto, blog e intervallo temporale; ordine dal più
-    recente. Gli eventi oltre la retention non sono qui ma negli archivi su
-    storage (vedi `app/workers/audit_maintenance.py`)."""
+    azione, attore, oggetto, blog, canale (web/api/system, vedi
+    _CHANNEL_BY_ACTOR_TYPE) e intervallo temporale; ordine dal più recente.
+    Gli eventi oltre la retention non sono qui ma negli archivi su storage
+    (vedi `app/workers/audit_maintenance.py`)."""
     stmt = select(AuditLog).order_by(AuditLog.occurred_at.desc())
     if action is not None:
         stmt = stmt.where(AuditLog.action == action)
@@ -337,6 +373,8 @@ async def list_audit_log(
         stmt = stmt.where(AuditLog.target_id == target_id)
     if blog_id is not None:
         stmt = stmt.where(AuditLog.blog_id == blog_id)
+    if channel is not None:
+        stmt = stmt.where(AuditLog.actor_type.in_(_ACTOR_TYPES_BY_CHANNEL[channel]))
     if since is not None:
         stmt = stmt.where(AuditLog.occurred_at >= since)
     if until is not None:
@@ -344,3 +382,89 @@ async def list_audit_log(
     stmt = stmt.limit(min(max(limit, 1), 500)).offset(max(offset, 0))
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+class AdminCommentOut(BaseModel):
+    """Come `BlogCommentOut` (`app/api/v1/comments.py`, moderazione per-blog),
+    con anche blog di appartenenza: qui i commenti attraversano *tutti* i
+    blog della piattaforma (ROADMAP.md §1 — pannello di moderazione
+    trasversale, finora mancante)."""
+
+    id: uuid.UUID
+    post_id: uuid.UUID
+    post_title: str
+    post_slug: str
+    blog_id: uuid.UUID
+    blog_slug: str
+    blog_title: str
+    author_id: uuid.UUID | None
+    author_display_name: str
+    status: CommentStatus
+    content: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/comments", response_model=list[AdminCommentOut])
+async def list_all_comments(
+    status_filter: CommentStatus = Query(CommentStatus.PENDING, alias="status"),
+    q: str | None = None,
+    current_user: User = Depends(require_platform_moderator),
+    session: AsyncSession = Depends(get_session),
+) -> list[AdminCommentOut]:
+    """Commenti di *tutti* i blog della piattaforma nello stato indicato
+    (default `pending`), dal più recente. Riservato ad Amministratore/Super
+    Admin/Moderatore (`require_platform_moderator`) — a differenza di
+    `GET /api/v1/blogs/{slug}/comments`, che resta per-blog ad opera del
+    proprietario/mediatore di quel singolo blog."""
+    stmt = (
+        select(Comment, Post.title, Post.slug, Blog.id, Blog.slug, Blog.title)
+        .join(Post, Post.id == Comment.post_id)
+        .join(Blog, Blog.id == Post.blog_id)
+        .where(Comment.status == status_filter)
+        .order_by(Comment.created_at.desc())
+    )
+    if q:
+        needle = f"%{q}%"
+        stmt = stmt.where(
+            or_(
+                Comment.content.ilike(needle),
+                Comment.author_display_name.ilike(needle),
+                Post.title.ilike(needle),
+                Blog.slug.ilike(needle),
+            )
+        )
+    rows = (await session.execute(stmt)).all()
+
+    # display name degli autori registrati ricalcolato in blocco, stesso
+    # principio di list_blog_comments (un solo SELECT invece di uno per commento).
+    author_ids = {c.author_id for c, *_ in rows if c.author_id is not None}
+    authors: dict[uuid.UUID, User] = {}
+    if author_ids:
+        res = await session.execute(select(User).where(User.id.in_(author_ids)))
+        authors = {u.id: u for u in res.scalars()}
+
+    out: list[AdminCommentOut] = []
+    for comment, post_title, post_slug, blog_id, blog_slug, blog_title in rows:
+        display_name = comment.author_display_name
+        author = authors.get(comment.author_id) if comment.author_id is not None else None
+        if author is not None:
+            display_name = resolve_personal_display_name(author)
+        out.append(
+            AdminCommentOut(
+                id=comment.id,
+                post_id=comment.post_id,
+                post_title=post_title,
+                post_slug=post_slug,
+                blog_id=blog_id,
+                blog_slug=blog_slug,
+                blog_title=blog_title,
+                author_id=comment.author_id,
+                author_display_name=display_name,
+                status=comment.status,
+                content=comment.content,
+                created_at=comment.created_at,
+            )
+        )
+    return out

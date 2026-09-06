@@ -11,6 +11,10 @@ WORKDIR /app
 # runtime: va passato come build-arg, non come env del container finale.
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# URL pubblico del sito (SEO: metadataBase/canonical/sitemap.xml/robots.txt —
+# vedi frontend/src/lib/site.ts), stesso schema di NEXT_PUBLIC_API_URL sopra.
+ARG NEXT_PUBLIC_SITE_URL=http://localhost:3000
+ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build

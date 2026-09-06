@@ -40,12 +40,9 @@ def connect_with_retry(
 
 
 def publish_email_otp(email: str, code: str) -> None:
-    """Accoda l'invio del codice OTP via email (CLAUDE.md #3).
-
-    Nessun consumer di invio email reale è ancora collegato: la coda esiste e
-    il messaggio viene pubblicato correttamente, ma manca l'integrazione con
-    un provider SMTP/transazionale — vedi app/workers/email_otp_consumer.py.
-    """
+    """Accoda l'invio del codice OTP via email (CLAUDE.md #3) — inviato
+    davvero via SMTP dal consumer, vedi app/workers/email_otp_consumer.py e
+    app/core/mail.py."""
     connection = pika.BlockingConnection(pika.URLParameters(settings.rabbitmq_url))
     try:
         channel = connection.channel()

@@ -9,6 +9,8 @@ import { useAuth } from "@/lib/auth-context";
 import {
   AUDIT_ACTION_LABELS,
   AUDIT_ACTOR_TYPE_LABELS,
+  AUDIT_CHANNEL_LABELS,
+  type AuditChannel,
   type AuditLogEntry,
 } from "@/lib/types";
 
@@ -27,6 +29,11 @@ function targetLabel(entry: AuditLogEntry): string {
   return entry.target_id ? `${entry.target_type} · ${entry.target_id.slice(0, 8)}` : entry.target_type;
 }
 
+function blogAliasLabel(entry: AuditLogEntry): string {
+  const alias = entry.payload.blog_alias;
+  return typeof alias === "string" && alias ? alias : "—";
+}
+
 function detailsLabel(payload: Record<string, unknown>): string {
   return Object.keys(payload).length ? JSON.stringify(payload) : "—";
 }
@@ -34,6 +41,7 @@ function detailsLabel(payload: Record<string, unknown>): string {
 export default function DashboardAuditLogPage() {
   const { authFetch } = useAuth();
   const [action, setAction] = useState("");
+  const [channel, setChannel] = useState<AuditChannel | "">("");
   const [entries, setEntries] = useState<AuditLogEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
@@ -43,11 +51,12 @@ export default function DashboardAuditLogPage() {
       authFetch((token) =>
         api.admin.listAuditLog(token, {
           action: action || undefined,
+          channel: channel || undefined,
           limit: String(PAGE_SIZE),
           offset: String(offset),
         })
       ),
-    [authFetch, action]
+    [authFetch, action, channel]
   );
 
   // (ri)carica dalla prima pagina; scatta al cambio di filtro
@@ -74,25 +83,42 @@ export default function DashboardAuditLogPage() {
 
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-serif text-2xl text-foreground">Registro di audit</h1>
-        <select
-          value={action}
-          onChange={(e) => setAction(e.target.value)}
-          aria-label="Filtra per azione"
-          className="max-w-xs rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
-        >
-          <option value="">Tutte le azioni</option>
-          {Object.keys(AUDIT_ACTION_LABELS).map((key) => (
-            <option key={key} value={key}>
-              {AUDIT_ACTION_LABELS[key]}
-            </option>
-          ))}
-        </select>
+        <div className="flex gap-3">
+          <select
+            value={channel}
+            onChange={(e) => setChannel(e.target.value as AuditChannel | "")}
+            aria-label="Filtra per canale"
+            className="max-w-xs rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+          >
+            <option value="">Tutti i canali</option>
+            {Object.entries(AUDIT_CHANNEL_LABELS).map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <select
+            value={action}
+            onChange={(e) => setAction(e.target.value)}
+            aria-label="Filtra per azione"
+            className="max-w-xs rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+          >
+            <option value="">Tutte le azioni</option>
+            {Object.keys(AUDIT_ACTION_LABELS).map((key) => (
+              <option key={key} value={key}>
+                {AUDIT_ACTION_LABELS[key]}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
       <p className="mb-6 text-sm text-muted">
         Azioni sensibili degli ultimi mesi. Gli eventi più vecchi della retention sono
-        archiviati su storage e non compaiono qui.
+        archiviati su storage e non compaiono qui. Canale: <strong>Web</strong> = sessione da
+        dashboard/sito, <strong>API</strong> = token diretto, <strong>Sistema</strong> = processo
+        interno (bootstrap, job schedulati).
       </p>
       {error && <Alert kind="error">{error}</Alert>}
 
@@ -102,8 +128,10 @@ export default function DashboardAuditLogPage() {
             <tr>
               <th className="px-4 py-3 whitespace-nowrap">Quando</th>
               <th className="px-4 py-3">Azione</th>
+              <th className="px-4 py-3 whitespace-nowrap">Canale</th>
               <th className="px-4 py-3">Attore</th>
               <th className="px-4 py-3">Oggetto</th>
+              <th className="px-4 py-3">Alias blog</th>
               <th className="px-4 py-3 whitespace-nowrap">IP</th>
               <th className="px-4 py-3">Dettagli</th>
             </tr>
@@ -115,10 +143,14 @@ export default function DashboardAuditLogPage() {
                   {new Date(entry.occurred_at).toLocaleString("it-IT")}
                 </td>
                 <td className="px-4 py-3 text-foreground">{actionLabel(entry.action)}</td>
+                <td className="px-4 py-3 whitespace-nowrap text-muted">
+                  {AUDIT_CHANNEL_LABELS[entry.channel]}
+                </td>
                 <td className="px-4 py-3 text-muted">
                   {entry.actor_label ?? AUDIT_ACTOR_TYPE_LABELS[entry.actor_type]}
                 </td>
                 <td className="px-4 py-3 text-muted">{targetLabel(entry)}</td>
+                <td className="px-4 py-3 text-muted">{blogAliasLabel(entry)}</td>
                 <td className="px-4 py-3 whitespace-nowrap text-muted">{entry.ip ?? "—"}</td>
                 <td className="px-4 py-3 font-mono text-xs text-muted break-all">
                   {detailsLabel(entry.payload)}
@@ -127,7 +159,7 @@ export default function DashboardAuditLogPage() {
             ))}
             {entries !== null && entries.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-muted">
+                <td colSpan={8} className="px-4 py-6 text-center text-muted">
                   Nessun evento registrato.
                 </td>
               </tr>

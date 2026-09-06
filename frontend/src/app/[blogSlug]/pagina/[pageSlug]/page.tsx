@@ -13,7 +13,7 @@ interface PageParams {
 
 /** Pagina statica pubblica di un blog (CLAUDE.md #1, feature opt-in). Niente
  * data/tag/categoria a differenza del post pubblico
- * ([blogSlug]/[date]/[postSlug]/page.tsx) — le pagine statiche non sono
+ * ([blogSlug]/[postSlug]/page.tsx) — le pagine statiche non sono
  * cronologiche. */
 export async function generateMetadata({
   params,

@@ -8,7 +8,12 @@ import { Card, CardTitle } from "@/components/ui/Card";
 import { FieldGroup, Input, Label } from "@/components/ui/Field";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { type BlogConfig } from "@/lib/types";
+import { SANS_SERIF_FONTS, SERIF_FONTS, type BlogConfig } from "@/lib/types";
+
+const FONT_OPTIONS: Record<string, string[]> = {
+  heading_font: SERIF_FONTS,
+  body_font: SANS_SERIF_FONTS,
+};
 
 import { errorMessage } from "./shared";
 
@@ -78,13 +83,39 @@ export function AppearanceTab({ blogSlug, canEdit }: { blogSlug: string; canEdit
       </div>
 
       <CardTitle>Tipografia (massimo 3 font)</CardTitle>
+      <p className="mb-4 -mt-4 text-xs text-muted">
+        Titoli in serif, testo in sans-serif: solo le combinazioni coerenti con questo vincolo sono
+        selezionabili.
+      </p>
       <div className="mb-6 flex flex-wrap gap-4">
-        {typographyEntries.map(([key, value]) => (
-          <FieldGroup key={key}>
-            <Label htmlFor={`font-${key}`}>{key}</Label>
-            <Input id={`font-${key}`} value={value} onChange={(e) => updateTypography(key, e.target.value)} />
-          </FieldGroup>
-        ))}
+        {typographyEntries.map(([key, value]) => {
+          const options = FONT_OPTIONS[key];
+          return (
+            <FieldGroup key={key}>
+              <Label htmlFor={`font-${key}`}>{key}</Label>
+              {options ? (
+                <select
+                  id={`font-${key}`}
+                  value={value}
+                  onChange={(e) => updateTypography(key, e.target.value)}
+                  className="w-full max-w-xs rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                >
+                  {options.map((font) => (
+                    <option key={font} value={font}>
+                      {font}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <Input
+                  id={`font-${key}`}
+                  value={value}
+                  onChange={(e) => updateTypography(key, e.target.value)}
+                />
+              )}
+            </FieldGroup>
+          );
+        })}
       </div>
 
       <CardTitle>Layout</CardTitle>

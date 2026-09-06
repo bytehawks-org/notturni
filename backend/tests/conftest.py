@@ -53,6 +53,22 @@ async def _prepare_schema() -> None:
     await engine.dispose()
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def _flush_redis() -> None:
+    """Azzera i contatori di rate limiting (app/domain/rate_limit.py) prima di
+    ogni test: senza questo, i limiti per IP/email persisterebbero tra test
+    diversi nello stesso DB Redis (NOCT_REDIS_DB, .env.test) e farebbero
+    scattare 429 inattesi su test successivi che riusano la stessa email/IP
+    di test. Se Redis non è raggiungibile non blocca comunque nulla (stesso
+    fail-open del rate limiting stesso)."""
+    from app.core.redis import get_redis
+
+    try:
+        await get_redis().flushdb()
+    except Exception:
+        pass
+
+
 @pytest_asyncio.fixture
 async def db_session() -> AsyncIterator[AsyncSession]:
     engine = create_async_engine(settings.database_url)
@@ -148,6 +164,26 @@ async def make_admin(make_user: Callable, db_session: AsyncSession) -> Callable:
 
 
 @pytest_asyncio.fixture
+async def make_moderator(make_user: Callable, db_session: AsyncSession) -> Callable:
+    """Come make_admin, ma promuove l'utente a Moderatore di piattaforma
+    (ROADMAP.md §1: ruolo con visibilità solo sulla moderazione commenti
+    trasversale, non sulla gestione utenti/blog/post)."""
+    from sqlalchemy import select
+
+    from app.models.user import PlatformRole, User
+
+    async def _make(username: str | None = None) -> AuthedUser:
+        authed = await make_user(username)
+        result = await db_session.execute(select(User).where(User.username == authed.username))
+        user = result.scalar_one()
+        user.platform_role = PlatformRole.MODERATORE
+        await db_session.commit()
+        return authed
+
+    return _make
+
+
+@pytest_asyncio.fixture
 async def core_api_token(db_session: AsyncSession) -> str:
     """Un token core valido, senza passare dallo script di bootstrap (che
     scrive su un processo/DB separato) — inserimento diretto, stessa logica."""
@@ -164,12 +200,38 @@ async def core_api_token(db_session: AsyncSession) -> str:
     return plaintext
 
 
+class FakeClientError(Exception):
+    """Sostituisce botocore.exceptions.ClientError: stesso accesso a
+    `.response["Error"]["Code"]` usato da app/workers/backup.py."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.response = {"Error": {"Code": code}}
+
+
+class _FakePaginator:
+    def __init__(self, client: "FakeS3Client", operation_name: str) -> None:
+        self._client = client
+        self._operation_name = operation_name
+
+    def paginate(self, Bucket: str):  # noqa: N803
+        if Bucket not in self._client.buckets:
+            raise FakeClientError("NoSuchBucket")
+        keys = [k for (b, k) in self._client.objects if b == Bucket]
+        yield {"Contents": [{"Key": k} for k in keys]}
+
+
+class _FakeExceptions:
+    ClientError = FakeClientError
+
+
 class FakeS3Client:
     """Sostituisce boto3 in-memory: stessa interfaccia usata da app.core.storage."""
 
     def __init__(self) -> None:
         self.objects: dict[tuple[str, str], bytes] = {}
         self.buckets: set[str] = set()
+        self.exceptions = _FakeExceptions()
 
     def head_bucket(self, Bucket: str) -> None:  # noqa: N803 (nomi boto3)
         if Bucket not in self.buckets:
@@ -181,7 +243,8 @@ class FakeS3Client:
     def put_bucket_policy(self, Bucket: str, Policy: str) -> None:  # noqa: N803
         pass
 
-    def put_object(self, Bucket: str, Key: str, Body: bytes, ContentType: str) -> None:  # noqa: N803
+    def put_object(self, Bucket: str, Key: str, Body: bytes, ContentType: str = "") -> None:  # noqa: N803
+        self.buckets.add(Bucket)
         self.objects[(Bucket, Key)] = Body
 
     def get_object(self, Bucket: str, Key: str) -> dict:  # noqa: N803
@@ -190,12 +253,30 @@ class FakeS3Client:
     def delete_object(self, Bucket: str, Key: str) -> None:  # noqa: N803
         self.objects.pop((Bucket, Key), None)
 
+    def get_paginator(self, operation_name: str) -> _FakePaginator:
+        return _FakePaginator(self, operation_name)
+
 
 @pytest.fixture
 def fake_s3(monkeypatch: pytest.MonkeyPatch) -> FakeS3Client:
     fake_client = FakeS3Client()
     monkeypatch.setattr("app.core.storage.get_s3_client", lambda: fake_client)
     return fake_client
+
+
+@pytest.fixture
+def turnstile_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Simula un'istanza con Cloudflare Turnstile configurato e ogni verifica
+    superata, senza chiamare davvero l'API di Cloudflare — necessario per
+    poter impostare comments_mode="everyone" e testare i commenti anonimi
+    su quella modalità (vedi app/core/captcha.py)."""
+
+    async def _fake_verify(token: str, remote_ip: str | None) -> bool:
+        return True
+
+    monkeypatch.setattr("app.api.v1.blogs.crud.turnstile_configured", lambda: True)
+    monkeypatch.setattr("app.api.v1.posts.turnstile_configured", lambda: True)
+    monkeypatch.setattr("app.api.v1.comments.verify_turnstile", _fake_verify)
 
 
 @pytest.fixture

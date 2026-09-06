@@ -1,0 +1,54 @@
+name: SAST (CodeQL)
+
+# Analisi statica del codice (Python backend/moderation, TypeScript/JS
+# frontend) tramite CodeQL — nativo GitHub, gratuito sui repository pubblici.
+# Il report è consultabile nella tab "Security -> Code scanning" del repository,
+# non come artifact separato.
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch: {}
+  schedule:
+    # lunedì 03:17 UTC: cadenza indipendente da push/PR, cattura anche
+    # eventuali nuove regole CodeQL su codice invariato.
+    - cron: "17 3 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  analyze:
+    name: Analizza (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # backend + moderation sono entrambi Python, analizzati insieme;
+        # frontend è TypeScript/JavaScript.
+        language: [python, javascript-typescript]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Inizializza CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Analisi CodeQL
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

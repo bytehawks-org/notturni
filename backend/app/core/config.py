@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     rabbitmq_host: str = "localhost"
     rabbitmq_port: int = 5672
 
+    # Rate limiting (app/domain/rate_limit.py): nessuna autenticazione, in
+    # locale coincide di norma con un'istanza Redis dedicata/condivisa senza
+    # persistenza sensibile, quindi nessuna password richiesta di default.
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_db: int = 0
+
     # sessioni utente (JWT access token + refresh token opaco, vedi app/core/security.py)
     jwt_secret: str
     jwt_access_token_ttl_minutes: int = 15
@@ -44,6 +51,27 @@ class Settings(BaseSettings):
 
     # richiesta da Authlib/Starlette per il flow OAuth2 (state/nonce in sessione firmata)
     session_secret: str
+
+    # Cloudflare Turnstile (app/core/captcha.py): verifica anti-spam per i
+    # commenti di autori non registrati sui blog/post con comments_mode
+    # "everyone". Senza chiavi configurate un proprietario non può impostare
+    # quella modalità (400 esplicito) — fail closed sulla *funzionalità*, non
+    # sulla singola richiesta: niente commenti aperti a tutti senza un modo
+    # di filtrare lo spam.
+    turnstile_site_key: str | None = None
+    turnstile_secret_key: str | None = None
+
+    # SMTP per l'invio reale dell'OTP via email (app/core/mail.py,
+    # app/workers/email_otp_consumer.py). Se None (default) l'OTP resta solo
+    # loggato, comportamento di sviluppo comodo senza SMTP configurato — mai
+    # il caso in produzione, dove va sempre valorizzato. In locale punta al
+    # servizio "mailhog" di compose.yaml (nessuna auth, nessun TLS).
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    smtp_use_tls: bool = True
+    smtp_from_email: str = "no-reply@notturni.eu"
 
     oauth_redirect_base_url: str = "http://localhost:8000"
     oauth_google_client_id: str | None = None
@@ -106,6 +134,20 @@ class Settings(BaseSettings):
     # Bucket dedicato agli archivi di audit: sempre privato, mai servito ai
     # visitatori (a differenza di s3_bucket_avatars/_content).
     s3_bucket_audit: str = "notturni-audit"
+
+    # Backup infrastrutturale periodico di Postgres e MinIO/S3 verso uno
+    # storage S3 **esterno**, distinto da quello applicativo sopra (ROADMAP.md
+    # §3) — in produzione deve poter essere un provider diverso da quello che
+    # ospita i contenuti, così un incidente su quest'ultimo non porta via
+    # anche i backup. Stessa convenzione di endpoint/credenziali iniettabili
+    # di s3_endpoint_url sopra (app/workers/backup.py). `backup_s3_bucket`
+    # assente (default) disattiva il backup: nessun giro, nessun tentativo di
+    # scrivere su un bucket non configurato.
+    backup_s3_bucket: str | None = None
+    backup_s3_endpoint_url: str | None = None
+    backup_s3_region: str | None = None
+    backup_s3_access_key_id: str | None = None
+    backup_s3_secret_access_key: str | None = None
 
     # origini ammesse per le chiamate del frontend dal browser (CORS), separate da virgola
     cors_origins: str = "http://localhost:3000"

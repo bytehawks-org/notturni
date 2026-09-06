@@ -91,9 +91,12 @@ registrazione successiva ritorna `409`. Con `NOCT_DEPLOYMENT_MODE=platform`
   {"mfa_required": true, "method": "totp", "challenge": "..."}
   ```
   Se `method` è `"email"`, a questo punto è già stato accodato l'invio del
-  codice (vedi limitazione email più sotto).
+  codice (vedi dettagli Email OTP più sotto).
 
-`401` su credenziali errate o utente disattivato.
+`401` su credenziali errate o utente disattivato. `429` oltre 20 tentativi/5
+minuti dallo stesso IP o oltre 5 tentativi/5 minuti sulla stessa email
+(protezione brute-force via Redis, `app/domain/rate_limit.py` — se Redis non
+è raggiungibile il limite è semplicemente disattivato, fail open).
 
 **`POST /api/v1/auth/mfa/verify`** — completa il login dopo una risposta
 `mfa_required`.
@@ -128,11 +131,17 @@ revocato (rotation): riusarlo dà `401`.
 ### MFA — gestione (richiede una sessione attiva, cioè un login già fatto)
 
 **`POST /api/v1/auth/mfa/totp/setup`** → genera un secret TOTP (non ancora
-attivo) e lo ritorna insieme a un `provisioning_uri` (`otpauth://...`) da
-mostrare come QR code:
+attivo) e lo ritorna insieme a un `provisioning_uri` (`otpauth://...`) e un
+QR già pronto da mostrare (`qr_code_data_uri`, SVG generato interamente lato
+backend — `qrcode`, `app/domain/mfa.py::totp_qr_code_data_uri` — mai da un
+servizio di terze parti: il secret non deve lasciare il backend):
 
 ```json
-{"secret": "BASE32...", "provisioning_uri": "otpauth://totp/Notturni:mario%40example.com?..."}
+{
+  "secret": "BASE32...",
+  "provisioning_uri": "otpauth://totp/Notturni:mario%40example.com?...",
+  "qr_code_data_uri": "data:image/svg+xml;base64,..."
+}
 ```
 
 **`POST /api/v1/auth/mfa/totp/confirm`** — `{"code": "123456"}` → `204` e
@@ -140,7 +149,7 @@ attiva l'MFA (`mfa_enabled=true`, `mfa_method="totp"`). `400` se il codice non
 corrisponde al secret generato dal setup.
 
 **`POST /api/v1/auth/mfa/email/setup`** → `202`, genera e accoda (RabbitMQ)
-l'invio di un codice all'email dell'utente (vedi limitazione più sotto).
+l'invio di un codice all'email dell'utente (vedi dettagli Email OTP più sotto).
 
 **`POST /api/v1/auth/mfa/email/confirm`** — `{"code": "123456"}` → `204` e
 attiva l'MFA (`mfa_method="email"`). `400` se il codice non corrisponde o è
@@ -180,13 +189,17 @@ con credenziali reali prima di un uso in produzione — in particolare per
 LinkedIn, i cui dettagli esatti dell'endpoint userinfo potrebbero richiedere
 aggiustamenti.
 
-**Limitazione nota (Email OTP):** il codice viene generato, salvato (hash) e
-pubblicato su RabbitMQ (coda `email_otp`) correttamente, ma **non esiste
-ancora un invio email reale** — nessun provider SMTP/transazionale è
-configurato nel progetto. Il consumer in
-`app/workers/email_otp_consumer.py` è un placeholder che logga il codice
-invece di spedirlo. Da collegare a un provider reale prima di usare l'MFA via
-email in produzione.
+**Email OTP:** il codice viene generato, salvato (hash) e pubblicato su
+RabbitMQ (coda `email_otp`); il consumer (`app/workers/email_otp_consumer.py`)
+lo invia via SMTP (`app/core/mail.py`, solo `smtplib` di libreria standard —
+`NOCT_SMTP_HOST`/`_PORT`/`_USER`/`_PASSWORD`/`_USE_TLS`/`_FROM_EMAIL`, vedi
+`.env.example`). In locale punta al servizio `mailhog` di `compose.yaml`
+(nessuna email reale in uscita, ispezionabile su `http://localhost:8025` o
+`GET http://localhost:8025/api/v2/messages`); in produzione va sempre
+puntato a un provider SMTP/transazionale reale. Senza `NOCT_SMTP_HOST`
+configurato l'OTP resta solo loggato dal consumer (comodo per sviluppo senza
+SMTP a disposizione, mai il caso in produzione). Un errore SMTP genuino
+(host irraggiungibile, credenziali sbagliate) fa nack/requeue del messaggio.
 
 ## Blog
 
@@ -248,14 +261,21 @@ non deve permettere di risalirvi (vedi "Profilo utente e follow" più sotto).
 **`PATCH /api/v1/blogs/{slug}`** — richiede sessione, solo il proprietario
 (`403` altrimenti). Campi aggiornabili: `title`, `subtitle` / `description`
 (`""` azzera, assente lascia invariato; `400` se oltre 64 / 256 caratteri),
-`visibility` (`public` | `members` | `private`), `allow_anonymous_comments`
-(governa se i commenti sono aperti anche a chi non è registrato, vedi sezione
-Commenti), `mentions_enabled` (bool — trasforma le `@username` nei post in
-link, vedi sezione Post), `default_author_display_name` — nome pubblico
-degli autori sui post di questo blog. Se valorizzato è **imposto** (nessun
-override per singolo autore o post — todo/USERS.md #2), a meno che il
-collaboratore non abbia un proprio alias di membership, che ha la precedenza.
-Stringa vuota `""` lo azzera, assente lo lascia invariato.
+`visibility` (`public` | `members` | `private`), `comments_mode`
+(`everyone` | `members` | `closed` — default chi può commentare, vedi sezione
+Commenti; `everyone` richiede `NOCT_TURNSTILE_SITE_KEY`/`_SECRET_KEY`
+configurate sull'istanza, altrimenti `400`), `mentions_enabled` (bool —
+trasforma le `@username` nei post in link, vedi sezione Post),
+`search_indexing_enabled` / `ai_crawling_enabled` (bool, default `true` —
+opt-out per crawler dei motori di ricerca e, separatamente, dei crawler
+IA/LLM: vedi `GET /api/v1/seo/crawl-directives` sopra; escludere il blog
+esclude anche tutti i suoi post, indipendentemente da un eventuale override
+per singolo post),
+`default_author_display_name` — nome pubblico degli autori sui post di
+questo blog. Se valorizzato è **imposto** (nessun override per singolo
+autore o post — todo/USERS.md #2), a meno che il collaboratore non abbia un
+proprio alias di membership, che ha la precedenza. Stringa vuota `""` lo
+azzera, assente lo lascia invariato.
 
 **`POST /api/v1/blogs/{slug}/follow`** / **`DELETE .../follow`** — richiede
 sessione. Segui/smetti di seguire un blog; idempotenti (`204` anche se già
@@ -280,9 +300,17 @@ piattaforma:
 
 **`PUT /api/v1/blogs/{slug}/config`** — richiede sessione, solo il
 proprietario (`403` altrimenti). Sostituisce l'intera configurazione (non è
-un merge). Uniche regole imposte: `palette` al massimo 5 colori, al massimo 3
-font distinti in `typography` (`400` altrimenti) — il resto della struttura
-(`layout` e qualsiasi altra chiave) è libero.
+un merge). Regole imposte (`400` altrimenti), resto della struttura (`layout`
+e qualsiasi altra chiave) libero:
+
+- `palette`: al massimo 5 colori; ogni colore esadecimale non può superare il
+  90% di saturazione HLS (palette "calma", CLAUDE.md § Estetica).
+- `typography`: al massimo 3 font distinti; se presenti, `heading_font` deve
+  essere uno dei font serif curati (`Lora`, `Merriweather`, `Playfair
+  Display`, `Source Serif 4`, `Crimson Pro`) e `body_font` uno dei font
+  sans-serif curati (`Inter`, `Nunito Sans`, `Work Sans`, `Source Sans 3`,
+  `Karla`) — vedi `backend/app/domain/blog_config.py`. Altre chiavi restano
+  libere.
 
 **`POST /api/v1/blogs/{slug}/media`** — richiede sessione e accesso in
 scrittura al blog (proprietario/autore/co-autore). `multipart/form-data`,
@@ -313,7 +341,7 @@ maiuscole/spaziatura) e ordinate per recency del primo post che le cita:
   {
     "content": "Testo della nota, Markdown inline.",
     "citations": [
-      {"post_title": "...", "post_slug": "...", "permalink": "/{blog}/{YYYYMMDD}/{slug}", "locale": "it", "idx": 1}
+      {"post_title": "...", "post_slug": "...", "permalink": "/{blog}/{slug}", "locale": "it", "idx": 1}
     ]
   }
 ]
@@ -330,7 +358,7 @@ citati nel corpo dei post **pubblicati**, raggruppati per URL identico:
     "alt_text": "Descrizione dell'immagine",
     "categories": ["nudity", "explicit"],
     "citations": [
-      {"post_title": "...", "post_slug": "...", "permalink": "/{blog}/{YYYYMMDD}/{slug}", "locale": "it", "used_at": "2026-01-01T00:00:00Z"}
+      {"post_title": "...", "post_slug": "...", "permalink": "/{blog}/{slug}", "locale": "it", "used_at": "2026-01-01T00:00:00Z"}
     ]
   }
 ]
@@ -350,7 +378,7 @@ link citati nel corpo dei post pubblicati:
     "url": "https://esempio.org/articolo",
     "link_text": "testo del link",
     "citations": [
-      {"post_title": "...", "post_slug": "...", "permalink": "/{blog}/{YYYYMMDD}/{slug}", "locale": "it", "used_at": "2026-01-01T00:00:00Z"}
+      {"post_title": "...", "post_slug": "...", "permalink": "/{blog}/{slug}", "locale": "it", "used_at": "2026-01-01T00:00:00Z"}
     ]
   }
 ]
@@ -407,7 +435,7 @@ di dashboard — a differenza della rotta per slug sopra, pensata per la
 risoluzione del permalink pubblico.
 
 Tutte le risposte (`PageOut`) includono `permalink` (calcolato,
-`/{blog_slug}/pagina/{slug}` per le pagine di blog o `/pages/{slug}` per
+`/{blog_slug}/pagina/{slug}` per le pagine di blog o `/p/{slug}` per
 quelle di piattaforma) e `mentions_enabled` (mirror di `Blog.mentions_enabled`,
 sempre `true` per le pagine di piattaforma) — utili al rendering pubblico
 lato frontend senza una fetch separata del blog.
@@ -518,7 +546,7 @@ serve anche per la pianificazione: un post con `status=published` e
 `is_publicly_visible` più sotto.
 
 `is_hidden` (`PostOut`): moderazione da parte di un admin di piattaforma
-(`dashboard/moderazione`, `PATCH /api/v1/admin/posts/{id}`) — se `true`, il
+(`admin/moderazione`, `PATCH /api/v1/admin/posts/{id}`) — se `true`, il
 post è irraggiungibile pubblicamente indipendentemente da `status`, per
 l'autore incluso (stesso trattamento 404 di un post inesistente per chi non
 ha accesso in scrittura — vedi `app/domain/authorization.py::is_publicly_visible`).
@@ -529,7 +557,7 @@ Ogni post ha un **permalink leggibile**, senza UUID: `blog_slug` e
 inclusi in ogni `PostOut`:
 
 ```text
-permalink = /{blog_slug}/{YYYYMMDD}/{slug}
+permalink = /{blog_slug}/{slug}
 ```
 
 La data è quella di pubblicazione (`published_at`) se il post è pubblicato,
@@ -651,14 +679,13 @@ della creazione); `404` (non `403`, per non rivelarne l'esistenza) se non
 autorizzato. Uso interno (dashboard/editor): identifica il post per UUID,
 non per il permalink pubblico.
 
-**`GET /api/v1/blogs/{blog_slug}/posts/{YYYYMMDD}/{post_slug}`** — pubblico
+**`GET /api/v1/blogs/{blog_slug}/posts/{post_slug}`** — pubblico
 (token opzionale), stesse regole di visibilità di `GET /posts/{post_id}`
 sopra. Risolve il permalink leggibile (vedi sopra) verso il post: è
 l'endpoint pensato per la pagina pubblica del post (es.
-`https://notturni.eu/{blog_slug}/{YYYYMMDD}/{post_slug}`), che così non deve
-mai esporre l'UUID nell'URL. `400` se la data non è nel formato `YYYYMMDD`,
-`404` se blog/slug/data non corrispondono a nessun post (o a un post non
-visibile per il chiamante).
+`https://notturni.eu/{blog_slug}/{post_slug}`), che così non deve mai
+esporre l'UUID nell'URL. `404` se blog/slug non corrispondono a nessun post
+(o a un post non visibile per il chiamante).
 
 **`PATCH /api/v1/posts/{post_id}`** — stessa autorizzazione della creazione.
 Aggiorna
@@ -684,7 +711,16 @@ ricaricare. Per `tags`, vedi sezione "Tag" sopra. Per `category_id`: campo
 assente lascia la categoria invariata, `null` esplicito la rimuove, un UUID
 valido la sostituisce (`404` se non appartiene a questo blog) — a
 differenza di `cover_image_url` non esiste un valore "vuoto" per un UUID, da
-cui la distinzione esplicita assente/`null`/valore.
+cui la distinzione esplicita assente/`null`/valore. Accetta anche
+`search_indexing_enabled`/`ai_crawling_enabled` (bool, tri-stato come
+`comments_mode`: campo assente non tocca, `null` esplicito torna a ereditare
+da `Blog.search_indexing_enabled`/`ai_crawling_enabled`, un valore imposta un
+override per questo solo post) — non può "riaprire" un crawler già escluso a
+livello di blog, solo restringerlo ulteriormente (vedi
+`app/domain/seo.py::effective_search_indexing`/`effective_ai_crawling`).
+`PostOut` riporta sia il valore grezzo (`null` = eredita) sia
+`effective_search_indexing_enabled`/`effective_ai_crawling_enabled` (sempre
+valorizzati, già tengono conto del blocco a cascata).
 
 ### Avviso sui contenuti
 
@@ -820,9 +856,12 @@ risolve a un indirizzo privato/loopback/link-local/riservato (mitigazione
 SSRF — `app/domain/link_preview.py::validate_previewable_url`; non è una
 barriera assoluta, stesso principio di "aiuto best-effort" già in atto per
 la moderazione automatica delle immagini sopra). **Nessuna cache**: ogni
-chiamata rifà il fetch (timeout 5s, corpo troncato a 512 KB) — un buon primo
-caso d'uso per Redis quando verrà usato per la prima volta nel progetto
-(oggi deployato ma non ancora sfruttato, vedi ROADMAP.md).
+chiamata rifà il fetch (timeout 5s, corpo troncato a 512 KB). `429` oltre 30
+richieste/minuto dallo stesso IP (rate limiting via Redis,
+`app/domain/rate_limit.py` — mitiga l'uso di questo endpoint come
+proxy/scanner verso terzi vista l'assenza di autenticazione; fail open se
+Redis non è raggiungibile). Una cache resta un possibile passo successivo,
+non fatto qui.
 
 Usato dall'editor (`frontend/src/components/editor/LinkPreviewCard.tsx`)
 quando si incolla un URL da solo: il link resta testo semplice/cancellabile,
@@ -834,60 +873,88 @@ dell'editor o rendering della pagina pubblica.
 
 ## Commenti
 
-Di default solo utenti registrati; il proprietario del blog può aprire ai non
-registrati ma con moderazione obbligatoria in quel caso.
+Chi può commentare è governato da `comments_mode` (`everyone` | `members` |
+`closed`), di default `members`: a livello di blog (`PATCH /api/v1/blogs/{slug}`)
+con un override opzionale per singolo post (`PATCH /api/v1/posts/{post_id}`,
+`comments_mode: null` torna a ereditare dal blog). Un thread è supportato con
+un solo livello: `Comment.parent_id` punta a un commento di *primo livello*
+dello stesso post (`400` se punta a una risposta o a un commento di un altro
+post) — mantiene le conversazioni leggibili senza limitare la profondità a
+livello di schema.
 
-**`POST /api/v1/posts/{post_id}/comments`** — autenticazione opzionale:
+**`POST /api/v1/posts/{post_id}/comments`** — autenticazione opzionale.
+`comments_mode` effettivo = quello del post se impostato, altrimenti quello
+del blog. `closed`: `403` per chiunque, anche un utente registrato.
 
-- **con sessione valida:** commento attribuito all'utente, stato `approved`
-  automaticamente (nessuna moderazione per utenti registrati).
+- **con sessione valida** (qualunque `comments_mode` tranne `closed`):
+  commento attribuito all'utente, stato `approved` automaticamente (nessuna
+  moderazione per utenti registrati).
   ```json
-  {"content": "..."}
+  {"content": "...", "parent_id": "..."}
   ```
-  `author_display_name` nella risposta segue la preferenza di profilo
-  `post_author_name_style` (username/nome e cognome/alias globale — non
-  l'alias di blog, che si applica solo ai post: un commento resta sempre a
-  nome della persona, non del blog) ed è **ricalcolato ad ogni lettura**, non
-  solo alla creazione: un cambio di username o di preferenza si riflette
-  subito anche sui commenti passati.
-- **senza sessione:** richiede che il blog abbia `allow_anonymous_comments=true`
-  (altrimenti `401`); richiede `author_display_name` e `author_email` nel
-  payload (altrimenti `400`); il commento è creato in stato `pending`.
+  `parent_id` opzionale (risposta a un commento di primo livello dello
+  stesso post). `author_display_name` nella risposta segue la preferenza di
+  profilo `post_author_name_style` (username/nome e cognome/alias globale —
+  non l'alias di blog, che si applica solo ai post: un commento resta sempre
+  a nome della persona, non del blog) ed è **ricalcolato ad ogni lettura**,
+  non solo alla creazione: un cambio di username o di preferenza si
+  riflette subito anche sui commenti passati.
+- **senza sessione, `comments_mode="members"`:** `401`.
+- **senza sessione, `comments_mode="everyone"`:** richiede
+  `author_display_name`/`author_email` (altrimenti `400`) e un
+  `captcha_token` valido del widget Cloudflare Turnstile, verificato
+  server-side (`app/core/captcha.py`) — `400` se mancante o non valido
+  (fail closed: un servizio Turnstile irraggiungibile blocca il commento).
+  Il commento è comunque creato in stato `pending`.
   ```json
-  {"content": "...", "author_display_name": "...", "author_email": "..."}
+  {
+    "content": "...",
+    "author_display_name": "...",
+    "author_email": "...",
+    "captcha_token": "..."
+  }
   ```
 
 **`GET /api/v1/posts/{post_id}/comments`** — pubblico. Solo commenti
 `approved`.
 
 **`GET /api/v1/posts/{post_id}/comments/pending`** — richiede sessione ed
-essere proprietario del blog o avere membership con ruolo `mediatore` (`403`
-altrimenti). Coda di moderazione del singolo post.
+essere proprietario del blog, avere membership con ruolo `mediatore`, oppure
+avere `platform_role` Amministratore/Super Admin/Moderatore (`403`
+altrimenti — `app/domain/authorization.py::can_moderate_comments`). Coda di
+moderazione del singolo post.
 
 **`GET /api/v1/blogs/{blog_slug}/comments`** — stessa autorizzazione di
 `pending`. Commenti di *tutti* i post del blog con lo stato indicato dal
 parametro opzionale `status` (`pending` di default, oppure `approved` /
 `rejected`), dal più recente. Ogni elemento ha in più `post_title` e
-`post_slug`. Serve alla moderazione trasversale nel dashboard senza una
-richiesta per ogni post.
+`post_slug`. Serve alla moderazione per-blog nel dashboard senza una
+richiesta per ogni post — per la versione trasversale su tutti i blog vedi
+`GET /api/v1/admin/comments` più sotto.
 
 **`POST /api/v1/comments/{comment_id}/approve`** / **`.../reject`** — stessa
-autorizzazione di `pending`. Cambiano lo stato del commento.
+autorizzazione di `pending` (quindi utilizzabili anche da Amministratore/
+Super Admin/Moderatore su un commento di un blog di cui non hanno nessuna
+membership). Cambiano lo stato del commento.
 
 ## Frammenti
 
 Porzione di testo evidenziata dal lettore (con il mouse) su un post
 pubblicato e salvata in una raccolta personale unificata — non legata
 all'autore del post, che non deve fare nulla per abilitarla. Richiede sempre
-sessione: un frammento appartiene a chi lo ha salvato, mai pubblico. Il testo
-è salvato così com'è (non un offset nel post): il frontend lo ri-cerca nel
-testo reso ad ogni lettura per ri-evidenziarlo (`lib/highlight-fragments.ts`),
-tollerando piccole differenze di spazi bianchi ma non un post riscritto nel
-frattempo — in quel caso il frammento resta salvato ma non più
-ri-evidenziato in pagina. Ri-selezionare (anche solo in parte) un frammento
-già evidenziato propone di rimuoverlo (`DELETE`) invece di salvarne uno
-nuovo — interamente lato frontend (`Range.intersectsNode` sui `<mark>` già
-presenti), nessun endpoint dedicato oltre alla `DELETE` già descritta sotto.
+sessione: un frammento appartiene a chi lo ha salvato. Pubblico o privato a
+livello di **utente** (`is_public`, scelto al salvataggio e modificabile
+ex-post) — non di blog: pubblico = visibile ad altri utenti iscritti alla
+piattaforma, mai a visitatori anonimi; privato (default) = visibile solo a
+chi lo ha salvato. Il testo è salvato così com'è (non un offset nel post):
+il frontend lo ri-cerca nel testo reso ad ogni lettura per ri-evidenziarlo
+(`lib/highlight-fragments.ts`), tollerando piccole differenze di spazi
+bianchi ma non un post riscritto nel frattempo — in quel caso il frammento
+resta salvato ma non più ri-evidenziato in pagina. Ri-selezionare (anche
+solo in parte) un frammento già evidenziato propone di rimuoverlo (`DELETE`)
+invece di salvarne uno nuovo — interamente lato frontend
+(`Range.intersectsNode` sui `<mark>` già presenti), nessun endpoint dedicato
+oltre a `DELETE`/`PATCH` già descritti sotto.
 
 **`POST /api/v1/posts/{post_id}/fragments`** — richiede sessione. `404` se il
 post non è pubblicato o non è visibile all'utente (stessa regola d'accesso
@@ -895,32 +962,45 @@ del permalink pubblico). `400` se il testo è vuoto o supera il **15%** della
 lunghezza del Markdown grezzo del post (`app/domain/fragments.py`) — un
 proxy della lunghezza del testo reso, che il backend non calcola mai (nessun
 rendering Markdown lato server, vedi Post). Salvare due volte lo stesso
-identico testo sullo stesso post è idempotente: ritorna lo stesso frammento,
-non un errore.
+identico testo sullo stesso post è idempotente: ritorna lo stesso frammento
+(la sua visibilità corrente, non sovrascritta da `is_public` della seconda
+richiesta), non un errore.
 
 ```json
-{"text": "il pezzo di testo evidenziato"}
+{"text": "il pezzo di testo evidenziato", "is_public": false}
 ```
 
+`is_public` opzionale, default `false`.
+
 ```json
-{"id": "...", "post_id": "...", "text": "...", "created_at": "..."}
+{"id": "...", "post_id": "...", "text": "...", "is_public": false, "created_at": "..."}
 ```
 
 **`GET /api/v1/posts/{post_id}/fragments`** — richiede sessione. Solo i
 frammenti salvati dall'utente corrente su quel post (mai quelli di altri
-utenti) — usato dal frontend per ri-evidenziarli ad ogni lettura,
-indipendentemente dal fatto che si sia arrivati al post dalla pagina di
-raccolta o da un link diretto.
+utenti, indipendentemente da `is_public` — questo endpoint resta quello per
+la ri-evidenziazione dei *propri* frammenti) — usato dal frontend per
+ri-evidenziarli ad ogni lettura, indipendentemente dal fatto che si sia
+arrivati al post dalla pagina di raccolta o da un link diretto.
 
-**`GET /api/v1/users/me/fragments`** — richiede sessione. Raccolta unificata
-di tutti i frammenti salvati dall'utente, più recenti prima: testo, data di
-cattura, titolo del post e permalink pubblico, nome dell'autore. Quest'ultimo
-è il valore già risolto al salvataggio/ultima modifica del post
-(`Post.author_display_name`), non ricalcolato da un alias cambiato dopo come
-invece fa `PostOut` — semplificazione accettata per questa vista derivata.
+**`PATCH /api/v1/fragments/{fragment_id}`** — richiede sessione ed essere il
+proprietario del frammento (`404` altrimenti, come `DELETE` sotto). Cambia
+la visibilità dopo il salvataggio.
 
 ```json
-[{"id": "...", "text": "...", "created_at": "...", "post_title": "...", "author_display_name": "...", "permalink": "/blog/20260101/post"}]
+{"is_public": true}
+```
+
+**`GET /api/v1/users/me/fragments`** — richiede sessione. Raccolta unificata
+di tutti i frammenti salvati dall'utente, più recenti prima: testo,
+visibilità, data di cattura, titolo del post e permalink pubblico, nome
+dell'autore. Quest'ultimo è il valore già risolto al salvataggio/ultima
+modifica del post (`Post.author_display_name`), non ricalcolato da un alias
+cambiato dopo come invece fa `PostOut` — semplificazione accettata per
+questa vista derivata.
+
+```json
+[{"id": "...", "text": "...", "is_public": false, "created_at": "...", "post_title": "...", "author_display_name": "...", "permalink": "/blog/post"}]
 ```
 
 **`DELETE /api/v1/fragments/{fragment_id}`** — richiede sessione ed essere il
@@ -933,7 +1013,7 @@ Pagine come Chi siamo, Contatti, Privacy — non legate a un blog utente
 (`blog_id: null` nella risposta), gestite dal team della piattaforma, sempre
 attive (a differenza delle pagine di blog, opt-in — vedi "Pagine statiche del
 blog" più sotto). Stesso schema di traduzione dei post (sezione Multilingua
-sopra). Permalink pubblico `/pages/{slug}` (prefisso dedicato per non
+sopra). Permalink pubblico `/p/{slug}` (prefisso dedicato per non
 collidere con gli slug dei blog raggiungibili senza sottodominio su
 `/{blog_slug}/...`), riportato anche nel campo `permalink` della risposta.
 
@@ -955,7 +1035,7 @@ senza `locale` implicito: va sempre indicato esplicitamente).
 `{id, locale, slug, is_published}` delle sole traduzioni pubblicate della
 stessa famiglia, stesso pattern delle pagine di blog sopra e dei post.
 
-**`GET /api/v1/pages/{slug}?locale=it`** — pubblico (token opzionale): senza
+**`GET /api/v1/p/{slug}?locale=it`** — pubblico (token opzionale): senza
 sessione admin, solo pagine `is_published=true` (`404` altrimenti, bozza o
 inesistente). Con sessione admin, anche le bozze — per poterle rivedere
 prima di pubblicarle.
@@ -963,7 +1043,7 @@ prima di pubblicarle.
 **`GET /api/v1/pages?locale=it`** — pubblico (token opzionale): stessa
 distinzione pubblicate/tutte in base al ruolo del chiamante. Query param
 opzionale `q`: filtra per titolo o slug (`ilike`, sottostringa), usato dalla
-ricerca della sezione Pagine del dashboard (`frontend/src/app/dashboard/pagine`).
+ricerca della sezione Pagine del dashboard (`frontend/src/app/admin/pagine`).
 
 **`PATCH /api/v1/pages/{page_id}`** — richiede ruolo admin. Aggiorna una
 singola traduzione (`slug`, `title`, `content`, `is_published`, tutti
@@ -1063,9 +1143,47 @@ si prova a seguire se stessi.
 **`GET /api/v1/users/{username}/followers`** / **`.../following`** —
 pubblici. Liste `{username}`.
 
-## API token (motore core / accesso diretto)
+### GDPR (ROADMAP.md §1)
 
-Sezione invariata rispetto alla versione precedente di questo documento.
+**`GET /api/v1/users/me/export-data`** — richiede sessione. Diritto di
+accesso/portabilità (Art. 20): istantanea JSON di tutti i dati collegati
+all'account — profilo, blog di proprietà, post e commenti scritti (ovunque,
+non solo sui propri blog — restano comunque parole scritte dall'utente),
+frammenti salvati, follow (in entrambe le direzioni, solo gli id), token API
+(nome/prefisso/date, mai il segreto o l'hash) ed eventi di audit di cui è
+l'attore (fino a 1000, i più recenti). Struttura libera, non un
+`response_model` tipizzato: vedi `app/domain/gdpr.py::export_user_data` per
+i campi esatti.
+
+**`DELETE /api/v1/users/me`** — richiede sessione.
+`{"confirm_username": "il-proprio-username"}` → `204`, `400` se non
+corrisponde esattamente allo username corrente (nessuna conferma via
+password: il flusso è pensato per essere lanciato da un form di conferma già
+autenticato in dashboard, non da un client automatizzato).
+
+**Importante**: non cancella la riga `users` — la **anonimizza**. Un utente
+può essere proprietario di blog pubblici con collaboratori o aver commentato
+su blog altrui: cancellare la riga richiederebbe bloccare l'operazione finché
+non esistono più blog/post/commenti collegati (nessuna funzionalità di
+trasferimento/cancellazione blog esiste oggi) oppure cancellare a cascata
+anche quel contenuto, danneggiando terzi che non hanno chiesto nulla —
+approccio comunque ammesso dal GDPR quando l'erasure in senso stretto
+confligge con diritti di terzi (Art. 17.3).
+
+Cancellati per intero (dati puramente personali): sessioni (logout ovunque),
+token API, codici MFA email pendenti, identità SSO, link social, frammenti
+salvati, follow (in entrambe le direzioni) e le membership come collaboratore
+su blog altrui. `username`/`email` sostituiti con valori anonimi univoci,
+`is_active=false` (blocca subito login e riutilizzo di token/sessioni
+esistenti, `app/api/deps.py::get_current_user`), `display_name="Utente
+eliminato"` con `post_author_name_style="display_name"`: blog di proprietà,
+post e commenti restano, ma da subito con questo autore ovunque (stessa
+risoluzione dinamica degli alias già in uso per la privacy dei blog,
+`app/domain/display_names.py`). Evento `user.account_deleted` in audit log,
+registrato **prima** dell'anonimizzazione (l'`actor_label` conserva quindi
+username/email originali). Vedi `app/domain/gdpr.py` per i dettagli.
+
+## API token (motore core / accesso diretto utente)
 
 Il token è un valore opaco (non un JWT decodificabile), generato con prefisso
 `noct_`; solo il suo hash sha256 è persistito in database (tabella
@@ -1075,26 +1193,42 @@ Il token è un valore opaco (non un JWT decodificabile), generato con prefisso
 - **`core`** — token del motore/servizio, non legato a un utente. Pensato per
   chiamate machine-to-machine: worker interni, script di manutenzione, task
   pianificati.
-- **`user`** — (predisposto per il futuro) token legato a uno `User`
-  specifico, per permettere all'utente di interfacciarsi con l'API senza
-  passare dall'editor del frontend o dall'admin del proprio blog.
+- **`user`** — token legato a uno `User` specifico, per permettere
+  all'utente di interfacciarsi con l'API senza passare dall'editor del
+  frontend o dall'admin del proprio blog. Gestibile dalla dashboard
+  (`frontend/src/app/dashboard/token`).
 
-Un token può generare altri token solo con lo stesso `owner_type` (e, se
-`user`, per lo stesso utente).
+Gli endpoint `/api/v1/tokens` accettano **due schemi di autenticazione**
+diversi sullo stesso header `Authorization: Bearer`:
 
-### Come ottenere il primo token
+- un **ApiToken opaco** (`noct_...`) — inerita `owner_type` (e utente, se
+  applicabile) del token stesso; è il meccanismo di bootstrap/rotazione per i
+  token `core`.
+- un **access token JWT di sessione** (login utente) — necessario per
+  emettere il *primo* token `user` dalla dashboard, dove per definizione non
+  esiste ancora nessun ApiToken con cui autenticare la richiesta. Con questa
+  autenticazione `owner_type` è sempre `user`, legato all'utente della
+  sessione.
+
+`app/api/deps.py::get_token_actor` distingue i due casi in base al prefisso
+del valore ricevuto (`noct_` vs JWT) e normalizza l'attore per gli endpoint
+sotto e per l'audit log.
+
+### Come ottenere il primo token core
 
 ```bash
 cd backend && source .venv/bin/activate
 python -m scripts.create_api_token --name "core-engine"
 ```
 
-Il valore in chiaro viene stampato una sola volta.
+Il valore in chiaro viene stampato una sola volta. Un utente non ha bisogno
+dello script: crea il proprio primo token `user` direttamente dalla dashboard
+(sessione JWT, vedi sopra).
 
 ### `POST /api/v1/tokens`
 
-Crea un nuovo token con lo stesso `owner_type` (e utente, se applicabile) del
-token usato per autenticare la richiesta.
+Crea un nuovo token con lo stesso `owner_type` (e utente, se applicabile)
+dell'attore che ha autenticato la richiesta (ApiToken o sessione JWT).
 
 ```json
 {"name": "descrizione-libera"}
@@ -1116,9 +1250,12 @@ token proprio, `404` se l'id non esiste.
 ## Amministrazione di piattaforma
 
 Tutti gli endpoint richiedono sessione con `platform_role` in
-`amministratore`/`super_admin` (`403` altrimenti). Consumati dalle sezioni
-`frontend/src/app/dashboard/{utenti,blog,moderazione,registro}` — voci di menu
-del dashboard esistente, non un'app separata — vedi ROADMAP.md.
+`amministratore`/`super_admin` (`403` altrimenti), **eccetto**
+`GET /api/v1/admin/comments` più sotto, che accetta anche `moderatore`.
+Consumati dalle sezioni
+`frontend/src/app/admin/{utenti,blog,moderazione,moderazione-commenti,registro}`
+— sotto il prefisso `/admin/*`, separato da `/dashboard/*` (sezioni
+personali), non un'app a parte — vedi ROADMAP.md.
 
 **`GET /api/v1/admin/users`** — lista tutti gli utenti della piattaforma
 (id, username, email, `platform_role`, `is_active`, `mfa_enabled`). Query
@@ -1171,6 +1308,18 @@ da `status`, anche per l'autore. Nessuna notifica all'autore e nessun campo
 per la motivazione; il cambio di stato viene però registrato nel registro di
 audit (`post.hidden`/`post.unhidden`, vedi sotto).
 
+**`GET /api/v1/admin/comments`** — richiede `platform_role` in
+`amministratore`/`super_admin`/**`moderatore`** (unico endpoint di questa
+sezione aperto anche al ruolo Moderatore, ROADMAP.md §1). Commenti di *tutti*
+i blog della piattaforma nello stato indicato dal parametro opzionale
+`status` (`pending` di default, oppure `approved`/`rejected`), dal più
+recente — stessa forma di `GET /api/v1/blogs/{slug}/comments` ma senza
+restrizione a un singolo blog, con in più `blog_id`/`blog_slug`/`blog_title`.
+Query param opzionale `q`: filtra per contenuto del commento, nome
+dell'autore, titolo del post o slug del blog (`ilike`, sottostringa).
+Approvazione/rifiuto restano i `POST /api/v1/comments/{comment_id}/approve`/
+`reject` già descritti sopra (stessa autorizzazione).
+
 ### Registro di audit
 
 Ogni azione sensibile lascia una riga in `audit_log` (append-only), scritta
@@ -1178,10 +1327,33 @@ nella stessa transazione dell'azione: autenticazione (`auth.login` con
 `payload.method` `password`/`mfa_*`/`sso_*`, `auth.login_failed`),
 amministrazione (`user.role_change` con `payload {from,to}`,
 `user.activated`/`user.deactivated`, `blog.suspended`/`blog.unsuspended`,
-`post.hidden`/`post.unhidden`), API token (`api_token.created`/
-`api_token.revoked`). Ogni riga porta `actor_type`, `actor_label` (snapshot
-`username <email>` al momento del fatto), `actor_id`, `target_type`/
-`target_id`, `blog_id`, `ip`, `user_agent`, `payload` (JSON) e `occurred_at`.
+`post.hidden`/`post.unhidden`, `comment.approved`/`comment.rejected`), API
+token (`api_token.created`/`api_token.revoked`), account (`user.
+account_deleted`, GDPR). Ogni riga porta:
+
+- `actor_type`/`actor_id`/`actor_label` — chi: tipo di attore, il suo id (se
+  applicabile) e uno snapshot leggibile `username <email>` al momento del
+  fatto (resta valido anche se l'account viene poi rinominato o cancellato).
+- `ip`/`user_agent` — indirizzo IP sorgente della richiesta (primo hop di
+  `X-Forwarded-For` dietro Traefik, altrimenti l'IP di connessione diretta —
+  `app/core/http.py::client_ip`) e user agent.
+- `target_type`/`target_id`/`blog_id` — su cosa: tipo e id dell'oggetto
+  coinvolto, più il blog di contesto quando applicabile (denormalizzato per
+  filtrare senza join).
+- `payload` (JSON) — dettagli specifici dell'azione; per le azioni con un
+  blog di contesto include anche `blog_alias`, l'alias pubblico sotto cui
+  compare quel blog (`Blog.default_author_display_name`, `null` se il blog
+  non ne ha uno) — in aggiunta all'identità reale in `actor_label`, mai al
+  posto.
+- `occurred_at`.
+
+**Canale** (web/api/system): non una colonna a sé, ma un campo calcolato da
+`actor_type` sia nella risposta di `GET /api/v1/admin/audit-log` sia nel suo
+filtro (vedi sotto) — `user`/`anonymous` sono sempre passati da una sessione
+autenticata via browser/app o non ancora autenticata (login), mai da un
+ApiToken; `core_token`/`user_token` sono sempre un accesso diretto via token
+opaco; `system` un processo interno senza richiesta HTTP (bootstrap, job
+schedulati). Mappa in `app/api/v1/admin.py::_CHANNEL_BY_ACTOR_TYPE`.
 
 Gli eventi oltre `NOCT_AUDIT_RETENTION_DAYS` (default 105) vengono scaricati
 su storage in NDJSON gzippato per settimana ISO e poi rimossi dal database
@@ -1190,9 +1362,10 @@ non ancora archiviati.
 
 **`GET /api/v1/admin/audit-log`** — righe dal più recente. Query param
 opzionali: `action`, `actor_id`, `target_id`, `blog_id` (uguaglianza esatta),
-`since`/`until` (ISO 8601, intervallo `[since, until)` su `occurred_at`),
-`limit` (1–500, default 100), `offset` (default 0). Solo gli eventi ancora
-nel database: quelli già archiviati stanno su storage, reimportabili con
+`channel` (`web`/`api`/`system`, vedi sopra), `since`/`until` (ISO 8601,
+intervallo `[since, until)` su `occurred_at`), `limit` (1–500, default 100),
+`offset` (default 0). Solo gli eventi ancora nel database: quelli già
+archiviati stanno su storage, reimportabili con
 `python -m app.workers.audit_maintenance --restore AAAAwSS`.
 
 ## Feed (homepage multi-blog)
@@ -1236,9 +1409,34 @@ chiameranno l'API direttamente dal browser.
 compose healthcheck).
 
 **`GET /api/v1/config`** — pubblico, nessuna autenticazione. Espone
-`{"deployment_mode": "solo"|"platform"}` (`NOCT_DEPLOYMENT_MODE`). Usato dal
-dashboard (`frontend/src/app/dashboard/layout.tsx`) per nascondere la voce
-Utenti in modalità `solo`, senza dover già avere una sessione autenticata.
+`{"deployment_mode": "solo"|"platform", "turnstile_site_key": "..."|null}`
+(`NOCT_DEPLOYMENT_MODE`/`NOCT_TURNSTILE_SITE_KEY`). `deployment_mode` è
+usato da `frontend/src/app/admin/layout.tsx` per nascondere la voce Utenti
+in modalità `solo`; `turnstile_site_key` da `CommentsSection` per sapere se
+mostrare il widget captcha sui commenti aperti a tutti (`null` se l'istanza
+non ne ha uno configurato) — entrambi senza dover già avere una sessione
+autenticata. Site key, mai la secret key: pensata per essere pubblica.
+
+**`GET /api/v1/seo/crawl-directives`** — pubblico, nessuna autenticazione.
+Espone `{"search_disallow": ["/blog", "/blog/post", ...], "ai_disallow":
+[...], "ai_user_agents": ["GPTBot", "ClaudeBot", ...]}` — percorsi relativi
+da mettere in `Disallow` in robots.txt, calcolati da
+`app/domain/seo.py::build_crawl_directives` a partire dagli opt-in per
+crawler di blog/post (vedi sotto). `ai_disallow` include sempre anche tutto
+`search_disallow`: un gruppo user-agent specifico in robots.txt sostituisce
+interamente `User-agent: *` per quel bot, non lo integra. Solo blog `public`
+non sospesi e post pubblicamente visibili (`is_publicly_visible`) — un blog
+`members`/`private` non è comunque raggiungibile da un crawler anonimo.
+Consumato da `frontend/src/app/robots.ts` (route speciale Next.js, genera
+`/robots.txt`).
+
+**`GET /api/v1/seo/sitemap-entries`** — pubblico, nessuna autenticazione.
+Espone `{"blogs": [{"slug", "updated_at"}, ...], "posts": [{"permalink",
+"updated_at"}, ...]}` (`app/domain/seo.py::build_sitemap_entries`) — solo
+contenuto effettivamente indicizzabile (stesso criterio di
+`search_disallow` sopra: un blog/post con `search_indexing_enabled`
+effettivo a `false` non compare). Consumato da
+`frontend/src/app/sitemap.ts` per generare `/sitemap.xml`.
 
 ## Errori comuni
 

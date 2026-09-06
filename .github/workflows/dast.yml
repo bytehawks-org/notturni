@@ -1,0 +1,81 @@
+name: DAST (OWASP ZAP)
+
+# Analisi dinamica contro lo stack realmente in esecuzione (stesso
+# compose.yaml usato in locale, avviato con Docker invece di Podman — nessuna
+# sintassi specifica di Podman nel file, vedi CLAUDE.md #3 "Dockerfile e
+# manifest agnostici"). Più pesante di SAST/SBOM (build completa + avvio
+# stack + scansione): solo schedule settimanale + avvio manuale, mai su ogni
+# push/PR.
+on:
+  workflow_dispatch: {}
+  schedule:
+    # lunedì 04:23 UTC — cadenza indipendente da codeql.yml/sbom.yml, per non
+    # sommare più job pesanti nella stessa finestra.
+    - cron: "23 4 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  zap-scan:
+    name: ZAP baseline (frontend) + API scan (backend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepara .env per l'ambiente CI
+        # Stessi default di sviluppo di GETTING_STARTED.md #1 (segreti fittizi,
+        # mai usati fuori da questo runner effimero) — bastano per avviare lo
+        # stack, non serve altro per una scansione black-box.
+        run: cp .env.example .env
+
+      - name: Avvia lo stack (Postgres, Redis, RabbitMQ, MinIO, backend, frontend, ...)
+        run: docker compose -f compose.yaml up -d --build
+
+      - name: Attendi Postgres
+        run: |
+          for i in $(seq 1 30); do
+            docker compose -f compose.yaml exec -T postgres pg_isready -U admin && break
+            sleep 2
+          done
+
+      - name: Applica le migrazioni
+        run: docker compose -f compose.yaml exec -T backend alembic upgrade head
+
+      - name: Attendi backend e frontend
+        run: |
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:8000/api/v1/health && break
+            sleep 2
+          done
+          for i in $(seq 1 60); do
+            curl -sf -o /dev/null http://localhost:3000/ && break
+            sleep 2
+          done
+
+      - name: ZAP baseline scan (pagine pubbliche del frontend)
+        uses: zaproxy/action-baseline@v0.15.0
+        with:
+          target: "http://localhost:3000"
+          fail_action: false
+          allow_issue_writing: false
+          artifact_name: zap-baseline-report
+
+      - name: ZAP API scan (backend, da OpenAPI)
+        uses: zaproxy/action-api-scan@v0.10.0
+        with:
+          target: "http://localhost:8000/openapi.json"
+          format: openapi
+          fail_action: false
+          allow_issue_writing: false
+          artifact_name: zap-api-report
+
+      - name: Log dei servizi (solo in caso di problemi)
+        if: failure()
+        run: docker compose -f compose.yaml logs --tail=200
+
+      - name: Ferma lo stack
+        if: always()
+        run: docker compose -f compose.yaml down -v

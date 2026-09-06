@@ -1,8 +1,14 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { FeedPostCard } from "@/components/FeedPostCard";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getPublicFeed, getTrendingTags } from "@/lib/server-api";
+
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+  openGraph: { type: "website", url: "/" },
+};
 
 export default async function Home({
   searchParams,

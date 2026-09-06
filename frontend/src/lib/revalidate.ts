@@ -25,7 +25,7 @@ export const revalidateTags = {
   post: (blogSlug: string, postSlug: string): string => `post:${blogSlug}:${postSlug}`,
   /** Elenco delle pagine statiche di piattaforma. */
   platformPages: (): string => "platform-pages",
-  /** Una singola pagina statica di piattaforma (`/pages/{slug}`). */
+  /** Una singola pagina statica di piattaforma (`/p/{slug}`). */
   platformPage: (slug: string): string => `platform-page:${slug}`,
   /** Una singola pagina statica di un blog (`/{blog}/pagina/{slug}`). */
   blogPage: (blogSlug: string, pageSlug: string): string => `blog-page:${blogSlug}:${pageSlug}`,

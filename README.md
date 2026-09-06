@@ -72,7 +72,7 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   un problema del servizio di moderazione non blocca mai l'upload.
 - **Permalink leggibili e homepage aggregata:** ogni post è raggiungibile
   anche senza sottodominio, con un permalink stile WordPress
-  (`/{blog}/{YYYYMMDD}/{slug}`, senza UUID nell'URL). La homepage della
+  (`/{blog}/{slug}`, senza UUID nell'URL). La homepage della
   piattaforma mostra il feed cronologico di tutti i blog, con una sezione
   "di tendenza" basata sui tag più usati.
 - **Media e backup su S3:** immagini incorporabili nei post (pubbliche) e una
@@ -86,7 +86,7 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   path).
 - **Pagine statiche:** Chi siamo, Contatti, Privacy, ecc. del sito
   principale, gestite da Amministratore/Super Admin (sempre attive,
-  permalink `/pages/{slug}`); estese anche ai singoli blog come feature
+  permalink `/p/{slug}`); estese anche ai singoli blog come feature
   opt-in per il proprietario (disattiva di default), stessa interfaccia di
   editing, permalink `/{blog}/pagina/{slug}`.
 - **Aspetto personalizzabile per blog:** palette/tipografia/layout in JSON
@@ -106,7 +106,7 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   di gestione del proprietario. Chi possiede un blog vede, solo nel proprio
   profilo, il totale dei follower sommato tra username e alias, oltre al
   conteggio separato per ciascuna entità.
-- **Amministrazione:** voci del dashboard esistente, visibili solo ad
+- **Amministrazione:** sezioni sotto `/admin`, visibili solo ad
   Amministratore/Super Admin, con un campo di ricerca in ogni sezione —
   Utenti (ruolo, attivazione; l'assegnazione dei ruoli di amministrazione è
   riservata al Super Admin; nascosta in modalità `solo`), Pagine statiche
@@ -130,8 +130,7 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   ATProto in prima battuta).
 
 Dettagli, esempi di richiesta/risposta e limitazioni note (SSO non testabile
-end-to-end senza credenziali reali, invio email OTP non collegato a un
-provider SMTP) sono in [backend/API.md](backend/API.md). Per lo stato di
+end-to-end senza credenziali reali) sono in [backend/API.md](backend/API.md). Per lo stato di
 avanzamento di ogni funzionalità, incluse quelle ancora parziali o non
 iniziate, vedi [ROADMAP.md](ROADMAP.md).
 
@@ -145,22 +144,13 @@ In sintesi, ad alto livello (l'elenco completo, specifica per specifica, è in
   sottodominio, via permalink su `notturni.eu`.
 - **"Pubblicazioni"**: raggruppare una serie di post in ordine cronologico,
   come i capitoli di un libro o di un saggio — non ancora iniziato.
-- **Interfaccia utente per i token API** (oggi generabili solo via API
-  diretta o script di bootstrap) e **bootstrap del Super Admin via
-  env/secret** in fase di deploy (oggi: auto-promozione del primo utente in
-  modalità "solo", o `UPDATE` manuale a DB in modalità "platform").
-- **Pannello di moderazione trasversale** in amministrazione (oggi la
-  moderazione commenti è solo per-blog) e ruolo piattaforma Moderatore non
-  ancora collegato a nessuna capacità reale.
-- **Consumer SMTP reale** per l'invio dell'OTP via email (oggi accodato su
-  RabbitMQ ma solo loggato, non spedito) e **sessione utente più robusta**
-  (cookie `httpOnly` + CSRF al posto di `localStorage`) prima di un uso in
-  produzione.
+- **Sessione utente più robusta** (cookie `httpOnly` + CSRF al posto di
+  `localStorage`) prima di un uso in produzione.
 - **Funzionalità GDPR dedicate** (export/cancellazione dati account, registro
   consensi) oltre al rafforzamento via MFA già presente.
-- **Rate limiting e lock distribuiti** su Redis (servizio già deployato, non
-  ancora usato da nessuna logica applicativa) e **clusterizzazione** dei
-  componenti in produzione (oggi Kubernetes a nodo singolo).
+- **Lock distribuiti** su Redis (il rate limiting invece è già in uso, su
+  login e anteprima link) e **clusterizzazione** dei componenti in produzione
+  (oggi Kubernetes a nodo singolo).
 - **Conteggio di like, citazioni e condivisioni**, e **federazione** con altre
   istanze/piattaforme (AT Protocol/Bluesky in prima battuta, poi
   ActivityPub/Mastodon) — esplicitamente fuori dall'ambito attuale, con
@@ -176,7 +166,7 @@ In sintesi, ad alto livello (l'elenco completo, specifica per specifica, è in
 │   │   ├── models/         # entità SQLAlchemy (User, Blog, Post, Category, Tag, Page, Comment, Follow, ...)
 │   │   ├── domain/          # regole di business (auth, mfa, sso, i18n, autorizzazione, tag, categorie, permalink, moderazione, ...)
 │   │   ├── api/v1/            # router FastAPI (auth, blogs, posts, comments, pages, users, tokens, feed, admin)
-│   │   └── workers/            # consumer RabbitMQ (backup post su S3; invio OTP email — placeholder)
+│   │   └── workers/            # consumer RabbitMQ (backup post su S3; invio OTP email via SMTP)
 │   ├── scripts/            # script di bootstrap (primo API token)
 │   ├── tests/               # suite pytest (vedi sotto)
 │   ├── alembic/              # migrazioni del database
@@ -187,7 +177,7 @@ In sintesi, ad alto livello (l'elenco completo, specifica per specifica, è in
 │   └── Dockerfile           # pesi del modello inclusi nell'immagine in fase di build
 ├── frontend/            # applicazione Next.js (pubblica + dashboard + amministrazione)
 │   ├── src/
-│   │   ├── app/            # login/register, dashboard (autore + amministrazione: pagine/utenti/blog), homepage, pagina pubblica del post, profilo pubblico
+│   │   ├── app/            # login/register, dashboard (sezioni personali), admin (pagine/utenti/blog/moderazione), homepage, pagina pubblica del post e del blog, profilo pubblico
 │   │   ├── lib/             # client API, sessione (auth-context), tema (theme-context, sun.ts), Markdown/social/lingue
 │   │   └── components/       # UI condivisa (Button, Card, SearchInput, ...), editor/ (Tiptap, tag, categorie, copertina, traduzioni), ThemeToggle
 │   └── Dockerfile
@@ -252,6 +242,33 @@ python -m pytest
 Serve solo Postgres raggiungibile (usa un database separato, `notturni_test`
 di default); MinIO e RabbitMQ sono sostituiti da fake/mock nei test, non
 servono in esecuzione. Dettagli in [backend/README.md](backend/README.md#test).
+
+## CI e sicurezza
+
+Tre GitHub Actions in [.github/workflows/](.github/workflows/):
+
+- [codeql.yml](.github/workflows/codeql.yml) — SAST (analisi statica) via
+  CodeQL su backend/moderation (Python) e frontend (TypeScript/JavaScript).
+  Report nella tab **Security → Code scanning** del repository, non come
+  artifact. Su push/PR verso `main`/`develop`, avvio manuale e schedule
+  settimanale.
+- [sbom.yml](.github/workflows/sbom.yml) — SBOM (Software Bill of Materials,
+  formato CycloneDX): un inventario delle dipendenze, non un'analisi di
+  vulnerabilità. Un livello dai sorgenti (backend/frontend/moderation, sempre
+  veloce) e uno dalle immagini container effettivamente costruite
+  (backend/frontend). Report come artifact del workflow. Stessi trigger di
+  `codeql.yml`.
+- [dast.yml](.github/workflows/dast.yml) — DAST (analisi dinamica): avvia
+  l'intero stack da `compose.yaml` (con Docker invece di Podman — nessuna
+  sintassi specifica di Podman nel file) ed esegue OWASP ZAP contro le pagine
+  pubbliche del frontend e l'API del backend (da `/openapi.json`). Più
+  pesante degli altri due: solo avvio manuale e schedule settimanale, mai su
+  ogni push/PR. Report come artifact del workflow.
+
+Nessuno dei tre fallisce la build in presenza di segnalazioni (`fail_action:
+false`/nessun controllo di soglia): sono pensati per produrre un report da
+consultare, non un gate che blocca il merge — da rivedere se in futuro si
+vorrà imporre una soglia.
 
 ## Backend e frontend in locale (senza container)
 

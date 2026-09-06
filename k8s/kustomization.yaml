@@ -9,7 +9,9 @@ resources:
   - redis.yaml
   - rabbitmq.yaml
   - minio.yaml
+  - smtp-relay.yaml
   - backend.yaml
   - audit-maintenance.yaml
+  - backup.yaml
   - frontend.yaml
   - ingress.yaml

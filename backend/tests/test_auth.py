@@ -105,6 +105,9 @@ async def test_totp_mfa_full_flow(client: AsyncClient, make_user: Callable) -> N
     setup_res = await client.post("/api/v1/auth/mfa/totp/setup", headers=user.headers)
     assert setup_res.status_code == 200
     secret = setup_res.json()["secret"]
+    # QR generato interamente lato backend (mai un servizio di terze parti,
+    # il secret non deve mai lasciare il backend) come SVG inline
+    assert setup_res.json()["qr_code_data_uri"].startswith("data:image/svg+xml;base64,")
 
     valid_code = pyotp.TOTP(secret).now()
     confirm_res = await client.post(

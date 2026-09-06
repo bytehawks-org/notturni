@@ -218,7 +218,7 @@ function EditPageForm({ page, onSaved }: { page: Page; onSaved: () => void }) {
         currentId={page.id}
         currentLocale={page.locale}
         translations={translations}
-        hrefFor={() => "/dashboard/pagine"}
+        hrefFor={() => "/admin/pagine"}
         suggestedLocales={[]}
         authFetch={authFetch}
         withNotes={false}

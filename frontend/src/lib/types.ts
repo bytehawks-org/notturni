@@ -24,6 +24,10 @@ export const POST_AUTHOR_NAME_STYLE_LABELS: Record<PostAuthorNameStyle, string> 
 };
 
 export const PLATFORM_ADMIN_ROLES: PlatformRole[] = ["super_admin", "amministratore"];
+/** Ruoli con accesso al pannello di moderazione commenti trasversale
+ * (ROADMAP.md §1): gli admin di piattaforma più il ruolo Moderatore, che
+ * non vede invece le altre sezioni di amministrazione. */
+export const PLATFORM_MODERATION_ROLES: PlatformRole[] = ["super_admin", "amministratore", "moderatore"];
 
 export interface SessionResponse {
   access_token: string;
@@ -64,6 +68,16 @@ export const INVITABLE_BLOG_ROLES: { value: Extract<BlogRole, "co_autore" | "med
 export const MAX_BLOG_SUBTITLE = 64;
 export const MAX_BLOG_DESCRIPTION = 256;
 
+/** Chi può commentare (CLAUDE.md #1): default di blog, con eventuale
+ * override per singolo post (vedi Post.comments_mode/effective_comments_mode). */
+export type CommentsMode = "everyone" | "members" | "closed";
+
+export const COMMENTS_MODE_LABELS: Record<CommentsMode, string> = {
+  everyone: "Aperti a tutti (richiede captcha)",
+  members: "Solo utenti iscritti",
+  closed: "Chiusi",
+};
+
 export interface Blog {
   id: string;
   slug: string;
@@ -74,11 +88,16 @@ export interface Blog {
   description: string | null;
   visibility: BlogVisibility;
   custom_domain: string | null;
-  allow_anonymous_comments: boolean;
+  comments_mode: CommentsMode;
   /** todo/EDITOR.md: @menzioni nel contenuto trasformate in link (default: true). */
   mentions_enabled: boolean;
   /** Pagine statiche del blog: feature opt-in, disattiva di default. */
   static_pages_enabled: boolean;
+  /** Opt-in per crawler (backend/app/domain/seo.py), attivi di default.
+   * Escludere il blog esclude anche tutti i suoi post, indipendentemente da
+   * un eventuale override di Post.search_indexing_enabled/ai_crawling_enabled. */
+  search_indexing_enabled: boolean;
+  ai_crawling_enabled: boolean;
   default_locale: string;
   /** Nome pubblico predefinito per i testi scritti su questo blog — vedi Post.author_display_name. */
   default_author_display_name: string | null;
@@ -124,6 +143,12 @@ export interface BlogConfig {
   [key: string]: unknown;
 }
 
+/** Stessi elenchi curati di `backend/app/domain/blog_config.py` (CLAUDE.md
+ * §5 Estetica: titoli in serif, corpo/link in sans-serif) — tenerli in
+ * sincronia se cambia uno dei due lati. */
+export const SERIF_FONTS = ["Lora", "Merriweather", "Playfair Display", "Source Serif 4", "Crimson Pro"];
+export const SANS_SERIF_FONTS = ["Inter", "Nunito Sans", "Work Sans", "Source Sans 3", "Karla"];
+
 export type PostStatus = "draft" | "published";
 
 export interface Post {
@@ -144,7 +169,7 @@ export interface Post {
   status: PostStatus;
   published_at: string | null;
   created_at: string;
-  /** Permalink leggibile /{blog_slug}/{YYYYMMDD}/{slug}, senza UUID. */
+  /** Permalink leggibile /{blog_slug}/{slug}, senza UUID. */
   blog_slug: string;
   permalink: string;
   /** Se il blog ha le @menzioni attive: il rendering le trasforma in link. */
@@ -157,6 +182,18 @@ export interface Post {
   tags: string[];
   /** Tassonomia del blog: al più una per post, a differenza dei tag. */
   category: Category | null;
+  /** Override di Blog.comments_mode per questo post: `null` eredita dal blog. */
+  comments_mode: CommentsMode | null;
+  /** Sempre valorizzato: comments_mode se impostato, altrimenti quello del blog. */
+  effective_comments_mode: CommentsMode;
+  /** Override di Blog.search_indexing_enabled/ai_crawling_enabled per questo
+   * post: `null` eredita dal blog (backend/app/domain/seo.py). */
+  search_indexing_enabled: boolean | null;
+  ai_crawling_enabled: boolean | null;
+  /** Sempre valorizzati: tengono già conto del blocco a cascata se il blog
+   * stesso è escluso — un override "true" sul post non può riaprirlo. */
+  effective_search_indexing_enabled: boolean;
+  effective_ai_crawling_enabled: boolean;
 }
 
 export interface Category {
@@ -237,6 +274,9 @@ export type CommentStatus = "pending" | "approved" | "rejected";
 export interface Comment {
   id: string;
   post_id: string;
+  /** Risposta a un altro commento dello stesso post; `null` per un commento
+   * di primo livello. */
+  parent_id: string | null;
   author_id: string | null;
   author_display_name: string;
   status: CommentStatus;
@@ -278,7 +318,7 @@ export interface Page {
   content: string;
   is_published: boolean;
   created_at: string;
-  /** Permalink pubblico: `/pages/{slug}` (piattaforma) o `/{blog_slug}/pagina/{slug}` (blog). */
+  /** Permalink pubblico: `/p/{slug}` (piattaforma) o `/{blog_slug}/pagina/{slug}` (blog). */
   permalink: string | null;
   /** Mirror di Blog.mentions_enabled (sempre true per le pagine di piattaforma). */
   mentions_enabled: boolean;
@@ -332,7 +372,7 @@ export interface AdminBlog {
   created_at: string;
 }
 
-/** Elenco di piattaforma (dashboard/moderazione, riservato ad
+/** Elenco di piattaforma (admin/moderazione, riservato ad
  * Amministratore/Super Admin) — a differenza di `Post`, include i tre stati
  * possibili (`PostStatus` sopra ne definisce solo due, per l'uso corrente
  * negli altri punti dell'app) e i soli campi utili a moderare, non l'intero
@@ -356,15 +396,29 @@ export const ADMIN_POST_STATUS_LABELS: Record<AdminPost["status"], string> = {
   published: "Pubblicato",
 };
 
-export type AuditActorType = "user" | "core_token" | "user_token" | "system" | "anonymous";
+/** GET /admin/comments (admin/moderazione-commenti, ROADMAP.md §1):
+ * come `BlogComment`, ma su tutti i blog della piattaforma — riservato ad
+ * Amministratore/Super Admin/Moderatore, non solo a proprietario/mediatore
+ * del singolo blog. */
+export interface AdminComment extends BlogComment {
+  blog_id: string;
+  blog_slug: string;
+  blog_title: string;
+}
 
-/** `GET /api/v1/admin/audit-log` (dashboard/registro). Registro append-only
+export type AuditActorType = "user" | "core_token" | "user_token" | "system" | "anonymous";
+/** Canale da cui è partita l'azione, calcolato server-side da `actor_type`
+ * (nessuna colonna dedicata, vedi `backend/app/api/v1/admin.py`). */
+export type AuditChannel = "web" | "api" | "system";
+
+/** `GET /api/v1/admin/audit-log` (admin/registro). Registro append-only
  * delle azioni sensibili; solo gli eventi ancora nel database (quelli oltre
  * la retention sono archiviati su storage). */
 export interface AuditLogEntry {
   id: string;
   occurred_at: string;
   actor_type: AuditActorType;
+  channel: AuditChannel;
   actor_id: string | null;
   actor_label: string | null;
   action: string;
@@ -386,8 +440,11 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "blog.unsuspended": "Blog riattivato",
   "post.hidden": "Post nascosto",
   "post.unhidden": "Post mostrato",
+  "comment.approved": "Commento approvato",
+  "comment.rejected": "Commento rifiutato",
   "api_token.created": "API token creato",
   "api_token.revoked": "API token revocato",
+  "user.account_deleted": "Account eliminato (GDPR)",
 };
 
 export const AUDIT_ACTOR_TYPE_LABELS: Record<AuditActorType, string> = {
@@ -398,11 +455,42 @@ export const AUDIT_ACTOR_TYPE_LABELS: Record<AuditActorType, string> = {
   anonymous: "Anonimo",
 };
 
+export const AUDIT_CHANNEL_LABELS: Record<AuditChannel, string> = {
+  web: "Web",
+  api: "API",
+  system: "Sistema",
+};
+
+/** `/api/v1/tokens` (dashboard/token). Non include mai il valore in chiaro né
+ * l'hash: quello arriva solo nella risposta di creazione (`token`), una
+ * sola volta. */
+export interface ApiToken {
+  id: string;
+  name: string;
+  token_prefix: string;
+  owner_type: "core" | "user";
+  created_at: string;
+  last_used_at: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+}
+
+export interface ApiTokenCreated {
+  id: string;
+  name: string;
+  token: string;
+  token_prefix: string;
+}
+
 /** `GET /api/v1/config`, pubblico: per sapere se nascondere le sezioni
- * multi-utente (dashboard/utenti) in modalità "solo" senza dover già avere
+ * multi-utente (admin/utenti) in modalità "solo" senza dover già avere
  * una sessione. */
 export interface InstanceConfig {
   deployment_mode: "solo" | "platform";
+  /** Site key pubblica di Cloudflare Turnstile (mai la secret key): `null`
+   * se l'istanza non ha il captcha configurato — in quel caso i commenti
+   * aperti a tutti non sono selezionabili (vedi CommentsMode). */
+  turnstile_site_key: string | null;
 }
 
 export interface ApiError {
@@ -417,6 +505,9 @@ export interface PostFragment {
   id: string;
   post_id: string;
   text: string;
+  /** Scelto al salvataggio, modificabile ex-post: pubblico = visibile ad
+   * altri utenti iscritti alla piattaforma, mai a visitatori anonimi. */
+  is_public: boolean;
   created_at: string;
 }
 
@@ -425,9 +516,10 @@ export const MAX_FRAGMENT_RATIO = 0.15;
 export interface FragmentCollectionEntry {
   id: string;
   text: string;
+  is_public: boolean;
   created_at: string;
   post_title: string;
   author_display_name: string;
-  /** Permalink pubblico /{blog}/{data}/{slug} del post di provenienza. */
+  /** Permalink pubblico /{blog}/{slug} del post di provenienza. */
   permalink: string;
 }

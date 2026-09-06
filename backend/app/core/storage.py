@@ -15,21 +15,39 @@ ALLOWED_AVATAR_CONTENT_TYPES = {
 MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024  # 2 MiB
 
 
-def get_s3_client():
+def build_s3_client(
+    *,
+    endpoint_url: str | None,
+    region: str | None,
+    access_key_id: str | None,
+    secret_access_key: str | None,
+):
     # CLAUDE.md #4: endpoint custom sempre iniettato (se impostato), per
     # compatibilità trasparente tra MinIO locale e AWS/Cloudflare R2 in
     # produzione. Credenziali esplicite solo se entrambe presenti: altrimenti
     # ci si affida alla default credential chain di boto3 (ruolo AWS —
-    # instance profile/IRSA, variabili AWS_* d'ambiente, ecc.).
+    # instance profile/IRSA, variabili AWS_* d'ambiente, ecc.). Parametrizzata
+    # (invece di leggere `settings` direttamente) così il backup su S3
+    # esterno (app/workers/backup.py) può costruire un client verso un
+    # provider diverso da quello applicativo, con le stesse regole.
     kwargs: dict = {"config": Config(signature_version="s3v4")}
-    if settings.s3_endpoint_url:
-        kwargs["endpoint_url"] = settings.s3_endpoint_url
-    if settings.s3_region:
-        kwargs["region_name"] = settings.s3_region
-    if settings.s3_access_key_id and settings.s3_secret_access_key:
-        kwargs["aws_access_key_id"] = settings.s3_access_key_id
-        kwargs["aws_secret_access_key"] = settings.s3_secret_access_key
+    if endpoint_url:
+        kwargs["endpoint_url"] = endpoint_url
+    if region:
+        kwargs["region_name"] = region
+    if access_key_id and secret_access_key:
+        kwargs["aws_access_key_id"] = access_key_id
+        kwargs["aws_secret_access_key"] = secret_access_key
     return boto3.client("s3", **kwargs)
+
+
+def get_s3_client():
+    return build_s3_client(
+        endpoint_url=settings.s3_endpoint_url,
+        region=settings.s3_region,
+        access_key_id=settings.s3_access_key_id,
+        secret_access_key=settings.s3_secret_access_key,
+    )
 
 
 def ensure_public_bucket(bucket: str) -> None:

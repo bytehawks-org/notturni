@@ -1,7 +1,11 @@
+import base64
+import io
 import secrets
 from datetime import datetime, timedelta, timezone
 
 import pyotp
+import qrcode
+import qrcode.image.svg
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +24,18 @@ def generate_totp_secret() -> str:
 
 def totp_provisioning_uri(secret: str, email: str) -> str:
     return pyotp.TOTP(secret).provisioning_uri(name=email, issuer_name="Notturni")
+
+
+def totp_qr_code_data_uri(provisioning_uri: str) -> str:
+    """QR dell'URI di provisioning, come SVG inline (niente Pillow/rendering
+    raster: `qrcode` con l'image factory SVG basta da sola). Generato
+    interamente lato backend — il secret non deve mai transitare da un
+    servizio di terze parti (niente API di generazione QR esterne) — e
+    restituito come data URI, pronto per un `<img src=...>`."""
+    buffer = io.BytesIO()
+    qrcode.make(provisioning_uri, image_factory=qrcode.image.svg.SvgPathImage).save(buffer)
+    encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+    return f"data:image/svg+xml;base64,{encoded}"
 
 
 def verify_totp_code(secret: str, code: str) -> bool:
