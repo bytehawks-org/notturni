@@ -18,6 +18,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.domain.i18n import DEFAULT_LOCALE
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
+from app.models.comment import CommentsMode, comments_mode_column
 from app.models.tag import Tag, post_tags
 
 
@@ -46,6 +47,9 @@ class Post(Base, UUIDPKMixin, TimestampMixin):
     )
     # nome pubblico dell'autore per questo post, può differire da User.username (CLAUDE.md #1)
     author_display_name: Mapped[str] = mapped_column(String(255))
+    # Override per questo singolo post di Blog.comments_mode. None: eredita
+    # dal blog (caso comune). Vedi app/api/v1/comments.py per la risoluzione.
+    comments_mode: Mapped["CommentsMode | None"] = comments_mode_column(nullable=True, default=None)
 
     # i18n: le traduzioni di uno stesso contenuto condividono translation_group_id
     # (di default = id del post stesso, quando non è traduzione di nient'altro)

@@ -255,14 +255,16 @@ non deve permettere di risalirvi (vedi "Profilo utente e follow" più sotto).
 **`PATCH /api/v1/blogs/{slug}`** — richiede sessione, solo il proprietario
 (`403` altrimenti). Campi aggiornabili: `title`, `subtitle` / `description`
 (`""` azzera, assente lascia invariato; `400` se oltre 64 / 256 caratteri),
-`visibility` (`public` | `members` | `private`), `allow_anonymous_comments`
-(governa se i commenti sono aperti anche a chi non è registrato, vedi sezione
-Commenti), `mentions_enabled` (bool — trasforma le `@username` nei post in
-link, vedi sezione Post), `default_author_display_name` — nome pubblico
-degli autori sui post di questo blog. Se valorizzato è **imposto** (nessun
-override per singolo autore o post — todo/USERS.md #2), a meno che il
-collaboratore non abbia un proprio alias di membership, che ha la precedenza.
-Stringa vuota `""` lo azzera, assente lo lascia invariato.
+`visibility` (`public` | `members` | `private`), `comments_mode`
+(`everyone` | `members` | `closed` — default chi può commentare, vedi sezione
+Commenti; `everyone` richiede `NOCT_TURNSTILE_SITE_KEY`/`_SECRET_KEY`
+configurate sull'istanza, altrimenti `400`), `mentions_enabled` (bool —
+trasforma le `@username` nei post in link, vedi sezione Post),
+`default_author_display_name` — nome pubblico degli autori sui post di
+questo blog. Se valorizzato è **imposto** (nessun override per singolo
+autore o post — todo/USERS.md #2), a meno che il collaboratore non abbia un
+proprio alias di membership, che ha la precedenza. Stringa vuota `""` lo
+azzera, assente lo lascia invariato.
 
 **`POST /api/v1/blogs/{slug}/follow`** / **`DELETE .../follow`** — richiede
 sessione. Segui/smetti di seguire un blog; idempotenti (`204` anche se già
@@ -851,27 +853,46 @@ dell'editor o rendering della pagina pubblica.
 
 ## Commenti
 
-Di default solo utenti registrati; il proprietario del blog può aprire ai non
-registrati ma con moderazione obbligatoria in quel caso.
+Chi può commentare è governato da `comments_mode` (`everyone` | `members` |
+`closed`), di default `members`: a livello di blog (`PATCH /api/v1/blogs/{slug}`)
+con un override opzionale per singolo post (`PATCH /api/v1/posts/{post_id}`,
+`comments_mode: null` torna a ereditare dal blog). Un thread è supportato con
+un solo livello: `Comment.parent_id` punta a un commento di *primo livello*
+dello stesso post (`400` se punta a una risposta o a un commento di un altro
+post) — mantiene le conversazioni leggibili senza limitare la profondità a
+livello di schema.
 
-**`POST /api/v1/posts/{post_id}/comments`** — autenticazione opzionale:
+**`POST /api/v1/posts/{post_id}/comments`** — autenticazione opzionale.
+`comments_mode` effettivo = quello del post se impostato, altrimenti quello
+del blog. `closed`: `403` per chiunque, anche un utente registrato.
 
-- **con sessione valida:** commento attribuito all'utente, stato `approved`
-  automaticamente (nessuna moderazione per utenti registrati).
+- **con sessione valida** (qualunque `comments_mode` tranne `closed`):
+  commento attribuito all'utente, stato `approved` automaticamente (nessuna
+  moderazione per utenti registrati).
   ```json
-  {"content": "..."}
+  {"content": "...", "parent_id": "..."}
   ```
-  `author_display_name` nella risposta segue la preferenza di profilo
-  `post_author_name_style` (username/nome e cognome/alias globale — non
-  l'alias di blog, che si applica solo ai post: un commento resta sempre a
-  nome della persona, non del blog) ed è **ricalcolato ad ogni lettura**, non
-  solo alla creazione: un cambio di username o di preferenza si riflette
-  subito anche sui commenti passati.
-- **senza sessione:** richiede che il blog abbia `allow_anonymous_comments=true`
-  (altrimenti `401`); richiede `author_display_name` e `author_email` nel
-  payload (altrimenti `400`); il commento è creato in stato `pending`.
+  `parent_id` opzionale (risposta a un commento di primo livello dello
+  stesso post). `author_display_name` nella risposta segue la preferenza di
+  profilo `post_author_name_style` (username/nome e cognome/alias globale —
+  non l'alias di blog, che si applica solo ai post: un commento resta sempre
+  a nome della persona, non del blog) ed è **ricalcolato ad ogni lettura**,
+  non solo alla creazione: un cambio di username o di preferenza si
+  riflette subito anche sui commenti passati.
+- **senza sessione, `comments_mode="members"`:** `401`.
+- **senza sessione, `comments_mode="everyone"`:** richiede
+  `author_display_name`/`author_email` (altrimenti `400`) e un
+  `captcha_token` valido del widget Cloudflare Turnstile, verificato
+  server-side (`app/core/captcha.py`) — `400` se mancante o non valido
+  (fail closed: un servizio Turnstile irraggiungibile blocca il commento).
+  Il commento è comunque creato in stato `pending`.
   ```json
-  {"content": "...", "author_display_name": "...", "author_email": "..."}
+  {
+    "content": "...",
+    "author_display_name": "...",
+    "author_email": "...",
+    "captcha_token": "..."
+  }
   ```
 
 **`GET /api/v1/posts/{post_id}/comments`** — pubblico. Solo commenti
@@ -1351,9 +1372,13 @@ chiameranno l'API direttamente dal browser.
 compose healthcheck).
 
 **`GET /api/v1/config`** — pubblico, nessuna autenticazione. Espone
-`{"deployment_mode": "solo"|"platform"}` (`NOCT_DEPLOYMENT_MODE`). Usato dal
-dashboard (`frontend/src/app/dashboard/layout.tsx`) per nascondere la voce
-Utenti in modalità `solo`, senza dover già avere una sessione autenticata.
+`{"deployment_mode": "solo"|"platform", "turnstile_site_key": "..."|null}`
+(`NOCT_DEPLOYMENT_MODE`/`NOCT_TURNSTILE_SITE_KEY`). `deployment_mode` è
+usato da `frontend/src/app/admin/layout.tsx` per nascondere la voce Utenti
+in modalità `solo`; `turnstile_site_key` da `CommentsSection` per sapere se
+mostrare il widget captcha sui commenti aperti a tutti (`null` se l'istanza
+non ne ha uno configurato) — entrambi senza dover già avere una sessione
+autenticata. Site key, mai la secret key: pensata per essere pubblica.
 
 ## Errori comuni
 

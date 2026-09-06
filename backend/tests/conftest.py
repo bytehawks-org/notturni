@@ -265,6 +265,21 @@ def fake_s3(monkeypatch: pytest.MonkeyPatch) -> FakeS3Client:
 
 
 @pytest.fixture
+def turnstile_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Simula un'istanza con Cloudflare Turnstile configurato e ogni verifica
+    superata, senza chiamare davvero l'API di Cloudflare — necessario per
+    poter impostare comments_mode="everyone" e testare i commenti anonimi
+    su quella modalità (vedi app/core/captcha.py)."""
+
+    async def _fake_verify(token: str, remote_ip: str | None) -> bool:
+        return True
+
+    monkeypatch.setattr("app.api.v1.blogs.crud.turnstile_configured", lambda: True)
+    monkeypatch.setattr("app.api.v1.posts.turnstile_configured", lambda: True)
+    monkeypatch.setattr("app.api.v1.comments.verify_turnstile", _fake_verify)
+
+
+@pytest.fixture
 def captured_emails(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
     """Cattura i codici OTP che verrebbero pubblicati su RabbitMQ, senza
     richiedere RabbitMQ in esecuzione durante i test."""

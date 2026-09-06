@@ -56,6 +56,12 @@ data:
   # SSO: valorizzare (qui o in secret.yaml) solo i provider da abilitare
   NOCT_OAUTH_REDIRECT_BASE_URL: "https://notturni.eu"
 
+  # Cloudflare Turnstile (app/core/captcha.py): captcha per i commenti aperti
+  # a tutti. Site key pubblica (safe da esporre, letta anche dal frontend via
+  # GET /api/v1/config) — la secret key sta in secret.yaml. Vuota: quella
+  # modalità di commenti non è selezionabile su questa istanza.
+  NOCT_TURNSTILE_SITE_KEY: ""
+
   # placeholder: CORS ad origine esatta non copre i sottodomini per-blog
   # (nomeutente.notturni.eu) — da rivedere con un match a wildcard quando le
   # pagine pubbliche dei blog chiameranno l'API dal browser.

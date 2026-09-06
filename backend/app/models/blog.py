@@ -15,6 +15,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.domain.i18n import DEFAULT_LOCALE
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
+from app.models.comment import CommentsMode, comments_mode_column
 
 
 class BlogRole(str, enum.Enum):
@@ -70,10 +71,11 @@ class Blog(Base, UUIDPKMixin, TimestampMixin):
         default=BlogVisibility.PUBLIC,
         nullable=False,
     )
-    # CLAUDE.md #1: di default i commenti sono possibili solo a utenti registrati;
-    # il proprietario del blog può aprirli anche ai non registrati (moderazione
-    # obbligatoria in quel caso, vedi app/api/v1/comments.py)
-    allow_anonymous_comments: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # CLAUDE.md #1: default `members` (solo utenti registrati); il proprietario
+    # può aprirli a tutti (`everyone`, richiede captcha per gli anonimi, vedi
+    # app/api/v1/comments.py) o chiuderli del tutto (`closed`). Un post può
+    # avere un proprio override, vedi Post.comments_mode.
+    comments_mode: Mapped[CommentsMode] = comments_mode_column(nullable=False, default=CommentsMode.MEMBERS)
     # todo/EDITOR.md: le @menzioni nel contenuto dei post vengono trasformate
     # in link al profilo dell'utente citato. Attive di default, disattivabili
     # dal proprietario del blog.

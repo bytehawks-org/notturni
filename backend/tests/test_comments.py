@@ -41,40 +41,88 @@ async def test_anonymous_comment_blocked_by_default(client: AsyncClient, make_us
     assert res.status_code == 401
 
 
-async def test_anonymous_comment_moderated_when_allowed(client: AsyncClient, make_user: Callable) -> None:
+async def test_comments_closed_blocks_everyone(client: AsyncClient, make_user: Callable) -> None:
+    owner: AuthedUser = await make_user("owner-c2b")
+    other: AuthedUser = await make_user("other-c2b")
+    post_id = await _published_post(client, owner, "blog-commenti-2b")
+
+    await client.patch(
+        "/api/v1/blogs/blog-commenti-2b", json={"comments_mode": "closed"}, headers=owner.headers
+    )
+
+    res = await client.post(
+        f"/api/v1/posts/{post_id}/comments", json={"content": "x"}, headers=other.headers
+    )
+    assert res.status_code == 403
+
+
+async def test_anonymous_comment_requires_captcha_when_open_to_everyone(
+    client: AsyncClient, make_user: Callable, turnstile_enabled: None
+) -> None:
     owner: AuthedUser = await make_user("owner-c3")
     post_id = await _published_post(client, owner, "blog-commenti-3")
 
     await client.patch(
-        "/api/v1/blogs/blog-commenti-3", json={"allow_anonymous_comments": True}, headers=owner.headers
+        "/api/v1/blogs/blog-commenti-3", json={"comments_mode": "everyone"}, headers=owner.headers
     )
 
     missing_fields_res = await client.post(f"/api/v1/posts/{post_id}/comments", json={"content": "x"})
     assert missing_fields_res.status_code == 400
 
+    missing_captcha_res = await client.post(
+        f"/api/v1/posts/{post_id}/comments",
+        json={"content": "x", "author_display_name": "Visitatore", "author_email": "v@example.com"},
+    )
+    assert missing_captcha_res.status_code == 400
+
     res = await client.post(
         f"/api/v1/posts/{post_id}/comments",
-        json={"content": "Anonimo", "author_display_name": "Visitatore", "author_email": "v@example.com"},
+        json={
+            "content": "Anonimo",
+            "author_display_name": "Visitatore",
+            "author_email": "v@example.com",
+            "captcha_token": "qualsiasi-token-verificato-dal-fixture",
+        },
     )
     assert res.status_code == 201
     assert res.json()["status"] == "pending"
-    comment_id = res.json()["id"]
 
     # non ancora visibile pubblicamente
     approved_res = await client.get(f"/api/v1/posts/{post_id}/comments")
     assert approved_res.json() == []
 
 
-async def test_moderation_approve_and_reject(client: AsyncClient, make_user: Callable) -> None:
+async def test_comments_mode_everyone_requires_turnstile_configured(
+    client: AsyncClient, make_user: Callable
+) -> None:
+    """Senza turnstile_enabled (fixture non usata qui): l'istanza non ha
+    Turnstile configurato, quindi non si può nemmeno impostare "everyone"."""
+    owner: AuthedUser = await make_user("owner-c3b")
+    await client.post("/api/v1/blogs", json={"slug": "blog-commenti-3b", "title": "x"}, headers=owner.headers)
+
+    res = await client.patch(
+        "/api/v1/blogs/blog-commenti-3b", json={"comments_mode": "everyone"}, headers=owner.headers
+    )
+    assert res.status_code == 400
+
+
+async def test_moderation_approve_and_reject(
+    client: AsyncClient, make_user: Callable, turnstile_enabled: None
+) -> None:
     owner: AuthedUser = await make_user("owner-c4")
     stranger: AuthedUser = await make_user("stranger-c4")
     post_id = await _published_post(client, owner, "blog-commenti-4")
     await client.patch(
-        "/api/v1/blogs/blog-commenti-4", json={"allow_anonymous_comments": True}, headers=owner.headers
+        "/api/v1/blogs/blog-commenti-4", json={"comments_mode": "everyone"}, headers=owner.headers
     )
     comment_res = await client.post(
         f"/api/v1/posts/{post_id}/comments",
-        json={"content": "x", "author_display_name": "V", "author_email": "v@example.com"},
+        json={
+            "content": "x",
+            "author_display_name": "V",
+            "author_email": "v@example.com",
+            "captcha_token": "ok",
+        },
     )
     comment_id = comment_res.json()["id"]
 
@@ -95,15 +143,20 @@ async def test_moderation_approve_and_reject(client: AsyncClient, make_user: Cal
     assert len(approved_list.json()) == 1
 
 
-async def test_reject_comment(client: AsyncClient, make_user: Callable) -> None:
+async def test_reject_comment(client: AsyncClient, make_user: Callable, turnstile_enabled: None) -> None:
     owner: AuthedUser = await make_user("owner-c5")
     post_id = await _published_post(client, owner, "blog-commenti-5")
     await client.patch(
-        "/api/v1/blogs/blog-commenti-5", json={"allow_anonymous_comments": True}, headers=owner.headers
+        "/api/v1/blogs/blog-commenti-5", json={"comments_mode": "everyone"}, headers=owner.headers
     )
     comment_res = await client.post(
         f"/api/v1/posts/{post_id}/comments",
-        json={"content": "spam", "author_display_name": "V", "author_email": "v@example.com"},
+        json={
+            "content": "spam",
+            "author_display_name": "V",
+            "author_email": "v@example.com",
+            "captcha_token": "ok",
+        },
     )
     comment_id = comment_res.json()["id"]
 
@@ -115,12 +168,64 @@ async def test_reject_comment(client: AsyncClient, make_user: Callable) -> None:
     assert approved_list.json() == []
 
 
-async def test_blog_comments_aggregate_moderation(client: AsyncClient, make_user: Callable) -> None:
+async def test_reply_thread(client: AsyncClient, make_user: Callable) -> None:
+    owner: AuthedUser = await make_user("owner-c7")
+    commenter: AuthedUser = await make_user("commenter-c7")
+    post_id = await _published_post(client, owner, "blog-commenti-7")
+
+    top_res = await client.post(
+        f"/api/v1/posts/{post_id}/comments", json={"content": "primo commento"}, headers=owner.headers
+    )
+    top_id = top_res.json()["id"]
+    assert top_res.json()["parent_id"] is None
+
+    reply_res = await client.post(
+        f"/api/v1/posts/{post_id}/comments",
+        json={"content": "risposta", "parent_id": top_id},
+        headers=commenter.headers,
+    )
+    assert reply_res.status_code == 201
+    assert reply_res.json()["parent_id"] == top_id
+
+    listed = await client.get(f"/api/v1/posts/{post_id}/comments")
+    assert {c["id"]: c["parent_id"] for c in listed.json()} == {top_id: None, reply_res.json()["id"]: top_id}
+
+
+async def test_reply_to_comment_on_different_post_rejected(
+    client: AsyncClient, make_user: Callable
+) -> None:
+    owner: AuthedUser = await make_user("owner-c8")
+    post_a = await _published_post(client, owner, "blog-commenti-8a")
+    await client.post("/api/v1/blogs", json={"slug": "blog-commenti-8b", "title": "x"}, headers=owner.headers)
+    post_b_res = await client.post(
+        "/api/v1/blogs/blog-commenti-8b/posts",
+        json={"slug": "post-b", "title": "x", "content": "y"},
+        headers=owner.headers,
+    )
+    post_b = post_b_res.json()["id"]
+    await client.post(f"/api/v1/posts/{post_b}/publish", headers=owner.headers)
+
+    comment_a = await client.post(
+        f"/api/v1/posts/{post_a}/comments", json={"content": "su A"}, headers=owner.headers
+    )
+    comment_a_id = comment_a.json()["id"]
+
+    res = await client.post(
+        f"/api/v1/posts/{post_b}/comments",
+        json={"content": "risposta sbagliata", "parent_id": comment_a_id},
+        headers=owner.headers,
+    )
+    assert res.status_code == 400
+
+
+async def test_blog_comments_aggregate_moderation(
+    client: AsyncClient, make_user: Callable, turnstile_enabled: None
+) -> None:
     owner: AuthedUser = await make_user("owner-c6")
     stranger: AuthedUser = await make_user("stranger-c6")
     await client.post("/api/v1/blogs", json={"slug": "blog-commenti-6", "title": "x"}, headers=owner.headers)
     await client.patch(
-        "/api/v1/blogs/blog-commenti-6", json={"allow_anonymous_comments": True}, headers=owner.headers
+        "/api/v1/blogs/blog-commenti-6", json={"comments_mode": "everyone"}, headers=owner.headers
     )
 
     post_ids = []
@@ -135,7 +240,12 @@ async def test_blog_comments_aggregate_moderation(client: AsyncClient, make_user
         post_ids.append(pid)
         await client.post(
             f"/api/v1/posts/{pid}/comments",
-            json={"content": f"pending {n}", "author_display_name": "V", "author_email": "v@example.com"},
+            json={
+                "content": f"pending {n}",
+                "author_display_name": "V",
+                "author_email": "v@example.com",
+                "captcha_token": "ok",
+            },
         )
 
     # un commento già approvato (autore registrato) sul primo post

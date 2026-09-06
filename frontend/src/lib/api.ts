@@ -11,6 +11,7 @@ import type {
   BibliographyEntry,
   Blog,
   BlogComment,
+  CommentsMode,
   BlogConfig,
   BlogInvitation,
   BlogMember,
@@ -157,7 +158,7 @@ export const api = {
         subtitle?: string;
         description?: string;
         visibility?: BlogVisibility;
-        allow_anonymous_comments?: boolean;
+        comments_mode?: CommentsMode;
         mentions_enabled?: boolean;
         static_pages_enabled?: boolean;
         /** "" azzera (torna allo username di chi scrive); assente non tocca. */
@@ -340,6 +341,9 @@ export const api = {
         category_id?: string | null;
         /** assente: non tocca le note; lista (anche []): le sostituisce. */
         notes?: PostNote[];
+        /** assente: non tocca; null: torna a ereditare da Blog.comments_mode;
+         * valore: imposta un override per questo solo post. */
+        comments_mode?: CommentsMode | null;
       }
     ) => request<Post>(`/api/v1/posts/${postId}`, { method: "PATCH", token, body: payload }),
     publish: (token: string, postId: string) =>
@@ -374,7 +378,15 @@ export const api = {
     create: (
       token: string | null,
       postId: string,
-      payload: { content: string; author_display_name?: string; author_email?: string }
+      payload: {
+        content: string;
+        parent_id?: string;
+        author_display_name?: string;
+        author_email?: string;
+        /** Richiesto solo per un commento anonimo su un post/blog con
+         * comments_mode "everyone" — token del widget Cloudflare Turnstile. */
+        captcha_token?: string;
+      }
     ) => request<Comment>(`/api/v1/posts/${postId}/comments`, { method: "POST", token, body: payload }),
     approve: (token: string, commentId: string) =>
       request<Comment>(`/api/v1/comments/${commentId}/approve`, { method: "POST", token }),

@@ -68,6 +68,16 @@ export const INVITABLE_BLOG_ROLES: { value: Extract<BlogRole, "co_autore" | "med
 export const MAX_BLOG_SUBTITLE = 64;
 export const MAX_BLOG_DESCRIPTION = 256;
 
+/** Chi può commentare (CLAUDE.md #1): default di blog, con eventuale
+ * override per singolo post (vedi Post.comments_mode/effective_comments_mode). */
+export type CommentsMode = "everyone" | "members" | "closed";
+
+export const COMMENTS_MODE_LABELS: Record<CommentsMode, string> = {
+  everyone: "Aperti a tutti (richiede captcha)",
+  members: "Solo utenti iscritti",
+  closed: "Chiusi",
+};
+
 export interface Blog {
   id: string;
   slug: string;
@@ -78,7 +88,7 @@ export interface Blog {
   description: string | null;
   visibility: BlogVisibility;
   custom_domain: string | null;
-  allow_anonymous_comments: boolean;
+  comments_mode: CommentsMode;
   /** todo/EDITOR.md: @menzioni nel contenuto trasformate in link (default: true). */
   mentions_enabled: boolean;
   /** Pagine statiche del blog: feature opt-in, disattiva di default. */
@@ -167,6 +177,10 @@ export interface Post {
   tags: string[];
   /** Tassonomia del blog: al più una per post, a differenza dei tag. */
   category: Category | null;
+  /** Override di Blog.comments_mode per questo post: `null` eredita dal blog. */
+  comments_mode: CommentsMode | null;
+  /** Sempre valorizzato: comments_mode se impostato, altrimenti quello del blog. */
+  effective_comments_mode: CommentsMode;
 }
 
 export interface Category {
@@ -247,6 +261,9 @@ export type CommentStatus = "pending" | "approved" | "rejected";
 export interface Comment {
   id: string;
   post_id: string;
+  /** Risposta a un altro commento dello stesso post; `null` per un commento
+   * di primo livello. */
+  parent_id: string | null;
   author_id: string | null;
   author_display_name: string;
   status: CommentStatus;
@@ -457,6 +474,10 @@ export interface ApiTokenCreated {
  * una sessione. */
 export interface InstanceConfig {
   deployment_mode: "solo" | "platform";
+  /** Site key pubblica di Cloudflare Turnstile (mai la secret key): `null`
+   * se l'istanza non ha il captcha configurato — in quel caso i commenti
+   * aperti a tutti non sono selezionabili (vedi CommentsMode). */
+  turnstile_site_key: string | null;
 }
 
 export interface ApiError {

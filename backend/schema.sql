@@ -9,7 +9,7 @@
 BEGIN;
 
 CREATE TABLE alembic_version (
-    version_num VARCHAR(32) NOT NULL,
+    version_num VARCHAR(32) NOT NULL, 
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 
@@ -18,16 +18,16 @@ CREATE TABLE alembic_version (
 CREATE TYPE platform_role AS ENUM ('super_admin', 'amministratore', 'moderatore', 'utente');
 
 CREATE TABLE users (
-    username VARCHAR(32) NOT NULL,
-    email VARCHAR(255) NOT NULL,
-    hashed_password VARCHAR(255),
-    platform_role platform_role NOT NULL,
-    is_active BOOLEAN NOT NULL,
-    mfa_enabled BOOLEAN NOT NULL,
-    mfa_totp_secret VARCHAR(64),
-    id UUID NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    username VARCHAR(32) NOT NULL, 
+    email VARCHAR(255) NOT NULL, 
+    hashed_password VARCHAR(255), 
+    platform_role platform_role NOT NULL, 
+    is_active BOOLEAN NOT NULL, 
+    mfa_enabled BOOLEAN NOT NULL, 
+    mfa_totp_secret VARCHAR(64), 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
     PRIMARY KEY (id)
 );
 
@@ -36,16 +36,16 @@ CREATE UNIQUE INDEX ix_users_email ON users (email);
 CREATE UNIQUE INDEX ix_users_username ON users (username);
 
 CREATE TABLE blogs (
-    slug VARCHAR(63) NOT NULL,
-    title VARCHAR(255) NOT NULL,
-    custom_domain VARCHAR(255),
-    owner_id UUID NOT NULL,
-    id UUID NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    PRIMARY KEY (id),
-    CONSTRAINT ck_blog_slug_min_length CHECK (length(slug) >= 4),
-    FOREIGN KEY(owner_id) REFERENCES users (id),
+    slug VARCHAR(63) NOT NULL, 
+    title VARCHAR(255) NOT NULL, 
+    custom_domain VARCHAR(255), 
+    owner_id UUID NOT NULL, 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    CONSTRAINT ck_blog_slug_min_length CHECK (length(slug) >= 4), 
+    FOREIGN KEY(owner_id) REFERENCES users (id), 
     UNIQUE (custom_domain)
 );
 
@@ -54,35 +54,35 @@ CREATE UNIQUE INDEX ix_blogs_slug ON blogs (slug);
 CREATE TYPE blog_role AS ENUM ('autore', 'co_autore', 'revisore', 'mediatore');
 
 CREATE TABLE blog_memberships (
-    user_id UUID NOT NULL,
-    blog_id UUID NOT NULL,
-    role blog_role NOT NULL,
-    id UUID NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    PRIMARY KEY (id),
-    FOREIGN KEY(blog_id) REFERENCES blogs (id),
-    FOREIGN KEY(user_id) REFERENCES users (id),
+    user_id UUID NOT NULL, 
+    blog_id UUID NOT NULL, 
+    role blog_role NOT NULL, 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    FOREIGN KEY(blog_id) REFERENCES blogs (id), 
+    FOREIGN KEY(user_id) REFERENCES users (id), 
     CONSTRAINT uq_blog_membership_user_blog UNIQUE (user_id, blog_id)
 );
 
 CREATE TYPE post_status AS ENUM ('draft', 'published');
 
 CREATE TABLE posts (
-    blog_id UUID NOT NULL,
-    author_id UUID NOT NULL,
-    author_display_name VARCHAR(255) NOT NULL,
-    title VARCHAR(255) NOT NULL,
-    slug VARCHAR(255) NOT NULL,
-    content TEXT NOT NULL,
-    status post_status NOT NULL,
-    published_at TIMESTAMP WITH TIME ZONE,
-    id UUID NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    PRIMARY KEY (id),
-    FOREIGN KEY(author_id) REFERENCES users (id),
-    FOREIGN KEY(blog_id) REFERENCES blogs (id),
+    blog_id UUID NOT NULL, 
+    author_id UUID NOT NULL, 
+    author_display_name VARCHAR(255) NOT NULL, 
+    title VARCHAR(255) NOT NULL, 
+    slug VARCHAR(255) NOT NULL, 
+    content TEXT NOT NULL, 
+    status post_status NOT NULL, 
+    published_at TIMESTAMP WITH TIME ZONE, 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    FOREIGN KEY(author_id) REFERENCES users (id), 
+    FOREIGN KEY(blog_id) REFERENCES blogs (id), 
     CONSTRAINT uq_post_blog_slug UNIQUE (blog_id, slug)
 );
 
@@ -91,17 +91,17 @@ CREATE INDEX ix_posts_slug ON posts (slug);
 CREATE TYPE comment_status AS ENUM ('pending', 'approved', 'rejected');
 
 CREATE TABLE comments (
-    post_id UUID NOT NULL,
-    author_id UUID,
-    author_display_name VARCHAR(255) NOT NULL,
-    author_email VARCHAR(255),
-    content TEXT NOT NULL,
-    status comment_status NOT NULL,
-    id UUID NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    PRIMARY KEY (id),
-    FOREIGN KEY(author_id) REFERENCES users (id),
+    post_id UUID NOT NULL, 
+    author_id UUID, 
+    author_display_name VARCHAR(255) NOT NULL, 
+    author_email VARCHAR(255), 
+    content TEXT NOT NULL, 
+    status comment_status NOT NULL, 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    FOREIGN KEY(author_id) REFERENCES users (id), 
     FOREIGN KEY(post_id) REFERENCES posts (id)
 );
 
@@ -112,19 +112,19 @@ INSERT INTO alembic_version (version_num) VALUES ('a788c6cab085') RETURNING alem
 CREATE TYPE api_token_owner_type AS ENUM ('core', 'user');
 
 CREATE TABLE api_tokens (
-    name VARCHAR(255) NOT NULL,
-    owner_type api_token_owner_type NOT NULL,
-    user_id UUID,
-    token_prefix VARCHAR(16) NOT NULL,
-    token_hash VARCHAR(64) NOT NULL,
-    expires_at TIMESTAMP WITH TIME ZONE,
-    last_used_at TIMESTAMP WITH TIME ZONE,
-    revoked_at TIMESTAMP WITH TIME ZONE,
-    id UUID NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    PRIMARY KEY (id),
-    CONSTRAINT ck_api_token_owner_consistency CHECK ((owner_type = 'user' AND user_id IS NOT NULL) OR (owner_type = 'core' AND user_id IS NULL)),
+    name VARCHAR(255) NOT NULL, 
+    owner_type api_token_owner_type NOT NULL, 
+    user_id UUID, 
+    token_prefix VARCHAR(16) NOT NULL, 
+    token_hash VARCHAR(64) NOT NULL, 
+    expires_at TIMESTAMP WITH TIME ZONE, 
+    last_used_at TIMESTAMP WITH TIME ZONE, 
+    revoked_at TIMESTAMP WITH TIME ZONE, 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    CONSTRAINT ck_api_token_owner_consistency CHECK ((owner_type = 'user' AND user_id IS NOT NULL) OR (owner_type = 'core' AND user_id IS NULL)), 
     FOREIGN KEY(user_id) REFERENCES users (id)
 );
 
@@ -135,42 +135,42 @@ UPDATE alembic_version SET version_num='6b37f8bc737a' WHERE alembic_version.vers
 -- Running upgrade 6b37f8bc737a -> 0767b8d527ec
 
 CREATE TABLE mfa_email_codes (
-    user_id UUID NOT NULL,
-    code_hash VARCHAR(64) NOT NULL,
-    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    consumed_at TIMESTAMP WITH TIME ZONE,
-    id UUID NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    PRIMARY KEY (id),
+    user_id UUID NOT NULL, 
+    code_hash VARCHAR(64) NOT NULL, 
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+    consumed_at TIMESTAMP WITH TIME ZONE, 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
     FOREIGN KEY(user_id) REFERENCES users (id)
 );
 
 CREATE TYPE sso_provider AS ENUM ('google', 'microsoft', 'github', 'linkedin');
 
 CREATE TABLE sso_identities (
-    user_id UUID NOT NULL,
-    provider sso_provider NOT NULL,
-    provider_user_id VARCHAR(255) NOT NULL,
-    email VARCHAR(255) NOT NULL,
-    id UUID NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    PRIMARY KEY (id),
-    FOREIGN KEY(user_id) REFERENCES users (id),
+    user_id UUID NOT NULL, 
+    provider sso_provider NOT NULL, 
+    provider_user_id VARCHAR(255) NOT NULL, 
+    email VARCHAR(255) NOT NULL, 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    FOREIGN KEY(user_id) REFERENCES users (id), 
     CONSTRAINT uq_sso_identity_provider_user UNIQUE (provider, provider_user_id)
 );
 
 CREATE TABLE user_sessions (
-    user_id UUID NOT NULL,
-    refresh_token_hash VARCHAR(64) NOT NULL,
-    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    last_used_at TIMESTAMP WITH TIME ZONE,
-    revoked_at TIMESTAMP WITH TIME ZONE,
-    id UUID NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    PRIMARY KEY (id),
+    user_id UUID NOT NULL, 
+    refresh_token_hash VARCHAR(64) NOT NULL, 
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+    last_used_at TIMESTAMP WITH TIME ZONE, 
+    revoked_at TIMESTAMP WITH TIME ZONE, 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
     FOREIGN KEY(user_id) REFERENCES users (id)
 );
 
@@ -187,19 +187,19 @@ UPDATE alembic_version SET version_num='0767b8d527ec' WHERE alembic_version.vers
 -- Running upgrade 0767b8d527ec -> 07a5634edf75
 
 CREATE TABLE pages (
-    slug VARCHAR(255) NOT NULL,
-    locale VARCHAR(2) NOT NULL,
-    translation_group_id UUID NOT NULL,
-    title VARCHAR(255) NOT NULL,
-    content TEXT NOT NULL,
-    is_published BOOLEAN NOT NULL,
-    updated_by_id UUID NOT NULL,
-    id UUID NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    PRIMARY KEY (id),
-    FOREIGN KEY(updated_by_id) REFERENCES users (id),
-    CONSTRAINT uq_page_slug_locale UNIQUE (slug, locale),
+    slug VARCHAR(255) NOT NULL, 
+    locale VARCHAR(2) NOT NULL, 
+    translation_group_id UUID NOT NULL, 
+    title VARCHAR(255) NOT NULL, 
+    content TEXT NOT NULL, 
+    is_published BOOLEAN NOT NULL, 
+    updated_by_id UUID NOT NULL, 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    FOREIGN KEY(updated_by_id) REFERENCES users (id), 
+    CONSTRAINT uq_page_slug_locale UNIQUE (slug, locale), 
     CONSTRAINT uq_page_translation_group_locale UNIQUE (translation_group_id, locale)
 );
 
@@ -208,39 +208,39 @@ CREATE INDEX ix_pages_slug ON pages (slug);
 CREATE INDEX ix_pages_translation_group_id ON pages (translation_group_id);
 
 CREATE TABLE social_links (
-    user_id UUID NOT NULL,
-    label VARCHAR(50) NOT NULL,
-    url VARCHAR(500) NOT NULL,
-    position INTEGER NOT NULL,
-    id UUID NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    PRIMARY KEY (id),
+    user_id UUID NOT NULL, 
+    label VARCHAR(50) NOT NULL, 
+    url VARCHAR(500) NOT NULL, 
+    position INTEGER NOT NULL, 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
     FOREIGN KEY(user_id) REFERENCES users (id)
 );
 
 CREATE TABLE user_follows (
-    follower_id UUID NOT NULL,
-    followed_user_id UUID NOT NULL,
-    id UUID NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    PRIMARY KEY (id),
-    CONSTRAINT ck_user_follow_not_self CHECK (follower_id != followed_user_id),
-    FOREIGN KEY(followed_user_id) REFERENCES users (id),
-    FOREIGN KEY(follower_id) REFERENCES users (id),
+    follower_id UUID NOT NULL, 
+    followed_user_id UUID NOT NULL, 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    CONSTRAINT ck_user_follow_not_self CHECK (follower_id != followed_user_id), 
+    FOREIGN KEY(followed_user_id) REFERENCES users (id), 
+    FOREIGN KEY(follower_id) REFERENCES users (id), 
     CONSTRAINT uq_user_follow_pair UNIQUE (follower_id, followed_user_id)
 );
 
 CREATE TABLE blog_follows (
-    follower_id UUID NOT NULL,
-    blog_id UUID NOT NULL,
-    id UUID NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    PRIMARY KEY (id),
-    FOREIGN KEY(blog_id) REFERENCES blogs (id),
-    FOREIGN KEY(follower_id) REFERENCES users (id),
+    follower_id UUID NOT NULL, 
+    blog_id UUID NOT NULL, 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    FOREIGN KEY(blog_id) REFERENCES blogs (id), 
+    FOREIGN KEY(follower_id) REFERENCES users (id), 
     CONSTRAINT uq_blog_follow_pair UNIQUE (follower_id, blog_id)
 );
 
@@ -267,13 +267,13 @@ UPDATE alembic_version SET version_num='07a5634edf75' WHERE alembic_version.vers
 -- Running upgrade 07a5634edf75 -> a7bbd274e2af
 
 CREATE TABLE blog_configs (
-    blog_id UUID NOT NULL,
-    config JSONB NOT NULL,
-    id UUID NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    PRIMARY KEY (id),
-    FOREIGN KEY(blog_id) REFERENCES blogs (id),
+    blog_id UUID NOT NULL, 
+    config JSONB NOT NULL, 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    FOREIGN KEY(blog_id) REFERENCES blogs (id), 
     UNIQUE (blog_id)
 );
 
@@ -294,20 +294,20 @@ UPDATE alembic_version SET version_num='e416be915439' WHERE alembic_version.vers
 -- Running upgrade e416be915439 -> bd9a65e7bdd4
 
 CREATE TABLE tags (
-    name VARCHAR(30) NOT NULL,
-    id UUID NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    name VARCHAR(30) NOT NULL, 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
     PRIMARY KEY (id)
 );
 
 CREATE UNIQUE INDEX ix_tags_name ON tags (name);
 
 CREATE TABLE post_tags (
-    post_id UUID NOT NULL,
-    tag_id UUID NOT NULL,
-    PRIMARY KEY (post_id, tag_id),
-    FOREIGN KEY(post_id) REFERENCES posts (id) ON DELETE CASCADE,
+    post_id UUID NOT NULL, 
+    tag_id UUID NOT NULL, 
+    PRIMARY KEY (post_id, tag_id), 
+    FOREIGN KEY(post_id) REFERENCES posts (id) ON DELETE CASCADE, 
     FOREIGN KEY(tag_id) REFERENCES tags (id) ON DELETE CASCADE
 );
 
@@ -340,14 +340,14 @@ UPDATE alembic_version SET version_num='d5dbeeb3f79f' WHERE alembic_version.vers
 -- Running upgrade d5dbeeb3f79f -> b16963e9cdcb
 
 CREATE TABLE categories (
-    blog_id UUID NOT NULL,
-    name VARCHAR(50) NOT NULL,
-    slug VARCHAR(60) NOT NULL,
-    id UUID NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    PRIMARY KEY (id),
-    FOREIGN KEY(blog_id) REFERENCES blogs (id),
+    blog_id UUID NOT NULL, 
+    name VARCHAR(50) NOT NULL, 
+    slug VARCHAR(60) NOT NULL, 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    FOREIGN KEY(blog_id) REFERENCES blogs (id), 
     CONSTRAINT uq_category_blog_slug UNIQUE (blog_id, slug)
 );
 
@@ -374,19 +374,19 @@ ALTER TABLE blog_memberships ADD COLUMN author_display_name VARCHAR(255);
 CREATE TYPE blog_invitation_status AS ENUM ('pending', 'accepted', 'declined', 'revoked');
 
 CREATE TABLE blog_invitations (
-    blog_id UUID NOT NULL,
-    invited_user_id UUID NOT NULL,
-    invited_by_id UUID NOT NULL,
-    role blog_role NOT NULL,
-    status blog_invitation_status DEFAULT 'pending' NOT NULL,
-    responded_at TIMESTAMP WITH TIME ZONE,
-    id UUID NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    PRIMARY KEY (id),
-    FOREIGN KEY(blog_id) REFERENCES blogs (id) ON DELETE CASCADE,
-    FOREIGN KEY(invited_user_id) REFERENCES users (id),
-    FOREIGN KEY(invited_by_id) REFERENCES users (id),
+    blog_id UUID NOT NULL, 
+    invited_user_id UUID NOT NULL, 
+    invited_by_id UUID NOT NULL, 
+    role blog_role NOT NULL, 
+    status blog_invitation_status DEFAULT 'pending' NOT NULL, 
+    responded_at TIMESTAMP WITH TIME ZONE, 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    FOREIGN KEY(blog_id) REFERENCES blogs (id) ON DELETE CASCADE, 
+    FOREIGN KEY(invited_user_id) REFERENCES users (id), 
+    FOREIGN KEY(invited_by_id) REFERENCES users (id), 
     CONSTRAINT uq_blog_invitation_blog_user UNIQUE (blog_id, invited_user_id)
 );
 
@@ -405,10 +405,10 @@ UPDATE alembic_version SET version_num='d8b3f1027a45' WHERE alembic_version.vers
 -- Running upgrade d8b3f1027a45 -> e2c9a4517f60
 
 CREATE TABLE post_notes (
-    post_id UUID NOT NULL,
-    idx INTEGER NOT NULL,
-    content TEXT NOT NULL,
-    PRIMARY KEY (post_id, idx),
+    post_id UUID NOT NULL, 
+    idx INTEGER NOT NULL, 
+    content TEXT NOT NULL, 
+    PRIMARY KEY (post_id, idx), 
     FOREIGN KEY(post_id) REFERENCES posts (id) ON DELETE CASCADE
 );
 
@@ -435,21 +435,21 @@ UPDATE alembic_version SET version_num='9fca56e73604' WHERE alembic_version.vers
 -- Running upgrade 9fca56e73604 -> ef332d4924b0
 
 CREATE TABLE post_links (
-    post_id UUID NOT NULL,
-    position INTEGER NOT NULL,
-    url TEXT NOT NULL,
-    link_text TEXT NOT NULL,
-    PRIMARY KEY (post_id, position),
+    post_id UUID NOT NULL, 
+    position INTEGER NOT NULL, 
+    url TEXT NOT NULL, 
+    link_text TEXT NOT NULL, 
+    PRIMARY KEY (post_id, position), 
     FOREIGN KEY(post_id) REFERENCES posts (id) ON DELETE CASCADE
 );
 
 CREATE TABLE post_media (
-    post_id UUID NOT NULL,
-    position INTEGER NOT NULL,
-    url TEXT NOT NULL,
-    alt_text TEXT NOT NULL,
-    categories VARCHAR(20)[] NOT NULL,
-    PRIMARY KEY (post_id, position),
+    post_id UUID NOT NULL, 
+    position INTEGER NOT NULL, 
+    url TEXT NOT NULL, 
+    alt_text TEXT NOT NULL, 
+    categories VARCHAR(20)[] NOT NULL, 
+    PRIMARY KEY (post_id, position), 
     FOREIGN KEY(post_id) REFERENCES posts (id) ON DELETE CASCADE
 );
 
@@ -460,15 +460,15 @@ UPDATE alembic_version SET version_num='ef332d4924b0' WHERE alembic_version.vers
 -- Running upgrade ef332d4924b0 -> 98da258b5f92
 
 CREATE TABLE post_fragments (
-    user_id UUID NOT NULL,
-    post_id UUID NOT NULL,
-    text TEXT NOT NULL,
-    id UUID NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
-    PRIMARY KEY (id),
-    FOREIGN KEY(post_id) REFERENCES posts (id),
-    FOREIGN KEY(user_id) REFERENCES users (id),
+    user_id UUID NOT NULL, 
+    post_id UUID NOT NULL, 
+    text TEXT NOT NULL, 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    FOREIGN KEY(post_id) REFERENCES posts (id), 
+    FOREIGN KEY(user_id) REFERENCES users (id), 
     CONSTRAINT uq_post_fragment_user_post_text UNIQUE (user_id, post_id, text)
 );
 
@@ -477,6 +477,103 @@ CREATE INDEX ix_post_fragments_post_id ON post_fragments (post_id);
 CREATE INDEX ix_post_fragments_user_id ON post_fragments (user_id);
 
 UPDATE alembic_version SET version_num='98da258b5f92' WHERE alembic_version.version_num = 'ef332d4924b0';
+
+-- Running upgrade 98da258b5f92 -> 1c9f6a2d3b4e
+
+ALTER TABLE blogs ADD COLUMN is_suspended BOOLEAN DEFAULT 'false' NOT NULL;
+
+UPDATE alembic_version SET version_num='1c9f6a2d3b4e' WHERE alembic_version.version_num = '98da258b5f92';
+
+-- Running upgrade 1c9f6a2d3b4e -> 2d7e4b8c1f6a
+
+ALTER TABLE posts ADD COLUMN is_hidden BOOLEAN DEFAULT 'false' NOT NULL;
+
+UPDATE alembic_version SET version_num='2d7e4b8c1f6a' WHERE alembic_version.version_num = '1c9f6a2d3b4e';
+
+-- Running upgrade 2d7e4b8c1f6a -> 4b2e8a1c9d30
+
+CREATE TYPE audit_actor_type AS ENUM ('user', 'core_token', 'user_token', 'system', 'anonymous');
+
+CREATE TABLE audit_log (
+    id UUID NOT NULL, 
+    occurred_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    actor_type audit_actor_type NOT NULL, 
+    actor_id UUID, 
+    actor_label VARCHAR(255), 
+    action VARCHAR(100) NOT NULL, 
+    target_type VARCHAR(50), 
+    target_id UUID, 
+    blog_id UUID, 
+    ip INET, 
+    user_agent VARCHAR(500), 
+    payload JSONB DEFAULT '{}'::jsonb NOT NULL, 
+    PRIMARY KEY (id)
+);
+
+CREATE INDEX ix_audit_log_occurred_at ON audit_log (occurred_at);
+
+CREATE INDEX ix_audit_log_actor_id_occurred_at ON audit_log (actor_id, occurred_at);
+
+CREATE INDEX ix_audit_log_blog_id_occurred_at ON audit_log (blog_id, occurred_at);
+
+UPDATE alembic_version SET version_num='4b2e8a1c9d30' WHERE alembic_version.version_num = '2d7e4b8c1f6a';
+
+-- Running upgrade 4b2e8a1c9d30 -> 5c3f9a71e0d2
+
+CREATE TABLE audit_archive_runs (
+    id UUID NOT NULL, 
+    period_start TIMESTAMP WITH TIME ZONE NOT NULL, 
+    period_end TIMESTAMP WITH TIME ZONE NOT NULL, 
+    week_label VARCHAR(16) NOT NULL, 
+    object_key VARCHAR(512), 
+    storage_backend VARCHAR(20) NOT NULL, 
+    row_count INTEGER NOT NULL, 
+    byte_size INTEGER DEFAULT '0' NOT NULL, 
+    sha256 VARCHAR(64), 
+    archived_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    CONSTRAINT uq_audit_archive_runs_period_start UNIQUE (period_start)
+);
+
+UPDATE alembic_version SET version_num='5c3f9a71e0d2' WHERE alembic_version.version_num = '4b2e8a1c9d30';
+
+-- Running upgrade 5c3f9a71e0d2 -> b1c2d3e4f5a6
+
+CREATE INDEX ix_comments_post_id ON comments (post_id);
+
+CREATE INDEX ix_user_follows_followed_user_id ON user_follows (followed_user_id);
+
+CREATE INDEX ix_blog_follows_blog_id ON blog_follows (blog_id);
+
+CREATE INDEX ix_posts_author_id ON posts (author_id);
+
+CREATE INDEX ix_posts_category_id ON posts (category_id);
+
+CREATE INDEX ix_posts_status_published_at ON posts (status, published_at);
+
+UPDATE alembic_version SET version_num='b1c2d3e4f5a6' WHERE alembic_version.version_num = '5c3f9a71e0d2';
+
+-- Running upgrade b1c2d3e4f5a6 -> 7981bf8eb571
+
+CREATE TYPE comments_mode AS ENUM ('everyone', 'members', 'closed');
+
+ALTER TABLE blogs ADD COLUMN comments_mode comments_mode;
+
+UPDATE blogs SET comments_mode = CASE WHEN allow_anonymous_comments THEN 'everyone'::comments_mode ELSE 'members'::comments_mode END;
+
+ALTER TABLE blogs ALTER COLUMN comments_mode SET NOT NULL;
+
+ALTER TABLE blogs DROP COLUMN allow_anonymous_comments;
+
+ALTER TABLE comments ADD COLUMN parent_id UUID;
+
+CREATE INDEX ix_comments_parent_id ON comments (parent_id);
+
+ALTER TABLE comments ADD CONSTRAINT comments_parent_id_fkey FOREIGN KEY(parent_id) REFERENCES comments (id) ON DELETE CASCADE;
+
+ALTER TABLE posts ADD COLUMN comments_mode comments_mode;
+
+UPDATE alembic_version SET version_num='7981bf8eb571' WHERE alembic_version.version_num = 'b1c2d3e4f5a6';
 
 COMMIT;
 

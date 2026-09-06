@@ -7,12 +7,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_optional_current_user
+from app.core.captcha import verify_turnstile
 from app.core.database import get_session
+from app.core.http import client_ip
 from app.domain import audit
 from app.domain.authorization import can_moderate_comments
 from app.domain.display_names import resolve_personal_display_name
 from app.models.blog import Blog
-from app.models.comment import Comment, CommentStatus
+from app.models.comment import Comment, CommentsMode, CommentStatus
 from app.models.post import Post
 from app.models.user import User
 
@@ -21,14 +23,22 @@ router = APIRouter()
 
 class CommentCreateRequest(BaseModel):
     content: str
+    # risposta a un altro commento dello stesso post (thread); assente/None
+    # per un commento di primo livello
+    parent_id: uuid.UUID | None = None
     # richiesti solo se il commento non è di un utente autenticato
     author_display_name: str | None = None
     author_email: EmailStr | None = None
+    # richiesto solo per un commento non registrato su un post/blog con
+    # comments_mode "everyone" (CLAUDE.md #1) — token del widget Cloudflare
+    # Turnstile, verificato server-side prima di accettare il commento.
+    captcha_token: str | None = None
 
 
 class CommentOut(BaseModel):
     id: uuid.UUID
     post_id: uuid.UUID
+    parent_id: uuid.UUID | None
     author_id: uuid.UUID | None
     author_display_name: str
     status: CommentStatus
@@ -36,6 +46,10 @@ class CommentOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+def _effective_comments_mode(post: Post, blog: Blog) -> CommentsMode:
+    return post.comments_mode or blog.comments_mode
 
 
 async def _get_post_and_blog_or_404(session: AsyncSession, post_id: uuid.UUID) -> tuple[Post, Blog]:
@@ -62,6 +76,7 @@ async def _comment_out(session: AsyncSession, comment: Comment) -> CommentOut:
     return CommentOut(
         id=comment.id,
         post_id=comment.post_id,
+        parent_id=comment.parent_id,
         author_id=comment.author_id,
         author_display_name=display_name,
         status=comment.status,
@@ -74,22 +89,33 @@ async def _comment_out(session: AsyncSession, comment: Comment) -> CommentOut:
 async def create_comment(
     post_id: uuid.UUID,
     payload: CommentCreateRequest,
+    request: Request,
     current_user: User | None = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> CommentOut:
-    _post, blog = await _get_post_and_blog_or_404(session, post_id)
+    post, blog = await _get_post_and_blog_or_404(session, post_id)
+    mode = _effective_comments_mode(post, blog)
+
+    if mode == CommentsMode.CLOSED:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "I commenti sono chiusi per questo post.")
+
+    if payload.parent_id is not None:
+        parent = await session.get(Comment, payload.parent_id)
+        if parent is None or parent.post_id != post_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Commento a cui rispondere non valido.")
 
     if current_user is not None:
         # CLAUDE.md #1: utenti registrati, nessuna moderazione obbligatoria
         comment = Comment(
             post_id=post_id,
+            parent_id=payload.parent_id,
             author_id=current_user.id,
             author_display_name=current_user.username,
             content=payload.content,
             status=CommentStatus.APPROVED,
         )
     else:
-        if not blog.allow_anonymous_comments:
+        if mode == CommentsMode.MEMBERS:
             raise HTTPException(
                 status.HTTP_401_UNAUTHORIZED, "Questo blog accetta commenti solo da utenti registrati."
             )
@@ -98,9 +124,16 @@ async def create_comment(
                 status.HTTP_400_BAD_REQUEST,
                 "Nome e email sono richiesti per commentare senza account.",
             )
+        # CommentsMode.EVERYONE: verifica captcha per contenere lo spam
+        # (ROADMAP.md §1) — nessun bypass se il servizio non è raggiungibile,
+        # a differenza della moderazione immagini (qui l'obiettivo è proprio
+        # bloccare i bot, non un aiuto best-effort).
+        if not payload.captcha_token or not await verify_turnstile(payload.captcha_token, client_ip(request)):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Verifica captcha non superata.")
         # CLAUDE.md #1: commenti non registrati sempre moderati prima della pubblicazione
         comment = Comment(
             post_id=post_id,
+            parent_id=payload.parent_id,
             author_id=None,
             author_display_name=payload.author_display_name,
             author_email=payload.author_email,
@@ -194,6 +227,7 @@ async def list_blog_comments(
             BlogCommentOut(
                 id=comment.id,
                 post_id=comment.post_id,
+                parent_id=comment.parent_id,
                 author_id=comment.author_id,
                 author_display_name=display_name,
                 status=comment.status,

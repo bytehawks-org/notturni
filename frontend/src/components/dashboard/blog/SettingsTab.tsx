@@ -10,9 +10,11 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import {
   BLOG_VISIBILITY_LABELS,
+  COMMENTS_MODE_LABELS,
   type Blog,
   type BlogVisibility,
   type Category,
+  type CommentsMode,
 } from "@/lib/types";
 
 import { errorMessage } from "./shared";
@@ -31,7 +33,7 @@ export function SettingsTab({
   const [subtitle, setSubtitle] = useState(blog.subtitle ?? "");
   const [description, setDescription] = useState(blog.description ?? "");
   const [visibility, setVisibility] = useState<BlogVisibility>(blog.visibility);
-  const [allowAnonymous, setAllowAnonymous] = useState(blog.allow_anonymous_comments);
+  const [commentsMode, setCommentsMode] = useState<CommentsMode>(blog.comments_mode);
   const [mentionsEnabled, setMentionsEnabled] = useState(blog.mentions_enabled);
   const [staticPagesEnabled, setStaticPagesEnabled] = useState(blog.static_pages_enabled);
   const [defaultAuthorName, setDefaultAuthorName] = useState(blog.default_author_display_name ?? "");
@@ -49,7 +51,7 @@ export function SettingsTab({
           subtitle,
           description,
           visibility,
-          allow_anonymous_comments: allowAnonymous,
+          comments_mode: commentsMode,
           mentions_enabled: mentionsEnabled,
           static_pages_enabled: staticPagesEnabled,
           default_author_display_name: defaultAuthorName,
@@ -130,15 +132,27 @@ export function SettingsTab({
           </p>
         </FieldGroup>
         <FieldGroup>
-          <label className="flex items-center gap-2 text-sm text-foreground">
-            <input
-              type="checkbox"
-              checked={allowAnonymous}
-              onChange={(e) => setAllowAnonymous(e.target.checked)}
-              disabled={!canEdit}
-            />
-            Consenti commenti da chi non è registrato (con moderazione obbligatoria)
-          </label>
+          <Label htmlFor="blog-comments-mode">Commenti</Label>
+          <select
+            id="blog-comments-mode"
+            value={commentsMode}
+            onChange={(e) => setCommentsMode(e.target.value as CommentsMode)}
+            disabled={!canEdit}
+            className="w-full max-w-xs rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground disabled:opacity-60"
+          >
+            {(Object.keys(COMMENTS_MODE_LABELS) as CommentsMode[]).map((m) => (
+              <option key={m} value={m}>
+                {COMMENTS_MODE_LABELS[m]}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-muted">
+            Default per tutti i post del blog — un singolo post può avere un&apos;impostazione
+            diversa dall&apos;editor. <strong>Aperti a tutti</strong> richiede un captcha
+            configurato per l&apos;istanza (chiedi a chi la gestisce se l&apos;opzione non è
+            disponibile); i commenti di chi non è registrato restano comunque moderati prima
+            della pubblicazione.
+          </p>
         </FieldGroup>
         <FieldGroup>
           <label className="flex items-center gap-2 text-sm text-foreground">

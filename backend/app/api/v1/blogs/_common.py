@@ -18,6 +18,7 @@ from app.models.blog import (
     BlogRole,
     BlogVisibility,
 )
+from app.models.comment import CommentsMode
 from app.models.user import User
 
 # Il todo limita gli inviti a co-autore e mediatore; autore/revisore restano
@@ -46,7 +47,7 @@ class BlogUpdateRequest(BaseModel):
     subtitle: str | None = None
     description: str | None = None
     visibility: BlogVisibility | None = None
-    allow_anonymous_comments: bool | None = None
+    comments_mode: CommentsMode | None = None
     # todo/EDITOR.md: @menzioni nei post trasformate in link (attive di default).
     mentions_enabled: bool | None = None
     # CLAUDE.md #1: pagine statiche del blog, opt-in e disattive di default.
@@ -65,7 +66,7 @@ class BlogOut(BaseModel):
     description: str | None
     visibility: BlogVisibility
     custom_domain: str | None
-    allow_anonymous_comments: bool
+    comments_mode: CommentsMode
     mentions_enabled: bool
     static_pages_enabled: bool
     default_locale: str

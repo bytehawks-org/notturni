@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { CommentsSection } from "@/components/CommentsSection";
 import { FragmentReader } from "@/components/FragmentReader";
 import { SiteHeader } from "@/components/SiteHeader";
 import { TagPills } from "@/components/TagPills";
@@ -95,6 +96,8 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
             <TagPills tags={post.tags} label="Tag:" />
           </div>
         )}
+
+        <CommentsSection postId={post.id} mode={post.effective_comments_mode} />
       </main>
     </div>
   );

@@ -227,7 +227,7 @@ async def test_list_all_comments_requires_moderator(client: AsyncClient, make_us
 
 
 async def test_moderator_role_sees_comments_across_blogs(
-    client: AsyncClient, make_moderator: Callable, make_user: Callable
+    client: AsyncClient, make_moderator: Callable, make_user: Callable, turnstile_enabled: None
 ) -> None:
     """ROADMAP.md §1: il ruolo Moderatore non ha nessuna membership sui blog
     coinvolti, ma deve comunque vedere (ed eventualmente moderare) i
@@ -239,7 +239,7 @@ async def test_moderator_role_sees_comments_across_blogs(
     for slug, owner in (("blog-admcm-a", owner_a), ("blog-admcm-b", owner_b)):
         await client.post("/api/v1/blogs", json={"slug": slug, "title": "x"}, headers=owner.headers)
         await client.patch(
-            f"/api/v1/blogs/{slug}", json={"allow_anonymous_comments": True}, headers=owner.headers
+            f"/api/v1/blogs/{slug}", json={"comments_mode": "everyone"}, headers=owner.headers
         )
         post_res = await client.post(
             f"/api/v1/blogs/{slug}/posts",
@@ -250,7 +250,12 @@ async def test_moderator_role_sees_comments_across_blogs(
         await client.post(f"/api/v1/posts/{post_id}/publish", headers=owner.headers)
         await client.post(
             f"/api/v1/posts/{post_id}/comments",
-            json={"content": f"pending su {slug}", "author_display_name": "V", "author_email": "v@example.com"},
+            json={
+                "content": f"pending su {slug}",
+                "author_display_name": "V",
+                "author_email": "v@example.com",
+                "captcha_token": "ok",
+            },
         )
 
     # il moderatore non è proprietario né mediatore di nessuno dei due blog,

@@ -52,6 +52,15 @@ class Settings(BaseSettings):
     # richiesta da Authlib/Starlette per il flow OAuth2 (state/nonce in sessione firmata)
     session_secret: str
 
+    # Cloudflare Turnstile (app/core/captcha.py): verifica anti-spam per i
+    # commenti di autori non registrati sui blog/post con comments_mode
+    # "everyone". Senza chiavi configurate un proprietario non può impostare
+    # quella modalità (400 esplicito) — fail closed sulla *funzionalità*, non
+    # sulla singola richiesta: niente commenti aperti a tutti senza un modo
+    # di filtrare lo spam.
+    turnstile_site_key: str | None = None
+    turnstile_secret_key: str | None = None
+
     # SMTP per l'invio reale dell'OTP via email (app/core/mail.py,
     # app/workers/email_otp_consumer.py). Se None (default) l'OTP resta solo
     # loggato, comportamento di sviluppo comodo senza SMTP configurato — mai

@@ -78,12 +78,12 @@ async def test_update_blog_owner_only(client: AsyncClient, make_user: Callable) 
 
     ok_res = await client.patch(
         "/api/v1/blogs/proprieta-blog",
-        json={"title": "nuovo titolo", "allow_anonymous_comments": True},
+        json={"title": "nuovo titolo", "comments_mode": "closed"},
         headers=owner.headers,
     )
     assert ok_res.status_code == 200
     assert ok_res.json()["title"] == "nuovo titolo"
-    assert ok_res.json()["allow_anonymous_comments"] is True
+    assert ok_res.json()["comments_mode"] == "closed"
 
 
 async def test_default_author_display_name_used_when_post_omits_it(

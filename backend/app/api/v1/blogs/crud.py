@@ -16,6 +16,7 @@ from app.api.v1.blogs._common import (
     _to_blog_out,
 )
 from app.api.v1.blogs._router import router
+from app.core.captcha import turnstile_configured
 from app.core.database import get_session
 from app.core.revalidation import blog_tag, feed_tag, revalidate_frontend
 from app.domain.blog_rules import (
@@ -26,6 +27,7 @@ from app.domain.blog_rules import (
 )
 from app.domain.i18n import validate_locale
 from app.models.blog import Blog, BlogMembership
+from app.models.comment import CommentsMode
 from app.models.follow import BlogFollow
 from app.models.user import User
 
@@ -139,8 +141,14 @@ async def update_blog(
         blog.description = payload.description or None
     if payload.visibility is not None:
         blog.visibility = payload.visibility
-    if payload.allow_anonymous_comments is not None:
-        blog.allow_anonymous_comments = payload.allow_anonymous_comments
+    if payload.comments_mode is not None:
+        if payload.comments_mode == CommentsMode.EVERYONE and not turnstile_configured():
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Commenti aperti a tutti non disponibili: questa istanza non ha un captcha "
+                "configurato (NOCT_TURNSTILE_SITE_KEY/_SECRET_KEY).",
+            )
+        blog.comments_mode = payload.comments_mode
     if payload.mentions_enabled is not None:
         blog.mentions_enabled = payload.mentions_enabled
     if payload.static_pages_enabled is not None:
