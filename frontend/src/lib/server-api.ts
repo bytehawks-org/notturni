@@ -92,6 +92,21 @@ export async function getPublicBlog(slug: string): Promise<Blog | null> {
   return (await res.json()) as Blog;
 }
 
+/** Post pubblicati di un blog, dal più recente — per la sua homepage
+ * pubblica (`/{blogSlug}`). Come `getPublicBlog`, nessun header di sessione:
+ * un blog `members`/`private` risulterà quindi vuoto/404 anche per un
+ * visitatore autenticato, stesso limite già presente sulle altre pagine
+ * pubbliche renderizzate server-side (nessun modo di inoltrare il JWT, che
+ * vive in `localStorage`, a un Server Component). */
+export async function getPublicBlogPosts(slug: string): Promise<Post[] | null> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}/posts`, {
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.blog(slug)] },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero dei post del blog.`);
+  return (await res.json()) as Post[];
+}
+
 /** Bibliografia automatica del blog: tutte le note dei post pubblicati. */
 export async function getBlogBibliography(slug: string): Promise<BibliographyEntry[] | null> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}/bibliography`, {
