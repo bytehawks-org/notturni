@@ -6,13 +6,6 @@ import { ApiClientError, api } from "./api";
 import type { CurrentUser, LoginResponse } from "./types";
 import { isMfaRequired } from "./types";
 
-interface StoredSession {
-  accessToken: string;
-  refreshToken: string;
-}
-
-const STORAGE_KEY = "notturni_auth";
-
 interface AuthContextValue {
   user: CurrentUser | null;
   accessToken: string | null;
@@ -29,107 +22,57 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function readStorage(): StoredSession | null {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<StoredSession>;
-    if (parsed.accessToken && parsed.refreshToken) return parsed as StoredSession;
-  } catch {
-    // ignorato: storage corrotto, si comporta come sessione assente
-  }
-  return null;
-}
-
-function writeStorage(session: StoredSession | null) {
-  if (session) {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-  } else {
-    window.localStorage.removeItem(STORAGE_KEY);
-  }
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<CurrentUser | null>(null);
+  // L'access token vive solo in memoria (mai in localStorage): sopravvive
+  // alla navigazione client-side ma si perde a un reload completo, motivo
+  // per cui all'avvio si tenta sempre un refresh silenzioso — il refresh
+  // token vero e proprio è nel cookie httpOnly impostato dal backend
+  // (ROADMAP.md "Sessione in localStorage", backend/app/api/v1/auth.py).
   const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [refreshToken, setRefreshToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // idratazione iniziale da localStorage: non disponibile lato server,
-    // quindi va per forza fatta qui e non con uno stato iniziale "lazy"
-    const stored = readStorage();
-    if (!stored) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setLoading(false);
-      return;
-    }
-    setAccessToken(stored.accessToken);
-    setRefreshToken(stored.refreshToken);
-
     api.auth
-      .me(stored.accessToken)
-      .then(setUser)
-      .catch(async () => {
-        try {
-          const session = await api.auth.refresh(stored.refreshToken);
-          setAccessToken(session.access_token);
-          setRefreshToken(session.refresh_token);
-          writeStorage({ accessToken: session.access_token, refreshToken: session.refresh_token });
-          setUser(await api.auth.me(session.access_token));
-        } catch {
-          writeStorage(null);
-          setAccessToken(null);
-          setRefreshToken(null);
-        }
+      .refresh()
+      .then(async (session) => {
+        setAccessToken(session.access_token);
+        setUser(await api.auth.me(session.access_token));
+      })
+      .catch(() => {
+        setAccessToken(null);
       })
       .finally(() => setLoading(false));
   }, []);
 
-  const applySession = useCallback((accessTok: string, refreshTok: string) => {
-    setAccessToken(accessTok);
-    setRefreshToken(refreshTok);
-    writeStorage({ accessToken: accessTok, refreshToken: refreshTok });
+  const login = useCallback(async (email: string, password: string): Promise<LoginResponse> => {
+    const res = await api.auth.login({ email, password });
+    if (!isMfaRequired(res)) {
+      setAccessToken(res.access_token);
+      setUser(await api.auth.me(res.access_token));
+    }
+    return res;
   }, []);
 
-  const login = useCallback(
-    async (email: string, password: string): Promise<LoginResponse> => {
-      const res = await api.auth.login({ email, password });
-      if (!isMfaRequired(res)) {
-        applySession(res.access_token, res.refresh_token);
-        setUser(await api.auth.me(res.access_token));
-      }
-      return res;
-    },
-    [applySession]
-  );
-
-  const verifyMfa = useCallback(
-    async (challenge: string, code: string) => {
-      const session = await api.auth.verifyMfa({ challenge, code });
-      applySession(session.access_token, session.refresh_token);
-      setUser(await api.auth.me(session.access_token));
-    },
-    [applySession]
-  );
+  const verifyMfa = useCallback(async (challenge: string, code: string) => {
+    const session = await api.auth.verifyMfa({ challenge, code });
+    setAccessToken(session.access_token);
+    setUser(await api.auth.me(session.access_token));
+  }, []);
 
   const register = useCallback(async (username: string, email: string, password: string) => {
     await api.auth.register({ username, email, password });
   }, []);
 
   const logout = useCallback(async () => {
-    if (refreshToken) {
-      try {
-        await api.auth.logout(refreshToken);
-      } catch {
-        // la sessione locale va comunque ripulita anche se la revoca remota fallisce
-      }
+    try {
+      await api.auth.logout();
+    } catch {
+      // la sessione locale va comunque ripulita anche se la revoca remota fallisce
     }
-    writeStorage(null);
     setUser(null);
     setAccessToken(null);
-    setRefreshToken(null);
-  }, [refreshToken]);
+  }, []);
 
   const refreshUser = useCallback(async () => {
     if (!accessToken) return;
@@ -142,15 +85,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         return await fn(accessToken);
       } catch (err) {
-        if (err instanceof ApiClientError && err.status === 401 && refreshToken) {
-          const session = await api.auth.refresh(refreshToken);
-          applySession(session.access_token, session.refresh_token);
+        if (err instanceof ApiClientError && err.status === 401) {
+          const session = await api.auth.refresh();
+          setAccessToken(session.access_token);
           return await fn(session.access_token);
         }
         throw err;
       }
     },
-    [accessToken, refreshToken, applySession]
+    [accessToken]
   );
 
   const value = useMemo(

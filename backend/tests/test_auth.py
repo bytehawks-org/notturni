@@ -5,7 +5,17 @@ import pytest
 from httpx import AsyncClient
 
 from app.core.config import settings
+from app.api.v1.auth import CSRF_COOKIE_NAME, CSRF_HEADER_NAME
 from tests.conftest import AuthedUser
+
+
+def _csrf_headers(client: AsyncClient) -> dict[str, str]:
+    """Il refresh token vive nel cookie httpOnly impostato al login: qui si
+    legge solo il cookie CSRF (double-submit, non httpOnly per costruzione)
+    per riecheggiarlo come header sulle richieste che modificano stato."""
+    token = client.cookies.get(CSRF_COOKIE_NAME)
+    assert token is not None
+    return {CSRF_HEADER_NAME: token}
 
 
 async def test_register_login_me(client: AsyncClient) -> None:
@@ -74,29 +84,40 @@ async def test_login_wrong_password(client: AsyncClient, make_user: Callable) ->
 
 
 async def test_refresh_rotation_and_reuse_rejected(client: AsyncClient, make_user: Callable) -> None:
-    user: AuthedUser = await make_user()
+    await make_user()
+    old_refresh_cookie = client.cookies.get("noct_refresh_token")
 
-    refresh_res = await client.post("/api/v1/auth/refresh", json={"refresh_token": user.refresh_token})
+    refresh_res = await client.post("/api/v1/auth/refresh", headers=_csrf_headers(client))
     assert refresh_res.status_code == 200
-    new_refresh = refresh_res.json()["refresh_token"]
-    assert new_refresh != user.refresh_token
+    new_refresh_cookie = client.cookies.get("noct_refresh_token")
+    assert new_refresh_cookie != old_refresh_cookie
 
-    reuse_res = await client.post("/api/v1/auth/refresh", json={"refresh_token": user.refresh_token})
+    # riusare il vecchio refresh token (già rotato) è rifiutato
+    client.cookies.set("noct_refresh_token", old_refresh_cookie)
+    reuse_res = await client.post("/api/v1/auth/refresh", headers=_csrf_headers(client))
     assert reuse_res.status_code == 401
 
-    # il nuovo refresh invece funziona ancora
-    ok_res = await client.post("/api/v1/auth/refresh", json={"refresh_token": new_refresh})
+    # il nuovo refresh (quello attuale) invece funziona ancora
+    client.cookies.set("noct_refresh_token", new_refresh_cookie)
+    ok_res = await client.post("/api/v1/auth/refresh", headers=_csrf_headers(client))
     assert ok_res.status_code == 200
 
 
-async def test_logout_revokes_session(client: AsyncClient, make_user: Callable) -> None:
-    user: AuthedUser = await make_user()
+async def test_refresh_without_csrf_header_rejected(client: AsyncClient, make_user: Callable) -> None:
+    await make_user()
+    res = await client.post("/api/v1/auth/refresh")
+    assert res.status_code == 403
 
-    logout_res = await client.post("/api/v1/auth/logout", json={"refresh_token": user.refresh_token})
+
+async def test_logout_revokes_session(client: AsyncClient, make_user: Callable) -> None:
+    await make_user()
+    csrf_headers = _csrf_headers(client)
+
+    logout_res = await client.post("/api/v1/auth/logout", headers=csrf_headers)
     assert logout_res.status_code == 204
 
-    refresh_res = await client.post("/api/v1/auth/refresh", json={"refresh_token": user.refresh_token})
-    assert refresh_res.status_code == 401
+    refresh_res = await client.post("/api/v1/auth/refresh", headers=csrf_headers)
+    assert refresh_res.status_code in (401, 403)
 
 
 async def test_totp_mfa_full_flow(client: AsyncClient, make_user: Callable) -> None:

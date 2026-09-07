@@ -56,11 +56,29 @@ interface RequestOptions {
   body?: unknown;
   token?: string | null;
   formData?: FormData;
+  /** Solo per refresh/logout: cookie di sessione, mai per le altre richieste
+   * (autenticate via header Authorization con l'access token in memoria). */
+  withCredentials?: boolean;
+}
+
+const CSRF_COOKIE_NAME = "noct_csrf_token";
+
+/** Letto dal cookie (non httpOnly per costruzione, pattern double-submit —
+ * vedi backend/app/api/v1/auth.py) e riecheggiato come header per le sole
+ * richieste autenticate dal cookie di refresh. */
+function readCsrfCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(new RegExp(`(?:^|; )${CSRF_COOKIE_NAME}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = {};
   if (options.token) headers["Authorization"] = `Bearer ${options.token}`;
+  if (options.withCredentials) {
+    const csrf = readCsrfCookie();
+    if (csrf) headers["X-CSRF-Token"] = csrf;
+  }
 
   let body: BodyInit | undefined;
   if (options.formData) {
@@ -74,6 +92,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     method: options.method ?? "GET",
     headers,
     body,
+    credentials: options.withCredentials ? "include" : "same-origin",
   });
 
   if (res.status === 204) {
@@ -108,13 +127,17 @@ export const api = {
     register: (payload: { username: string; email: string; password: string }) =>
       request<CurrentUser>("/api/v1/auth/register", { method: "POST", body: payload }),
     login: (payload: { email: string; password: string }) =>
-      request<LoginResponse>("/api/v1/auth/login", { method: "POST", body: payload }),
+      request<LoginResponse>("/api/v1/auth/login", { method: "POST", body: payload, withCredentials: true }),
     verifyMfa: (payload: { challenge: string; code: string }) =>
-      request<SessionResponse>("/api/v1/auth/mfa/verify", { method: "POST", body: payload }),
-    refresh: (refresh_token: string) =>
-      request<SessionResponse>("/api/v1/auth/refresh", { method: "POST", body: { refresh_token } }),
-    logout: (refresh_token: string) =>
-      request<void>("/api/v1/auth/logout", { method: "POST", body: { refresh_token } }),
+      request<SessionResponse>("/api/v1/auth/mfa/verify", {
+        method: "POST",
+        body: payload,
+        withCredentials: true,
+      }),
+    /** Nessun refresh_token da passare: viaggia nel cookie httpOnly, inviato
+     * automaticamente dal browser. */
+    refresh: () => request<SessionResponse>("/api/v1/auth/refresh", { method: "POST", withCredentials: true }),
+    logout: () => request<void>("/api/v1/auth/logout", { method: "POST", withCredentials: true }),
     me: (token: string) => request<CurrentUser>("/api/v1/auth/me", { token }),
     totpSetup: (token: string) =>
       request<{ secret: string; provisioning_uri: string; qr_code_data_uri: string }>(

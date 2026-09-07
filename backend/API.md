@@ -36,13 +36,10 @@ supportata.
 
 ## Due meccanismi di autenticazione distinti
 
-Entrambi usano l'header `Authorization: Bearer <valore>`, ma non sono
-intercambiabili — ogni gruppo di endpoint richiede quello giusto:
-
-| Meccanismo           | Formato token                                         | Endpoint che lo richiedono                                        | Ottenuto da                                 |
+| Meccanismo           | Trasporto                                               | Endpoint che lo richiedono                                        | Ottenuto da                                 |
 | --------------------- | ------------------------------------------------------ | -------------------------------------------------------------------- | ---------------------------------------------- |
-| **Sessione utente**  | JWT firmato, breve durata (15 min)                    | `/auth/me`, `/auth/mfa/*`, `/blogs`, `/posts`, `/comments`          | login (`/auth/login`, SSO)                  |
-| **API token**        | Opaco, prefisso `noct_`, nessuna scadenza di default    | `/tokens`                                                             | script di bootstrap o un token già valido    |
+| **Sessione utente**  | Access token JWT (15 min) via `Authorization: Bearer`; refresh token via cookie `httpOnly` | `/auth/me`, `/auth/mfa/*`, `/blogs`, `/posts`, `/comments`          | login (`/auth/login`, SSO)                  |
+| **API token**        | Opaco, prefisso `noct_`, via `Authorization: Bearer`, nessuna scadenza di default    | `/tokens`                                                             | script di bootstrap o un token già valido    |
 
 Il primo (sessione) rappresenta *chi sei* (un utente loggato dal browser o da
 un client che ha fatto login); il secondo (API token) rappresenta *un accesso
@@ -50,6 +47,31 @@ diretto* — motore core oggi, in futuro anche utenti che vogliono
 interfacciarsi con l'API senza passare da editor o admin del blog. Dettagli
 sugli API token in fondo a questo file (sezione invariata rispetto alla
 versione precedente).
+
+### Sessione utente: access token in memoria, refresh token in cookie `httpOnly`
+
+Il refresh token (`app/domain/auth.py::issue_session`) non è più restituito
+nel corpo JSON: viaggia solo in un cookie `httpOnly` + `Secure` +
+`SameSite`, impostato dal backend su `/auth/login`, `/auth/mfa/verify`,
+`/auth/sso/{provider}/callback` e `/auth/refresh` (nome `noct_refresh_token`,
+path ristretto a `/api/v1/auth` — il browser non lo invia sulle altre
+richieste API). Attributi del cookie (`Secure`/`SameSite`/`Domain`)
+configurabili via `NOCT_SESSION_COOKIE_*` (`.env.example`) — necessario per
+ambienti senza TLS ancora attivo (K3s a inizio rollout, prima di
+cert-manager) o con frontend/backend su domini diversi. L'access token resta
+nel corpo JSON: il frontend non lo persiste (niente `localStorage`), lo tiene
+solo in memoria e lo ripassa come prima via `Authorization: Bearer` — vedi
+`frontend/src/lib/auth-context.tsx`.
+
+Gli endpoint autenticati dal solo cookie (`/auth/refresh`, `/auth/logout`)
+richiedono in più l'header `X-CSRF-Token`, uguale al valore del cookie
+**non** `httpOnly` `noct_csrf_token` impostato insieme al refresh token
+(pattern *double-submit*: un'origine estranea non può leggere quel cookie
+per costruire l'header, anche se il browser gli allega comunque il cookie
+stesso). Tutti gli altri endpoint che modificano stato restano autenticati
+via `Authorization: Bearer` con l'access token, di per sé immune a CSRF —
+un'origine estranea non può impostare quell'header su una richiesta
+cross-site.
 
 ## Autenticazione utente (password, MFA, SSO)
 
@@ -82,9 +104,10 @@ registrazione successiva ritorna `409`. Con `NOCT_DEPLOYMENT_MODE=platform`
 
 → `200`. Due forme possibili:
 
-- MFA non attiva: sessione diretta.
+- MFA non attiva: sessione diretta. Il refresh token non è nel corpo della
+  risposta: il backend lo imposta come cookie `httpOnly` (vedi sopra).
   ```json
-  {"access_token": "...", "refresh_token": "...", "token_type": "bearer"}
+  {"access_token": "...", "token_type": "bearer"}
   ```
 - MFA attiva: richiede un secondo passaggio.
   ```json
@@ -105,25 +128,21 @@ minuti dallo stesso IP o oltre 5 tentativi/5 minuti sulla stessa email
 {"challenge": "...", "code": "123456"}
 ```
 
-→ `200` con `access_token`/`refresh_token` come sopra. `401` se il codice è
-sbagliato/scaduto o il challenge non è più valido (dura 5 minuti).
+→ `200` con `access_token` come sopra (refresh token nel cookie). `401` se il
+codice è sbagliato/scaduto o il challenge non è più valido (dura 5 minuti).
 
-**`POST /api/v1/auth/refresh`**
+**`POST /api/v1/auth/refresh`** — nessun corpo: il refresh token è letto dal
+cookie `noct_refresh_token`, richiede l'header `X-CSRF-Token` (vedi sopra).
 
-```json
-{"refresh_token": "..."}
-```
+→ `200`, nuovo `access_token` e nuovo cookie di refresh (rotation: il
+precedente viene revocato, riusarlo dà `401`). `401` senza cookie di sessione
+o con refresh token scaduto/già rotato. `403` senza `X-CSRF-Token` valido.
 
-→ `200`, nuova coppia access/refresh token. Il refresh token usato viene
-revocato (rotation): riusarlo dà `401`.
+**`POST /api/v1/auth/logout`** — nessun corpo, stesso cookie/header di sopra.
 
-**`POST /api/v1/auth/logout`**
-
-```json
-{"refresh_token": "..."}
-```
-
-→ `204`. Revoca la sessione; idempotente (nessun errore se già revocata).
+→ `204`. Revoca la sessione e cancella i cookie; idempotente (nessun errore
+se la sessione era già revocata o il cookie assente). `403` senza
+`X-CSRF-Token` valido.
 
 **`GET /api/v1/auth/me`** — richiede sessione. Ritorna
 `{id, username, email, mfa_enabled}`.
@@ -179,7 +198,7 @@ provider, scambia il code, recupera l'userinfo e applica l'account linking:
   sospeso" e lo finalizza dopo la verifica del codice.
 
 Risposta finale (login riuscito, senza MFA da verificare): stesso formato di
-`/auth/login` (`access_token`/`refresh_token`).
+`/auth/login` (`access_token` nel corpo, refresh token nel cookie).
 
 **Limitazione nota:** senza credenziali OAuth reali (client id/secret per
 ciascun provider) il flow non è testabile end-to-end in questo ambiente di

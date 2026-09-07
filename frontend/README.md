@@ -49,13 +49,15 @@ src/
     └── ThemeToggle.tsx
 ```
 
-## Autenticazione (scelta pragmatica, da rivedere prima della produzione)
+## Autenticazione
 
-Sessione (access + refresh token) tenuta in `localStorage` e gestita da
-`AuthProvider` (`src/lib/auth-context.tsx`), con refresh automatico su `401`.
-Più semplice da costruire di un flusso con cookie `httpOnly`, ma esposta a
-furto del token via XSS — da rafforzare (cookie `httpOnly` + CSRF token)
-prima di un uso in produzione reale.
+`AuthProvider` (`src/lib/auth-context.tsx`) tiene l'access token **solo in
+memoria** (mai in `localStorage`): un reload completo lo perde, per cui
+all'avvio l'app tenta sempre un refresh silenzioso. Il refresh token vero e
+proprio non è mai visibile a JS — vive in un cookie `httpOnly` impostato dal
+backend (`backend/API.md`), inviato automaticamente dal browser con
+`credentials: "include"` sulle sole chiamate a `/auth/refresh`/`/auth/logout`
+(`src/lib/api.ts`). Refresh automatico su `401` come prima, via `authFetch`.
 
 ## Tema chiaro/scuro/automatico
 

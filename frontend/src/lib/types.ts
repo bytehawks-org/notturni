@@ -29,9 +29,11 @@ export const PLATFORM_ADMIN_ROLES: PlatformRole[] = ["super_admin", "amministrat
  * non vede invece le altre sezioni di amministrazione. */
 export const PLATFORM_MODERATION_ROLES: PlatformRole[] = ["super_admin", "amministratore", "moderatore"];
 
+/** Il refresh token non è più qui: viaggia solo in un cookie httpOnly
+ * impostato dal backend (vedi backend/app/api/v1/auth.py), mai leggibile da
+ * JS/localStorage — ROADMAP.md "Sessione in localStorage". */
 export interface SessionResponse {
   access_token: string;
-  refresh_token: string;
   token_type: string;
 }
 

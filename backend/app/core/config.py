@@ -152,6 +152,20 @@ class Settings(BaseSettings):
     # origini ammesse per le chiamate del frontend dal browser (CORS), separate da virgola
     cors_origins: str = "http://localhost:3000"
 
+    # Cookie di sessione (refresh token, ROADMAP.md "Sessione in
+    # localStorage"): httpOnly, mai leggibile da JS — a differenza
+    # dell'access token, tenuto in memoria dal frontend e mai persistito.
+    # Attributi configurabili per ambiente (app/api/v1/auth.py):
+    # secure=False serve solo per http locale/test senza TLS (Podman
+    # compose, K3s a inizio rollout prima di cert-manager) — va sempre True
+    # non appena l'istanza è raggiunta in https. domain: da valorizzare solo
+    # se frontend e backend condividono un dominio genitore e il cookie deve
+    # attraversare i sottodomini (es. ".notturni.eu"); None (default) lo
+    # limita all'host esatto del backend.
+    session_cookie_secure: bool = True
+    session_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+    session_cookie_domain: str | None = None
+
     # Invalidazione on-demand della cache dei Server Component del frontend
     # (Next.js) dopo una modifica a contenuti pubblici (post, config/impostazioni
     # blog, pagine statiche). Il backend fa una POST fire-and-forget a

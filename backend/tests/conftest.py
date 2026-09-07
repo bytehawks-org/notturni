@@ -106,7 +106,6 @@ class AuthedUser:
     email: str
     password: str
     access_token: str
-    refresh_token: str
 
     @property
     def headers(self) -> dict[str, str]:
@@ -138,7 +137,6 @@ async def make_user(client: AsyncClient) -> Callable:
             email=email,
             password=password,
             access_token=data["access_token"],
-            refresh_token=data["refresh_token"],
         )
 
     return _make

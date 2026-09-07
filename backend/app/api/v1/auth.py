@@ -1,7 +1,8 @@
+import secrets
 import uuid
 
 from authlib.integrations.starlette_client import OAuthError
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,6 +45,65 @@ LOGIN_IP_RATE_LIMIT = 20
 LOGIN_EMAIL_RATE_LIMIT = 5
 LOGIN_RATE_LIMIT_WINDOW_SECONDS = 300
 
+# Sessione (ROADMAP.md "Sessione in localStorage"): il refresh token vive
+# solo in un cookie httpOnly, mai in JSON/localStorage — l'access token
+# (breve durata) resta invece nella risposta, tenuto in memoria dal
+# frontend. Path ristretto a /api/v1/auth: il cookie non serve altrove e
+# così non viaggia su ogni richiesta all'API. Il cookie CSRF è invece
+# leggibile da JS (necessario al pattern double-submit) e su path "/" per
+# essere visibile da qualunque pagina del frontend.
+REFRESH_COOKIE_NAME = "noct_refresh_token"
+REFRESH_COOKIE_PATH = "/api/v1/auth"
+CSRF_COOKIE_NAME = "noct_csrf_token"
+CSRF_HEADER_NAME = "X-CSRF-Token"
+
+
+def _set_session_cookies(response: Response, refresh_token: str) -> None:
+    max_age = settings.jwt_refresh_token_ttl_days * 24 * 3600
+    response.set_cookie(
+        REFRESH_COOKIE_NAME,
+        refresh_token,
+        max_age=max_age,
+        httponly=True,
+        secure=settings.session_cookie_secure,
+        samesite=settings.session_cookie_samesite,
+        domain=settings.session_cookie_domain or None,
+        path=REFRESH_COOKIE_PATH,
+    )
+    response.set_cookie(
+        CSRF_COOKIE_NAME,
+        secrets.token_urlsafe(32),
+        max_age=max_age,
+        httponly=False,
+        secure=settings.session_cookie_secure,
+        samesite=settings.session_cookie_samesite,
+        domain=settings.session_cookie_domain or None,
+        path="/",
+    )
+
+
+def _clear_session_cookies(response: Response) -> None:
+    response.delete_cookie(REFRESH_COOKIE_NAME, path=REFRESH_COOKIE_PATH, domain=settings.session_cookie_domain or None)
+    response.delete_cookie(CSRF_COOKIE_NAME, path="/", domain=settings.session_cookie_domain or None)
+
+
+def _clear_refresh_cookie(response: Response) -> None:
+    """Solo il cookie di refresh: usata quando un refresh fallisce (token
+    scaduto/già rotato) — il cookie CSRF non ha valore di confidenzialità e
+    lasciarlo in vita evita di rompere una richiesta legittima concorrente."""
+    response.delete_cookie(REFRESH_COOKIE_NAME, path=REFRESH_COOKIE_PATH, domain=settings.session_cookie_domain or None)
+
+
+def _verify_csrf(request: Request) -> None:
+    """Double-submit cookie: richiesto sui soli endpoint autenticati dal
+    cookie di refresh (refresh/logout) — tutte le altre scritture dell'API
+    passano l'access token via header Authorization, già di per sé immune a
+    CSRF (un'origine estranea non può impostarlo su una richiesta cross-site)."""
+    cookie_token = request.cookies.get(CSRF_COOKIE_NAME)
+    header_token = request.headers.get(CSRF_HEADER_NAME)
+    if not cookie_token or not header_token or not secrets.compare_digest(cookie_token, header_token):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "CSRF token mancante o non valido.")
+
 
 # ---- schemi ----------------------------------------------------------------
 
@@ -72,7 +132,6 @@ class LoginRequest(BaseModel):
 
 class SessionResponse(BaseModel):
     access_token: str
-    refresh_token: str
     token_type: str = "bearer"
 
 
@@ -85,14 +144,6 @@ class MfaRequiredResponse(BaseModel):
 class MfaVerifyRequest(BaseModel):
     challenge: str
     code: str
-
-
-class RefreshRequest(BaseModel):
-    refresh_token: str
-
-
-class LogoutRequest(BaseModel):
-    refresh_token: str
 
 
 class TotpSetupResponse(BaseModel):
@@ -123,7 +174,9 @@ async def register(payload: RegisterRequest, session: AsyncSession = Depends(get
 
 
 @router.post("/login", response_model=SessionResponse | MfaRequiredResponse)
-async def login(payload: LoginRequest, request: Request, session: AsyncSession = Depends(get_session)):
+async def login(
+    payload: LoginRequest, request: Request, response: Response, session: AsyncSession = Depends(get_session)
+):
     ip = client_ip(request)
     if ip is not None:
         await enforce_rate_limit(
@@ -158,7 +211,8 @@ async def login(payload: LoginRequest, request: Request, session: AsyncSession =
             session, action="auth.login", actor=user, request=request, payload={"method": "password"}
         )
         access_token, refresh_token = await issue_session(session, user)
-        return SessionResponse(access_token=access_token, refresh_token=refresh_token)
+        _set_session_cookies(response, refresh_token)
+        return SessionResponse(access_token=access_token)
 
     if user.mfa_method == MfaMethod.EMAIL:
         await send_email_otp(session, user)
@@ -169,7 +223,10 @@ async def login(payload: LoginRequest, request: Request, session: AsyncSession =
 
 @router.post("/mfa/verify", response_model=SessionResponse)
 async def verify_mfa(
-    payload: MfaVerifyRequest, request: Request, session: AsyncSession = Depends(get_session)
+    payload: MfaVerifyRequest,
+    request: Request,
+    response: Response,
+    session: AsyncSession = Depends(get_session),
 ) -> SessionResponse:
     try:
         claims = decode_mfa_challenge_token(payload.challenge)
@@ -202,21 +259,32 @@ async def verify_mfa(
         session, action="auth.login", actor=user, request=request, payload={"method": f"mfa_{method}"}
     )
     access_token, refresh_token = await issue_session(session, user)
-    return SessionResponse(access_token=access_token, refresh_token=refresh_token)
+    _set_session_cookies(response, refresh_token)
+    return SessionResponse(access_token=access_token)
 
 
 @router.post("/refresh", response_model=SessionResponse)
-async def refresh(payload: RefreshRequest, session: AsyncSession = Depends(get_session)) -> SessionResponse:
+async def refresh(request: Request, response: Response, session: AsyncSession = Depends(get_session)) -> SessionResponse:
+    _verify_csrf(request)
+    refresh_token = request.cookies.get(REFRESH_COOKIE_NAME)
+    if not refresh_token:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sessione assente.")
     try:
-        access_token, refresh_token = await rotate_refresh_token(session, payload.refresh_token)
+        access_token, new_refresh_token = await rotate_refresh_token(session, refresh_token)
     except AuthError as exc:
+        _clear_refresh_cookie(response)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
-    return SessionResponse(access_token=access_token, refresh_token=refresh_token)
+    _set_session_cookies(response, new_refresh_token)
+    return SessionResponse(access_token=access_token)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(payload: LogoutRequest, session: AsyncSession = Depends(get_session)) -> None:
-    await revoke_session(session, payload.refresh_token)
+async def logout(request: Request, response: Response, session: AsyncSession = Depends(get_session)) -> None:
+    _verify_csrf(request)
+    refresh_token = request.cookies.get(REFRESH_COOKIE_NAME)
+    if refresh_token:
+        await revoke_session(session, refresh_token)
+    _clear_session_cookies(response)
 
 
 @router.get("/me", response_model=UserOut)
@@ -305,7 +373,9 @@ async def sso_login(provider: str, request: Request):
 
 
 @router.get("/sso/{provider}/callback", response_model=SessionResponse | MfaRequiredResponse)
-async def sso_callback(provider: str, request: Request, session: AsyncSession = Depends(get_session)):
+async def sso_callback(
+    provider: str, request: Request, response: Response, session: AsyncSession = Depends(get_session)
+):
     if provider not in configured_providers():
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, f"Provider '{provider}' non configurato.")
 
@@ -355,4 +425,5 @@ async def sso_callback(provider: str, request: Request, session: AsyncSession = 
         session, action="auth.login", actor=user, request=request, payload={"method": f"sso_{provider}"}
     )
     access_token, refresh_token = await issue_session(session, user)
-    return SessionResponse(access_token=access_token, refresh_token=refresh_token)
+    _set_session_cookies(response, refresh_token)
+    return SessionResponse(access_token=access_token)

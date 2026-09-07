@@ -144,8 +144,6 @@ In sintesi, ad alto livello (l'elenco completo, specifica per specifica, è in
   sottodominio, via permalink su `notturni.eu`.
 - **"Pubblicazioni"**: raggruppare una serie di post in ordine cronologico,
   come i capitoli di un libro o di un saggio — non ancora iniziato.
-- **Sessione utente più robusta** (cookie `httpOnly` + CSRF al posto di
-  `localStorage`) prima di un uso in produzione.
 - **Funzionalità GDPR dedicate** (export/cancellazione dati account, registro
   consensi) oltre al rafforzamento via MFA già presente.
 - **Lock distribuiti** su Redis (il rate limiting invece è già in uso, su
