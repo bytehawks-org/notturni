@@ -1,0 +1,113 @@
+name: Pubblica immagini (GHCR)
+
+# Build multi-arch (amd64+arm64, CLAUDE.md #3: "Dockerfile e manifest
+# agnostici rispetto all'architettura" — sviluppo x86_64, produzione ARM64)
+# delle tre immagini container del progetto, pubblicate su GitHub Container
+# Registry sotto l'organizzazione (ghcr.io/bytehawks-org/notturni-<nome>,
+# vedi https://github.com/orgs/bytehawks-org/packages). Autenticazione a
+# GHCR con il GITHUB_TOKEN effimero generato automaticamente per la run
+# (permesso packages: write sotto), non un Personal Access Token da creare
+# a mano.
+#
+# arm64 viene costruita via QEMU (i runner ubuntu-latest sono amd64 nativi):
+# più lento del solo amd64, in particolare per "moderation" (installa torch
+# e scarica un modello ML in fase di build, vedi moderation/Dockerfile) —
+# è il job che più probabilmente allunga la pipeline, per questo ogni
+# immagine è un job a sé (matrice, fail-fast:false) invece che passi in
+# sequenza in un job unico.
+#
+# Nota per la prima pubblicazione di ciascuna immagine: un pacchetto GHCR
+# creato da un workflow nasce privato di default, anche se il repository è
+# pubblico — va reso pubblico (o collegato esplicitamente al repository) a
+# mano una volta, da Package settings nella pagina del pacchetto su GitHub.
+# Se il push fallisce con 403 al login/push (non a un problema di sintassi):
+# controllare in bytehawks-org -> Settings -> Packages che "Package creation"
+# per Actions non sia ristretto a livello di organizzazione.
+on:
+  push:
+    branches:
+      - main
+      - develop
+    tags:
+      - "v*.*.*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    name: Build e push (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: backend
+            context: ./backend
+            build-args: ""
+          - name: frontend
+            context: ./frontend
+            # NEXT_PUBLIC_* è inglobato nel bundle in fase di build, non
+            # letto a runtime (vedi frontend/Dockerfile, k8s/README.md): i
+            # valori qui sono quelli di produzione, sovrascrivibili senza
+            # toccare questo file impostando le repository/organization
+            # variable NEXT_PUBLIC_API_URL/NEXT_PUBLIC_SITE_URL (Settings ->
+            # Secrets and variables -> Actions -> Variables). Per un target
+            # diverso (es. un ambiente di test) l'immagine va ricostruita a
+            # parte con --build-arg, come già documentato in k8s/README.md.
+            build-args: |
+              NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'https://notturni.eu' }}
+              NEXT_PUBLIC_SITE_URL=${{ vars.NEXT_PUBLIC_SITE_URL || 'https://notturni.eu' }}
+          - name: moderation
+            context: ./moderation
+            build-args: ""
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: QEMU (emulazione arm64 sul runner amd64)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login a GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Metadati/tag immagine
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/notturni-${{ matrix.name }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build e push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: ${{ matrix.build-args }}
+          # niente attestazioni provenance/SBOM separate nel manifest list:
+          # tengono pulito l'elenco architetture nella UI del pacchetto GHCR
+          # (la SBOM "vera" del progetto resta quella di sbom.yml).
+          provenance: false
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
