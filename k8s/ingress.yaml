@@ -2,22 +2,29 @@
 # Il routing per sottodominio-per-blog (nomeutente.notturni.eu) e per dominio
 # custom dell'utente (CLAUDE.md #2) richiede un IngressRoute Traefik dinamico
 # con TLS wildcard/cert-manager per dominio: non ancora implementato qui.
+#
+# Versione ATTUALE: solo http, nessun host fisso — pensata per un primo test
+# su un K3s a nodo singolo senza dominio reale né cert-manager già installato
+# (si accede via IP del nodo, es. `curl http://<ip-nodo>/api/v1/health`,
+# senza dover configurare DNS). Coerente con
+# NOCT_SESSION_COOKIE_SECURE="false" in configmap.yaml: un cookie Secure non
+# verrebbe accettato dal browser su una connessione http.
+#
+# Per passare alla produzione (dominio reale + cert-manager già installato
+# con un ClusterIssuer, es. letsencrypt-prod): aggiungere di nuovo `host:
+# notturni.eu` a entrambe le regole sotto, l'annotazione
+# `cert-manager.io/cluster-issuer: letsencrypt-prod` e un blocco
+# `tls: [{hosts: ["notturni.eu"], secretName: notturni-eu-tls}]` — e
+# riportare NOCT_SESSION_COOKIE_SECURE a "true" in configmap.yaml.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: notturni
   namespace: notturni
-  annotations:
-    # richiede un ClusterIssuer cert-manager già installato nel cluster
-    cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
   ingressClassName: traefik
-  tls:
-    - hosts: ["notturni.eu"]
-      secretName: notturni-eu-tls
   rules:
-    - host: notturni.eu
-      http:
+    - http:
         paths:
           - path: /api
             pathType: Prefix

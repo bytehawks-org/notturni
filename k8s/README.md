@@ -2,8 +2,18 @@
 
 Primo draft dei manifest per un singolo nodo K3s (vedi
 [ROADMAP.md](../ROADMAP.md#3-architettura-stack-e-infrastruttura)). Richiede:
-Longhorn (storage class `longhorn`), Traefik come IngressController, cert-manager
-con un `ClusterIssuer` chiamato `letsencrypt-prod`.
+Longhorn (storage class `longhorn`), Traefik come IngressController (entrambi
+già inclusi in una installazione K3s standard, salvo li si sia disattivati
+esplicitamente).
+
+`ingress.yaml`, nella versione attuale, serve solo **http** e senza host
+fisso — pensato per un primo test senza dominio reale né cert-manager ancora
+installati (si accede via IP del nodo). **cert-manager con un
+`ClusterIssuer`** (es. `letsencrypt-prod`) **serve solo quando si passa a un
+dominio reale in https** — vedi il commento in cima a `ingress.yaml` per
+cosa aggiungere a quel punto (annotazione + blocco `tls`), e ricordarsi di
+riportare `NOCT_SESSION_COOKIE_SECURE` a `"true"` in `configmap.yaml` nello
+stesso momento (i due vanno sempre cambiati insieme).
 
 ## Setup
 
@@ -14,12 +24,29 @@ cp secret.example.yaml secret.yaml
 kubectl apply -k .
 ```
 
+Per un primo test senza registro (immagini `notturni-backend:latest`/
+`notturni-frontend:latest` costruite localmente, vedi nota sotto): buildarle
+sulla stessa macchina del nodo K3s (o importarle con `k3s ctr images
+import` se costruite altrove), poi in `configmap.yaml` sostituire
+`NOCT_CORS_ORIGINS`/`NOCT_OAUTH_REDIRECT_BASE_URL` con l'indirizzo davvero
+raggiungibile stasera (es. `http://<ip-nodo>`, vedi i commenti accanto a
+quelle variabili) — e ricostruire l'immagine frontend con
+`--build-arg NEXT_PUBLIC_API_URL=http://<ip-nodo>` (letto solo in fase di
+build, non a runtime — vedi nota più sotto).
+
 ## Note
 
 - `backend.yaml` / `frontend.yaml` referenziano immagini locali
   (`notturni-backend:latest`, `notturni-frontend:latest`); vanno sostituite
   con un riferimento a registro una volta disponibile un flusso di
-  build/push.
+  build/push. Fino ad allora, `imagePullPolicy: IfNotPresent` richiede che
+  l'immagine sia già presente sul nodo (buildata lì o importata) — senza,
+  il pod resta in `ImagePullBackOff`.
+- `postgres.yaml` imposta `PGDATA` su una sottodirectory del volume
+  (`/var/lib/postgresql/data/pgdata`) invece della radice del mount: un
+  volume Longhorn (ext4) arriva con un `lost+found` creato dal filesystem, e
+  `initdb` si rifiuta di inizializzare una data directory non vuota —
+  fallirebbe al primo avvio senza questo accorgimento.
 - `redis.yaml` e `rabbitmq.yaml` non hanno persistenza in questo primo draft.
 - `ingress.yaml` gestisce un solo host path-based; il routing per sottodominio/blog
   e per dominio custom utente è demandato a un lavoro successivo (vedi

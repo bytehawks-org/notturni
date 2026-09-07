@@ -66,7 +66,12 @@ data:
   # in secret.yaml: NOCT_SMTP_RELAY_USERNAME/_PASSWORD).
   NOCT_SMTP_RELAY_HOST: ""
 
-  # SSO: valorizzare (qui o in secret.yaml) solo i provider da abilitare
+  # SSO: valorizzare (qui o in secret.yaml) solo i provider da abilitare.
+  # ATTENZIONE: "https://notturni.eu" è il valore di produzione (dominio
+  # reale + TLS). Per un test senza dominio (vedi ingress.yaml, versione
+  # attuale solo http) sostituirlo con l'indirizzo davvero raggiungibile
+  # stasera, es. "http://<ip-nodo>" — senza SSO configurato in secret.yaml
+  # questo valore resta comunque inerte (nessun provider chiamato).
   NOCT_OAUTH_REDIRECT_BASE_URL: "https://notturni.eu"
 
   # Cloudflare Turnstile (app/core/captcha.py): captcha per i commenti aperti
@@ -78,7 +83,24 @@ data:
   # placeholder: CORS ad origine esatta non copre i sottodomini per-blog
   # (nomeutente.notturni.eu) — da rivedere con un match a wildcard quando le
   # pagine pubbliche dei blog chiameranno l'API dal browser.
+  # ATTENZIONE per il test di stasera: senza dominio reale (ingress.yaml solo
+  # http) il browser chiama l'API da "http://<ip-nodo>" — questa variabile
+  # va aggiornata di conseguenza, altrimenti ogni richiesta del frontend
+  # all'API viene bloccata dal browser come cross-origin non ammessa (nessun
+  # errore lato backend: si vede solo in console/Network del browser).
   NOCT_CORS_ORIGINS: "https://notturni.eu"
+
+  # Cookie di sessione (refresh token httpOnly, backend/API.md).
+  # NOCT_SESSION_COOKIE_SECURE="false" perché ingress.yaml, nella sua
+  # versione attuale, serve solo http (nessun dominio reale/cert-manager
+  # ancora configurato — vedi commento in cima a quel file): un cookie
+  # Secure non verrebbe accettato dal browser su una connessione non
+  # cifrata. Passare a "true" **insieme** al blocco TLS di ingress.yaml non
+  # appena l'istanza è raggiunta in https, mai prima (altrimenti il login
+  # smette di "restare loggato" senza errori visibili).
+  NOCT_SESSION_COOKIE_SECURE: "false"
+  NOCT_SESSION_COOKIE_SAMESITE: "lax"
+  NOCT_SESSION_COOKIE_DOMAIN: ""
 
   # URL interno al cluster del backend, usato dai Server Component del
   # frontend per l'SSR (il browser usa invece l'host pubblico).
