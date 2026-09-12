@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Lora } from "next/font/google";
+import { Lora, Source_Sans_3 } from "next/font/google";
 import Script from "next/script";
 
 import { AuthProvider } from "@/lib/auth-context";
@@ -8,14 +8,17 @@ import { ThemeProvider } from "@/lib/theme-context";
 
 import "./globals.css";
 
-const bodyFont = Inter({
+const bodyFont = Source_Sans_3({
   variable: "--font-body",
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
+  weight: ["400", "500", "600"],
 });
 
 const headingFont = Lora({
   variable: "--font-heading",
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
+  weight: ["400", "500", "600"],
+  style: ["normal", "italic"],
 });
 
 const DEFAULT_DESCRIPTION =
