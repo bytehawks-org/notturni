@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { SiteHeader } from "@/components/SiteHeader";
+import { BlogHeader } from "@/components/shell/BlogHeader";
 import { SENSITIVITY_CATEGORY_LABELS } from "@/lib/content-media";
 import { getBlogMediaBibliography, getPublicBlog } from "@/lib/server-api";
 
@@ -36,13 +36,9 @@ export default async function BlogMediaBibliographyPage({
 
   return (
     <div className="flex flex-1 flex-col">
-      <SiteHeader />
+      <BlogHeader slug={blogSlug} name={blog.title} current="media" />
       <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-12">
-        <Link href={`/${blogSlug}`} className="text-sm text-muted hover:text-foreground">
-          ← {blogSlug}
-        </Link>
-
-        <h1 className="mt-6 font-serif text-4xl font-semibold leading-tight text-foreground">Media</h1>
+        <h1 className="font-serif text-4xl font-semibold leading-tight text-foreground">Media</h1>
         <p className="mt-2 text-sm text-muted">
           Tutte le immagini usate nei post di <span className="text-foreground">{blog.title}</span>, con
           l&apos;elenco dei post che le citano e la data di pubblicazione.

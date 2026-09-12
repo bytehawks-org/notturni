@@ -4,10 +4,10 @@ import { notFound } from "next/navigation";
 
 import { CommentsSection } from "@/components/CommentsSection";
 import { FragmentReader } from "@/components/FragmentReader";
-import { SiteHeader } from "@/components/SiteHeader";
+import { BlogHeader } from "@/components/shell/BlogHeader";
 import { TagPills } from "@/components/TagPills";
 import { excerpt, renderMarkdown } from "@/lib/markdown";
-import { getPublicPostByPermalink } from "@/lib/server-api";
+import { getPublicBlog, getPublicPostByPermalink } from "@/lib/server-api";
 
 interface PageParams {
   blogSlug: string;
@@ -45,7 +45,10 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
 
 export default async function PublicPostPage({ params }: { params: Promise<PageParams> }) {
   const { blogSlug, postSlug } = await params;
-  const post = await getPublicPostByPermalink(blogSlug, postSlug);
+  const [post, blog] = await Promise.all([
+    getPublicPostByPermalink(blogSlug, postSlug),
+    getPublicBlog(blogSlug),
+  ]);
   if (!post) notFound();
 
   const html = await renderMarkdown(post.content, {
@@ -55,13 +58,9 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
 
   return (
     <div className="flex flex-1 flex-col">
-      <SiteHeader />
+      <BlogHeader slug={blogSlug} name={blog?.title ?? blogSlug} current="posts" />
       <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-12">
-        <Link href={`/${blogSlug}`} className="text-sm text-muted hover:text-foreground">
-          ← {blogSlug}
-        </Link>
-
-        <h1 className="mt-6 font-serif text-5xl font-semibold leading-tight text-foreground">{post.title}</h1>
+        <h1 className="font-serif text-5xl font-semibold leading-tight text-foreground">{post.title}</h1>
         <p className="mt-4 text-sm text-muted">
           {post.author_display_name}
           {post.published_at && <> · {formatDate(post.published_at)}</>}

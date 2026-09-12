@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { SiteHeader } from "@/components/SiteHeader";
+import { BlogHeader } from "@/components/shell/BlogHeader";
 import { getBlogLinksBibliography, getPublicBlog } from "@/lib/server-api";
 
 interface PageParams {
@@ -32,13 +32,9 @@ export default async function BlogLinksBibliographyPage({
 
   return (
     <div className="flex flex-1 flex-col">
-      <SiteHeader />
+      <BlogHeader slug={blogSlug} name={blog.title} current="links" />
       <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-12">
-        <Link href={`/${blogSlug}`} className="text-sm text-muted hover:text-foreground">
-          ← {blogSlug}
-        </Link>
-
-        <h1 className="mt-6 font-serif text-4xl font-semibold leading-tight text-foreground">Link</h1>
+        <h1 className="font-serif text-4xl font-semibold leading-tight text-foreground">Link</h1>
         <p className="mt-2 text-sm text-muted">
           Tutti i link citati nei post di <span className="text-foreground">{blog.title}</span>, con
           l&apos;elenco dei post che li usano e la data di pubblicazione.

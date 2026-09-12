@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
+import { DashboardShell, type NavItem } from "@/components/shell/DashboardShell";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/lib/auth-context";
@@ -30,42 +30,44 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const isAdmin = PLATFORM_ADMIN_ROLES.includes(user.platform_role);
   const isModerator = PLATFORM_MODERATION_ROLES.includes(user.platform_role);
 
+  const items: NavItem[] = [
+    { href: "/dashboard", label: "I miei blog", icon: "✎", mobile: true },
+    { href: "/dashboard/frammenti", label: "Frammenti", icon: "❝", mobile: true },
+    { href: "/dashboard/profile", label: "Profilo", icon: "◯", mobile: true },
+    { href: "/dashboard/token", label: "Token API", icon: "◈", mobile: true },
+    ...(isAdmin || isModerator ? [{ href: "/admin", label: "Amministrazione", icon: "⚙", mobile: true } as NavItem] : []),
+  ];
+
   return (
     <div className="flex flex-1 flex-col">
-      <header className="border-b border-border">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <nav className="flex items-center gap-6">
-            <Link href="/dashboard" className="font-serif text-lg text-foreground">
-              Notturni
-            </Link>
-            <Link href="/dashboard" className="text-sm text-muted hover:text-foreground">
-              I miei blog
-            </Link>
-            <Link href="/dashboard/profile" className="text-sm text-muted hover:text-foreground">
-              Profilo
-            </Link>
-            <Link href="/dashboard/frammenti" className="text-sm text-muted hover:text-foreground">
-              Frammenti
-            </Link>
-            <Link href="/dashboard/token" className="text-sm text-muted hover:text-foreground">
-              Token API
-            </Link>
-            {(isAdmin || isModerator) && (
-              <Link href="/admin" className="text-sm text-muted hover:text-foreground">
-                Amministrazione
-              </Link>
-            )}
-          </nav>
-          <div className="flex items-center gap-4">
-            <ThemeToggle />
-            <span className="text-sm text-muted">{user.username}</span>
-            <Button variant="secondary" onClick={() => logout().then(() => router.push("/login"))}>
+      {/* Solo mobile: la sidebar con account/logout è nascosta sotto lg,
+          e la tab bar del DashboardShell non lascia spazio a un footer —
+          senza questa barra Esci sarebbe irraggiungibile su schermi piccoli. */}
+      <div className="flex items-center justify-between border-b border-border px-5 py-3 text-sm lg:hidden">
+        <span className="truncate text-muted">{user.username}</span>
+        <div className="flex items-center gap-3">
+          <ThemeToggle />
+          <Button variant="secondary" size="sm" onClick={() => logout().then(() => router.push("/login"))}>
+            Esci
+          </Button>
+        </div>
+      </div>
+      <DashboardShell
+        items={items}
+        footer={
+          <div className="flex flex-col gap-3 px-3 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="truncate text-muted">{user.username}</span>
+              <ThemeToggle />
+            </div>
+            <Button variant="secondary" size="sm" onClick={() => logout().then(() => router.push("/login"))}>
               Esci
             </Button>
           </div>
-        </div>
-      </header>
-      <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">{children}</main>
+        }
+      >
+        {children}
+      </DashboardShell>
     </div>
   );
 }

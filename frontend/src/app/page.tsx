@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { FeedPostCard } from "@/components/FeedPostCard";
 import { SiteHeader } from "@/components/SiteHeader";
+import { SiteFooter } from "@/components/shell/SiteFooter";
 import { getPublicFeed, getTrendingTags } from "@/lib/server-api";
 
 export const metadata: Metadata = {
@@ -87,6 +88,7 @@ export default async function Home({
           )}
         </div>
       </main>
+      <SiteFooter />
     </>
   );
 }

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { FeedPostCard } from "@/components/FeedPostCard";
-import { SiteHeader } from "@/components/SiteHeader";
+import { BlogHeader } from "@/components/shell/BlogHeader";
 import { getPublicBlog, getPublicBlogPosts } from "@/lib/server-api";
 
 interface PageParams {
@@ -30,7 +30,7 @@ export default async function BlogHomePage({ params }: { params: Promise<PagePar
 
   return (
     <div className="flex flex-1 flex-col">
-      <SiteHeader />
+      <BlogHeader slug={blogSlug} name={blog.title} current="posts" />
       <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-12">
         <h1 className="font-serif text-4xl font-semibold leading-tight text-foreground">{blog.title}</h1>
         {blog.subtitle && <p className="mt-2 text-lg text-muted">{blog.subtitle}</p>}

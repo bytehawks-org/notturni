@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/lib/auth-context";
 
 export function SiteHeader() {
@@ -10,28 +11,29 @@ export function SiteHeader() {
 
   return (
     <header className="border-b border-border">
-      <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-        <Link href="/" className="font-serif text-lg text-foreground">
+      <div className="mx-auto flex h-[60px] w-full max-w-[1184px] items-center justify-between px-5 lg:px-12">
+        <Link href="/" className="font-serif text-[21px] font-semibold tracking-tight text-foreground no-underline">
           Notturni
         </Link>
-        <div className="flex items-center gap-4">
-          <ThemeToggle />
-          {!loading && user ? (
-            <Link href="/dashboard" className="text-sm text-primary underline underline-offset-4">
-              Dashboard
-            </Link>
-          ) : (
-            !loading && (
+        <div className="flex items-center gap-4 text-sm">
+          <span className="hidden sm:inline-flex">
+            <ThemeToggle />
+          </span>
+          {!loading &&
+            (user ? (
+              <Link href="/dashboard">
+                <Button size="sm">Dashboard</Button>
+              </Link>
+            ) : (
               <>
-                <Link href="/login" className="text-sm text-muted hover:text-foreground">
+                <Link href="/login" className="text-muted no-underline hover:text-foreground">
                   Accedi
                 </Link>
-                <Link href="/register" className="text-sm text-primary underline underline-offset-4">
-                  Registrati
+                <Link href="/register">
+                  <Button size="sm">Crea account</Button>
                 </Link>
               </>
-            )
-          )}
+            ))}
         </div>
       </div>
     </header>
