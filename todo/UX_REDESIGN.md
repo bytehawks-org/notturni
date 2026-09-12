@@ -17,7 +17,7 @@ funzionante, cambia l'aspetto) da quelli che richiedono **lavoro reale**
 | Fase | Contenuto | Stato |
 |---|---|---|
 | 1 | Token colore (light/dark), font (Lora + Source Sans 3), `globals.css`, `layout.tsx` | ✅ Fatto — vedi commit su `feat/new-ux-ui` |
-| 2 | Primitives `components/ui/*` (Button, Card, Field, Pill, Controls, States, ConfirmDialog, Toast) | ⚪ Da fare |
+| 2 | Primitives `components/ui/*` (Button, Card, Field, Pill, Controls, States, ConfirmDialog, Toast) | ✅ Fatto — vedi commit su `feat/new-ux-ui`. `ConfirmDialog`/`Toast`/`States` adattati senza `next-intl` (stringhe italiane hardcoded, coerenti col resto dell'app oggi); `Card` e `FieldGroup` mantengono il padding/margine di default del componente precedente (il kit li lascia al chiamante, ma tutti gli usi esistenti — 50 per `Card`, 11 file per `FieldGroup` — si affidano al valore implicito: verrà sovrascritto man mano che le singole schermate vengono restilizzate nelle fasi 3-5) |
 | 3 | Shell: `DashboardShell` (dashboard+admin layout), `SiteHeader`/`SiteFooter`, `BlogHeader` | ⚪ Da fare |
 | 4 | Home (`app/page.tsx`) e nuova `/blogs` (directory pubblica) | ⚪ Da fare |
 | 5 | Tab dashboard blog (Overview nuovo, Comments/Settings estesi) e admin piattaforma | ⚪ Da fare |
