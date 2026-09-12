@@ -26,7 +26,7 @@ from app.domain.blog_rules import (
     validate_blog_subtitle,
 )
 from app.domain.i18n import validate_locale
-from app.models.blog import Blog, BlogMembership
+from app.models.blog import Blog, BlogMembership, BlogVisibility
 from app.models.comment import CommentsMode
 from app.models.follow import BlogFollow
 from app.models.user import User
@@ -101,6 +101,31 @@ async def list_blogs_i_belong_to(
         )
         for membership, blog in result.all()
     ]
+
+
+@router.get("", response_model=list[BlogOut])
+async def list_public_blogs(
+    limit: int = 30,
+    offset: int = 0,
+    session: AsyncSession = Depends(get_session),
+) -> list[BlogOut]:
+    """Directory pubblica dei blog (todo/UX_REDESIGN.md, mockup 4c): solo
+    blog pubblici, non sospesi e indicizzabili — stesso criterio del
+    `robots.txt` generato (`Blog.search_indexing_enabled`), non quello di
+    visibilità nel feed dei post (che include qualunque blog pubblico)."""
+    limit = max(1, min(limit, 100))
+    result = await session.execute(
+        select(Blog)
+        .where(
+            Blog.visibility == BlogVisibility.PUBLIC,
+            Blog.is_suspended.is_(False),
+            Blog.search_indexing_enabled.is_(True),
+        )
+        .order_by(Blog.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return [_to_blog_out(blog, None) for blog in result.scalars().all()]
 
 
 @router.get("/{slug}", response_model=BlogOut)

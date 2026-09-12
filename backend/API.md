@@ -260,6 +260,14 @@ ricade sulla preferenza di profilo di chi scrive (`username` di default).
 le `@username` nel contenuto dei post in link al profilo citato — vedi
 "Menzioni `@username`" nella sezione Post.
 
+**`GET /api/v1/blogs`** — pubblico, nessuna sessione richiesta. Directory dei
+blog pubblici indicizzabili: `visibility=public`, non sospesi
+(`is_suspended=false`) e `search_indexing_enabled=true` — stesso criterio del
+`robots.txt` generato, più restrittivo del semplice "pubblico" usato dal feed
+dei post (che include anche i blog pubblici non indicizzabili). Parametri
+`limit` (default 30, max 100) e `offset` per la paginazione, più recenti
+prima. `owner_id` sempre `null` in questa lista (nessun viewer autenticato).
+
 **`GET /api/v1/blogs/mine`** — richiede sessione. Lista i blog di proprietà
 dell'utente.
 
