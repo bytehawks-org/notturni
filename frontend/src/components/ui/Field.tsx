@@ -30,6 +30,6 @@ export function Label({ children, htmlFor, hint }: { children: ReactNode; htmlFo
 // nel resto dell'app si affidano a questo margine per lo spazio verticale
 // tra campi consecutivi (il kit lo delega a un contenitore con gap, non
 // ancora presente nelle pagine non ancora restilizzate).
-export function FieldGroup({ children }: { children: ReactNode }) {
-  return <div className="mb-4 flex flex-col">{children}</div>;
+export function FieldGroup({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <div className={`mb-4 flex flex-col ${className}`}>{children}</div>;
 }

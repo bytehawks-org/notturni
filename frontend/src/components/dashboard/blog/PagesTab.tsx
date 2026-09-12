@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Pill } from "@/components/ui/Pill";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { type Blog, type Page } from "@/lib/types";
@@ -57,18 +58,21 @@ export function PagesTab({ blog, canWrite }: { blog: Blog; canWrite: boolean }) 
       )}
       {error && <Alert kind="error">{error}</Alert>}
       {pages !== null && pages.length === 0 && <p className="text-sm text-muted">Nessuna pagina.</p>}
-      <div className="space-y-3">
+      <div className="flex flex-col gap-2.5">
         {pages?.map((page) => (
-          <Card key={page.id} className="flex items-center justify-between">
-            <div>
+          <Card key={page.id} className="flex items-center justify-between p-4">
+            <div className="flex flex-col gap-1">
               <Link
                 href={`/dashboard/blogs/${blog.slug}/pages/${page.id}`}
                 className="font-serif text-lg text-foreground hover:text-primary"
               >
                 {page.title}
               </Link>
-              <p className="text-sm text-muted">
-                /{page.slug} · {page.locale} · {page.is_published ? "pubblicata" : "bozza"}
+              <p className="flex items-center gap-2 text-sm text-muted">
+                <span>/{page.slug} · {page.locale}</span>
+                <Pill tone={page.is_published ? "ok" : "neutral"}>
+                  {page.is_published ? "Pubblicata" : "Bozza"}
+                </Pill>
               </p>
             </div>
             <div className="flex items-center gap-3">

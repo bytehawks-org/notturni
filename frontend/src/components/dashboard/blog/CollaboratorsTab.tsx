@@ -6,6 +6,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Input, Label } from "@/components/ui/Field";
+import { Pill } from "@/components/ui/Pill";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -16,6 +17,8 @@ import {
 } from "@/lib/types";
 
 import { errorMessage, ROLE_LABELS } from "./shared";
+
+const hue = (s: string) => `oklch(0.55 0.06 ${[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % 360})`;
 
 export function CollaboratorsTab({ blogSlug }: { blogSlug: string }) {
   const { authFetch } = useAuth();
@@ -81,50 +84,65 @@ export function CollaboratorsTab({ blogSlug }: { blogSlug: string }) {
     <div className="space-y-6">
       {error && <Alert kind="error">{error}</Alert>}
 
-      <Card>
+      <Card className="flex flex-col gap-3">
         <CardTitle>Collaboratori</CardTitle>
         {members !== null && members.length === 0 && (
           <p className="text-sm text-muted">Nessun collaboratore.</p>
         )}
-        <ul className="space-y-2">
-          {members?.map((m) => (
-            <li key={m.user_id} className="flex flex-wrap items-center justify-between gap-3 text-sm">
-              <span className="text-foreground">
-                @{m.username}
-                {m.author_display_name && (
-                  <span className="text-muted"> — firma come «{m.author_display_name}»</span>
-                )}
-              </span>
-              <span className="flex items-center gap-2">
-                <select
-                  value={m.role}
-                  onChange={(e) => handleChangeRole(m.user_id, e.target.value as BlogRole)}
-                  className="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
-                >
-                  {INVITABLE_BLOG_ROLES.map((r) => (
-                    <option key={r.value} value={r.value}>
-                      {r.label}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveMember(m.user_id)}
-                  className="text-muted hover:text-foreground"
-                >
-                  Rimuovi
-                </button>
-              </span>
-            </li>
-          ))}
-        </ul>
+        {members && members.length > 0 && (
+          <div className="overflow-hidden rounded-lg border border-border">
+            {members.map((m) => (
+              <div
+                key={m.user_id}
+                className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2.5 text-sm last:border-0"
+              >
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span
+                    className="grid h-7 w-7 flex-none place-items-center rounded-full text-xs font-semibold text-white"
+                    style={{ background: hue(m.username) }}
+                    aria-hidden="true"
+                  >
+                    {m.username[0]?.toUpperCase()}
+                  </span>
+                  <div className="flex min-w-0 flex-col leading-tight">
+                    <span className="text-foreground">@{m.username}</span>
+                    {m.author_display_name && (
+                      <span className="truncate text-xs text-muted">firma come «{m.author_display_name}»</span>
+                    )}
+                  </div>
+                </div>
+                <span className="flex items-center gap-2.5">
+                  <Pill tone="primary">{ROLE_LABELS[m.role] ?? m.role}</Pill>
+                  <select
+                    value={m.role}
+                    onChange={(e) => handleChangeRole(m.user_id, e.target.value as BlogRole)}
+                    className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
+                  >
+                    {INVITABLE_BLOG_ROLES.map((r) => (
+                      <option key={r.value} value={r.value}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveMember(m.user_id)}
+                    className="text-muted hover:text-foreground"
+                  >
+                    Rimuovi
+                  </button>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
 
-      <Card>
-        <CardTitle>Invita un collaboratore</CardTitle>
-        <p className="mb-4 text-sm text-muted">
-          L&apos;invito resta in attesa finché l&apos;utente non lo accetta dalla propria dashboard.
-        </p>
+      <Card className="flex flex-col gap-3">
+        <div className="flex items-baseline justify-between">
+          <CardTitle>Invita un collaboratore</CardTitle>
+          <span className="text-[13px] text-muted">resta in attesa finché non lo accetta</span>
+        </div>
         <form onSubmit={handleInvite} className="flex flex-wrap items-end gap-3">
           <div>
             <Label htmlFor="invite-username">Username</Label>
@@ -141,7 +159,7 @@ export function CollaboratorsTab({ blogSlug }: { blogSlug: string }) {
               id="invite-role"
               value={role}
               onChange={(e) => setRole(e.target.value as BlogRole)}
-              className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+              className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
             >
               {INVITABLE_BLOG_ROLES.map((r) => (
                 <option key={r.value} value={r.value}>
@@ -154,11 +172,12 @@ export function CollaboratorsTab({ blogSlug }: { blogSlug: string }) {
         </form>
 
         {pending.length > 0 && (
-          <ul className="mt-4 space-y-2">
+          <div className="overflow-hidden rounded-lg border border-border">
             {pending.map((inv) => (
-              <li key={inv.id} className="flex items-center justify-between text-sm">
+              <div key={inv.id} className="flex items-center justify-between border-b border-border px-4 py-2.5 text-sm last:border-0">
                 <span className="text-foreground">
-                  @{inv.invited_username} — {ROLE_LABELS[inv.role] ?? inv.role} (in attesa)
+                  @{inv.invited_username} — {ROLE_LABELS[inv.role] ?? inv.role}{" "}
+                  <span className="text-muted">(in attesa)</span>
                 </span>
                 <button
                   type="button"
@@ -167,9 +186,9 @@ export function CollaboratorsTab({ blogSlug }: { blogSlug: string }) {
                 >
                   Revoca
                 </button>
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </Card>
     </div>

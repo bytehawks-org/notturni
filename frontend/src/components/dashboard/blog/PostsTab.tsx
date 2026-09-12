@@ -6,11 +6,21 @@ import { useEffect, useState } from "react";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Pill } from "@/components/ui/Pill";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { type Post } from "@/lib/types";
 
 import { errorMessage } from "./shared";
+
+const STATUS_LABEL: Record<Post["status"], string> = {
+  draft: "Bozza",
+  published: "Pubblicato",
+};
+const STATUS_TONE: Record<Post["status"], "ok" | "neutral"> = {
+  draft: "neutral",
+  published: "ok",
+};
 
 export function PostsTab({ blogSlug, canWrite }: { blogSlug: string; canWrite: boolean }) {
   const { accessToken, authFetch } = useAuth();
@@ -44,18 +54,19 @@ export function PostsTab({ blogSlug, canWrite }: { blogSlug: string; canWrite: b
       )}
       {error && <Alert kind="error">{error}</Alert>}
       {posts !== null && posts.length === 0 && <p className="text-sm text-muted">Nessun post.</p>}
-      <div className="space-y-3">
+      <div className="flex flex-col gap-2.5">
         {posts?.map((post) => (
-          <Card key={post.id} className="flex items-center justify-between">
-            <div>
+          <Card key={post.id} className="flex items-center justify-between p-4">
+            <div className="flex flex-col gap-1">
               <Link
                 href={`/dashboard/blogs/${blogSlug}/posts/${post.id}`}
                 className="font-serif text-lg text-foreground hover:text-primary"
               >
                 {post.title}
               </Link>
-              <p className="text-sm text-muted">
-                {post.locale} · {post.status === "published" ? "pubblicato" : "bozza"}
+              <p className="flex items-center gap-2 text-sm text-muted">
+                <span>{post.locale}</span>
+                <Pill tone={STATUS_TONE[post.status]}>{STATUS_LABEL[post.status]}</Pill>
               </p>
             </div>
             <div className="flex items-center gap-3">

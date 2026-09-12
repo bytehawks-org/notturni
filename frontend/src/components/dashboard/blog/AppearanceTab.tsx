@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { Card, CardTitle } from "@/components/ui/Card";
+import { Card, CardTitle, SectionLabel } from "@/components/ui/Card";
 import { FieldGroup, Input, Label } from "@/components/ui/Field";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -62,93 +62,102 @@ export function AppearanceTab({ blogSlug, canEdit }: { blogSlug: string; canEdit
   const typographyEntries = Object.entries(config.typography ?? {});
 
   return (
-    <Card>
-      <CardTitle>Palette (massimo 5 colori)</CardTitle>
-      <div className="mb-6 flex flex-wrap gap-4">
-        {paletteEntries.map(([key, value]) => (
-          <div key={key}>
-            <Label htmlFor={`color-${key}`}>{key}</Label>
-            <div className="flex items-center gap-2">
+    <div className="flex flex-col gap-6">
+      <Card className="flex flex-col gap-3">
+        <div className="flex items-baseline justify-between">
+          <CardTitle>Palette</CardTitle>
+          <span className="text-[13px] text-muted">{paletteEntries.length} di 5 colori</span>
+        </div>
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
+          {paletteEntries.map(([key, value]) => (
+            <label
+              key={key}
+              htmlFor={`color-${key}`}
+              className="flex cursor-pointer flex-col gap-2 rounded-lg border border-border bg-surface p-2.5"
+            >
+              <span
+                className="block h-14 rounded-md border border-border"
+                style={{ background: value }}
+              />
+              <span className="text-[13px] font-medium text-foreground">{key}</span>
+              <span className="font-mono text-xs text-muted">{value}</span>
               <input
                 id={`color-${key}`}
                 type="color"
                 value={value}
                 onChange={(e) => updatePaletteColor(key, e.target.value)}
-                className="h-9 w-9 cursor-pointer rounded border border-border"
+                className="sr-only"
               />
-              <span className="text-xs text-muted">{value}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <CardTitle>Tipografia (massimo 3 font)</CardTitle>
-      <p className="mb-4 -mt-4 text-xs text-muted">
-        Titoli in serif, testo in sans-serif: solo le combinazioni coerenti con questo vincolo sono
-        selezionabili.
-      </p>
-      <div className="mb-6 flex flex-wrap gap-4">
-        {typographyEntries.map(([key, value]) => {
-          const options = FONT_OPTIONS[key];
-          return (
-            <FieldGroup key={key}>
-              <Label htmlFor={`font-${key}`}>{key}</Label>
-              {options ? (
-                <select
-                  id={`font-${key}`}
-                  value={value}
-                  onChange={(e) => updateTypography(key, e.target.value)}
-                  className="w-full max-w-xs rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
-                >
-                  {options.map((font) => (
-                    <option key={font} value={font}>
-                      {font}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <Input
-                  id={`font-${key}`}
-                  value={value}
-                  onChange={(e) => updateTypography(key, e.target.value)}
-                />
-              )}
-            </FieldGroup>
-          );
-        })}
-      </div>
-
-      <CardTitle>Layout</CardTitle>
-      <FieldGroup>
-        <select
-          value={config.layout ?? "standard"}
-          onChange={(e) => {
-            setConfig((prev) => ({ ...prev, layout: e.target.value }));
-            setSaved(false);
-          }}
-          className="w-full max-w-xs rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
-        >
-          <option value="standard">Standard</option>
-          <option value="magazine">Magazine</option>
-          <option value="minimal">Minimale</option>
-        </select>
-      </FieldGroup>
-
-      {error && (
-        <div className="mb-4">
-          <Alert kind="error">{error}</Alert>
+            </label>
+          ))}
         </div>
-      )}
-      {saved && (
-        <div className="mb-4">
-          <Alert kind="success">Salvato.</Alert>
+      </Card>
+
+      <Card className="flex flex-col gap-3">
+        <div className="flex items-baseline justify-between">
+          <CardTitle>Tipografia</CardTitle>
+          <span className="text-[13px] text-muted">titoli serif · corpo sans-serif</span>
         </div>
-      )}
+        <div className="flex flex-wrap gap-4">
+          {typographyEntries.map(([key, value]) => {
+            const options = FONT_OPTIONS[key];
+            return (
+              <FieldGroup key={key} className="min-w-[220px] flex-1">
+                <Label htmlFor={`font-${key}`}>{key}</Label>
+                {options ? (
+                  <select
+                    id={`font-${key}`}
+                    value={value}
+                    onChange={(e) => updateTypography(key, e.target.value)}
+                    className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
+                  >
+                    {options.map((font) => (
+                      <option key={font} value={font}>
+                        {font}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input
+                    id={`font-${key}`}
+                    value={value}
+                    onChange={(e) => updateTypography(key, e.target.value)}
+                  />
+                )}
+              </FieldGroup>
+            );
+          })}
+        </div>
+      </Card>
+
+      <Card className="flex flex-col gap-3">
+        <CardTitle>Layout</CardTitle>
+        <FieldGroup className="max-w-xs">
+          <SectionLabel>Presentazione dei post</SectionLabel>
+          <select
+            value={config.layout ?? "standard"}
+            onChange={(e) => {
+              setConfig((prev) => ({ ...prev, layout: e.target.value }));
+              setSaved(false);
+            }}
+            className="mt-1.5 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
+          >
+            <option value="standard">Standard</option>
+            <option value="magazine">Magazine</option>
+            <option value="minimal">Minimale</option>
+          </select>
+        </FieldGroup>
+      </Card>
+
+      {error && <Alert kind="error">{error}</Alert>}
+      {saved && <Alert kind="success">Salvato.</Alert>}
       {canEdit && (
-        <Button onClick={handleSave} disabled={saving}>
-          {saving ? "Salvataggio…" : "Salva aspetto"}
-        </Button>
+        <div>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? "Salvataggio…" : "Salva aspetto"}
+          </Button>
+        </div>
       )}
-    </Card>
+    </div>
   );
 }
