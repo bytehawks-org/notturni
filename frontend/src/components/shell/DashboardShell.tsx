@@ -32,7 +32,7 @@ export function DashboardShell({
   const active = (href: string) => (href === "/dashboard" || href === "/admin" ? path === href : path.startsWith(href));
   const tabs = items.filter((i) => i.mobile).slice(0, 5);
   return (
-    <div className="flex min-h-full lg:grid lg:grid-cols-[240px_minmax(0,1fr)]">
+    <div className="flex min-h-screen lg:grid lg:grid-cols-[240px_minmax(0,1fr)]">
       <aside className="hidden border-r border-border bg-surface px-3.5 py-5 text-sm lg:flex lg:flex-col lg:gap-1">
         <Link href={homeHref} className="flex flex-col px-3 pb-4 pt-1 leading-tight">
           <span className="font-serif text-xl font-semibold text-foreground">Notturni</span>
