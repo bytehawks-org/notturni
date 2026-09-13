@@ -57,10 +57,68 @@ fatto in B7.
 |---|---|---|
 | 3f Palette custom sul rendering pubblico | `blog_configs` era solo salvata/validata | ✅ Palette applicata (A3). Tipografia (`heading_font`/`body_font`, `body_size`, `measure`) e `layout` ancora **non** applicati al rendering pubblico |
 
-## 3. Mockup che richiedono lavoro reale (backend nuovo o esteso)
+## 3. Cosa resta da fare (residui dei blocchi A/B, tutti rimandati per scelta)
 
-| Mockup | Cosa manca | Riferimento |
-|---|---|---|
+Elenco unico di ciò che il prototipo mostra e che **non** è stato costruito,
+con il motivo. Nessuna di queste voci è un blocco già pianificato: ognuna va
+decisa e, se approvata, diventa un blocco a sé.
+
+### Richiede una decisione di prodotto (nulla da collegare oggi)
+- **RSS** del feed di piattaforma e dei blog (link presenti nel mockup 1c/3f/4a).
+- **Newsletter** con double opt-in (sezione 5c, card 3f): nessun sistema di
+  invio email transazionale oltre all'OTP, il cui consumer è ancora placeholder.
+- **"Avvisami via email"** per i commenti (5b): stessa dipendenza dell'email.
+- **Sessioni multiple** ("Sessioni · N" in 2f): un solo cookie di refresh,
+  nessuna gestione per dispositivo.
+- **Reset password** e **codice MFA via email come canale alternativo** (1h).
+- **Pulsanti SSO nel login** (1h): il callback risponde JSON grezzo invece di
+  reindirizzare al frontend con una sessione.
+- **Registrazione "su invito"** (5f): oggi equivale a chiusa con un messaggio
+  diverso, nessun sistema di inviti.
+- **Ricorso del proprietario** a una sospensione (3d "Appeal to moderation").
+- **"Pubblicazioni" nell'header di piattaforma** e **"in corso" nella home**
+  (4a): serve un elenco trasversale ai blog; oggi le pubblicazioni sono per blog.
+- **"Dal blog di piattaforma"** in home (4a): `blog.notturni.eu` non è ancora
+  distinto (vedi ROADMAP.md §3).
+
+### Richiede lavoro tecnico noto ma non pianificato
+- **Tipografia e layout del blog sul rendering pubblico** (2e/3f): salvati in
+  `blog_configs` (`heading_font`, `body_font`, `body_size`, `measure`,
+  `layout`) ma applicata solo la palette. Caricare i font di Google a runtime
+  contrasta con "nessun font di terze parti nelle pagine pubbliche" (1a): da
+  decidere se self-hostare i font curati.
+- **Gating per ruolo delle tab della scheda blog** (5a-5g, ADMIN-IA.md): oggi
+  le tab dipendono solo da proprietario/non proprietario; Revisore e Mediatore
+  vedono tutto in sola lettura.
+- **Quota di spazio per blog** ("412 MB of 2 GB", 5a/3c): nessuna quota esiste,
+  solo il conteggio dei byte occupati.
+- **Dimensioni in pixel ed "EXIF rimossi"** nella libreria media (3c):
+  nessuna elaborazione immagine lato backend (Pillow non è una dipendenza).
+- **Scelta di una nota della libreria dall'editor** (3b): l'editor scrive note
+  libere, che finiscono comunque in libreria; manca l'autocomplete.
+- **"Letto ✓" per capitolo** (2d/3g): nessuna posizione di lettura salvata.
+- **"Nuovi follower questa settimana"** (1e): il follow non espone una data.
+- **Paginazione "Post precedenti"** nella home (4a) e **vista "Timeline"** dei
+  media (2b).
+- **Export BibTeX pubblico** (2a): esiste solo per chi gestisce il blog.
+- **Tema scuro di default per l'area admin** (1g, opzionale nel mockup).
+- **Segnalazione automatica "nome riservato"** (5e): i nomi riservati sono
+  bloccati alla creazione, non esistono blog da segnalare.
+- **i18n residua**: stringhe ancora hardcoded in italiano in editor
+  (`posts/new`, `posts/[postId]` tranne lo stato, `RichTextEditor`,
+  `TranslationsBar`, `CoverImageUpload`), tab `PagesTab`/`CollaboratorsTab`/
+  `MyMembershipCard`, `components/dashboard/blog/shared.ts`, pagine admin
+  `pagine`/`registro`, pagine statiche `/p` e `/[blog]/pagina`,
+  `LanguagePicker`, `Alert`.
+
+### Debito operativo emerso durante la Parte B
+- Con una migrazione pendente il backend va in **crash-loop** finché non si
+  esegue `alembic upgrade head` (il bootstrap del super admin legge le
+  colonne nuove): in produzione la migrazione va eseguita **prima** di
+  avviare la nuova immagine (init container o job K8s), oggi non previsto
+  nei manifest.
+- L'export ZIP del blog (B3) è **sincrono**: per blog molto grandi andrebbe
+  spostato su worker con link a scadenza, come nel mockup.
 
 ## 4. Parte B — piano concordato (un blocco per sessione, in ordine di dipendenza)
 
