@@ -25,6 +25,7 @@ funzionante, cambia l'aspetto) da quelli che richiedono **lavoro reale**
 | — | 1h Login/MFA (`/login`, `/register`): brand + headline stile mockup, caselle OTP per cifra invece di un campo unico | ✅ Fatto — vedi commit su `feat/new-ux-ui`. **Non aggiunti**: pulsanti SSO (il mockup li mostra ma `GET /api/v1/auth/sso/{provider}/callback` oggi risponde con JSON grezzo invece di reindirizzare al frontend con una sessione — collegarli avrebbe portato l'utente su una pagina JSON nuda, peggio che ometterli; richiede prima un redirect callback→frontend lato backend), link "Password dimenticata" (nessun endpoint di reset password esiste), "Invia un codice via email"/"Usa un codice di recupero" nello step MFA e l'avviso "nuovo dispositivo rilevato" (nessuna di queste funzionalità esiste lato backend: `method` nella sfida MFA è fisso, non c'è un canale alternativo né codici di recupero né rilevamento dispositivo) |
 | — | 1d Editor chrome (`/dashboard/blogs/[slug]/posts/*`): rail destro a tab (Post/Traduzioni) al posto dei controlli accumulati sopra la toolbar, popover per la nota al posto del `window.prompt`, avatar colorato nel menu di autocomplete delle @menzioni | ✅ Fatto — vedi commit su `feat/new-ux-ui`. Nuovo `components/editor/EditorRail.tsx` (tab generiche, riusabile). Stato del post ora `SegmentedControl` (primitiva della Fase 2, prima inutilizzata) invece di un `<select>`, ma resta **2 vie** (Bozza/Pubblica ora): il mockup ne mostra 3 (+ Review, + Scheduled) ma l'invio in revisione (`POST .../submit-for-review`, esiste lato backend) e la pianificazione (`published_at`) non sono mai stati collegati lato frontend — funzionalità reale non ancora costruita, non solo stile, va trattata come blocco a sé. Non aggiunti nel rail: "Allow @mentions" (`Blog.mentions_enabled` è un'impostazione di blog, già in `SettingsTab`, non per-post) e "Content warning" (già gestito dalle pillole in sovraimpressione di `CoverImageUpload`/`SensitiveImageNodeView`) — duplicarli nel rail avrebbe rischiato di disallinearli dalla fonte reale. **Non verificato dal vivo** sullo stack podman (nessun container in esecuzione in questa sessione): solo `npm run build`/`eslint` puliti — nessuna nuova chiamata API, comportamento invariato a parità di dati. |
 | — | 2f Profilo utente (`/dashboard/profile`): nav interna sticky (Identità/Lingue/Link social/Sicurezza/Privacy), sezione Identità con avatar+campi in griglia, "Firma i miei post come" come 3 card selezionabili invece di un `<select>`, "Privacy e dati" come lista titolo/sottotitolo/azione | ✅ Fatto — vedi commit su `feat/new-ux-ui`. Stessi campi/endpoint di prima, solo riorganizzati: un unico `<form>` copre ancora Identità+Lingue (un solo salvataggio, `PATCH /users/me`); Link social/MFA/Privacy restano azioni indipendenti come oggi. **Non aggiunti**: "Lingua dell'interfaccia" (richiede `next-intl`/`users.ui_locale`, non ancora costruito — vedi riga i18n sotto) e "Sessioni · N" (nessuna gestione multi-sessione lato backend, solo un cookie di refresh) — il mockup li mostra ma non esiste nulla da collegare. |
+| — | 2g Scaffale frammenti (`/dashboard/frammenti`): intestazione con conteggio, chip di raggruppamento (Tutti/Per post/Per autore), card con azioni Apri nel post/Copia/visibilità/Rimuovi | ✅ Fatto — vedi commit su `feat/new-ux-ui`. "Per post"/"Per autore" sono un raggruppamento **reale** dei dati già caricati (client-side, nessun endpoint nuovo), non un placeholder — i frammenti hanno già `post_title`/`author_display_name`. "Copia" usa `navigator.clipboard`, puramente frontend. **Non aggiunto**: il filtro "Tagged" del mockup (i frammenti non hanno tag, nessun campo del genere esiste) ed "Export" nell'intestazione (nessun endpoint di export dedicato ai soli frammenti — l'export GDPR completo in `dashboard/profile` include già i frammenti, un export parallelo qui sarebbe un'altra funzionalità reale, non solo stile). |
 | — | i18n dell'interfaccia (`next-intl`, non presente oggi come dipendenza) | ⚪ Rimandato a blocco dedicato, non legato a una fase specifica sopra |
 
 Ogni fase è un blocco a sé (vedi CLAUDE.md §2): non anticipare la fase
@@ -46,7 +47,7 @@ aspetto/interazione. Migrabili nelle fasi 2-5 senza toccare il backend.
 | 2a/2b/2c Bibliografia/media/link | `/[blogSlug]/bibliografia`, `/media`, `/link` | §1 "Note a piè di pagina + bibliografia automatica" |
 | 2e Impostazioni blog | `/dashboard/blogs/[slug]` (tab Aspetto/Collaboratori) | §1 "Personalizzazione colori/tipografia...", "Inviti a collaborare" |
 | ~~2f Profilo (identità, privacy & dati)~~ | ~~`/dashboard/profile`~~ | ✅ Fatto — vedi tabella fasi sopra |
-| 2g Frammenti | `/dashboard/frammenti` | §1 "Frammenti: raccolta personale..." |
+| ~~2g Frammenti~~ | ~~`/dashboard/frammenti`~~ | ✅ Fatto — vedi tabella fasi sopra |
 | 3a Bib/media/link mobile | stesse route | come sopra |
 | 3c Media lightbox | editor / libreria media | §1 "Moderazione automatica delle immagini" |
 | 3e Profilo pubblico | `/u/[username]` | §1 "Follow tra utenti...", "Profilo utente" |
@@ -79,7 +80,18 @@ applicabile.
 
 ## 4. Prossimo blocco suggerito
 
-Fase 2 (primitives `components/ui/*`): stesso rischio basso della Fase 1,
-nessuna dipendenza nuova, nessuna route nuova — sostituzione di componenti
-esistenti con superset della stessa API (vedi `frontend-kit/INVENTORY.md §2.2`).
-Da confermare con l'utente prima di iniziare (CLAUDE.md §2).
+Tutti i mockup di puro restyling elencati in §1 sono ✅ fatti. Il backlog
+residuo (§2-3) richiede lavoro reale (backend nuovo e/o decisioni di
+prodotto) o è rimandato per scelta esplicita (i18n): non anticipabile senza
+indicazione esplicita dell'utente (CLAUDE.md §2). Candidati, in ordine di
+rischio crescente:
+
+1. 3f Home blog con palette custom (§2): il gap più piccolo, solo leggere
+   `blog_configs` e iniettarlo come variabili CSS su `/[blogSlug]`.
+2. i18n dell'interfaccia (`next-intl`): nessun backend nuovo ma tocca
+   `next.config.ts`, routing e 291 stringhe — un blocco a sé stante per
+   dimensione, non per rischio tecnico.
+3. Uno dei mockup di §3 (Publications, gestione Note, Overview blog/
+   piattaforma, coda commenti estesa, impostazioni blog avanzate,
+   impostazioni piattaforma, coda GDPR, nota di audit obbligatoria): tutti
+   richiedono prima definire lo schema/endpoint lato backend.
