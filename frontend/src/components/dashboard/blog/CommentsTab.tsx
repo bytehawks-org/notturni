@@ -1,18 +1,26 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { EmptyState, SkeletonRows } from "@/components/ui/States";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { formatDate } from "@/lib/format";
 import { type BlogComment } from "@/lib/types";
 
 import { errorMessage } from "./shared";
 
+/** Coda dei commenti in attesa (mockup 5b, versione con le sole azioni oggi
+ * disponibili: approva/rifiuta). Stati "nascosti"/"segnalati", lista dei
+ * bloccati, escalation e policy estesa arrivano con il blocco B4. */
 export function CommentsTab({ blogSlug, canModerate }: { blogSlug: string; canModerate: boolean }) {
   const { accessToken, authFetch } = useAuth();
+  const t = useTranslations("CommentsTab");
+  const locale = useLocale();
   const [pending, setPending] = useState<BlogComment[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,31 +53,46 @@ export function CommentsTab({ blogSlug, canModerate }: { blogSlug: string; canMo
     }
   }
 
-  if (!canModerate) return <p className="text-sm text-muted">Solo il proprietario può moderare i commenti.</p>;
+  if (!canModerate) return <p className="text-sm text-muted">{t("ownerOnly")}</p>;
 
   return (
-    <div>
-      {error && <Alert kind="error">{error}</Alert>}
-      {pending !== null && pending.length === 0 && (
-        <p className="text-sm text-muted">Nessun commento in attesa di moderazione.</p>
-      )}
-      <div className="space-y-3">
-        {pending?.map((comment) => (
-          <Card key={comment.id}>
-            <p className="text-xs text-muted">
-              su <span className="text-foreground">{comment.post_title}</span> — da{" "}
-              {comment.author_display_name}
-            </p>
-            <p className="my-2 text-sm text-foreground">{comment.content}</p>
-            <div className="flex gap-2">
-              <Button onClick={() => handleModerate(comment.id, "approve")}>Approva</Button>
-              <Button variant="danger" onClick={() => handleModerate(comment.id, "reject")}>
-                Rifiuta
-              </Button>
-            </div>
-          </Card>
-        ))}
+    <div className="flex flex-col gap-4">
+      <div className="flex items-baseline gap-3 text-sm">
+        <span className="font-semibold text-foreground">
+          {t("pending")}
+          {pending && <span className="text-muted"> · {pending.length}</span>}
+        </span>
       </div>
+      {error && <Alert kind="error">{error}</Alert>}
+      {pending === null && !error && <SkeletonRows rows={3} />}
+      {pending !== null && pending.length === 0 && <EmptyState glyph="✓" title={t("emptyTitle")} body={t("emptyBody")} />}
+      {pending && pending.length > 0 && (
+        <ul className="flex flex-col rounded-xl border border-border bg-surface">
+          {pending.map((comment) => (
+            <li key={comment.id} className="flex flex-col gap-2.5 border-b border-border px-4 py-4 last:border-0">
+              <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted">
+                <span className="font-medium text-foreground">{comment.author_display_name}</span>
+                <span>· {formatDate(comment.created_at, locale, { day: "numeric", month: "short" })}</span>
+                <span>
+                  · {t("on")}{" "}
+                  <Link href={`/${blogSlug}/${comment.post_slug}`} className="text-foreground no-underline hover:underline">
+                    {comment.post_title}
+                  </Link>
+                </span>
+              </div>
+              <p className="text-[15px] leading-relaxed text-foreground">{comment.content}</p>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={() => handleModerate(comment.id, "approve")}>
+                  {t("approve")}
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => handleModerate(comment.id, "reject")}>
+                  {t("reject")}
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

@@ -99,6 +99,27 @@ body {
 .notturni-prose h1 {
   font-size: 1.75em;
 }
+/* Titoli ancorabili dall'indice "In questo post" (mockup 1a): margine per
+   non finire sotto l'header al click. */
+.notturni-prose h2,
+.notturni-prose h3 {
+  scroll-margin-top: 1.5rem;
+}
+/* Colonna di lettura del post pubblico (mockup 1a): titoli più ariosi del
+   Markdown "compatto" usato nell'editor. */
+.notturni-prose--reading h2 {
+  font-size: 1.55em;
+  font-weight: 500;
+  margin-top: 1.6em;
+}
+.notturni-prose--reading h3 {
+  font-size: 1.2em;
+  font-weight: 500;
+}
+.notturni-prose--reading blockquote {
+  font-family: var(--font-serif);
+  font-size: 1.05em;
+}
 .notturni-prose h2 {
   font-size: 1.4em;
 }
@@ -359,4 +380,18 @@ body {
 .fragment-quote {
   padding-left: 1rem;
   border-left: 3px solid var(--fragment-highlight-border);
+}
+
+/* Palette personalizzata di un blog (mockup 3f, components/blog/BlogPageShell.tsx):
+   le variabili arrivano come style inline sulla root della pagina e valgono
+   per il tema chiaro. In modalità scura si torna alla palette scura di
+   piattaforma (la variante scura derivata dalla palette del blog non è ancora
+   supportata da blog_configs). */
+:root[data-theme="dark"] .blog-palette {
+  --background: #18191b !important;
+  --surface: #1f2023 !important;
+  --foreground: #ebe6de !important;
+  --primary: #83b8a5 !important;
+  --muted: #968e82 !important;
+  --border-color: #2f2e2b !important;
 }

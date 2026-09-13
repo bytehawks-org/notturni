@@ -5,3 +5,6 @@
  * (standalone Next.js), non serve una controparte "interna" come per l'URL
  * del backend. */
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, "");
+
+/** Solo host (senza schema/porta) per mostrare `{slug}.{host}` nelle directory. */
+export const SITE_HOST = new URL(SITE_URL).hostname;

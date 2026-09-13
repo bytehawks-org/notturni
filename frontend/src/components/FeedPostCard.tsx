@@ -1,42 +1,68 @@
+import { getLocale, getTranslations } from "next-intl/server";
 import Link from "next/link";
 
-import { TagPills } from "@/components/TagPills";
+import { formatDate, readingMinutes } from "@/lib/format";
 import { excerpt } from "@/lib/markdown";
 import type { Post } from "@/lib/types";
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
-}
-
-export function FeedPostCard({ post }: { post: Post }) {
+/** Riga del feed su / e /[blogSlug] (mockup 1c, 4a, 4b, 3e): autore, blog,
+ * data, titolo, estratto, categoria, tempo di lettura, note, tag, copertina. */
+export async function FeedPostCard({ post, blogTitle, showBlog = true }: { post: Post; blogTitle?: string; showBlog?: boolean }) {
+  const [t, locale] = await Promise.all([getTranslations("Feed"), getLocale()]);
   return (
-    <article className="flex gap-5 border-b border-border/60 py-6 first:pt-0 last:border-0">
+    <article className="grid gap-4 border-b border-border py-5 last:border-0 md:grid-cols-[minmax(0,1fr)_128px] md:gap-7 md:py-6">
+      <div className="flex min-w-0 flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted">
+          <span className="grid h-5 w-5 place-items-center rounded-full bg-primary/60 font-serif text-[11px] text-background">
+            {post.author_display_name[0]?.toUpperCase()}
+          </span>
+          <span className="font-medium text-foreground">{post.author_display_name}</span>
+          {showBlog && (
+            <span>
+              {t("in")}{" "}
+              <Link href={`/${post.blog_slug}`} className="no-underline hover:underline">
+                {blogTitle ?? post.blog_slug}
+              </Link>
+            </span>
+          )}
+          {post.published_at && (
+            <>
+              <span>·</span>
+              <span>{formatDate(post.published_at, locale, { day: "numeric", month: "short", year: "numeric" })}</span>
+            </>
+          )}
+        </div>
+        <h3 className="m-0 font-serif text-xl font-medium leading-tight text-pretty md:text-[23px]">
+          <Link href={post.permalink} className="text-foreground no-underline hover:text-primary">
+            {post.title}
+          </Link>
+        </h3>
+        <p className="m-0 text-[15px] leading-relaxed text-muted md:line-clamp-2">{excerpt(post.content, 180)}</p>
+        <div className="mt-1 flex flex-wrap items-center gap-3.5 text-[13px] text-muted">
+          {post.category && (
+            <Link href={`/?category=${encodeURIComponent(post.category.slug)}`} className="font-medium no-underline hover:underline">
+              {post.category.name}
+            </Link>
+          )}
+          <span>{t("minutes", { min: readingMinutes(post.content) })}</span>
+          {post.notes.length > 0 && <span>{t("notes", { count: post.notes.length })}</span>}
+          {post.tags.slice(0, 3).map((tag) => (
+            <Link key={tag} href={`/?tag=${encodeURIComponent(tag)}`} className="text-muted no-underline hover:text-primary">
+              #{tag}
+            </Link>
+          ))}
+        </div>
+      </div>
       {post.cover_image_url && (
-        <Link href={post.permalink} className="shrink-0">
+        <Link href={post.permalink} className="hidden md:block">
           {/* eslint-disable-next-line @next/next/no-img-element -- URL storage esterno */}
           <img
             src={post.cover_image_url}
             alt=""
-            className="h-24 w-24 rounded-lg object-cover sm:h-28 sm:w-28"
+            className={`h-24 w-full rounded-lg border border-border object-cover ${post.cover_image_is_sensitive ? "blur-md" : ""}`}
           />
         </Link>
       )}
-      <div className="min-w-0">
-        <Link href={post.permalink} className="font-serif text-xl text-foreground hover:text-primary">
-          {post.title}
-        </Link>
-        <p className="mt-1 text-sm text-muted">
-          {post.author_display_name} · {post.blog_slug}
-          {post.published_at && <> · {formatDate(post.published_at)}</>}
-          {post.category && <> · {post.category.name}</>}
-        </p>
-        <p className="mt-2 text-sm leading-relaxed text-foreground/80">{excerpt(post.content, 180)}</p>
-        {post.tags.length > 0 && (
-          <div className="mt-2">
-            <TagPills tags={post.tags} />
-          </div>
-        )}
-      </div>
     </article>
   );
 }

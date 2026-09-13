@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -14,6 +15,8 @@ import { PLATFORM_ADMIN_ROLES, PLATFORM_MODERATION_ROLES } from "@/lib/types";
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, loading, logout } = useAuth();
+  const t = useTranslations("Nav");
+  const tc = useTranslations("Common");
   const [deploymentMode, setDeploymentMode] = useState<"solo" | "platform" | null>(null);
 
   useEffect(() => {
@@ -41,53 +44,53 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (loading || !user || (!isAdmin && !isModerator)) {
     return (
       <main className="flex flex-1 items-center justify-center">
-        <p className="text-sm text-muted">Caricamento…</p>
+        <p className="text-sm text-muted">{tc("loading")}</p>
       </main>
     );
   }
 
   const items: NavItem[] = [
-    ...(isAdmin ? [{ href: "/admin/pagine", label: "Pagine", icon: "▤", mobile: true } as NavItem] : []),
+    ...(isAdmin ? [{ href: "/admin/pagine", label: t("pages"), icon: "▤", mobile: true } as NavItem] : []),
     ...(isAdmin && deploymentMode !== "solo"
-      ? [{ href: "/admin/utenti", label: "Utenti", icon: "◯", mobile: true } as NavItem]
+      ? [{ href: "/admin/utenti", label: t("users"), icon: "◯", mobile: true } as NavItem]
       : []),
-    ...(isAdmin ? [{ href: "/admin/blog", label: "Tutti i blog", icon: "✎", mobile: true } as NavItem] : []),
-    ...(isAdmin ? [{ href: "/admin/moderazione", label: "Moderazione", icon: "◔", mobile: true } as NavItem] : []),
+    ...(isAdmin ? [{ href: "/admin/blog", label: t("allBlogs"), icon: "✎", mobile: true } as NavItem] : []),
+    ...(isAdmin ? [{ href: "/admin/moderazione", label: t("moderation"), icon: "◔", mobile: true } as NavItem] : []),
     ...(isModerator
-      ? [{ href: "/admin/moderazione-commenti", label: "Moderazione commenti", icon: "◔", mobile: true } as NavItem]
+      ? [{ href: "/admin/moderazione-commenti", label: t("commentModeration"), icon: "◔", mobile: true } as NavItem]
       : []),
-    ...(isAdmin ? [{ href: "/admin/registro", label: "Registro", icon: "≡", mobile: true } as NavItem] : []),
+    ...(isAdmin ? [{ href: "/admin/registro", label: t("register"), icon: "≡", mobile: true } as NavItem] : []),
   ];
 
   return (
     <div className="flex flex-1 flex-col">
       <div className="flex items-center justify-between border-b border-border px-5 py-3 text-sm lg:hidden">
         <Link href="/dashboard" className="text-muted hover:text-foreground">
-          ← La mia dashboard
+          {tc("myDashboard")}
         </Link>
         <div className="flex items-center gap-3">
           <ThemeToggle />
           <Button variant="secondary" size="sm" onClick={() => logout().then(() => router.push("/login"))}>
-            Esci
+            {tc("signOut")}
           </Button>
         </div>
       </div>
       <DashboardShell
         items={items}
-        eyebrow="Amministrazione"
+        eyebrow={t("administration")}
         homeHref="/admin"
         footer={
           <div className="flex flex-col gap-3 px-3 text-sm">
             <Link href="/dashboard" className="text-muted hover:text-foreground">
-              ← La mia dashboard
+              {tc("myDashboard")}
             </Link>
             <div className="flex items-center justify-between">
               <span className="truncate text-muted">{user.username}</span>
               <ThemeToggle />
             </div>
             <Button variant="secondary" size="sm" onClick={() => logout().then(() => router.push("/login"))}>
-              Esci
-            </Button>
+            {tc("signOut")}
+          </Button>
           </div>
         }
       >

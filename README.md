@@ -119,7 +119,9 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   utilizzo diretto da parte degli utenti.
 - **Frontend:** interfaccia autore (dashboard, editor, profilo), tema
   chiaro/scuro/automatico (alba-tramonto in base alla posizione, calcolata
-  solo lato client).
+  solo lato client), interfaccia in italiano e inglese (`next-intl`,
+  selettore nell'header e nel profilo — la lingua dei contenuti è a parte),
+  palette personalizzata del blog applicata alle sue pagine pubbliche.
 - **Self-hosting:** hostname/FQDN e modalità di installazione configurabili
   (`NOCT_INSTANCE_FQDN`, `NOCT_DEPLOYMENT_MODE=solo|platform`) — "solo" per un
   blog/sito personale a singolo proprietario (il primo utente registrato

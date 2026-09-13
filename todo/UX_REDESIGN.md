@@ -7,91 +7,77 @@ cartella di lavoro locale, non fa parte del repository). Contiene
 React/Tailwind di riferimento in `frontend-prototype/frontend-kit/`.
 
 Questo documento traccia **l'integrazione di quel prototipo in `frontend/src`**
-a blocchi, secondo l'ordine suggerito in `frontend-kit/INVENTORY.md §5`, e
-separa i mockup che sono **solo un restyling** (funzionalità già presente e
-funzionante, cambia l'aspetto) da quelli che richiedono **lavoro reale**
-(backend nuovo e/o funzionalità di dominio non ancora costruita).
+a blocchi e separa i mockup che sono **solo un restyling** (funzionalità già
+presente, cambia l'aspetto) da quelli che richiedono **lavoro reale** (backend
+nuovo e/o funzionalità di dominio non ancora costruita).
 
 ## Stato di avanzamento della migrazione
 
-| Fase | Contenuto | Stato |
+| Blocco | Contenuto | Stato |
 |---|---|---|
-| 1 | Token colore (light/dark), font (Lora + Source Sans 3), `globals.css`, `layout.tsx` | ✅ Fatto — vedi commit su `feat/new-ux-ui` |
-| 2 | Primitives `components/ui/*` (Button, Card, Field, Pill, Controls, States, ConfirmDialog, Toast) | ✅ Fatto — vedi commit su `feat/new-ux-ui`. `ConfirmDialog`/`Toast`/`States` adattati senza `next-intl` (stringhe italiane hardcoded, coerenti col resto dell'app oggi); `Card` e `FieldGroup` mantengono il padding/margine di default del componente precedente (il kit li lascia al chiamante, ma tutti gli usi esistenti — 50 per `Card`, 11 file per `FieldGroup` — si affidano al valore implicito: verrà sovrascritto man mano che le singole schermate vengono restilizzate nelle fasi 3-5) |
-| 3 | Shell: `DashboardShell` (dashboard+admin layout), `SiteHeader`/`SiteFooter`, `BlogHeader` | ✅ Fatto — vedi commit su `feat/new-ux-ui`. `SiteFooter` minimale (solo nome sito + link al repository): i link a pagine statiche del kit (chi siamo/contatti/privacy/...) non sono stati aggiunti perché sono contenuto libero su `/p/{slug}`, nessuno slug è riservato — servono dati reali o una convenzione di slug per popolarli senza rischiare link rotti. `SiteHeader` senza le voci "Blog"/"Pubblicazioni" (route non ancora esistenti, arriveranno con le fasi 4 e 6). `BlogHeader` senza tab "About" (nessuno slug di pagina blog è garantito, stessa ragione del footer) |
-| 4 | Home (`app/page.tsx`) e nuova `/blogs` (directory pubblica) | 🟡 Parziale — vedi commit su `feat/new-ux-ui`. Aggiunta `/blogs` con `GET /api/v1/blogs` (nuovo endpoint pubblico, non c'era: filtra `visibility=public`, non sospesi, `search_indexing_enabled`) e link "Blog" in `SiteHeader`. **Non fatto**: il restyling della home in stile mockup 4a/4b (Manifesto a due colonne, `BlogDirectoryList` in sidebar) — la home resta nella struttura attuale (hero + tendenze + feed), solo la palette/font della Fase 1 si applicano già lì |
-| 5 | Tab dashboard blog (Overview nuovo, Comments/Settings estesi) e admin piattaforma | 🟡 Parziale — vedi commit su `feat/new-ux-ui`. Restilizzati con le primitive delle fasi 1-2 (Pill per gli stati, card per palette/collaboratori, layout dei form) i quattro tab già funzionanti: `AppearanceTab`, `CollaboratorsTab`, `PostsTab`, `PagesTab` — nessun campo nuovo (niente preset/generatore variante scura/contrasto AA/anteprima live del mockup 2e, non supportati da `blog_configs`). **Non fatto, richiede prima decisioni di prodotto** (vedi §3 sotto): `OverviewTab`, `CommentsQueue`/`CommentPolicyCard` estesi, `SettingsForm` con pausa/trasferimento/soft-delete, tutto l'admin di piattaforma (`AdminOverview`, `BlogsTable`+`ReportPanel` con nota di audit obbligatoria, `GdprRequestsTable`, `PlatformSettingsForm`) |
-| 6 | Publications + gestione Note come entità di prima classe (richiede backend nuovo) | ⚪ Da fare |
-| — | 1h Login/MFA (`/login`, `/register`): brand + headline stile mockup, caselle OTP per cifra invece di un campo unico | ✅ Fatto — vedi commit su `feat/new-ux-ui`. **Non aggiunti**: pulsanti SSO (il mockup li mostra ma `GET /api/v1/auth/sso/{provider}/callback` oggi risponde con JSON grezzo invece di reindirizzare al frontend con una sessione — collegarli avrebbe portato l'utente su una pagina JSON nuda, peggio che ometterli; richiede prima un redirect callback→frontend lato backend), link "Password dimenticata" (nessun endpoint di reset password esiste), "Invia un codice via email"/"Usa un codice di recupero" nello step MFA e l'avviso "nuovo dispositivo rilevato" (nessuna di queste funzionalità esiste lato backend: `method` nella sfida MFA è fisso, non c'è un canale alternativo né codici di recupero né rilevamento dispositivo) |
-| — | 1d Editor chrome (`/dashboard/blogs/[slug]/posts/*`): rail destro a tab (Post/Traduzioni) al posto dei controlli accumulati sopra la toolbar, popover per la nota al posto del `window.prompt`, avatar colorato nel menu di autocomplete delle @menzioni | ✅ Fatto — vedi commit su `feat/new-ux-ui`. Nuovo `components/editor/EditorRail.tsx` (tab generiche, riusabile). Stato del post ora `SegmentedControl` (primitiva della Fase 2, prima inutilizzata) invece di un `<select>`, ma resta **2 vie** (Bozza/Pubblica ora): il mockup ne mostra 3 (+ Review, + Scheduled) ma l'invio in revisione (`POST .../submit-for-review`, esiste lato backend) e la pianificazione (`published_at`) non sono mai stati collegati lato frontend — funzionalità reale non ancora costruita, non solo stile, va trattata come blocco a sé. Non aggiunti nel rail: "Allow @mentions" (`Blog.mentions_enabled` è un'impostazione di blog, già in `SettingsTab`, non per-post) e "Content warning" (già gestito dalle pillole in sovraimpressione di `CoverImageUpload`/`SensitiveImageNodeView`) — duplicarli nel rail avrebbe rischiato di disallinearli dalla fonte reale. **Non verificato dal vivo** sullo stack podman (nessun container in esecuzione in questa sessione): solo `npm run build`/`eslint` puliti — nessuna nuova chiamata API, comportamento invariato a parità di dati. |
-| — | 2f Profilo utente (`/dashboard/profile`): nav interna sticky (Identità/Lingue/Link social/Sicurezza/Privacy), sezione Identità con avatar+campi in griglia, "Firma i miei post come" come 3 card selezionabili invece di un `<select>`, "Privacy e dati" come lista titolo/sottotitolo/azione | ✅ Fatto — vedi commit su `feat/new-ux-ui`. Stessi campi/endpoint di prima, solo riorganizzati: un unico `<form>` copre ancora Identità+Lingue (un solo salvataggio, `PATCH /users/me`); Link social/MFA/Privacy restano azioni indipendenti come oggi. **Non aggiunti**: "Lingua dell'interfaccia" (richiede `next-intl`/`users.ui_locale`, non ancora costruito — vedi riga i18n sotto) e "Sessioni · N" (nessuna gestione multi-sessione lato backend, solo un cookie di refresh) — il mockup li mostra ma non esiste nulla da collegare. |
-| — | 2g Scaffale frammenti (`/dashboard/frammenti`): intestazione con conteggio, chip di raggruppamento (Tutti/Per post/Per autore), card con azioni Apri nel post/Copia/visibilità/Rimuovi | ✅ Fatto — vedi commit su `feat/new-ux-ui`. "Per post"/"Per autore" sono un raggruppamento **reale** dei dati già caricati (client-side, nessun endpoint nuovo), non un placeholder — i frammenti hanno già `post_title`/`author_display_name`. "Copia" usa `navigator.clipboard`, puramente frontend. **Non aggiunto**: il filtro "Tagged" del mockup (i frammenti non hanno tag, nessun campo del genere esiste) ed "Export" nell'intestazione (nessun endpoint di export dedicato ai soli frammenti — l'export GDPR completo in `dashboard/profile` include già i frammenti, un export parallelo qui sarebbe un'altra funzionalità reale, non solo stile). |
-| — | i18n dell'interfaccia (`next-intl`, non presente oggi come dipendenza) | ⚪ Rimandato a blocco dedicato, non legato a una fase specifica sopra |
+| 1 | Token colore (light/dark), font (Lora + Source Sans 3), `globals.css`, `layout.tsx` | ✅ |
+| 2 | Primitives `components/ui/*` (Button, Card, Field, Pill, Controls, States, ConfirmDialog, Toast) | ✅ — `Toast` ha ora anche `ToastProvider`/`useToast()` (montato in `layout.tsx`, auto-dismiss 5 s); `States` ha anche `SkeletonCards` |
+| 3 | Shell: `DashboardShell`, `SiteHeader`/`SiteFooter`, `BlogHeader` | ✅ — `SiteHeader` con `UiLanguagePicker`; `BlogHeader` è un Server Component (`getTranslations`) con slot `actions` (tema, accesso, `FollowBlogButton`) |
+| A0 | i18n dell'interfaccia con `next-intl` | ✅ — `src/i18n/{config,request,actions}.ts`, `src/messages/{it,en}.json` (le 291 stringhe del kit + quelle delle schermate migrate), `next.config.ts` con `createNextIntlPlugin`, `NextIntlClientProvider` in `layout.tsx`, `<html lang>` dinamico. Risoluzione: cookie `notturni_ui_locale` → `Accept-Language` → `it` (fallback italiano, non `en` come nel kit: le stringhe non ancora migrate sono italiane e un fallback inglese mischierebbe le lingue). Selettore nell'header pubblico e in Profilo → Lingue. **Non fatto**: `platform_config.default_locale` e `users.ui_locale` (blocco B6), quindi la scelta è per browser, non per account. **Stringhe ancora hardcoded in italiano**: editor (`posts/new`, `posts/[postId]` tranne lo stato, `RichTextEditor`, `TranslationsBar`, `CoverImageUpload`), tab `PagesTab`/`CollaboratorsTab`/`SettingsTab`/`MyMembershipCard`, `components/dashboard/blog/shared.ts`, pagine admin `blog`/`moderazione`/`moderazione-commenti`/`pagine`/`registro`, pagine statiche `/p` e `/[blog]/pagina`, `LanguagePicker`, `Alert`. Si migrano man mano che le schermate vengono toccate |
+| A1 | 1a/1b Post pubblico | ✅ — griglia `1fr 680px 1fr` da `xl`, indice "In questo post" dai titoli h2/h3 (`renderPost` in `lib/markdown.ts` assegna gli id e restituisce `headings`; sotto `xl` è un `<details>`), rail destro con note/categoria/traduzioni (`GET /posts/{id}/translations`), meta con iniziale/autore/data/tempo di lettura (`lib/format.ts::readingMinutes`, ~200 parole/min), `PostActions` (Condividi via Web Share API o copia link; Cita copia "Autore, “Titolo”, Blog, data. URL"), `FragmentMenu` del kit dentro `FragmentReader` (desktop flottante, mobile bottom-sheet; Salva/Salva pubblico/Rimuovi, Copia link, Cita con conteggio parole e %; funziona anche da anonimi per link/citazione), riquadro "I tuoi frammenti qui · n · apri lo scaffale", `CommentsSection` con conteggio e riga di policy, nota privacy in fondo. **Non fatto**: "Save" del mockup (nessuna funzione "salva post" esiste — coperto dallo scaffale frammenti), didascalia/alt della copertina (nessun campo sul post), numero follower nella riga meta (è nel pulsante Segui dell'header) |
+| A2 | 4a/4b/1c Home di piattaforma, 4c `/blogs` | ✅ — `Manifesto` a due colonne con i 4 pilastri, `TrendingTags`, feed con chip lingua (`?locale=`, filtro già supportato da `GET /feed/posts`) e filtri tag/categoria, sidebar `BlogDirectoryList` + card "Tuo, da portare via"; `/blogs` con ricerca `?q=` e filtro lingua `?locale=` **applicati lato pagina** sulla lista (max 100) perché `GET /blogs` non li supporta; nuova `FeedPostCard` (Server Component: autore, blog, data, estratto, categoria, minuti, note, tag, copertina). **Non fatto**: tab "Seguiti" (feed dei soli blog seguiti — B1), "Pubblicazioni in corso" (B9), "Dal blog di piattaforma", conteggi post/follower per blog nella directory (B1), paginazione "Post precedenti" e RSS |
+| A3 | 3f Home del blog con palette custom | ✅ — hero (iniziale colorata, titolo, sottotitolo, descrizione, host), chip delle categorie (`?category=` filtrato lato pagina sui post del blog), feed con `FeedPostCard`, card "Su questo blog". **Palette custom applicata**: `components/blog/BlogPageShell.tsx` legge `GET /blogs/{slug}/config` (pubblico) e inietta `palette.*` come variabili CSS sulla root di **tutte** le pagine pubbliche del blog (home, post, bibliografia, media, link); la palette di default del backend non viene iniettata (blog mai personalizzato = identico allo shell). In tema scuro il CSS `.blog-palette` ripristina la palette scura di piattaforma. **Non fatto**: font del blog sul rendering pubblico (richiederebbe caricare Google Fonts a runtime, contro la promessa "nessun font di terze parti nelle pagine pubbliche" — da decidere), colonna destra del mockup (Autori: `GET /blogs/{slug}/members` è solo autenticato; Pubblicazioni: B9; Newsletter: non esiste), RSS |
+| A4 | 2a/2b/2c/3a Bibliografia, media, link | ✅ — bibliografia numerata con "Citata in", conteggio citazioni e ordinamento `?sort=cited`; media in griglia 2/4 colonne con vista `?view=post` (raggruppata per primo post) e sfocatura CSS delle immagini segnalate; link raggruppati per host e ordinati per numero. Tutte sotto `BlogPageShell` (palette). **Non fatto**: filtro per tipo di nota (libro/articolo/web — le note non hanno `kind`, B8), "Export BibTeX" (B8), vista "Timeline" dei media |
+| A5 | 1e/1f Dashboard utente | ✅ — saluto in base all'ora, riga riepilogo (bozze, inviti, commenti da moderare), KPI (post, follower da `follow-stats`, blog), "Post recenti" aggregati client-side dai propri blog con filtri Tutti/Bozze/In revisione/Pianificati/Pubblicati e `StatusPill`, card invito, "Commenti da moderare" (prime 3, link alla tab), card dei blog con `BlogCard`/`VisibilityBand` del kit (colori `--vis-*` di HANDOFF), stati vuoti/skeleton. **Non fatto**: letture e "nuovi follower questa settimana" (B1/B2) |
+| A6 | 2e Aspetto | ✅ — preset di palette calme (Notturni/Carta/Ardesia/Lavanda), verifica contrasto AA (`lib/contrast.ts`, WCAG: testo ≥ 4.5, primario/attenuato ≥ 3), corpo 17/18/19 e misura stretta/normale (chiavi libere `typography.body_size`/`measure`, accettate dal backend ma **non ancora applicate al rendering pubblico**), layout come `SegmentedControl`, anteprima live vista lettore. **Non fatto**: "Genera variante scura" (serve una chiave `palette_dark` in `blog_configs`, B1) |
+| A7 | 3e Profilo pubblico | ✅ — header con avatar, `@username`, paese e lingue nella lingua dell'interfaccia, bio, follower e "su Notturni da", link social, nota privacy. **Non fatto**: tab Post/Blog/Commenti e contatori blog/post (nessun endpoint per utente: B1) |
+| A8 | 1g/5d Admin | ✅ — panoramica con code aperte (commenti in attesa, post in revisione, post nascosti, blog sospesi) calcolate dagli endpoint admin esistenti, scorciatoie alle sezioni; tabella utenti con MFA, stato, data iscrizione, pillole. **Non fatto**: KPI di piattaforma, stato dei servizi, "audit di oggi" (`GET /admin/overview`, B1/B5), colonne blog/ultimo accesso ed export CSV utenti (B1), tema scuro di default per l'admin |
+| A9 | 3d Stati | ✅ — `EmptyState`/`SkeletonRows`/`SkeletonCards`/`ErrorState` usati in dashboard, scheda blog, `PostsTab`, `CommentsTab`, token, admin, frammenti, profilo pubblico; `ToastProvider` per le conferme (frammenti, copia link/citazione). **Non fatto**: avviso "blog sospeso" sulla pagina pubblica — il backend risponde 404 (indistinguibile da "non trovato", `can_view_blog`), serve un segnale dedicato (B5) |
+| A10 | 1d Editor: stato a 3 vie + pianificazione | ✅ — `components/editor/PostStatusControl.tsx`: Bozza · In revisione · Pubblica ora (`submit-for-review`/`return-to-draft`/`publish`), "Pianifica la pubblicazione…" con `datetime-local` → `publish` con `published_at` futuro; `lib/post-status.ts::displayPostStatus` deriva "pianificato" da `published` + data futura; tipo `PostStatus` allineato al backend (`pending_review`). `PostsTab` con filtri per stato |
+| — | 1h Login/MFA, 1d rail editor, 2f Profilo, 2g Frammenti | ✅ (sessioni precedenti) — ora migrati a `next-intl`; 2f ha in più "Lingua dell'interfaccia" |
+| B | Funzionalità che richiedono backend | ⚪ — vedi §4 |
 
-Ogni fase è un blocco a sé (vedi CLAUDE.md §2): non anticipare la fase
-successiva senza indicazione esplicita.
+Ogni blocco è a sé (vedi CLAUDE.md §2): non anticipare il successivo senza
+indicazione esplicita.
 
-## 1. Mockup che sono solo restyling (nessun gap funzionale)
+## 1. Mockup che sono solo restyling — tutti ✅
 
-La funzionalità sottostante esiste già e funziona; il prototipo cambia solo
-aspetto/interazione. Migrabili nelle fasi 2-5 senza toccare il backend.
+1a/1b, 1c/4a/4b, 1d, 1e/1f, 1g, 1h, 2a/2b/2c, 2e, 2f, 2g, 3a, 3d, 3e, 3f, 4c:
+fatti (vedi tabella sopra per i dettagli e le parti rimandate perché
+richiedono backend). Restano fuori, per scelta: 3c lightbox media (richiede
+una libreria media per blog, B7) e le voci del mockup senza nulla da collegare
+(SSO nel login, reset password, sessioni multiple, RSS, newsletter).
 
-| Mockup | Route reale | Riferimento ROADMAP.md |
+## 2. Gap noti già in ROADMAP.md
+
+| Mockup | Gap | Stato |
 |---|---|---|
-| 1a/1b Post pubblico | `/[blogSlug]/[postSlug]` | §1 righe "Note a piè di pagina...", "Frammenti" |
-| 1c Home | `/` | §1 "notturni.eu: raccolta articoli..." |
-| ~~1d Editor~~ | ~~`/dashboard/blogs/[slug]/posts/*`~~ | ✅ Fatto — vedi tabella fasi sopra |
-| 1e/1f Dashboard utente | `/dashboard` | §1 "Dashboard utente..." |
-| 1g Admin: tabella utenti | `/admin/utenti` | §1 "4 ruoli piattaforma..." |
-| ~~1h Login/MFA~~ | ~~`/login`, `/register`~~ | ✅ Fatto — vedi tabella fasi sopra |
-| 2a/2b/2c Bibliografia/media/link | `/[blogSlug]/bibliografia`, `/media`, `/link` | §1 "Note a piè di pagina + bibliografia automatica" |
-| 2e Impostazioni blog | `/dashboard/blogs/[slug]` (tab Aspetto/Collaboratori) | §1 "Personalizzazione colori/tipografia...", "Inviti a collaborare" |
-| ~~2f Profilo (identità, privacy & dati)~~ | ~~`/dashboard/profile`~~ | ✅ Fatto — vedi tabella fasi sopra |
-| ~~2g Frammenti~~ | ~~`/dashboard/frammenti`~~ | ✅ Fatto — vedi tabella fasi sopra |
-| 3a Bib/media/link mobile | stesse route | come sopra |
-| 3c Media lightbox | editor / libreria media | §1 "Moderazione automatica delle immagini" |
-| 3e Profilo pubblico | `/u/[username]` | §1 "Follow tra utenti...", "Profilo utente" |
-
-## 2. Mockup con un gap noto già in ROADMAP.md (restyling + piccolo lavoro reale)
-
-| Mockup | Gap | Dettaglio |
-|---|---|---|
-| 3f Home blog con palette custom | Palette/tipografia di `blog_configs` salvata e validata ma **non applicata al rendering pubblico** del blog | ROADMAP.md §1, riga "Personalizzazione colori/tipografia/presentazione per blog": va letta `blog_configs` e iniettata come variabili CSS sulla root della pagina `/[blogSlug]` |
+| 3f Palette custom sul rendering pubblico | `blog_configs` era solo salvata/validata | ✅ Palette applicata (A3). Tipografia (`heading_font`/`body_font`, `body_size`, `measure`) e `layout` ancora **non** applicati al rendering pubblico |
 
 ## 3. Mockup che richiedono lavoro reale (backend nuovo o esteso)
 
-Nessuno di questi va anticipato senza indicazione esplicita — sono blocchi a
-sé, coerenti con l'ordine di priorità del backlog in ROADMAP.md §5 quando
-applicabile.
-
 | Mockup | Cosa manca | Riferimento |
 |---|---|---|
-| 2d, 3g Publications (indice, capitoli, drag-to-order) | Funzionalità non iniziata: tabelle `publications`/`chapters` (ordine, stato), route pubbliche `/[blogSlug]/pub/[nome]`/`[capitolo]`, gestione in dashboard | ROADMAP.md §1 riga "Pubblicazioni: serie di articoli..." (⚪); intento di prodotto in `todo/PUBLICATIONS.md` |
-| 3b Gestione note (tabella, merge duplicati, "citato in") | Oggi le note sono un elenco per-post (`post_notes`, ✅ per la bibliografia), non entità di prima classe con tipo/URL, deduplica assistita o pannello di gestione dedicato | ROADMAP.md §1 riga "Note a piè di pagina + bibliografia automatica" (✅ solo per l'uso attuale, non per questa gestione avanzata) |
-| ~~4c Directory blog pubblica~~ | ✅ Fatto in fase 4: `GET /api/v1/blogs` (`backend/app/api/v1/blogs/crud.py::list_public_blogs`), `/blogs` (`frontend/src/app/blogs/page.tsx`) | `backend/API.md` |
-| 5a/5g Overview blog (KPI, grafico letture, storage) | Manca `GET /blogs/{slug}/overview`; `ReadsChart` richiede solo aggregati giornalieri (privacy) | Nuovo |
-| 5d Overview piattaforma (code, servizi) | Manca `GET /admin/overview` | Nuovo |
-| 5b Coda commenti estesa (block list, escalation al piattaforma) | Oggi: 3 stati (`members`/`everyone`/`closed`) e approvazione/rifiuto (✅). Mancano: lista utenti bloccati per blog, escalation di un commento al moderatore di piattaforma | ROADMAP.md §1 riga "Sistema di commenti con moderazione dell'autore" (✅ solo per lo scope attuale) |
-| 5c Impostazioni blog: pausa, trasferimento proprietà, cancellazione soft (30gg) | Oggi esiste solo la sospensione **imposta da admin** (`Blog.is_suspended`). Pausa volontaria del proprietario, trasferimento ownership e soft-delete non esistono | ROADMAP.md §1 righe 24-26 (GDPR/cancellazione account) lo notano esplicitamente come fuori scope oggi |
-| 5f Impostazioni piattaforma (form completo) | `GET /api/v1/config` espone solo alcuni valori read-only oggi; manca un form admin per `default_locale`, `registration`, `sso_providers`, `mfa_for_admins`, `reserved_names`, `moderation_threshold`, `max_blogs_per_user`, `anonymous_comments` | Nuovo — richiede anche persistenza lato backend per questi campi |
-| 5f Coda richieste GDPR con scadenze e doppia approvazione admin | Oggi export/cancellazione sono self-service immediati (✅), non una coda mediata da admin con SLA e secondo approvatore | ROADMAP.md §1 righe 25-26 — funzionalità diversa da quella già costruita, non un'estensione diretta |
-| Registro di controllo: nota obbligatoria per azione admin | L'audit log oggi è automatico, senza campo di nota libera per l'azione | ROADMAP.md §3 riga "Audit log delle azioni sensibili" (🟡) |
-| i18n interfaccia (`next-intl`, `users.ui_locale`) | Non presente come dipendenza; richiede `next.config.ts`, routing locale, 291 stringhe in `messages/{it,en}.json`, colonna `users.ui_locale` | `frontend-kit/I18N.md` |
+| 2d, 3g Publications | Tabelle `publications`/`chapters`, route `/[blog]/pub/[nome]/[capitolo]`, gestione in dashboard con drag-to-order | ROADMAP.md §1 "Pubblicazioni" (⚪); `todo/PUBLICATIONS.md` |
+| 3b Gestione note | Note come entità di blog con `kind`/URL, duplicati, "citato in", import/export BibTeX | ROADMAP.md §1 "Note a piè di pagina + bibliografia automatica" |
+| 3c Libreria media + lightbox | `GET /blogs/{slug}/media`, alt/didascalia/avviso per immagine, quota storage | Nuovo |
+| 5a/5g Overview blog | `GET /blogs/{slug}/overview`, letture aggregate giornaliere (privacy) | Nuovo |
+| 5d Overview piattaforma | `GET /admin/overview` (code, salute servizi, audit di oggi) | Nuovo |
+| 5b Coda commenti estesa | Bloccati per blog, segnalazione/escalation, stati nascosto/segnalato, chiusura automatica | ROADMAP.md §1 "Sistema di commenti" |
+| 5c Impostazioni blog | Pausa, trasferimento proprietà, export ZIP, soft-delete 30 gg, lingue multiple | ROADMAP.md §1 righe GDPR |
+| 5e Segnalazioni + nota di audit | `blog_reports`/segnalazioni post dai lettori, campo `note` obbligatorio nelle azioni admin | ROADMAP.md §3 "Audit log" (🟡) |
+| 5f Impostazioni piattaforma + coda GDPR | Tabella `platform_config` (oggi solo env), coda richieste con scadenza e seconda approvazione, `users.ui_locale`/`default_locale` | Nuovo |
 
-## 4. Prossimo blocco suggerito
+## 4. Parte B — piano concordato (un blocco per sessione, in ordine di dipendenza)
 
-Tutti i mockup di puro restyling elencati in §1 sono ✅ fatti. Il backlog
-residuo (§2-3) richiede lavoro reale (backend nuovo e/o decisioni di
-prodotto) o è rimandato per scelta esplicita (i18n): non anticipabile senza
-indicazione esplicita dell'utente (CLAUDE.md §2). Candidati, in ordine di
-rischio crescente:
+| Blocco | Mockup | Backend | Frontend (sblocca) |
+|---|---|---|---|
+| B1 | supporto A2/A5–A8 | Endpoint leggeri senza tabelle nuove: `GET /blogs/{slug}/overview` (conteggi), `GET /admin/overview` (code + salute servizi), `GET /users/{username}/blogs\|posts\|comments`, feed `following=1`, `GET /blogs?q=&locale=` con `post_count`/`follower_count`, campi `blogs_count`/`last_seen_at` su `AdminUser`, chiave `palette_dark` in `blog_configs` | Tab del profilo pubblico, "Seguiti" in home, conteggi in directory, colonne admin, variante scura |
+| B2 | 5a/5g | Tabella `post_reads_daily` aggregata (nessun cookie), conteggio server-side | `BlogTabs` con gating per ruolo, `OverviewTab` con `ReadsChart` e `StorageCard` |
+| B3 | 5c | `Blog.is_paused`, `deleted_at` + purge a 30 giorni, trasferimento proprietà, export ZIP via worker RabbitMQ, lingue multiple | `SettingsForm` con danger zone e `ConfirmDialog` a slug |
+| B4 | 5b | Lista bloccati per blog, segnalazione commento con escalation, stati `hidden`/`reported`, chiusura automatica | `CommentsQueue`, `CommentPolicyCard` |
+| B5 | 5e/5d | `blog_reports`/segnalazioni post dai lettori, `note` obbligatoria in `audit_log` per le azioni admin, segnale "blog sospeso" sulle route pubbliche | `BlogsTable`, `ReportPanel`, `AdminOverview` completo, avviso blog sospeso (3d) |
+| B6 | 5f | Tabella `platform_config` (default_locale, registrazione, SSO, MFA admin, nomi riservati, soglia moderazione, max blog, commenti anonimi); coda GDPR con scadenza e seconda approvazione; `users.ui_locale` | `PlatformSettingsForm`, `GdprRequestsTable`, lingua dell'interfaccia per account |
+| B7 | 3c | `GET /blogs/{slug}/media`, alt/didascalia/avviso su `post_media`, quota | Libreria media + lightbox |
+| B8 | 3b | Note come entità (`kind`, URL/DOI), duplicati, "citato in", import/export BibTeX | Gestione note; filtro per tipo in 2a |
+| B9 | 2d/3g | `publications`/`chapters`, route `/pub/[nome]/[capitolo]` | `PublicationIndex`, `ChapterNav`, drag-to-order, voce "Pubblicazioni" in header/home |
 
-1. 3f Home blog con palette custom (§2): il gap più piccolo, solo leggere
-   `blog_configs` e iniettarlo come variabili CSS su `/[blogSlug]`.
-2. i18n dell'interfaccia (`next-intl`): nessun backend nuovo ma tocca
-   `next.config.ts`, routing e 291 stringhe — un blocco a sé stante per
-   dimensione, non per rischio tecnico.
-3. Uno dei mockup di §3 (Publications, gestione Note, Overview blog/
-   piattaforma, coda commenti estesa, impostazioni blog avanzate,
-   impostazioni piattaforma, coda GDPR, nota di audit obbligatoria): tutti
-   richiedono prima definire lo schema/endpoint lato backend.
+Decisioni di prodotto ancora aperte, mostrate dal mockup ma non coperte da
+nessun blocco: RSS, newsletter con double opt-in, sessioni multiple, reset
+password, pulsanti SSO nel login (il callback risponde JSON grezzo), invio
+del codice MFA via email come canale alternativo.

@@ -1,24 +1,24 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { EmptyState, SkeletonRows } from "@/components/ui/States";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { formatDate } from "@/lib/format";
 import type { FragmentCollectionEntry } from "@/lib/types";
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
-}
 
 type GroupMode = "none" | "post" | "author";
 
-const GROUP_OPTIONS: { value: GroupMode; label: string }[] = [
-  { value: "none", label: "Tutti" },
-  { value: "post", label: "Per post" },
-  { value: "author", label: "Per autore" },
+const GROUP_OPTIONS: { value: GroupMode; key: "groupAll" | "groupPost" | "groupAuthor" }[] = [
+  { value: "none", key: "groupAll" },
+  { value: "post", key: "groupPost" },
+  { value: "author", key: "groupAuthor" },
 ];
 
 function groupFragments(
@@ -37,6 +37,9 @@ function groupFragments(
 
 export default function FragmentsPage() {
   const { authFetch } = useAuth();
+  const t = useTranslations("FragmentsPage");
+  const tc = useTranslations("Common");
+  const locale = useLocale();
   const [fragments, setFragments] = useState<FragmentCollectionEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [groupMode, setGroupMode] = useState<GroupMode>("none");
@@ -45,8 +48,8 @@ export default function FragmentsPage() {
   const load = useCallback(() => {
     authFetch((token) => api.fragments.listMine(token))
       .then(setFragments)
-      .catch((err) => setError(err instanceof ApiClientError ? err.message : "Errore imprevisto."));
-  }, [authFetch]);
+      .catch((err) => setError(err instanceof ApiClientError ? err.message : tc("unexpectedError")));
+  }, [authFetch, tc]);
 
   useEffect(load, [load]);
 
@@ -55,7 +58,7 @@ export default function FragmentsPage() {
       await authFetch((token) => api.fragments.remove(token, id));
       setFragments((prev) => prev?.filter((f) => f.id !== id) ?? null);
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Impossibile rimuovere il frammento.");
+      setError(err instanceof ApiClientError ? err.message : t("removeError"));
     }
   }
 
@@ -66,7 +69,7 @@ export default function FragmentsPage() {
         (prev) => prev?.map((f) => (f.id === id ? { ...f, is_public: updated.is_public } : f)) ?? null
       );
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Impossibile cambiare la visibilità.");
+      setError(err instanceof ApiClientError ? err.message : t("visibilityError"));
     }
   }
 
@@ -90,10 +93,10 @@ export default function FragmentsPage() {
     <div className="mx-auto max-w-2xl">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-0.5">
-          <h1 className="font-serif text-2xl font-medium text-foreground">Frammenti</h1>
+          <h1 className="font-serif text-2xl font-medium text-foreground">{t("title")}</h1>
           {fragments && fragments.length > 0 && (
             <span className="text-[13px] text-muted">
-              {fragments.length} salvati · {authorCount} autori · privati a te, salvo quelli resi pubblici
+              {t("summary", { count: fragments.length, authors: authorCount })}
             </span>
           )}
         </div>
@@ -112,7 +115,7 @@ export default function FragmentsPage() {
                   : "border border-border text-muted hover:text-foreground"
               }`}
             >
-              {opt.label}
+              {t(opt.key)}
             </button>
           ))}
         </div>
@@ -125,14 +128,19 @@ export default function FragmentsPage() {
       )}
 
       {fragments === null ? (
-        <p className="text-sm text-muted">Caricamento…</p>
+        <SkeletonRows rows={4} />
       ) : fragments.length === 0 ? (
-        <Card>
-          <p className="text-sm text-muted">
-            Nessun frammento salvato. Seleziona una porzione di testo in un post (fino al 15% del testo)
-            per evidenziarla e salvarla qui.
-          </p>
-        </Card>
+        <EmptyState
+          title={t("emptyTitle")}
+          body={t("emptyBody")}
+          action={
+            <Link href="/">
+              <Button variant="secondary" size="sm">
+                {t("browseFeed")}
+              </Button>
+            </Link>
+          }
+        />
       ) : (
         <div className="flex flex-col gap-8">
           {groups.map((group) => (
@@ -154,29 +162,29 @@ export default function FragmentsPage() {
                           <span className="font-semibold text-foreground">{fragment.author_display_name}</span> ·{" "}
                           {fragment.post_title}
                         </span>
-                        <span className="shrink-0">{formatDate(fragment.created_at)}</span>
+                        <span className="shrink-0">{formatDate(fragment.created_at, locale)}</span>
                       </div>
                       <div className="flex items-center gap-4 text-[13px]">
                         <Link href={fragment.permalink} className="font-medium text-primary hover:underline">
-                          Apri nel post
+                          {t("openInPost")}
                         </Link>
                         <button type="button" onClick={() => handleCopy(fragment)} className="text-muted hover:text-foreground">
-                          {copiedId === fragment.id ? "Copiato" : "Copia"}
+                          {copiedId === fragment.id ? tc("copied") : tc("copy")}
                         </button>
                         <button
                           type="button"
                           onClick={() => handleToggleVisibility(fragment.id, !fragment.is_public)}
                           className={fragment.is_public ? "text-primary hover:underline" : "text-muted hover:text-foreground"}
-                          title="Cambia visibilità"
+                          title={t("toggleVisibility")}
                         >
-                          {fragment.is_public ? "Pubblico" : "Privato"}
+                          {fragment.is_public ? tc("public") : tc("private")}
                         </button>
                         <button
                           type="button"
                           onClick={() => handleRemove(fragment.id)}
                           className="ml-auto text-muted hover:text-foreground"
                         >
-                          Rimuovi
+                          {tc("remove")}
                         </button>
                       </div>
                     </Card>

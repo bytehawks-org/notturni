@@ -375,8 +375,17 @@ export const api = {
         ai_crawling_enabled?: boolean | null;
       }
     ) => request<Post>(`/api/v1/posts/${postId}`, { method: "PATCH", token, body: payload }),
-    publish: (token: string, postId: string) =>
-      request<Post>(`/api/v1/posts/${postId}/publish`, { method: "POST", token }),
+    /** Pubblica subito, o pianifica se `publishedAt` (ISO) è nel futuro. */
+    publish: (token: string, postId: string, publishedAt?: string) =>
+      request<Post>(`/api/v1/posts/${postId}/publish`, {
+        method: "POST",
+        token,
+        body: publishedAt ? { published_at: publishedAt } : undefined,
+      }),
+    submitForReview: (token: string, postId: string) =>
+      request<Post>(`/api/v1/posts/${postId}/submit-for-review`, { method: "POST", token }),
+    returnToDraft: (token: string, postId: string) =>
+      request<Post>(`/api/v1/posts/${postId}/return-to-draft`, { method: "POST", token }),
     translations: (postId: string) =>
       request<PostTranslationSummary[]>(`/api/v1/posts/${postId}/translations`),
     addTranslation: (

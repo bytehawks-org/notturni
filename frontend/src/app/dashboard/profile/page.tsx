@@ -1,10 +1,12 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { LanguagePicker } from "@/components/LanguagePicker";
+import { UiLanguagePicker } from "@/components/shell/UiLanguagePicker";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { FieldGroup, Input, Label, TextArea } from "@/components/ui/Field";
@@ -12,19 +14,22 @@ import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { SOCIAL_PLATFORMS, getSocialPlatform } from "@/lib/social-platforms";
 import {
-  POST_AUTHOR_NAME_STYLE_LABELS,
   type FollowStats,
   type PostAuthorNameStyle,
   type Profile,
 } from "@/lib/types";
 
-function errorMessage(err: unknown): string {
-  return err instanceof ApiClientError ? err.message : "Errore imprevisto.";
-}
+const AUTHOR_NAME_STYLES: PostAuthorNameStyle[] = ["username", "full_name", "display_name"];
 
 export default function ProfilePage() {
   const router = useRouter();
   const { user, authFetch, refreshUser, logout } = useAuth();
+  const t = useTranslations("Profile");
+  const tc = useTranslations("Common");
+  const errorMessage = useCallback(
+    (err: unknown): string => (err instanceof ApiClientError ? err.message : tc("unexpectedError")),
+    [tc]
+  );
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -85,7 +90,7 @@ export default function ProfilePage() {
       .catch((err) => setError(errorMessage(err)));
   };
 
-  useEffect(loadProfile, [user]);
+  useEffect(loadProfile, [user, errorMessage]);
 
   useEffect(() => {
     authFetch((token) => api.users.followStats(token))
@@ -183,7 +188,7 @@ export default function ProfilePage() {
     setMfaError(null);
     try {
       await authFetch((token) => api.auth.totpConfirm(token, totpCode));
-      setMfaMessage("Autenticazione a due fattori (app) attivata.");
+      setMfaMessage(t("mfaTotpOn"));
       setTotpSetup(null);
       setTotpCode("");
     } catch (err) {
@@ -206,7 +211,7 @@ export default function ProfilePage() {
     setMfaError(null);
     try {
       await authFetch((token) => api.auth.emailConfirm(token, emailCode));
-      setMfaMessage("Autenticazione a due fattori (email) attivata.");
+      setMfaMessage(t("mfaEmailOn"));
       setEmailSetupSent(false);
       setEmailCode("");
     } catch (err) {
@@ -218,7 +223,7 @@ export default function ProfilePage() {
     setMfaError(null);
     try {
       await authFetch((token) => api.auth.disableMfa(token));
-      setMfaMessage("Autenticazione a due fattori disattivata.");
+      setMfaMessage(t("mfaOff"));
     } catch (err) {
       setMfaError(errorMessage(err));
     }
@@ -261,15 +266,15 @@ export default function ProfilePage() {
 
   const authorNamePreview: Record<PostAuthorNameStyle, string> = {
     username: `@${username || user.username}`,
-    full_name: [firstName, lastName].filter(Boolean).join(" ") || "Non impostato",
-    display_name: displayName || "Non impostato",
+    full_name: [firstName, lastName].filter(Boolean).join(" ") || tc("notSet"),
+    display_name: displayName || tc("notSet"),
   };
 
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-8 flex flex-col gap-1">
-        <h1 className="font-serif text-[30px] font-medium leading-tight text-foreground">Profilo</h1>
-        <p className="text-sm text-muted">Quello che i lettori vedono, quello che resta con te.</p>
+        <h1 className="font-serif text-[30px] font-medium leading-tight text-foreground">{t("title")}</h1>
+        <p className="text-sm text-muted">{t("subtitle")}</p>
       </div>
       {error && (
         <div className="mb-6">
@@ -280,26 +285,26 @@ export default function ProfilePage() {
       <div className="grid gap-10 lg:grid-cols-[180px_minmax(0,1fr)]">
         <nav className="hidden flex-col gap-0.5 text-sm text-muted lg:sticky lg:top-6 lg:flex lg:h-fit">
           <a href="#identita" className="rounded-md bg-primary/10 px-2.5 py-1.5 font-semibold text-foreground">
-            Identità
+            {t("nav.identity")}
           </a>
           <a href="#lingue" className="rounded-md px-2.5 py-1.5 hover:text-foreground">
-            Lingue
+            {t("nav.languages")}
           </a>
           <a href="#social" className="rounded-md px-2.5 py-1.5 hover:text-foreground">
-            Link social
+            {t("nav.social")}
           </a>
           <a href="#sicurezza" className="rounded-md px-2.5 py-1.5 hover:text-foreground">
-            Sicurezza · MFA
+            {t("nav.security")}
           </a>
           <a href="#privacy" className="rounded-md px-2.5 py-1.5 hover:text-foreground">
-            Privacy e dati
+            {t("nav.privacy")}
           </a>
         </nav>
 
         <div className="flex flex-col gap-12">
           <form onSubmit={handleSaveBio} className="flex flex-col gap-12">
             <section id="identita" className="flex scroll-mt-6 flex-col gap-5">
-              <h2 className="font-serif text-lg text-foreground">Identità</h2>
+              <h2 className="font-serif text-lg text-foreground">{t("nav.identity")}</h2>
 
               <div className="grid gap-6 sm:grid-cols-[96px_minmax(0,1fr)] sm:items-start">
                 <div className="flex flex-col items-center gap-2 sm:items-start">
@@ -318,7 +323,7 @@ export default function ProfilePage() {
                     </div>
                   )}
                   <label className="cursor-pointer text-center text-[13px] text-primary hover:underline">
-                    {uploadingAvatar ? "Caricamento…" : "Cambia"}
+                    {uploadingAvatar ? t("uploading") : t("changeAvatar")}
                     <input
                       type="file"
                       accept="image/png,image/jpeg,image/webp"
@@ -333,7 +338,7 @@ export default function ProfilePage() {
                       onClick={handleDeleteAvatar}
                       className="text-[13px] text-muted hover:text-foreground"
                     >
-                      Rimuovi
+                      {tc("remove")}
                     </button>
                   )}
                   {avatarError && <p className="text-xs text-red-700">{avatarError}</p>}
@@ -341,8 +346,8 @@ export default function ProfilePage() {
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <FieldGroup className="mb-0">
-                    <Label htmlFor="username" hint="referenziato per id — rinominalo liberamente">
-                      Username
+                    <Label htmlFor="username" hint={t("usernameHint")}>
+                      {t("style.username")}
                     </Label>
                     <Input
                       id="username"
@@ -354,25 +359,25 @@ export default function ProfilePage() {
                     />
                   </FieldGroup>
                   <FieldGroup className="mb-0">
-                    <Label htmlFor="display-name">Alias pubblico</Label>
+                    <Label htmlFor="display-name">{t("displayName")}</Label>
                     <Input
                       id="display-name"
                       value={displayName}
                       maxLength={255}
-                      placeholder="Lascia vuoto per usare lo username"
+                      placeholder={t("displayNamePlaceholder")}
                       onChange={(e) => setDisplayName(e.target.value)}
                     />
                   </FieldGroup>
                   <FieldGroup className="mb-0">
-                    <Label htmlFor="first-name">Nome</Label>
+                    <Label htmlFor="first-name">{t("firstName")}</Label>
                     <Input id="first-name" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
                   </FieldGroup>
                   <FieldGroup className="mb-0">
-                    <Label htmlFor="last-name">Cognome</Label>
+                    <Label htmlFor="last-name">{t("lastName")}</Label>
                     <Input id="last-name" value={lastName} onChange={(e) => setLastName(e.target.value)} />
                   </FieldGroup>
                   <FieldGroup className="mb-0">
-                    <Label htmlFor="country">Paese</Label>
+                    <Label htmlFor="country">{t("country")}</Label>
                     <Input
                       id="country"
                       maxLength={2}
@@ -384,17 +389,14 @@ export default function ProfilePage() {
                   </FieldGroup>
                 </div>
               </div>
-              <p className="-mt-2 text-xs text-muted">
-                Citabile come @{username || "username"} nei post; cambiarlo si riflette subito su tutta la
-                piattaforma (le @menzioni già scritte nel testo restano invariate).
-              </p>
+              <p className="-mt-2 text-xs text-muted">{t("mentionNote", { username: username || "username" })}</p>
 
               <div className="flex flex-col gap-2">
                 <span className="text-xs font-semibold uppercase tracking-[.04em] text-muted">
-                  Firma i miei post come
+                  {t("signAs")}
                 </span>
                 <div className="grid gap-2.5 sm:grid-cols-3">
-                  {(Object.keys(POST_AUTHOR_NAME_STYLE_LABELS) as PostAuthorNameStyle[]).map((s) => (
+                  {AUTHOR_NAME_STYLES.map((s) => (
                     <button
                       key={s}
                       type="button"
@@ -403,38 +405,41 @@ export default function ProfilePage() {
                         authorNameStyle === s ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
                       }`}
                     >
-                      <span className="text-sm font-semibold text-foreground">{POST_AUTHOR_NAME_STYLE_LABELS[s]}</span>
+                      <span className="text-sm font-semibold text-foreground">{t(`style.${s}`)}</span>
                       <span className="truncate text-[13px] text-muted">{authorNamePreview[s]}</span>
                     </button>
                   ))}
                 </div>
-                <span className="text-[13px] text-muted">
-                  Un alias impostato dal blog (o dal tuo ruolo su quel blog) vince sempre su questa scelta.
-                </span>
+                <span className="text-[13px] text-muted">{t("signAsNote")}</span>
               </div>
 
               <FieldGroup className="mb-0">
-                <Label htmlFor="bio">Bio</Label>
+                <Label htmlFor="bio">{t("bio")}</Label>
                 <TextArea
                   id="bio"
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
-                  placeholder="Racconta qualcosa di te…"
+                  placeholder={t("bioPlaceholder")}
                 />
               </FieldGroup>
             </section>
 
             <section id="lingue" className="flex scroll-mt-6 flex-col gap-5">
-              <h2 className="font-serif text-lg text-foreground">Lingue</h2>
+              <h2 className="font-serif text-lg text-foreground">{t("nav.languages")}</h2>
               <LanguagePicker
                 nativeLanguage={nativeLanguage}
                 onNativeLanguageChange={setNativeLanguage}
                 fallbackLanguages={fallbackLanguages}
                 onFallbackLanguagesChange={setFallbackLanguages}
               />
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-semibold uppercase tracking-[.04em] text-muted">{t("interfaceLanguage")}</span>
+                <UiLanguagePicker className="w-fit" />
+                <span className="text-[13px] text-muted">{t("interfaceLanguageNote")}</span>
+              </div>
               <div>
                 <Button type="submit" disabled={savingBio}>
-                  {savingBio ? "Salvataggio…" : "Salva"}
+                  {savingBio ? tc("saving") : tc("save")}
                 </Button>
               </div>
             </section>
@@ -442,11 +447,12 @@ export default function ProfilePage() {
 
           {followStats && (
             <section className="flex flex-col gap-3">
-              <h2 className="font-serif text-lg text-foreground">Follower</h2>
+              <h2 className="font-serif text-lg text-foreground">{t("followers")}</h2>
               <p className="text-sm text-foreground">
-                <span className="font-medium">{followStats.total_followers}</span> in totale, sommando chi ti
-                segue con il tuo username e chi segue i tuoi blog — anche quelli che si presentano con un alias
-                diverso dal tuo nome.
+                {t.rich("followersTotal", {
+                  count: followStats.total_followers,
+                  b: (chunks) => <span className="font-medium">{chunks}</span>,
+                })}
               </p>
               <ul className="space-y-1 text-sm text-muted">
                 <li>
@@ -455,23 +461,19 @@ export default function ProfilePage() {
                 {followStats.blogs.map((b) => (
                   <li key={b.blog_slug}>
                     {b.blog_title}
-                    {b.alias && <span className="text-xs"> (alias: {b.alias})</span>}: {b.followers}
+                    {b.alias && <span className="text-xs"> ({t("alias", { alias: b.alias })})</span>}: {b.followers}
                   </li>
                 ))}
               </ul>
-              <p className="text-xs text-muted">
-                Visibile solo a te: qui è l&apos;unico punto in cui username e alias dei blog vengono messi
-                insieme. Ogni blog e il tuo profilo mostrano pubblicamente solo il proprio numero di follower,
-                separatamente.
-              </p>
+              <p className="text-xs text-muted">{t("followersPrivacy")}</p>
             </section>
           )}
 
           <section id="social" className="flex scroll-mt-6 flex-col gap-4">
-            <h2 className="font-serif text-lg text-foreground">Link social</h2>
+            <h2 className="font-serif text-lg text-foreground">{t("nav.social")}</h2>
             <div className="overflow-hidden rounded-lg border border-border">
               {(profile?.social_links.length ?? 0) === 0 && (
-                <p className="px-4 py-3 text-sm text-muted">Nessun link aggiunto.</p>
+                <p className="px-4 py-3 text-sm text-muted">{t("noLinks")}</p>
               )}
               {profile?.social_links.map((link) => {
                 const platform = getSocialPlatform(link.label);
@@ -490,7 +492,7 @@ export default function ProfilePage() {
                       onClick={() => handleDeleteLink(link.id)}
                       className="shrink-0 text-muted hover:text-foreground"
                     >
-                      Rimuovi
+                      {tc("remove")}
                     </button>
                   </div>
                 );
@@ -499,7 +501,7 @@ export default function ProfilePage() {
             {(profile?.social_links.length ?? 0) < 5 && (
               <form onSubmit={handleAddLink} className="flex flex-wrap items-end gap-3">
                 <div>
-                  <Label htmlFor="link-platform">Piattaforma</Label>
+                  <Label htmlFor="link-platform">{t("platform")}</Label>
                   <select
                     id="link-platform"
                     value={linkPlatform}
@@ -514,7 +516,7 @@ export default function ProfilePage() {
                   </select>
                 </div>
                 <div className="min-w-[200px] flex-1">
-                  <Label htmlFor="link-url">URL</Label>
+                  <Label htmlFor="link-url">{t("url")}</Label>
                   <Input
                     id="link-url"
                     required
@@ -524,50 +526,46 @@ export default function ProfilePage() {
                     onChange={(e) => setLinkUrl(e.target.value)}
                   />
                 </div>
-                <Button type="submit">Aggiungi</Button>
+                <Button type="submit">{tc("add")}</Button>
               </form>
             )}
             {linkError && <Alert kind="error">{linkError}</Alert>}
           </section>
 
           <section id="sicurezza" className="flex scroll-mt-6 flex-col gap-4">
-            <h2 className="font-serif text-lg text-foreground">Sicurezza · MFA</h2>
+            <h2 className="font-serif text-lg text-foreground">{t("nav.security")}</h2>
             {user.mfa_enabled ? (
               <div className="flex flex-col gap-3">
-                <Alert kind="success">Autenticazione a due fattori attiva.</Alert>
+                <Alert kind="success">{t("mfaActive")}</Alert>
                 <div>
                   <Button variant="secondary" onClick={handleDisableMfa}>
-                    Disattiva
+                    {t("disable")}
                   </Button>
                 </div>
               </div>
             ) : (
               <div className="flex flex-col gap-6">
                 <div>
-                  <p className="mb-2 text-sm text-muted">App di autenticazione (TOTP)</p>
+                  <p className="mb-2 text-sm text-muted">{t("totp")}</p>
                   {!totpSetup ? (
                     <Button variant="secondary" onClick={handleTotpSetup}>
-                      Configura
+                      {t("configure")}
                     </Button>
                   ) : (
                     <form onSubmit={handleTotpConfirm} className="flex flex-col gap-3">
                       {/* eslint-disable-next-line @next/next/no-img-element -- SVG generato dal backend come data URI */}
                       <img
                         src={totpSetup.qr_code_data_uri}
-                        alt="QR code per configurare l'app di autenticazione"
+                        alt={t("qrAlt")}
                         className="h-40 w-40 rounded-md border border-border bg-white p-2"
                       />
                       <details>
-                        <summary className="cursor-pointer text-xs text-muted">
-                          Non riesci a scansionare il QR? Inserisci il codice a mano
-                        </summary>
+                        <summary className="cursor-pointer text-xs text-muted">{t("qrManual")}</summary>
                         <p className="mt-2 break-all rounded-md border border-border bg-foreground/5 p-3 font-mono text-xs">
                           {totpSetup.secret}
                         </p>
                       </details>
-                      <p className="text-xs text-muted">
-                        Inquadra il QR con la tua app di autenticazione, poi inserisci il codice generato.
-                      </p>
+                      <p className="text-xs text-muted">{t("qrHint")}</p>
                       <div className="flex items-end gap-3">
                         <Input
                           inputMode="numeric"
@@ -576,16 +574,16 @@ export default function ProfilePage() {
                           value={totpCode}
                           onChange={(e) => setTotpCode(e.target.value)}
                         />
-                        <Button type="submit">Conferma</Button>
+                        <Button type="submit">{tc("confirm")}</Button>
                       </div>
                     </form>
                   )}
                 </div>
                 <div>
-                  <p className="mb-2 text-sm text-muted">Codice via email</p>
+                  <p className="mb-2 text-sm text-muted">{t("emailCode")}</p>
                   {!emailSetupSent ? (
                     <Button variant="secondary" onClick={handleEmailSetup}>
-                      Invia codice
+                      {t("sendCode")}
                     </Button>
                   ) : (
                     <form onSubmit={handleEmailConfirm} className="flex items-end gap-3">
@@ -596,7 +594,7 @@ export default function ProfilePage() {
                         value={emailCode}
                         onChange={(e) => setEmailCode(e.target.value)}
                       />
-                      <Button type="submit">Conferma</Button>
+                      <Button type="submit">{tc("confirm")}</Button>
                     </form>
                   )}
                 </div>
@@ -607,30 +605,25 @@ export default function ProfilePage() {
           </section>
 
           <section id="privacy" className="flex scroll-mt-6 flex-col gap-4">
-            <h2 className="font-serif text-lg text-foreground">Privacy e dati</h2>
+            <h2 className="font-serif text-lg text-foreground">{t("nav.privacy")}</h2>
             <div className="overflow-hidden rounded-lg border border-border">
               <div className="flex items-center justify-between gap-5 border-b border-border px-4 py-4 last:border-0">
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-sm font-medium text-foreground">Scarica i miei dati</span>
-                  <span className="text-[13px] text-muted">
-                    Profilo, blog di proprietà, post e commenti scritti, frammenti salvati, follow e token API.
-                  </span>
+                  <span className="text-sm font-medium text-foreground">{t("downloadData")}</span>
+                  <span className="text-[13px] text-muted">{t("downloadDataSub")}</span>
                 </div>
                 <Button variant="secondary" size="sm" onClick={handleExportData} disabled={exporting}>
-                  {exporting ? "Preparazione…" : "Scarica"}
+                  {exporting ? t("preparing") : t("download")}
                 </Button>
               </div>
               <div className="flex items-center justify-between gap-5 px-4 py-4">
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-sm font-medium text-foreground">Elimina il mio account</span>
-                  <span className="text-[13px] text-muted">
-                    Sessioni, token API, link social, frammenti e SSO rimossi per sempre. Blog, post e
-                    commenti già scritti restano, con autore &quot;Utente eliminato&quot;. Non reversibile.
-                  </span>
+                  <span className="text-sm font-medium text-foreground">{t("deleteAccount")}</span>
+                  <span className="text-[13px] text-muted">{t("deleteAccountSub")}</span>
                 </div>
                 {!showDeleteConfirm && (
                   <Button variant="danger" size="sm" onClick={() => setShowDeleteConfirm(true)}>
-                    Elimina
+                    {tc("delete")}
                   </Button>
                 )}
               </div>
@@ -640,7 +633,7 @@ export default function ProfilePage() {
               <form onSubmit={handleDeleteAccount} className="flex flex-col gap-3 rounded-lg border border-danger/40 p-4">
                 <FieldGroup className="mb-0">
                   <Label htmlFor="confirm-delete-username">
-                    Per confermare, scrivi il tuo username (<strong>{user.username}</strong>)
+                    {t.rich("confirmDeleteLabel", { username: user.username, b: (chunks) => <strong>{chunks}</strong> })}
                   </Label>
                   <Input
                     id="confirm-delete-username"
@@ -651,7 +644,7 @@ export default function ProfilePage() {
                 </FieldGroup>
                 <div className="flex gap-3">
                   <Button type="submit" variant="danger" disabled={deleting}>
-                    {deleting ? "Eliminazione…" : "Conferma eliminazione"}
+                    {deleting ? t("deleting") : t("confirmDelete")}
                   </Button>
                   <Button
                     type="button"
@@ -662,16 +655,13 @@ export default function ProfilePage() {
                       setDeleteError(null);
                     }}
                   >
-                    Annulla
+                    {tc("cancel")}
                   </Button>
                 </div>
                 {deleteError && <Alert kind="error">{deleteError}</Alert>}
               </form>
             )}
-            <p className="text-[13px] leading-relaxed text-muted">
-              I dati sono trattati nell&apos;UE secondo il GDPR. La posizione usata per alba/tramonto del tema
-              è calcolata sul tuo dispositivo e non ci viene mai inviata.
-            </p>
+            <p className="text-[13px] leading-relaxed text-muted">{t("gdprNote")}</p>
           </section>
         </div>
       </div>

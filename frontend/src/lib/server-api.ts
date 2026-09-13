@@ -4,10 +4,13 @@ import { REVALIDATE_SECONDS, revalidateTags } from "./revalidate";
 import type {
   BibliographyEntry,
   Blog,
+  BlogConfig,
+  Category,
   LinkBibliographyEntry,
   MediaBibliographyEntry,
   Page,
   Post,
+  PostTranslationSummary,
   TrendingTag,
 } from "./types";
 
@@ -228,4 +231,33 @@ export async function getSitemapEntries(): Promise<SitemapEntries> {
   });
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero delle voci della sitemap.`);
   return (await res.json()) as SitemapEntries;
+}
+
+/** Traduzioni (famiglia `translation_group_id`) di un post pubblico — per i
+ * link "Italiano · English" nella colonna laterale del post (mockup 1a). */
+export async function getPublicPostTranslations(postId: string): Promise<PostTranslationSummary[]> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/posts/${postId}/translations`, {
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.feed()] },
+  });
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero delle traduzioni del post.`);
+  return (await res.json()) as PostTranslationSummary[];
+}
+
+/** Palette/tipografia del blog (`GET /blogs/{slug}/config`, pubblico per i
+ * blog pubblici) — applicata alla root delle pagine del blog (mockup 3f). */
+export async function getPublicBlogConfig(slug: string): Promise<BlogConfig | null> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}/config`, {
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.blog(slug)] },
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as BlogConfig;
+}
+
+/** Categorie del blog per i filtri della sua home pubblica (mockup 3f). */
+export async function getPublicBlogCategories(slug: string): Promise<Category[]> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}/categories`, {
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.blog(slug)] },
+  });
+  if (!res.ok) return [];
+  return (await res.json()) as Category[];
 }

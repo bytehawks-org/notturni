@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
@@ -12,6 +13,8 @@ import { PLATFORM_ADMIN_ROLES, PLATFORM_MODERATION_ROLES } from "@/lib/types";
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, loading, logout } = useAuth();
+  const t = useTranslations("Nav");
+  const tc = useTranslations("Common");
 
   useEffect(() => {
     if (!loading && !user) {
@@ -22,7 +25,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (loading || !user) {
     return (
       <main className="flex flex-1 items-center justify-center">
-        <p className="text-sm text-muted">Caricamento…</p>
+        <p className="text-sm text-muted">{tc("loading")}</p>
       </main>
     );
   }
@@ -31,11 +34,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const isModerator = PLATFORM_MODERATION_ROLES.includes(user.platform_role);
 
   const items: NavItem[] = [
-    { href: "/dashboard", label: "I miei blog", icon: "✎", mobile: true },
-    { href: "/dashboard/frammenti", label: "Frammenti", icon: "❝", mobile: true },
-    { href: "/dashboard/profile", label: "Profilo", icon: "◯", mobile: true },
-    { href: "/dashboard/token", label: "Token API", icon: "◈", mobile: true },
-    ...(isAdmin || isModerator ? [{ href: "/admin", label: "Amministrazione", icon: "⚙", mobile: true } as NavItem] : []),
+    { href: "/dashboard", label: t("myBlogs"), icon: "✎", mobile: true },
+    { href: "/dashboard/frammenti", label: t("fragments"), icon: "❝", mobile: true },
+    { href: "/dashboard/profile", label: t("profile"), icon: "◯", mobile: true },
+    { href: "/dashboard/token", label: t("apiTokens"), icon: "◈", mobile: true },
+    ...(isAdmin || isModerator ? [{ href: "/admin", label: t("administrationShort"), icon: "⚙", mobile: true } as NavItem] : []),
   ];
 
   return (
@@ -48,7 +51,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex items-center gap-3">
           <ThemeToggle />
           <Button variant="secondary" size="sm" onClick={() => logout().then(() => router.push("/login"))}>
-            Esci
+            {tc("signOut")}
           </Button>
         </div>
       </div>
@@ -61,8 +64,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <ThemeToggle />
             </div>
             <Button variant="secondary" size="sm" onClick={() => logout().then(() => router.push("/login"))}>
-              Esci
-            </Button>
+            {tc("signOut")}
+          </Button>
           </div>
         }
       >

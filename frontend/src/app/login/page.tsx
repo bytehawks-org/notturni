@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState, type FormEvent, type KeyboardEvent } from "react";
@@ -65,6 +66,8 @@ function OtpInput({ value, onChange }: { value: string; onChange: (value: string
 export default function LoginPage() {
   const router = useRouter();
   const { login, verifyMfa } = useAuth();
+  const t = useTranslations("Auth");
+  const tc = useTranslations("Common");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -88,7 +91,7 @@ export default function LoginPage() {
         router.push("/dashboard");
       }
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Errore imprevisto.");
+      setError(err instanceof ApiClientError ? err.message : tc("unexpectedError"));
     } finally {
       setSubmitting(false);
     }
@@ -103,7 +106,7 @@ export default function LoginPage() {
       await verifyMfa(challenge, code);
       router.push("/dashboard");
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Errore imprevisto.");
+      setError(err instanceof ApiClientError ? err.message : tc("unexpectedError"));
     } finally {
       setSubmitting(false);
     }
@@ -126,15 +129,13 @@ export default function LoginPage() {
         {!challenge ? (
           <form onSubmit={handleLogin} className="mt-7 flex flex-col gap-6">
             <div className="flex flex-col gap-1.5">
-              <h1 className="font-serif text-[30px] font-medium leading-[1.15] text-foreground">Bentornato/a</h1>
-              <p className="text-[15px] text-muted">
-                Accedi con la tua email. Lo username non serve mai per l&apos;accesso.
-              </p>
+              <h1 className="font-serif text-[30px] font-medium leading-[1.15] text-foreground">{t("welcomeBack")}</h1>
+              <p className="text-[15px] text-muted">{t("loginIntro")}</p>
             </div>
 
             <div className="flex flex-col gap-3.5">
               <FieldGroup className="mb-0">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">{t("email")}</Label>
                 <Input
                   id="email"
                   type="email"
@@ -145,7 +146,7 @@ export default function LoginPage() {
                 />
               </FieldGroup>
               <FieldGroup className="mb-0">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">{t("password")}</Label>
                 <Input
                   id="password"
                   type="password"
@@ -160,13 +161,13 @@ export default function LoginPage() {
             {error && <Alert kind="error">{error}</Alert>}
 
             <Button type="submit" size="lg" disabled={submitting}>
-              {submitting ? "Accesso in corso…" : "Continua"}
+              {submitting ? t("signingIn") : t("continue")}
             </Button>
 
             <p className="text-center text-[13px] leading-relaxed text-muted">
-              Non hai un account?{" "}
+              {t("noAccount")}{" "}
               <Link href="/register" className="text-primary no-underline hover:underline">
-                Creane uno
+                {t("createOne")}
               </Link>
             </p>
           </form>
@@ -177,20 +178,18 @@ export default function LoginPage() {
               onClick={handleBack}
               className="self-start text-[15px] text-muted hover:text-foreground"
             >
-              ‹ Indietro
+              {tc("back")}
             </button>
 
             <div className="flex flex-col gap-1.5">
               <span className="font-mono text-xs font-semibold uppercase tracking-[.06em] text-primary">
-                Passo 2 di 2
+                {t("step2")}
               </span>
               <h1 className="font-serif text-[30px] font-medium leading-[1.15] text-foreground">
-                Conferma che sei tu
+                {t("confirmYou")}
               </h1>
               <p className="text-[15px] leading-relaxed text-muted">
-                {mfaMethod === "email"
-                  ? "Inserisci il codice a 6 cifre che ti abbiamo inviato via email."
-                  : "Inserisci il codice a 6 cifre dalla tua app di autenticazione."}
+                {mfaMethod === "email" ? t("otpEmail") : t("otpApp")}
               </p>
             </div>
 
@@ -199,7 +198,7 @@ export default function LoginPage() {
             {error && <Alert kind="error">{error}</Alert>}
 
             <Button type="submit" size="lg" disabled={submitting || code.length !== OTP_LENGTH}>
-              {submitting ? "Verifica…" : "Verifica"}
+              {submitting ? t("verifying") : t("verify")}
             </Button>
           </form>
         )}

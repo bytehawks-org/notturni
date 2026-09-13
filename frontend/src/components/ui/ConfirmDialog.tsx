@@ -1,9 +1,12 @@
 "use client";
+
+import { useTranslations } from "next-intl";
 import { useState } from "react";
+
 import { Button } from "./Button";
 import { Input } from "./Field";
 
-/** Conferma distruttiva: l'utente deve ridigitare `confirmText` (es. lo slug del blog). */
+/** Conferma distruttiva (mockup 3d): l'utente deve ridigitare `confirmText` (es. lo slug del blog). */
 export function ConfirmDialog({
   open,
   title,
@@ -22,6 +25,7 @@ export function ConfirmDialog({
   onConfirm: () => void;
 }) {
   const [typed, setTyped] = useState("");
+  const t = useTranslations("Common");
   if (!open) return null;
   const ok = typed.trim() === confirmText;
   return (
@@ -34,7 +38,7 @@ export function ConfirmDialog({
         <Input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={confirmText} className="font-mono text-[13px]" autoFocus />
         <div className="mt-1.5 flex justify-end gap-2">
           <Button variant="secondary" size="sm" onClick={onCancel}>
-            Annulla
+            {t("keepIt")}
           </Button>
           <Button variant="danger" size="sm" disabled={!ok} onClick={onConfirm}>
             {confirmLabel}

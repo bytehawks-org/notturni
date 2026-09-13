@@ -1,21 +1,23 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { FieldGroup, Input, Label } from "@/components/ui/Field";
+import { EmptyState, SkeletonRows } from "@/components/ui/States";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { formatDateTime } from "@/lib/format";
 import type { ApiToken } from "@/lib/types";
-
-function errorMessage(err: unknown): string {
-  return err instanceof ApiClientError ? err.message : "Errore imprevisto.";
-}
 
 export default function DashboardTokenPage() {
   const { authFetch } = useAuth();
+  const t = useTranslations("Tokens");
+  const tc = useTranslations("Common");
+  const locale = useLocale();
   const [tokens, setTokens] = useState<ApiToken[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,6 +26,11 @@ export default function DashboardTokenPage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [justCreated, setJustCreated] = useState<string | null>(null);
 
+  const errorMessage = useCallback(
+    (err: unknown) => (err instanceof ApiClientError ? err.message : tc("unexpectedError")),
+    [tc]
+  );
+
   const load = useCallback(() => {
     authFetch((token) => api.tokens.list(token))
       .then((list) => {
@@ -31,7 +38,7 @@ export default function DashboardTokenPage() {
         setError(null);
       })
       .catch((err) => setError(errorMessage(err)));
-  }, [authFetch]);
+  }, [authFetch, errorMessage]);
 
   useEffect(load, [load]);
 
@@ -52,7 +59,7 @@ export default function DashboardTokenPage() {
   }
 
   async function handleRevoke(tokenId: string) {
-    if (!window.confirm("Revocare questo token? Chi lo usa perderà l'accesso all'API.")) return;
+    if (!window.confirm(t("confirmRevoke"))) return;
     try {
       await authFetch((token) => api.tokens.revoke(token, tokenId));
       load();
@@ -61,98 +68,73 @@ export default function DashboardTokenPage() {
     }
   }
 
+  const active = tokens?.filter((tk) => !tk.revoked_at) ?? null;
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="font-serif text-2xl text-foreground">Token API</h1>
-        <p className="mt-1 text-sm text-muted">
-          Permettono di interfacciarsi con l&apos;API di Notturni senza passare dall&apos;editor o
-          dalla dashboard, ad esempio da script o integrazioni esterne.
-        </p>
+    <div className="mx-auto flex max-w-4xl flex-col gap-8">
+      <div className="flex flex-col gap-1">
+        <h1 className="font-serif text-[28px] font-medium leading-tight text-foreground">{t("title")}</h1>
+        <p className="text-sm text-muted">{t("intro")}</p>
       </div>
 
-      <Card>
-        <CardTitle>Nuovo token</CardTitle>
+      <Card className="flex flex-col gap-3">
+        <CardTitle>{t("newToken")}</CardTitle>
         <form onSubmit={handleCreate} className="flex items-end gap-3">
           <div className="flex-1">
-            <FieldGroup>
-              <Label htmlFor="token-name">Nome</Label>
-              <Input
-                id="token-name"
-                required
-                placeholder="es. integrazione-newsletter"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
+            <FieldGroup className="mb-0">
+              <Label htmlFor="token-name">{t("name")}</Label>
+              <Input id="token-name" required placeholder={t("namePlaceholder")} value={name} onChange={(e) => setName(e.target.value)} />
             </FieldGroup>
           </div>
           <Button type="submit" disabled={creating}>
-            Crea
+            {t("create")}
           </Button>
         </form>
-        {createError && (
-          <div className="mt-3">
-            <Alert kind="error">{createError}</Alert>
-          </div>
-        )}
+        {createError && <Alert kind="error">{createError}</Alert>}
         {justCreated && (
-          <div className="mt-4 space-y-2">
-            <p className="break-all rounded-md border border-border bg-foreground/5 p-3 font-mono text-xs">
-              {justCreated}
-            </p>
-            <Alert kind="info">
-              Questo è l&apos;unico momento in cui il valore completo viene mostrato: copialo ora,
-              non potrà essere recuperato in seguito.
-            </Alert>
+          <div className="flex flex-col gap-2">
+            <p className="break-all rounded-md border border-border bg-foreground/5 p-3 font-mono text-xs">{justCreated}</p>
+            <Alert kind="info">{t("shownOnce")}</Alert>
           </div>
         )}
       </Card>
 
-      <Card>
-        <CardTitle>Token attivi</CardTitle>
+      <section className="flex flex-col gap-3">
+        <CardTitle>{t("active")}</CardTitle>
         {error && <Alert kind="error">{error}</Alert>}
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-border text-muted">
-              <tr>
-                <th className="px-4 py-3">Nome</th>
-                <th className="px-4 py-3">Prefisso</th>
-                <th className="px-4 py-3 whitespace-nowrap">Creato il</th>
-                <th className="px-4 py-3 whitespace-nowrap">Ultimo utilizzo</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {tokens
-                ?.filter((t) => !t.revoked_at)
-                .map((t) => (
-                  <tr key={t.id} className="border-b border-border align-top last:border-0">
-                    <td className="px-4 py-3 text-foreground">{t.name}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-muted">{t.token_prefix}…</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-muted">
-                      {new Date(t.created_at).toLocaleString("it-IT")}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-muted">
-                      {t.last_used_at ? new Date(t.last_used_at).toLocaleString("it-IT") : "Mai"}
-                    </td>
+        {active === null && !error && <SkeletonRows rows={3} />}
+        {active !== null && active.length === 0 && <EmptyState glyph="◈" title={t("emptyTitle")} body={t("emptyBody")} />}
+        {active !== null && active.length > 0 && (
+          <div className="overflow-x-auto rounded-xl border border-border bg-surface">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-border font-mono text-[11px] uppercase tracking-[.06em] text-muted">
+                <tr>
+                  <th className="px-4 py-3">{t("col.name")}</th>
+                  <th className="px-4 py-3">{t("col.prefix")}</th>
+                  <th className="whitespace-nowrap px-4 py-3">{t("col.created")}</th>
+                  <th className="whitespace-nowrap px-4 py-3">{t("col.lastUsed")}</th>
+                  <th className="px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {active.map((tk) => (
+                  <tr key={tk.id} className="border-b border-border align-top last:border-0">
+                    <td className="px-4 py-3 text-foreground">{tk.name}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-muted">{tk.token_prefix}…</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-muted">{formatDateTime(tk.created_at, locale)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-muted">{tk.last_used_at ? formatDateTime(tk.last_used_at, locale) : t("never")}</td>
                     <td className="px-4 py-3 text-right">
-                      <Button variant="danger" onClick={() => handleRevoke(t.id)}>
-                        Revoca
+                      <Button variant="danger" size="sm" onClick={() => handleRevoke(tk.id)}>
+                        {t("revoke")}
                       </Button>
                     </td>
                   </tr>
                 ))}
-              {tokens !== null && tokens.filter((t) => !t.revoked_at).length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-muted">
-                    Nessun token attivo.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

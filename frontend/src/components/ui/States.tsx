@@ -1,6 +1,11 @@
+"use client";
+
+import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
+
 import { Button } from "./Button";
 
+/** Stato vuoto (mockup 3d): glifo, titolo, corpo, azione opzionale. */
 export function EmptyState({
   glyph = "❝",
   title,
@@ -37,6 +42,7 @@ export function ErrorState({
   secondary?: ReactNode;
   requestId?: string;
 }) {
+  const t = useTranslations("Common");
   return (
     <div className="flex flex-col items-center gap-2.5 rounded-xl border border-border bg-surface px-7 py-10 text-center">
       <span className="grid h-14 w-14 place-items-center rounded-full bg-danger/12 text-2xl font-semibold text-danger">!</span>
@@ -45,7 +51,7 @@ export function ErrorState({
       <div className="mt-2 flex gap-2">
         {onRetry && (
           <Button size="sm" onClick={onRetry}>
-            Riprova
+            {t("retry")}
           </Button>
         )}
         {secondary}
@@ -55,7 +61,7 @@ export function ErrorState({
   );
 }
 
-/** Riga scheletro che rispecchia una riga di tabella: titolo + meta + pillola. */
+/** Righe scheletro che rispecchiano una riga di tabella: titolo + meta + pillola. Niente spinner (mockup 3d). */
 export function SkeletonRows({ rows = 4 }: { rows?: number }) {
   const widths = ["78%", "62%", "85%", "54%", "70%"];
   return (
@@ -67,6 +73,21 @@ export function SkeletonRows({ rows = 4 }: { rows?: number }) {
             <span className="block h-2.5 w-2/5 rounded bg-border opacity-70" />
           </div>
           <span className="block h-5 rounded-full bg-border" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Griglia di card scheletro (elenchi di blog, media). */
+export function SkeletonCards({ count = 4 }: { count?: number }) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2" aria-busy="true">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-5">
+          <span className="block h-4 w-3/5 rounded bg-border" />
+          <span className="block h-3 w-2/5 rounded bg-border opacity-70" />
+          <span className="mt-2 block h-3 w-4/5 rounded bg-border opacity-50" />
         </div>
       ))}
     </div>

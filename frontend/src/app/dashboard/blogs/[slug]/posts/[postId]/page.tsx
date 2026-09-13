@@ -6,19 +6,22 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { SegmentedControl } from "@/components/ui/Controls";
 import { CategorySelect } from "@/components/editor/CategorySelect";
 import { CoverImageUpload } from "@/components/editor/CoverImageUpload";
 import { EditorRail } from "@/components/editor/EditorRail";
+import { PostStatusControl } from "@/components/editor/PostStatusControl";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
 import { TagInput } from "@/components/editor/TagInput";
 import { TranslationsBar } from "@/components/editor/TranslationsBar";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import type { SensitivityCategory } from "@/lib/content-media";
+import { displayPostStatus } from "@/lib/post-status";
 import { COMMENTS_MODE_LABELS, type CommentsMode, type Post, type PostNote, type PostTranslationSummary } from "@/lib/types";
 
 const FORM_ID = "edit-post-form";
+
+const STATUS_LABEL = { draft: "Bozza", review: "In revisione", scheduled: "Pianificato", published: "Pubblicato" } as const;
 
 function errorMessage(err: unknown): string {
   return err instanceof ApiClientError ? err.message : "Errore imprevisto.";
@@ -27,27 +30,6 @@ function errorMessage(err: unknown): string {
 function RailLabel({ children }: { children: React.ReactNode }) {
   return (
     <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[.04em] text-muted">{children}</span>
-  );
-}
-
-/** La sola transizione possibile da qui è bozza → pubblicato (non c'è un modo
- * per tornare a bozza una volta pubblicato, né uno step di revisione
- * raggiungibile dall'autore in questa vista — todo/UX_REDESIGN.md). */
-function PostStatusControl({ status, onPublish }: { status: Post["status"]; onPublish: () => void }) {
-  return (
-    <div>
-      <RailLabel>Stato</RailLabel>
-      <SegmentedControl
-        value={status}
-        onChange={(v) => {
-          if (v === "published") onPublish();
-        }}
-        options={[
-          { value: "draft", label: "Bozza" },
-          { value: "published", label: status === "published" ? "Pubblicato" : "Pubblica ora" },
-        ]}
-      />
-    </div>
   );
 }
 
@@ -195,9 +177,20 @@ export default function PostEditorPage() {
     }
   }
 
-  async function handlePublish() {
+  async function handlePublish(publishedAt?: string) {
     try {
-      const updated = await authFetch((token) => api.posts.publish(token, params.postId));
+      const updated = await authFetch((token) => api.posts.publish(token, params.postId, publishedAt));
+      setPost(updated);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  async function handleChangeStatus(target: "draft" | "review") {
+    try {
+      const updated = await authFetch((token) =>
+        target === "review" ? api.posts.submitForReview(token, params.postId) : api.posts.returnToDraft(token, params.postId)
+      );
       setPost(updated);
     } catch (err) {
       setError(errorMessage(err));
@@ -228,7 +221,7 @@ export default function PostEditorPage() {
           </Link>
           <span className="text-border">|</span>
           <span className="font-mono text-xs">
-            {post.status === "published" ? "Pubblicato" : "Bozza"} · {saving ? "salvataggio…" : "salvato"}
+            {STATUS_LABEL[displayPostStatus(post)]} · {saving ? "salvataggio…" : "salvato"}
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-4">
@@ -295,7 +288,7 @@ export default function PostEditorPage() {
               label: "Post",
               content: (
                 <>
-                  <PostStatusControl status={post.status} onPublish={handlePublish} />
+                  <PostStatusControl post={post} onChangeStatus={handleChangeStatus} onPublish={handlePublish} />
                   <div>
                     <RailLabel>Slug</RailLabel>
                     <span className="block truncate rounded-lg border border-border bg-surface px-3 py-2.5 font-mono text-[13px] text-muted">

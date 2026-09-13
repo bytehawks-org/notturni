@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
@@ -13,6 +14,8 @@ import { useAuth } from "@/lib/auth-context";
 export default function RegisterPage() {
   const router = useRouter();
   const { register, login } = useAuth();
+  const t = useTranslations("Auth");
+  const tc = useTranslations("Common");
 
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -30,7 +33,7 @@ export default function RegisterPage() {
       await login(email, password);
       router.push("/dashboard");
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Errore imprevisto.");
+      setError(err instanceof ApiClientError ? err.message : tc("unexpectedError"));
     } finally {
       setSubmitting(false);
     }
@@ -45,15 +48,13 @@ export default function RegisterPage() {
 
         <form onSubmit={handleSubmit} className="mt-7 flex flex-col gap-6">
           <div className="flex flex-col gap-1.5">
-            <h1 className="font-serif text-[30px] font-medium leading-[1.15] text-foreground">Crea un account</h1>
-            <p className="text-[15px] text-muted">
-              Uno spazio tuo per scrivere, nella tua lingua. Lo username resta modificabile in ogni momento.
-            </p>
+            <h1 className="font-serif text-[30px] font-medium leading-[1.15] text-foreground">{t("createAccount")}</h1>
+            <p className="text-[15px] text-muted">{t("registerIntro")}</p>
           </div>
 
           <div className="flex flex-col gap-3.5">
             <FieldGroup className="mb-0">
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="username">{t("username")}</Label>
               <Input
                 id="username"
                 required
@@ -63,7 +64,7 @@ export default function RegisterPage() {
               />
             </FieldGroup>
             <FieldGroup className="mb-0">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">{t("email")}</Label>
               <Input
                 id="email"
                 type="email"
@@ -74,8 +75,8 @@ export default function RegisterPage() {
               />
             </FieldGroup>
             <FieldGroup className="mb-0">
-              <Label htmlFor="password" hint="minimo 8 caratteri">
-                Password
+              <Label htmlFor="password" hint={t("passwordHint")}>
+                {t("password")}
               </Label>
               <Input
                 id="password"
@@ -92,13 +93,13 @@ export default function RegisterPage() {
           {error && <Alert kind="error">{error}</Alert>}
 
           <Button type="submit" size="lg" disabled={submitting}>
-            {submitting ? "Creazione…" : "Crea account"}
+            {submitting ? t("creating") : t("createAccount")}
           </Button>
 
           <p className="text-center text-[13px] leading-relaxed text-muted">
-            Hai già un account?{" "}
+            {t("haveAccount")}{" "}
             <Link href="/login" className="text-primary no-underline hover:underline">
-              Accedi
+              {t("signIn")}
             </Link>
           </p>
         </form>

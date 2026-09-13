@@ -1,24 +1,45 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card, CardTitle, SectionLabel } from "@/components/ui/Card";
-import { FieldGroup, Input, Label } from "@/components/ui/Field";
+import { SegmentedControl } from "@/components/ui/Controls";
+import { FieldGroup, Label } from "@/components/ui/Field";
+import { SkeletonRows } from "@/components/ui/States";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { contrastRatio } from "@/lib/contrast";
 import { SANS_SERIF_FONTS, SERIF_FONTS, type BlogConfig } from "@/lib/types";
+
+import { errorMessage } from "./shared";
 
 const FONT_OPTIONS: Record<string, string[]> = {
   heading_font: SERIF_FONTS,
   body_font: SANS_SERIF_FONTS,
 };
 
-import { errorMessage } from "./shared";
+/** Preset di palette calme (saturazione < 90%, vincolo del backend). */
+const PRESETS: { id: string; palette: Record<string, string> }[] = [
+  { id: "notturni", palette: { background: "#faf8f4", foreground: "#232220", primary: "#3d6b5e", muted: "#857e74", border: "#e5dfd5" } },
+  { id: "carta", palette: { background: "#f6f1e7", foreground: "#2d2a25", primary: "#8a5a2b", muted: "#8c8273", border: "#e3d9c8" } },
+  { id: "ardesia", palette: { background: "#f3f4f6", foreground: "#1f2429", primary: "#3d5a80", muted: "#7b838d", border: "#dfe3e8" } },
+  { id: "lavanda", palette: { background: "#f8f6fb", foreground: "#262330", primary: "#6b5b95", muted: "#8a8497", border: "#e6e1ee" } },
+];
 
+const BODY_SIZES = ["17", "18", "19"] as const;
+const MEASURES = ["narrow", "normal"] as const;
+const LAYOUTS = ["standard", "magazine", "minimal"] as const;
+
+/** Tab Aspetto (mockup 2e): palette (5 colori) con preset e verifica AA,
+ * tipografia dagli elenchi curati, corpo/misura/layout, anteprima live.
+ * "Genera variante scura" richiede una chiave dedicata in blog_configs (B1). */
 export function AppearanceTab({ blogSlug, canEdit }: { blogSlug: string; canEdit: boolean }) {
   const { accessToken, authFetch } = useAuth();
+  const t = useTranslations("Appearance");
+  const tc = useTranslations("Common");
   const [config, setConfig] = useState<BlogConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -31,15 +52,12 @@ export function AppearanceTab({ blogSlug, canEdit }: { blogSlug: string; canEdit
       .catch((err) => setError(errorMessage(err)));
   }, [blogSlug, accessToken]);
 
-  function updatePaletteColor(key: string, value: string) {
-    setConfig((prev) => ({ ...prev, palette: { ...prev?.palette, [key]: value } }));
+  function patch(fn: (prev: BlogConfig) => BlogConfig) {
+    setConfig((prev) => fn(prev ?? {}));
     setSaved(false);
   }
-
-  function updateTypography(key: string, value: string) {
-    setConfig((prev) => ({ ...prev, typography: { ...prev?.typography, [key]: value } }));
-    setSaved(false);
-  }
+  const updatePaletteColor = (key: string, value: string) => patch((p) => ({ ...p, palette: { ...p.palette, [key]: value } }));
+  const updateTypography = (key: string, value: string) => patch((p) => ({ ...p, typography: { ...p.typography, [key]: value } }));
 
   async function handleSave() {
     if (!config) return;
@@ -56,108 +74,175 @@ export function AppearanceTab({ blogSlug, canEdit }: { blogSlug: string; canEdit
     }
   }
 
-  if (!config) return <p className="text-sm text-muted">Caricamento…</p>;
+  if (!config) return error ? <Alert kind="error">{error}</Alert> : <SkeletonRows rows={4} />;
 
-  const paletteEntries = Object.entries(config.palette ?? {});
-  const typographyEntries = Object.entries(config.typography ?? {});
+  const palette = config.palette ?? {};
+  const typography = config.typography ?? {};
+  const paletteEntries = Object.entries(palette);
+  const bg = palette.background ?? "#faf8f4";
+  const fg = palette.foreground ?? "#232220";
+  const primary = palette.primary ?? "#3d6b5e";
+  const muted = palette.muted ?? "#857e74";
+  const textRatio = contrastRatio(fg, bg);
+  const primaryRatio = contrastRatio(primary, bg);
+  const mutedRatio = contrastRatio(muted, bg);
+  const aaOk = (textRatio ?? 0) >= 4.5 && (primaryRatio ?? 0) >= 3 && (mutedRatio ?? 0) >= 3;
+  const bodySize = (typography.body_size as string) ?? "18";
+  const measure = (typography.measure as string) ?? "normal";
+
+  const previewStyle = {
+    background: bg,
+    color: fg,
+    borderColor: palette.border ?? "#e5dfd5",
+    fontFamily: `"${typography.body_font ?? "Source Sans 3"}", system-ui, sans-serif`,
+    fontSize: `${bodySize}px`,
+  } as const;
 
   return (
-    <div className="flex flex-col gap-6">
-      <Card className="flex flex-col gap-3">
-        <div className="flex items-baseline justify-between">
-          <CardTitle>Palette</CardTitle>
-          <span className="text-[13px] text-muted">{paletteEntries.length} di 5 colori</span>
-        </div>
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
-          {paletteEntries.map(([key, value]) => (
-            <label
-              key={key}
-              htmlFor={`color-${key}`}
-              className="flex cursor-pointer flex-col gap-2 rounded-lg border border-border bg-surface p-2.5"
-            >
-              <span
-                className="block h-14 rounded-md border border-border"
-                style={{ background: value }}
-              />
-              <span className="text-[13px] font-medium text-foreground">{key}</span>
-              <span className="font-mono text-xs text-muted">{value}</span>
-              <input
-                id={`color-${key}`}
-                type="color"
-                value={value}
-                onChange={(e) => updatePaletteColor(key, e.target.value)}
-                className="sr-only"
-              />
-            </label>
-          ))}
-        </div>
-      </Card>
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="flex flex-col gap-6">
+        <Card className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <CardTitle>{t("palette")}</CardTitle>
+            <span className="text-[13px] text-muted">{t("paletteHint", { count: paletteEntries.length })}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
+            {paletteEntries.map(([key, value]) => (
+              <label key={key} htmlFor={`color-${key}`} className="flex cursor-pointer flex-col gap-2 rounded-lg border border-border bg-surface p-2.5">
+                <span className="block h-14 rounded-md border border-border" style={{ background: value }} />
+                <span className="text-[13px] font-medium text-foreground">{t.has(`color.${key}`) ? t(`color.${key}`) : key}</span>
+                <span className="font-mono text-xs text-muted">{value}</span>
+                <input
+                  id={`color-${key}`}
+                  type="color"
+                  value={value}
+                  disabled={!canEdit}
+                  onChange={(e) => updatePaletteColor(key, e.target.value)}
+                  className="sr-only"
+                />
+              </label>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-3 text-[13px]">
+            <span className="text-muted">{t("presets")}</span>
+            {PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                disabled={!canEdit}
+                onClick={() => patch((p) => ({ ...p, palette: { ...preset.palette } }))}
+                className="flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-muted hover:text-foreground disabled:opacity-50"
+              >
+                <span className="flex overflow-hidden rounded-full border border-border">
+                  {Object.values(preset.palette).map((c) => (
+                    <span key={c} className="h-3 w-3" style={{ background: c }} />
+                  ))}
+                </span>
+                {t(`preset.${preset.id}`)}
+              </button>
+            ))}
+            <span className={`ml-auto rounded-full px-2 py-0.5 text-xs font-semibold ${aaOk ? "bg-ok/15 text-ok" : "bg-danger/12 text-danger"}`}>
+              {t("contrast")} · AA {aaOk ? "✓" : "✗"}
+              {textRatio && ` · ${textRatio.toFixed(1)}:1`}
+            </span>
+          </div>
+        </Card>
 
-      <Card className="flex flex-col gap-3">
-        <div className="flex items-baseline justify-between">
-          <CardTitle>Tipografia</CardTitle>
-          <span className="text-[13px] text-muted">titoli serif · corpo sans-serif</span>
-        </div>
-        <div className="flex flex-wrap gap-4">
-          {typographyEntries.map(([key, value]) => {
-            const options = FONT_OPTIONS[key];
-            return (
-              <FieldGroup key={key} className="min-w-[220px] flex-1">
-                <Label htmlFor={`font-${key}`}>{key}</Label>
-                {options ? (
-                  <select
-                    id={`font-${key}`}
-                    value={value}
-                    onChange={(e) => updateTypography(key, e.target.value)}
-                    className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
-                  >
-                    {options.map((font) => (
-                      <option key={font} value={font}>
-                        {font}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <Input
-                    id={`font-${key}`}
-                    value={value}
-                    onChange={(e) => updateTypography(key, e.target.value)}
-                  />
-                )}
+        <Card className="flex flex-col gap-4">
+          <div className="flex items-baseline justify-between">
+            <CardTitle>{t("typography")}</CardTitle>
+            <span className="text-[13px] text-muted">{t("typographyHint")}</span>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {(["heading_font", "body_font"] as const).map((key) => (
+              <FieldGroup key={key} className="mb-0">
+                <Label htmlFor={`font-${key}`}>{t(key)}</Label>
+                <select
+                  id={`font-${key}`}
+                  value={(typography[key] as string) ?? FONT_OPTIONS[key][0]}
+                  disabled={!canEdit}
+                  onChange={(e) => updateTypography(key, e.target.value)}
+                  className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
+                >
+                  {FONT_OPTIONS[key].map((font) => (
+                    <option key={font} value={font}>
+                      {font}
+                    </option>
+                  ))}
+                </select>
               </FieldGroup>
-            );
-          })}
-        </div>
-      </Card>
+            ))}
+            <div className="flex flex-col gap-1.5">
+              <SectionLabel>{t("bodySize")}</SectionLabel>
+              <SegmentedControl
+                value={bodySize}
+                options={BODY_SIZES.map((s) => ({ value: s, label: s }))}
+                onChange={(v) => canEdit && updateTypography("body_size", v)}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <SectionLabel>{t("measureLabel")}</SectionLabel>
+              <SegmentedControl
+                value={measure}
+                options={MEASURES.map((m) => ({ value: m, label: t(`measure.${m}`) }))}
+                onChange={(v) => canEdit && updateTypography("measure", v)}
+              />
+            </div>
+          </div>
+        </Card>
 
-      <Card className="flex flex-col gap-3">
-        <CardTitle>Layout</CardTitle>
-        <FieldGroup className="max-w-xs">
-          <SectionLabel>Presentazione dei post</SectionLabel>
-          <select
-            value={config.layout ?? "standard"}
-            onChange={(e) => {
-              setConfig((prev) => ({ ...prev, layout: e.target.value }));
-              setSaved(false);
-            }}
-            className="mt-1.5 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
-          >
-            <option value="standard">Standard</option>
-            <option value="magazine">Magazine</option>
-            <option value="minimal">Minimale</option>
-          </select>
-        </FieldGroup>
-      </Card>
+        <Card className="flex flex-col gap-3">
+          <CardTitle>{t("layoutLabel")}</CardTitle>
+          <div className="max-w-sm">
+            <SegmentedControl
+              value={(config.layout as (typeof LAYOUTS)[number]) ?? "standard"}
+              options={LAYOUTS.map((l) => ({ value: l, label: t(`layout.${l}`) }))}
+              onChange={(v) => canEdit && patch((p) => ({ ...p, layout: v }))}
+            />
+          </div>
+        </Card>
 
-      {error && <Alert kind="error">{error}</Alert>}
-      {saved && <Alert kind="success">Salvato.</Alert>}
-      {canEdit && (
-        <div>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? "Salvataggio…" : "Salva aspetto"}
-          </Button>
+        {error && <Alert kind="error">{error}</Alert>}
+        {saved && <Alert kind="success">{t("saved")}</Alert>}
+        {canEdit && (
+          <div>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? tc("saving") : t("save")}
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <aside className="flex flex-col gap-2">
+        <SectionLabel>{t("preview")}</SectionLabel>
+        <div className="rounded-xl border p-6 leading-[1.6] shadow-soft" style={previewStyle}>
+          <div className="mb-4 flex items-center gap-4 border-b pb-3 text-[13px]" style={{ borderColor: previewStyle.borderColor }}>
+            <span className="font-semibold" style={{ fontFamily: `"${typography.heading_font ?? "Lora"}", serif` }}>
+              {t("previewBlog")}
+            </span>
+            <span style={{ color: muted }}>{t("previewNav")}</span>
+          </div>
+          <span className="text-xs uppercase tracking-[.06em]" style={{ color: muted }}>
+            {t("previewCategory")}
+          </span>
+          <h3 className="mt-1 text-[1.6em] font-medium leading-tight" style={{ fontFamily: `"${typography.heading_font ?? "Lora"}", serif` }}>
+            {t("previewTitle")}
+          </h3>
+          <p className={`mt-3 ${measure === "narrow" ? "max-w-[38ch]" : "max-w-[60ch]"}`}>
+            {t("previewBody")}{" "}
+            <a href="#" onClick={(e) => e.preventDefault()} style={{ color: primary }}>
+              {t("previewLink")}
+            </a>
+            <sup className="ml-0.5 text-[.7em]" style={{ color: primary }}>
+              1
+            </sup>
+          </p>
+          <p className="mt-4 text-[.85em]" style={{ color: muted }}>
+            1. {t("previewNote")}
+          </p>
         </div>
-      )}
+        <span className="text-xs text-muted">{t("previewHint")}</span>
+      </aside>
     </div>
   );
 }

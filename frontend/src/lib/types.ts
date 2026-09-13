@@ -151,7 +151,9 @@ export interface BlogConfig {
 export const SERIF_FONTS = ["Lora", "Merriweather", "Playfair Display", "Source Serif 4", "Crimson Pro"];
 export const SANS_SERIF_FONTS = ["Inter", "Nunito Sans", "Work Sans", "Source Sans 3", "Karla"];
 
-export type PostStatus = "draft" | "published";
+/** Stati persistiti dal backend (app/models/post.py). "Pianificato" non è uno
+ * stato a sé: è `published` con `published_at` nel futuro — vedi lib/post-status.ts. */
+export type PostStatus = "draft" | "pending_review" | "published";
 
 export interface Post {
   id: string;
