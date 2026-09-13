@@ -6,7 +6,6 @@ import { useState, type FormEvent } from "react";
 
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { Card, CardTitle } from "@/components/ui/Card";
 import { FieldGroup, Input, Label } from "@/components/ui/Field";
 import { ApiClientError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -39,58 +38,71 @@ export default function RegisterPage() {
 
   return (
     <main className="flex flex-1 items-center justify-center px-6 py-16">
-      <Card className="w-full max-w-sm">
-        <CardTitle>Crea un account</CardTitle>
-        <form onSubmit={handleSubmit}>
-          <FieldGroup>
-            <Label htmlFor="username">Username</Label>
-            <Input
-              id="username"
-              required
-              minLength={3}
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-            />
-          </FieldGroup>
-          <FieldGroup>
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              required
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </FieldGroup>
-          <FieldGroup>
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              required
-              minLength={8}
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </FieldGroup>
-          {error && (
-            <div className="mb-4">
-              <Alert kind="error">{error}</Alert>
-            </div>
-          )}
-          <Button type="submit" disabled={submitting} className="w-full">
-            {submitting ? "Creazione…" : "Registrati"}
+      <div className="w-full max-w-sm">
+        <Link href="/" className="font-serif text-2xl font-semibold text-foreground no-underline">
+          Notturni
+        </Link>
+
+        <form onSubmit={handleSubmit} className="mt-7 flex flex-col gap-6">
+          <div className="flex flex-col gap-1.5">
+            <h1 className="font-serif text-[30px] font-medium leading-[1.15] text-foreground">Crea un account</h1>
+            <p className="text-[15px] text-muted">
+              Uno spazio tuo per scrivere, nella tua lingua. Lo username resta modificabile in ogni momento.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3.5">
+            <FieldGroup className="mb-0">
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                required
+                minLength={3}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+              />
+            </FieldGroup>
+            <FieldGroup className="mb-0">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                required
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </FieldGroup>
+            <FieldGroup className="mb-0">
+              <Label htmlFor="password" hint="minimo 8 caratteri">
+                Password
+              </Label>
+              <Input
+                id="password"
+                type="password"
+                required
+                minLength={8}
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </FieldGroup>
+          </div>
+
+          {error && <Alert kind="error">{error}</Alert>}
+
+          <Button type="submit" size="lg" disabled={submitting}>
+            {submitting ? "Creazione…" : "Crea account"}
           </Button>
+
+          <p className="text-center text-[13px] leading-relaxed text-muted">
+            Hai già un account?{" "}
+            <Link href="/login" className="text-primary no-underline hover:underline">
+              Accedi
+            </Link>
+          </p>
         </form>
-        <p className="mt-6 text-center text-sm text-muted">
-          Hai già un account?{" "}
-          <Link href="/login" className="text-primary underline underline-offset-4">
-            Accedi
-          </Link>
-        </p>
-      </Card>
+      </div>
     </main>
   );
 }
