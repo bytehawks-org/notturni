@@ -2,6 +2,7 @@ import type { SensitivityCategory } from "./content-media";
 import type {
   AdminBlog,
   AdminComment,
+  AdminOverview,
   AdminPost,
   AdminUser,
   ApiToken,
@@ -11,15 +12,16 @@ import type {
   BibliographyEntry,
   Blog,
   BlogComment,
-  CommentsMode,
   BlogConfig,
   BlogInvitation,
   BlogMember,
+  BlogOverview,
   BlogRole,
   BlogVisibility,
   Category,
   Comment,
   CommentStatus,
+  CommentsMode,
   CurrentUser,
   FollowStats,
   FragmentCollectionEntry,
@@ -37,6 +39,7 @@ import type {
   PostNote,
   PostTranslationSummary,
   Profile,
+  PublicComment,
   SessionResponse,
   SocialLink,
 } from "./types";
@@ -214,6 +217,7 @@ export const api = {
     unfollow: (token: string, slug: string) =>
       request<void>(`/api/v1/blogs/${slug}/follow`, { method: "DELETE", token }),
     followers: (slug: string) => request<{ username: string }[]>(`/api/v1/blogs/${slug}/followers`),
+    overview: (token: string, slug: string) => request<BlogOverview>(`/api/v1/blogs/${slug}/overview`, { token }),
     /** Immagine da incorporare nel contenuto o da usare come cover di un post.
      * `is_sensitive`: risultato della moderazione automatica (nudità/contenuti
      * sensibili) fatta lato backend al momento dell'upload — vedi API.md. */
@@ -481,6 +485,9 @@ export const api = {
       request<void>(`/api/v1/users/${username}/follow`, { method: "POST", token }),
     unfollow: (token: string, username: string) =>
       request<void>(`/api/v1/users/${username}/follow`, { method: "DELETE", token }),
+    publicBlogs: (username: string) => request<Blog[]>(`/api/v1/users/${username}/blogs`),
+    publicPosts: (username: string) => request<Post[]>(`/api/v1/users/${username}/posts`),
+    publicComments: (username: string) => request<PublicComment[]>(`/api/v1/users/${username}/comments`),
     followers: (username: string) =>
       request<{ username: string }[]>(`/api/v1/users/${username}/followers`),
     following: (username: string) =>
@@ -551,7 +558,14 @@ export const api = {
     ) => request<Page>(`/api/v1/pages/${pageId}`, { method: "PATCH", token, body: payload }),
   },
 
+  feed: {
+    /** Post dei blog/utenti seguiti (mockup 1c "Seguiti"): richiede sessione. */
+    following: (token: string, limit = 20) =>
+      request<Post[]>(`/api/v1/feed/posts?following=true&limit=${limit}`, { token }),
+  },
+
   admin: {
+    overview: (token: string) => request<AdminOverview>("/api/v1/admin/overview", { token }),
     listUsers: (token: string, q?: string) =>
       request<AdminUser[]>(withQuery("/api/v1/admin/users", { q }), { token }),
     updateUser: (

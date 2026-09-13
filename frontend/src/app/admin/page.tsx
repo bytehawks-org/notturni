@@ -5,43 +5,27 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { Card } from "@/components/ui/Card";
+import { Pill } from "@/components/ui/Pill";
 import { SkeletonRows } from "@/components/ui/States";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { PLATFORM_ADMIN_ROLES } from "@/lib/types";
+import { PLATFORM_ADMIN_ROLES, type AdminOverview } from "@/lib/types";
 
-interface Queues {
-  pendingComments: number;
-  hiddenPosts: number;
-  suspendedBlogs: number;
-  reviewPosts: number;
-}
-
-/** Panoramica admin (mockup 1g/5d): code aperte calcolate dagli endpoint
- * admin esistenti e scorciatoie alle sezioni. KPI di piattaforma, stato dei
- * servizi e "audit di oggi" arrivano con `GET /admin/overview` (blocco B1/B5). */
+/** Panoramica admin (mockup 1g/5d): KPI, code aperte, audit di oggi e
+ * salute dei servizi da `GET /admin/overview`, più le scorciatoie alle sezioni. */
 export default function AdminHomePage() {
   const { user, authFetch } = useAuth();
   const t = useTranslations("AdminHome");
   const tn = useTranslations("Nav");
   const isAdmin = !!user && PLATFORM_ADMIN_ROLES.includes(user.platform_role);
-  const [queues, setQueues] = useState<Queues | null>(null);
+  const [overview, setOverview] = useState<AdminOverview | null>(null);
 
   useEffect(() => {
     if (!user) return;
-    Promise.all([
-      authFetch((token) => api.admin.listComments(token, { status: "pending" })).catch(() => []),
-      isAdmin ? authFetch((token) => api.admin.listPosts(token)).catch(() => []) : Promise.resolve([]),
-      isAdmin ? authFetch((token) => api.admin.listBlogs(token)).catch(() => []) : Promise.resolve([]),
-    ]).then(([comments, posts, blogs]) =>
-      setQueues({
-        pendingComments: comments.length,
-        hiddenPosts: posts.filter((p) => p.is_hidden).length,
-        reviewPosts: posts.filter((p) => p.status === "pending_review").length,
-        suspendedBlogs: blogs.filter((b) => b.is_suspended).length,
-      })
-    );
-  }, [user, isAdmin, authFetch]);
+    authFetch((token) => api.admin.overview(token))
+      .then(setOverview)
+      .catch(() => undefined);
+  }, [user, authFetch]);
 
   const sections = [
     { href: "/admin/utenti", label: tn("users"), description: t("usersDesc"), admin: true },
@@ -52,32 +36,56 @@ export default function AdminHomePage() {
     { href: "/admin/registro", label: tn("auditRegister"), description: t("auditDesc"), admin: true },
   ].filter((s) => isAdmin || !s.admin);
 
-  const queueRows = queues
+  const queueRows = overview
     ? [
-        { label: t("queue.comments"), value: queues.pendingComments, href: "/admin/moderazione-commenti" },
-        ...(isAdmin
-          ? [
-              { label: t("queue.review"), value: queues.reviewPosts, href: "/admin/moderazione" },
-              { label: t("queue.hidden"), value: queues.hiddenPosts, href: "/admin/moderazione" },
-              { label: t("queue.suspended"), value: queues.suspendedBlogs, href: "/admin/blog" },
-            ]
-          : []),
+        { label: t("queue.comments"), value: overview.queue_pending_comments, href: "/admin/moderazione-commenti" },
+        { label: t("queue.review"), value: overview.queue_posts_in_review, href: "/admin/moderazione" },
+        { label: t("queue.hidden"), value: overview.queue_hidden_posts, href: "/admin/moderazione" },
+        { label: t("queue.suspended"), value: overview.blogs_suspended, href: "/admin/blog" },
       ]
     : [];
+  const allOk = overview?.services.every((s) => s.status !== "down") ?? true;
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-8">
       <header className="flex flex-col gap-1">
         <h1 className="font-serif text-[28px] font-medium leading-tight text-foreground">{t("title")}</h1>
-        <p className="text-sm text-muted">{t("signedInAs", { username: user?.username ?? "", role: user?.platform_role ?? "" })}</p>
+        <p className="text-sm text-muted">
+          {t("signedInAs", { username: user?.username ?? "", role: user?.platform_role ?? "" })}
+          {overview && (
+            <>
+              {" · "}
+              <span className={allOk ? "text-ok" : "text-danger"}>● {allOk ? t("operational") : t("degraded")}</span>
+              {" · "}
+              {t("mode", { mode: overview.deployment_mode })}
+            </>
+          )}
+        </p>
       </header>
+
+      {overview && (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {[
+            [overview.users_total, t("kpi.users"), t("kpi.usersNew", { count: overview.users_new_7d })],
+            [overview.blogs_total, t("kpi.blogs"), t("kpi.blogsSuspended", { count: overview.blogs_suspended })],
+            [overview.posts_published, t("kpi.posts"), ""],
+            [overview.audit_today, t("kpi.audit"), ""],
+          ].map(([value, label, sub]) => (
+            <div key={String(label)} className="flex flex-col gap-1 rounded-xl border border-border bg-surface px-4 py-3.5">
+              <span className="font-serif text-2xl text-foreground">{value}</span>
+              <span className="text-xs text-muted">{label}</span>
+              {sub && <span className="text-[11px] text-muted">{sub}</span>}
+            </div>
+          ))}
+        </div>
+      )}
 
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <Card className="flex flex-col gap-3">
           <div className="flex items-baseline justify-between">
             <span className="font-mono text-[11px] uppercase tracking-[.08em] text-muted">{t("openQueues")}</span>
           </div>
-          {queues === null ? (
+          {overview === null ? (
             <SkeletonRows rows={3} />
           ) : (
             <ul className="flex flex-col">
@@ -95,9 +103,22 @@ export default function AdminHomePage() {
             </ul>
           )}
         </Card>
-        <Card className="flex flex-col gap-2 text-sm">
+        <Card className="flex flex-col gap-3 text-sm">
           <span className="font-mono text-[11px] uppercase tracking-[.08em] text-muted">{t("services")}</span>
-          <p className="text-[13px] leading-relaxed text-muted">{t("servicesNote")}</p>
+          {overview === null ? (
+            <SkeletonRows rows={3} />
+          ) : (
+            <ul className="flex flex-col">
+              {overview.services.map((svc) => (
+                <li key={svc.name} className="flex items-center justify-between border-b border-border py-2 last:border-0">
+                  <span className="font-mono text-[13px] text-foreground">{svc.name}</span>
+                  <Pill tone={svc.status === "ok" ? "ok" : svc.status === "down" ? "danger" : "neutral"}>
+                    {t(`service.${svc.status}`)}
+                  </Pill>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
       </section>
 

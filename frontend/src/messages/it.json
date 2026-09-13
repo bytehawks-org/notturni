@@ -203,7 +203,13 @@
     "showing": "Mostrati {count}",
     "allLanguages": "Tutte",
     "nothingYet": "Ancora nessun post pubblicato.",
-    "older": "Post precedenti"
+    "older": "Post precedenti",
+    "followingSignInTitle": "Accedi per vedere i seguiti",
+    "followingSignInBody": "Qui compaiono i post dei blog e degli autori che segui.",
+    "signIn": "Accedi",
+    "followingEmptyTitle": "Non segui ancora nessuno",
+    "followingEmptyBody": "Segui un blog o un autore: i suoi nuovi post compariranno qui.",
+    "browseBlogs": "Esplora i blog"
   },
   "BlogsPage": {
     "title": "Blog su Notturni",
@@ -238,14 +244,30 @@
     "settings": "Impostazioni"
   },
   "Overview": {
-    "attention": "Richiede la tua attenzione",
+    "attention": {
+      "pendingComments": "Commenti da moderare",
+      "inReview": "Post in revisione",
+      "drafts": "Bozze in sospeso",
+      "scheduled": "Post pianificati"
+    },
     "items": "{count} elementi",
     "reads": "Letture · ultimi 30 giorni",
-    "readsNote": "Aggregate lato server, senza cookie né tracciamento del singolo lettore",
+    "readsNote": "Le letture aggregate (senza cookie né tracciamento) arriveranno con il prossimo blocco.",
     "readsAria": "Letture giornaliere dal {from} al {to}",
     "activity": "Attività recente",
     "storage": "Spazio",
-    "storageLine": "{used} MB di {quota} GB · {images} immagini · {backups} backup Markdown"
+    "storageLine": "{used} MB di {quota} GB · {images} immagini · {backups} backup Markdown",
+    "kpi": {
+      "posts": "post pubblicati",
+      "followers": "follower",
+      "pendingComments": "commenti in attesa",
+      "members": "collaboratori"
+    },
+    "nothingToDo": "Niente in sospeso.",
+    "open": "Apri →",
+    "mediaCount": "{count, plural, one {# immagine} other {# immagini}} nei post",
+    "approvedComments": "{count, plural, one {# commento approvato} other {# commenti approvati}}",
+    "lastPublished": "Ultimo post pubblicato il {date}"
   },
   "Comments": {
     "approveN": "Approva {count}",
@@ -706,7 +728,13 @@
     "previewNote": "Zerby, Chuck. The Devil's Details. 2002.",
     "previewHint": "I lettori possono comunque passare al tema scuro: la palette definisce il tema chiaro, in quello scuro si usa la palette di piattaforma.",
     "measureLabel": "Misura",
-    "layoutLabel": "Layout"
+    "layoutLabel": "Layout",
+    "generateDark": "Genera variante scura",
+    "regenerateDark": "Rigenera variante scura",
+    "removeDark": "Rimuovi variante scura",
+    "previewDark": "Anteprima tema scuro",
+    "previewLight": "Anteprima tema chiaro",
+    "previewHintDark": "La variante scura è applicata alle pagine pubbliche quando il lettore usa il tema scuro."
   },
   "PublicProfile": {
     "writesIn": "scrive in",
@@ -715,7 +743,19 @@
     "follow": "Segui",
     "unfollow": "Non seguire più",
     "links": "Link",
-    "privacyNote": "I conteggi mostrano solo ciò che l'autore ha scelto di rendere pubblico. I follower anonimi non sono mai elencati."
+    "privacyNote": "I conteggi mostrano solo ciò che l'autore ha scelto di rendere pubblico. I follower anonimi non sono mai elencati.",
+    "tab": {
+      "posts": "Post",
+      "blogs": "Blog",
+      "comments": "Commenti"
+    },
+    "noPostsTitle": "Nessun post pubblico",
+    "noPostsBody": "Compaiono qui solo i post firmati con lo username, su blog pubblici.",
+    "noBlogsTitle": "Nessun blog pubblico",
+    "noBlogsBody": "Compaiono qui solo i blog pubblici che non usano un alias.",
+    "noCommentsTitle": "Nessun commento",
+    "noCommentsBody": "Compaiono qui i commenti approvati firmati con lo username.",
+    "on": "su"
   },
   "AdminHome": {
     "title": "Panoramica",
@@ -735,7 +775,23 @@
     "moderationDesc": "Nascondi o mostra i post di ogni blog.",
     "commentsDesc": "Commenti in attesa su tutti i blog.",
     "pagesDesc": "Editor delle pagine del sito principale.",
-    "auditDesc": "Cronologia delle azioni sensibili."
+    "auditDesc": "Cronologia delle azioni sensibili.",
+    "operational": "tutti i servizi operativi",
+    "degraded": "un servizio non risponde",
+    "mode": "modalità {mode}",
+    "kpi": {
+      "users": "account",
+      "usersNew": "{count} nuovi negli ultimi 7 giorni",
+      "blogs": "blog",
+      "blogsSuspended": "{count} sospesi",
+      "posts": "post pubblicati",
+      "audit": "voci di audit oggi"
+    },
+    "service": {
+      "ok": "ok",
+      "down": "giù",
+      "unconfigured": "non configurato"
+    }
   },
   "AdminUsers": {
     "title": "Utenti",
@@ -748,7 +804,9 @@
       "role": "Ruolo piattaforma",
       "mfa": "MFA",
       "since": "Iscritto dal",
-      "status": "Stato"
+      "status": "Stato",
+      "blogs": "Blog",
+      "lastSeen": "Ultimo accesso"
     },
     "role": {
       "utente": "Utente",
@@ -761,7 +819,9 @@
     "active": "Attivo",
     "inactive": "Disattivato",
     "deactivate": "Disattiva",
-    "activate": "Riattiva"
+    "activate": "Riattiva",
+    "never": "Mai",
+    "exportCsv": "Esporta CSV"
   },
   "Tokens": {
     "title": "Token API",

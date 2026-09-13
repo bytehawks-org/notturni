@@ -22,21 +22,34 @@ const PALETTE_VARS: Record<string, string> = {
   border: "--border-color",
 };
 
+const HEX_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+
 /** Variabili CSS derivate da `blog_configs.palette` (mockup 3f). Restituisce
- * `null` se il blog usa la palette di default. La palette custom definisce
- * solo il tema chiaro: in modalità scura il CSS (`.blog-palette` in
- * globals.css) ripristina i valori scuri di piattaforma. */
+ * `null` se il blog usa la palette di default e non ha una variante scura.
+ * La palette chiara vale in tema chiaro; `palette_dark` (se presente) viene
+ * esposta come `--blog-dark-*` e applicata in tema scuro dal CSS
+ * `.blog-palette` in globals.css, altrimenti vale la palette scura di
+ * piattaforma. */
 export function paletteStyle(config: BlogConfig | null): CSSProperties | null {
   const palette = config?.palette;
-  if (!palette) return null;
-  const isDefault = Object.entries(palette).every(([k, v]) => DEFAULT_PALETTE[k]?.toLowerCase() === v.toLowerCase());
-  if (isDefault) return null;
+  const dark = config?.palette_dark;
+  const lightIsDefault =
+    !palette || Object.entries(palette).every(([k, v]) => DEFAULT_PALETTE[k]?.toLowerCase() === v.toLowerCase());
+  if (lightIsDefault && !dark) return null;
   const style: Record<string, string> = {};
-  for (const [key, value] of Object.entries(palette)) {
-    const cssVar = PALETTE_VARS[key];
-    if (cssVar && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(value)) style[cssVar] = value;
+  if (palette && !lightIsDefault) {
+    for (const [key, value] of Object.entries(palette)) {
+      const cssVar = PALETTE_VARS[key];
+      if (cssVar && HEX_RE.test(value)) style[cssVar] = value;
+    }
+    if (style["--background"] && !style["--surface"]) style["--surface"] = style["--background"];
   }
-  if (style["--background"] && !style["--surface"]) style["--surface"] = style["--background"];
+  if (dark) {
+    for (const [key, value] of Object.entries(dark)) {
+      if (PALETTE_VARS[key] && HEX_RE.test(value)) style[`--blog-dark-${key}`] = value;
+    }
+    if (style["--blog-dark-background"] && !style["--blog-dark-surface"]) style["--blog-dark-surface"] = style["--blog-dark-background"];
+  }
   return style as CSSProperties;
 }
 

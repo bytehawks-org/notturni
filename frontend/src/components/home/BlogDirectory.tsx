@@ -2,11 +2,11 @@ import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 
 import { SITE_HOST } from "@/lib/site";
-import type { Blog } from "@/lib/types";
+import type { PublicBlog } from "@/lib/types";
 
 const hue = (s: string) => `oklch(0.55 0.06 ${[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % 360})`;
 
-function Avatar({ blog, size = 44 }: { blog: Blog; size?: number }) {
+function Avatar({ blog, size = 44 }: { blog: PublicBlog; size?: number }) {
   return (
     <span
       className="grid shrink-0 place-items-center rounded-[10px] font-serif text-white"
@@ -18,10 +18,8 @@ function Avatar({ blog, size = 44 }: { blog: Blog; size?: number }) {
   );
 }
 
-/** Elenco compatto nella sidebar della home (mockup 4a). Il backend non
- * espone ancora conteggi di post/follower per blog (blocco B1): la riga
- * meta mostra solo host e lingua principale. */
-export async function BlogDirectoryList({ blogs, total }: { blogs: Blog[]; total: number }) {
+/** Elenco compatto nella sidebar della home (mockup 4a), con i conteggi di `GET /blogs`. */
+export async function BlogDirectoryList({ blogs, total }: { blogs: PublicBlog[]; total: number }) {
   const t = await getTranslations("Directory");
   if (!blogs.length) return null;
   return (
@@ -41,7 +39,7 @@ export async function BlogDirectoryList({ blogs, total }: { blogs: Blog[]; total
                 {b.title}
               </Link>
               <span className="truncate text-xs text-muted">
-                {b.slug}.{SITE_HOST} · {b.default_locale.toUpperCase()}
+                {b.slug}.{SITE_HOST} · {b.default_locale.toUpperCase()} · {t("postsCount", { count: b.post_count })}
               </span>
             </div>
             <Link href={`/${b.slug}`} className="text-[13px] font-medium no-underline hover:underline">
@@ -55,7 +53,7 @@ export async function BlogDirectoryList({ blogs, total }: { blogs: Blog[]; total
 }
 
 /** Griglia di card per /blogs (mockup 4c). */
-export async function BlogDirectoryGrid({ blogs }: { blogs: Blog[] }) {
+export async function BlogDirectoryGrid({ blogs }: { blogs: PublicBlog[] }) {
   const t = await getTranslations("Directory");
   if (!blogs.length) return <p className="py-10 text-center text-sm text-muted">{t("noMatch")}</p>;
   return (
@@ -75,7 +73,9 @@ export async function BlogDirectoryGrid({ blogs }: { blogs: Blog[] }) {
           </div>
           {(b.subtitle || b.description) && <p className="text-sm leading-relaxed text-muted">{b.subtitle ?? b.description}</p>}
           <div className="mt-auto flex items-center justify-between pt-1.5 text-[13px] text-muted">
-            <span>{b.default_locale.toUpperCase()}</span>
+            <span>
+              {b.default_locale.toUpperCase()} · {t("postsCount", { count: b.post_count })} · {t("followers", { count: b.follower_count })}
+            </span>
             <Link href={`/${b.slug}`} className="font-medium no-underline hover:underline">
               {t("follow")}
             </Link>

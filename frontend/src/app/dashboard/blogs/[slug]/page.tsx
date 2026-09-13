@@ -10,6 +10,7 @@ import { AppearanceTab } from "@/components/dashboard/blog/AppearanceTab";
 import { CollaboratorsTab } from "@/components/dashboard/blog/CollaboratorsTab";
 import { CommentsTab } from "@/components/dashboard/blog/CommentsTab";
 import { MyMembershipCard } from "@/components/dashboard/blog/MyMembershipCard";
+import { OverviewTab } from "@/components/dashboard/blog/OverviewTab";
 import { PagesTab } from "@/components/dashboard/blog/PagesTab";
 import { PostsTab } from "@/components/dashboard/blog/PostsTab";
 import { SettingsTab } from "@/components/dashboard/blog/SettingsTab";
@@ -22,13 +23,13 @@ import { useAuth } from "@/lib/auth-context";
 import { SITE_HOST } from "@/lib/site";
 import { type Blog } from "@/lib/types";
 
-type Tab = "posts" | "pages" | "comments" | "appearance" | "collaborators" | "settings";
-const TABS: Tab[] = ["posts", "pages", "comments", "appearance", "collaborators", "settings"];
+type Tab = "overview" | "posts" | "pages" | "comments" | "appearance" | "collaborators" | "settings";
+const TABS: Tab[] = ["overview", "posts", "pages", "comments", "appearance", "collaborators", "settings"];
 
 /** Scheda del blog in dashboard (mockup 5a-5c/2e/5g): intestazione con
  * visibilità e ruolo, azioni "Vedi il blog"/"Scrivi un post", tab
  * scorrevoli su mobile. La tab attiva è nell'URL (`?tab=`) così le altre
- * schermate possono linkarla. La tab "Panoramica" (KPI, letture) arriva con B2. */
+ * schermate possono linkarla. La tab "Panoramica" usa `GET /blogs/{slug}/overview`. */
 export default function BlogDetailPage() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug;
@@ -42,8 +43,8 @@ export default function BlogDetailPage() {
   const [blog, setBlog] = useState<Blog | null>(null);
   const [error, setError] = useState<string | null>(null);
   const tabParam = searchParams.get("tab");
-  const tab: Tab = TABS.includes(tabParam as Tab) ? (tabParam as Tab) : "posts";
-  const setTab = (next: Tab) => router.replace(`/dashboard/blogs/${slug}${next === "posts" ? "" : `?tab=${next}`}`);
+  const tab: Tab = TABS.includes(tabParam as Tab) ? (tabParam as Tab) : "overview";
+  const setTab = (next: Tab) => router.replace(`/dashboard/blogs/${slug}${next === "overview" ? "" : `?tab=${next}`}`);
 
   const load = useCallback(() => {
     api.blogs
@@ -112,6 +113,7 @@ export default function BlogDetailPage() {
         ))}
       </div>
 
+      {tab === "overview" && <OverviewTab blogSlug={blog.slug} />}
       {tab === "posts" && <PostsTab blogSlug={blog.slug} canWrite={isOwner} />}
       {tab === "pages" && <PagesTab blog={blog} canWrite={isOwner} />}
       {tab === "comments" && <CommentsTab blogSlug={blog.slug} canModerate={isOwner} />}

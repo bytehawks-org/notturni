@@ -203,7 +203,13 @@
     "showing": "Showing {count}",
     "allLanguages": "All",
     "nothingYet": "Nothing published yet.",
-    "older": "Older posts"
+    "older": "Older posts",
+    "followingSignInTitle": "Sign in to see who you follow",
+    "followingSignInBody": "Posts from the blogs and authors you follow show up here.",
+    "signIn": "Sign in",
+    "followingEmptyTitle": "You don't follow anyone yet",
+    "followingEmptyBody": "Follow a blog or an author: their new posts will show up here.",
+    "browseBlogs": "Browse blogs"
   },
   "BlogsPage": {
     "title": "Blogs on Notturni",
@@ -238,14 +244,30 @@
     "settings": "Settings"
   },
   "Overview": {
-    "attention": "Needs your attention",
+    "attention": {
+      "pendingComments": "Comments to moderate",
+      "inReview": "Posts in review",
+      "drafts": "Drafts waiting",
+      "scheduled": "Scheduled posts"
+    },
     "items": "{count} items",
     "reads": "Reads · last 30 days",
-    "readsNote": "Aggregated server-side, no cookies, no per-reader tracking",
+    "readsNote": "Aggregated reads (no cookies, no tracking) will come with the next block.",
     "readsAria": "Daily reads from {from} to {to}",
     "activity": "Recent activity",
     "storage": "Storage",
-    "storageLine": "{used} MB of {quota} GB · {images} images · {backups} Markdown backups"
+    "storageLine": "{used} MB of {quota} GB · {images} images · {backups} Markdown backups",
+    "kpi": {
+      "posts": "published posts",
+      "followers": "followers",
+      "pendingComments": "pending comments",
+      "members": "collaborators"
+    },
+    "nothingToDo": "Nothing pending.",
+    "open": "Open →",
+    "mediaCount": "{count, plural, one {# image} other {# images}} in posts",
+    "approvedComments": "{count, plural, one {# approved comment} other {# approved comments}}",
+    "lastPublished": "Last post published on {date}"
   },
   "Comments": {
     "approveN": "Approve {count}",
@@ -706,7 +728,13 @@
     "previewNote": "Zerby, Chuck. The Devil's Details. 2002.",
     "previewHint": "Readers can still switch to dark: your palette defines the light theme, the dark theme uses the platform palette.",
     "measureLabel": "Measure",
-    "layoutLabel": "Layout"
+    "layoutLabel": "Layout",
+    "generateDark": "Generate dark variant",
+    "regenerateDark": "Regenerate dark variant",
+    "removeDark": "Remove dark variant",
+    "previewDark": "Preview dark theme",
+    "previewLight": "Preview light theme",
+    "previewHintDark": "The dark variant is applied to public pages when the reader uses the dark theme."
   },
   "PublicProfile": {
     "writesIn": "writes in",
@@ -715,7 +743,19 @@
     "follow": "Follow",
     "unfollow": "Unfollow",
     "links": "Links",
-    "privacyNote": "Counts show only what this author chose to make public. Anonymous followers are never listed."
+    "privacyNote": "Counts show only what this author chose to make public. Anonymous followers are never listed.",
+    "tab": {
+      "posts": "Posts",
+      "blogs": "Blogs",
+      "comments": "Comments"
+    },
+    "noPostsTitle": "No public posts",
+    "noPostsBody": "Only posts signed with the username, on public blogs, appear here.",
+    "noBlogsTitle": "No public blogs",
+    "noBlogsBody": "Only public blogs that don't use an alias appear here.",
+    "noCommentsTitle": "No comments",
+    "noCommentsBody": "Approved comments signed with the username appear here.",
+    "on": "on"
   },
   "AdminHome": {
     "title": "Overview",
@@ -735,7 +775,23 @@
     "moderationDesc": "Hide or show posts of any blog.",
     "commentsDesc": "Pending comments across all blogs.",
     "pagesDesc": "Editor of the main site pages.",
-    "auditDesc": "History of sensitive actions."
+    "auditDesc": "History of sensitive actions.",
+    "operational": "all systems operational",
+    "degraded": "a service is not responding",
+    "mode": "{mode} mode",
+    "kpi": {
+      "users": "accounts",
+      "usersNew": "{count} new in the last 7 days",
+      "blogs": "blogs",
+      "blogsSuspended": "{count} suspended",
+      "posts": "published posts",
+      "audit": "audit entries today"
+    },
+    "service": {
+      "ok": "ok",
+      "down": "down",
+      "unconfigured": "not configured"
+    }
   },
   "AdminUsers": {
     "title": "Users",
@@ -748,7 +804,9 @@
       "role": "Platform role",
       "mfa": "MFA",
       "since": "Member since",
-      "status": "Status"
+      "status": "Status",
+      "blogs": "Blogs",
+      "lastSeen": "Last seen"
     },
     "role": {
       "utente": "User",
@@ -761,7 +819,9 @@
     "active": "Active",
     "inactive": "Deactivated",
     "deactivate": "Deactivate",
-    "activate": "Reactivate"
+    "activate": "Reactivate",
+    "never": "Never",
+    "exportCsv": "Export CSV"
   },
   "Tokens": {
     "title": "API tokens",

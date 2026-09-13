@@ -1,7 +1,9 @@
 """Blog: creazione, elenco, dettaglio, modifica, follow."""
 
+from datetime import datetime, timezone
+
 from fastapi import Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_optional_current_user
@@ -29,7 +31,17 @@ from app.domain.i18n import validate_locale
 from app.models.blog import Blog, BlogMembership, BlogVisibility
 from app.models.comment import CommentsMode
 from app.models.follow import BlogFollow
+from app.models.post import Post, PostStatus
 from app.models.user import User
+
+
+class PublicBlogOut(BlogOut):
+    """Voce della directory pubblica (todo/UX_REDESIGN.md B1): come BlogOut
+    più i conteggi mostrati nelle card (mockup 4a/4c)."""
+
+    post_count: int
+    follower_count: int
+    last_published_at: datetime | None
 
 
 @router.post("", response_model=BlogOut, status_code=status.HTTP_201_CREATED)
@@ -103,29 +115,61 @@ async def list_blogs_i_belong_to(
     ]
 
 
-@router.get("", response_model=list[BlogOut])
+@router.get("", response_model=list[PublicBlogOut])
 async def list_public_blogs(
+    q: str | None = None,
+    locale: str | None = None,
+    sort: str = "active",
     limit: int = 30,
     offset: int = 0,
     session: AsyncSession = Depends(get_session),
-) -> list[BlogOut]:
-    """Directory pubblica dei blog (todo/UX_REDESIGN.md, mockup 4c): solo
+) -> list[PublicBlogOut]:
+    """Directory pubblica dei blog (todo/UX_REDESIGN.md, mockup 4a/4c): solo
     blog pubblici, non sospesi e indicizzabili — stesso criterio del
     `robots.txt` generato (`Blog.search_indexing_enabled`), non quello di
-    visibilità nel feed dei post (che include qualunque blog pubblico)."""
+    visibilità nel feed dei post (che include qualunque blog pubblico).
+    `q` cerca in slug/titolo/sottotitolo, `locale` filtra per lingua
+    principale, `sort` è `active` (ultimo post pubblicato, poi creazione),
+    `new` (creazione) o `followers`. Con i conteggi di post pubblicati e
+    follower per le card."""
     limit = max(1, min(limit, 100))
-    result = await session.execute(
-        select(Blog)
-        .where(
-            Blog.visibility == BlogVisibility.PUBLIC,
-            Blog.is_suspended.is_(False),
-            Blog.search_indexing_enabled.is_(True),
-        )
-        .order_by(Blog.created_at.desc())
-        .limit(limit)
-        .offset(offset)
+    now = datetime.now(timezone.utc)
+    published = (Post.status == PostStatus.PUBLISHED) & (Post.published_at <= now) & Post.is_hidden.is_(False)
+    post_count = (
+        select(func.count()).select_from(Post).where(Post.blog_id == Blog.id, published).correlate(Blog).scalar_subquery()
     )
-    return [_to_blog_out(blog, None) for blog in result.scalars().all()]
+    last_published = (
+        select(func.max(Post.published_at)).where(Post.blog_id == Blog.id, published).correlate(Blog).scalar_subquery()
+    )
+    follower_count = (
+        select(func.count()).select_from(BlogFollow).where(BlogFollow.blog_id == Blog.id).correlate(Blog).scalar_subquery()
+    )
+    stmt = select(Blog, post_count, follower_count, last_published).where(
+        Blog.visibility == BlogVisibility.PUBLIC,
+        Blog.is_suspended.is_(False),
+        Blog.search_indexing_enabled.is_(True),
+    )
+    if q:
+        needle = f"%{q.strip()}%"
+        stmt = stmt.where(or_(Blog.slug.ilike(needle), Blog.title.ilike(needle), Blog.subtitle.ilike(needle)))
+    if locale:
+        stmt = stmt.where(Blog.default_locale == locale)
+    if sort == "followers":
+        stmt = stmt.order_by(follower_count.desc(), Blog.created_at.desc())
+    elif sort == "new":
+        stmt = stmt.order_by(Blog.created_at.desc())
+    else:
+        stmt = stmt.order_by(last_published.desc().nulls_last(), Blog.created_at.desc())
+    result = await session.execute(stmt.limit(limit).offset(max(offset, 0)))
+    return [
+        PublicBlogOut(
+            **_to_blog_out(blog, None).model_dump(),
+            post_count=int(posts or 0),
+            follower_count=int(followers or 0),
+            last_published_at=last,
+        )
+        for blog, posts, followers, last in result.all()
+    ]
 
 
 @router.get("/{slug}", response_model=BlogOut)

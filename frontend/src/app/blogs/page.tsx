@@ -16,18 +16,14 @@ export async function generateMetadata(): Promise<Metadata> {
 
 const DIRECTORY_LOCALES = ["it", "en", "de", "fr"];
 
-/** Directory pubblica dei blog indicizzabili (mockup 4c). Ricerca e filtro
- * lingua sono applicati qui sull'elenco restituito (max 100): il backend non
- * espone ancora `q`/`locale` su `GET /blogs` (blocco B1). */
+/** Directory pubblica dei blog indicizzabili (mockup 4c): ricerca e filtro
+ * lingua passati a `GET /blogs`, ordinati per attività. */
 export default async function BlogsPage({ searchParams }: { searchParams: Promise<{ locale?: string; q?: string }> }) {
   const { locale, q } = await searchParams;
-  const [all, t] = await Promise.all([getPublicBlogs({ limit: 100 }).catch(() => []), getTranslations("BlogsPage")]);
-  const needle = q?.trim().toLowerCase();
-  const blogs = all.filter(
-    (b) =>
-      (!locale || b.default_locale === locale) &&
-      (!needle || b.title.toLowerCase().includes(needle) || b.slug.includes(needle) || (b.subtitle ?? "").toLowerCase().includes(needle))
-  );
+  const [blogs, t] = await Promise.all([
+    getPublicBlogs({ limit: 100, q: q?.trim() || undefined, locale: locale || undefined, sort: "active" }).catch(() => []),
+    getTranslations("BlogsPage"),
+  ]);
   const href = (code: string) => {
     const params = new URLSearchParams();
     if (q) params.set("q", q);
@@ -42,7 +38,7 @@ export default async function BlogsPage({ searchParams }: { searchParams: Promis
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="flex flex-col gap-1.5">
             <h1 className="font-serif text-3xl font-medium tracking-tight md:text-[40px]">{t("title")}</h1>
-            <p className="text-muted md:text-base">{t("subtitle", { count: all.length })}</p>
+            <p className="text-muted md:text-base">{t("subtitle", { count: blogs.length })}</p>
           </div>
           <form className="flex items-center gap-2 rounded-[10px] border border-border bg-surface px-3.5 py-2 text-sm text-muted md:w-80">
             {locale && <input type="hidden" name="locale" value={locale} />}

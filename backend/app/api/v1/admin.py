@@ -1,15 +1,19 @@
+import asyncio
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, field_validator, model_validator
-from sqlalchemy import or_, select
+import httpx
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import require_platform_admin, require_platform_moderator
+from app.core.config import settings
 from app.core.database import get_session
+from app.core.redis import get_redis
 from app.core.revalidation import blog_tag, feed_tag, post_tag, revalidate_frontend
 from app.domain import audit
 from app.domain.display_names import resolve_personal_display_name
@@ -18,6 +22,7 @@ from app.models.blog import Blog, BlogVisibility
 from app.models.comment import Comment, CommentStatus
 from app.models.post import Post, PostStatus
 from app.models.user import PlatformRole, User
+from app.models.user_session import UserSession
 
 router = APIRouter()
 
@@ -34,8 +39,36 @@ class AdminUserOut(BaseModel):
     is_active: bool
     mfa_enabled: bool
     created_at: datetime
+    # todo/UX_REDESIGN.md B1 (mockup 1g): blog di proprietà e ultimo accesso
+    # (ultimo uso di una sessione di refresh, `user_sessions.last_used_at`).
+    blogs_count: int = 0
+    last_seen_at: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+
+async def _admin_users_out(session: AsyncSession, users: list[User]) -> list[AdminUserOut]:
+    if not users:
+        return []
+    ids = [u.id for u in users]
+    blog_counts = dict(
+        (await session.execute(select(Blog.owner_id, func.count()).where(Blog.owner_id.in_(ids)).group_by(Blog.owner_id))).all()
+    )
+    last_seen = dict(
+        (
+            await session.execute(
+                select(UserSession.user_id, func.max(UserSession.last_used_at))
+                .where(UserSession.user_id.in_(ids))
+                .group_by(UserSession.user_id)
+            )
+        ).all()
+    )
+    return [
+        AdminUserOut.model_validate(u).model_copy(
+            update={"blogs_count": int(blog_counts.get(u.id, 0)), "last_seen_at": last_seen.get(u.id)}
+        )
+        for u in users
+    ]
 
 
 class AdminUserUpdateRequest(BaseModel):
@@ -48,13 +81,13 @@ async def list_users(
     q: str | None = None,
     current_user: User = Depends(require_platform_admin),
     session: AsyncSession = Depends(get_session),
-) -> list[User]:
+) -> list[AdminUserOut]:
     stmt = select(User).order_by(User.created_at)
     if q:
         needle = f"%{q}%"
         stmt = stmt.where(or_(User.username.ilike(needle), User.email.ilike(needle)))
     result = await session.execute(stmt)
-    return list(result.scalars().all())
+    return await _admin_users_out(session, list(result.scalars().all()))
 
 
 @router.patch("/users/{user_id}", response_model=AdminUserOut)
@@ -64,7 +97,7 @@ async def update_user(
     request: Request,
     current_user: User = Depends(require_platform_admin),
     session: AsyncSession = Depends(get_session),
-) -> User:
+) -> AdminUserOut:
     target = await session.get(User, user_id)
     if target is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Utente non trovato.")
@@ -106,7 +139,104 @@ async def update_user(
 
     await session.commit()
     await session.refresh(target)
-    return target
+    return (await _admin_users_out(session, [target]))[0]
+
+
+class ServiceStatus(BaseModel):
+    name: str
+    status: str  # "ok" | "down" | "unconfigured"
+    detail: str | None = None
+
+
+class AdminOverviewOut(BaseModel):
+    users_total: int
+    users_new_7d: int
+    blogs_total: int
+    blogs_suspended: int
+    posts_published: int
+    queue_pending_comments: int
+    queue_posts_in_review: int
+    queue_hidden_posts: int
+    audit_today: int
+    services: list[ServiceStatus]
+    deployment_mode: str
+
+
+async def _tcp_check(name: str, host: str, port: int) -> ServiceStatus:
+    try:
+        _, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=2)
+        writer.close()
+        return ServiceStatus(name=name, status="ok")
+    except Exception as exc:  # noqa: BLE001 — qualunque errore di rete è "giù"
+        return ServiceStatus(name=name, status="down", detail=type(exc).__name__)
+
+
+async def _check_services(session: AsyncSession) -> list[ServiceStatus]:
+    """Salute dei servizi di piattaforma (mockup 5d). Controlli leggeri e
+    con timeout: `SELECT 1` su Postgres, `PING` su Redis, connessione TCP
+    per RabbitMQ e storage S3, `GET /health` sul servizio di moderazione."""
+    services: list[ServiceStatus] = []
+    try:
+        await session.execute(text("SELECT 1"))
+        services.append(ServiceStatus(name="postgres", status="ok"))
+    except Exception as exc:  # noqa: BLE001
+        services.append(ServiceStatus(name="postgres", status="down", detail=type(exc).__name__))
+    try:
+        await asyncio.wait_for(get_redis().ping(), timeout=2)
+        services.append(ServiceStatus(name="redis", status="ok"))
+    except Exception as exc:  # noqa: BLE001
+        services.append(ServiceStatus(name="redis", status="down", detail=type(exc).__name__))
+    services.append(await _tcp_check("rabbitmq", settings.rabbitmq_host, settings.rabbitmq_port))
+    if settings.storage_backend == "s3" and settings.s3_endpoint_url:
+        url = httpx.URL(settings.s3_endpoint_url)
+        services.append(await _tcp_check("storage", url.host, url.port or (443 if url.scheme == "https" else 80)))
+    else:
+        services.append(ServiceStatus(name="storage", status="ok", detail="localstorage"))
+    if settings.moderation_service_url:
+        try:
+            async with httpx.AsyncClient(timeout=2) as client:
+                res = await client.get(f"{settings.moderation_service_url}/health")
+            services.append(ServiceStatus(name="moderation", status="ok" if res.status_code == 200 else "down"))
+        except Exception as exc:  # noqa: BLE001
+            services.append(ServiceStatus(name="moderation", status="down", detail=type(exc).__name__))
+    else:
+        services.append(ServiceStatus(name="moderation", status="unconfigured"))
+    return services
+
+
+@router.get("/overview", response_model=AdminOverviewOut)
+async def admin_overview(
+    current_user: User = Depends(require_platform_moderator),
+    session: AsyncSession = Depends(get_session),
+) -> AdminOverviewOut:
+    """Panoramica di piattaforma (todo/UX_REDESIGN.md B1, mockup 5d): KPI,
+    code aperte, audit di oggi, salute dei servizi. Un Moderatore vede gli
+    stessi numeri (sono aggregati, nessun dato personale)."""
+    now = datetime.now(timezone.utc)
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    async def count(stmt) -> int:
+        return int((await session.execute(stmt)).scalar_one() or 0)
+
+    return AdminOverviewOut(
+        users_total=await count(select(func.count()).select_from(User)),
+        users_new_7d=await count(select(func.count()).select_from(User).where(User.created_at >= now - timedelta(days=7))),
+        blogs_total=await count(select(func.count()).select_from(Blog)),
+        blogs_suspended=await count(select(func.count()).select_from(Blog).where(Blog.is_suspended.is_(True))),
+        posts_published=await count(
+            select(func.count()).select_from(Post).where(Post.status == PostStatus.PUBLISHED, Post.published_at <= now)
+        ),
+        queue_pending_comments=await count(
+            select(func.count()).select_from(Comment).where(Comment.status == CommentStatus.PENDING)
+        ),
+        queue_posts_in_review=await count(
+            select(func.count()).select_from(Post).where(Post.status == PostStatus.PENDING_REVIEW)
+        ),
+        queue_hidden_posts=await count(select(func.count()).select_from(Post).where(Post.is_hidden.is_(True))),
+        audit_today=await count(select(func.count()).select_from(AuditLog).where(AuditLog.occurred_at >= today)),
+        services=await _check_services(session),
+        deployment_mode=settings.deployment_mode,
+    )
 
 
 class AdminBlogOut(BaseModel):

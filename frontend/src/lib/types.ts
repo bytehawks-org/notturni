@@ -109,6 +109,28 @@ export interface Blog {
   created_at: string;
 }
 
+/** Voce di `GET /blogs` (directory pubblica): blog più i conteggi delle card. */
+export interface PublicBlog extends Blog {
+  post_count: number;
+  follower_count: number;
+  last_published_at: string | null;
+}
+
+/** `GET /blogs/{slug}/overview` (todo/UX_REDESIGN.md B1): conteggi per la tab Panoramica. */
+export interface BlogOverview {
+  posts_total: number;
+  posts_published: number;
+  posts_scheduled: number;
+  posts_draft: number;
+  posts_in_review: number;
+  followers: number;
+  members: number;
+  pending_comments: number;
+  approved_comments: number;
+  media: number;
+  last_published_at: string | null;
+}
+
 export interface MembershipBlog {
   blog: Blog;
   role: BlogRole;
@@ -140,6 +162,8 @@ export interface BlogInvitation {
 
 export interface BlogConfig {
   palette?: Record<string, string>;
+  /** Variante scura (stessi vincoli della palette), applicata in tema scuro sulle pagine pubbliche del blog. */
+  palette_dark?: Record<string, string>;
   typography?: Record<string, string>;
   layout?: string;
   [key: string]: unknown;
@@ -361,6 +385,40 @@ export interface AdminUser {
   is_active: boolean;
   mfa_enabled: boolean;
   created_at: string;
+  /** Blog di proprietà. */
+  blogs_count: number;
+  /** Ultimo uso di una sessione di refresh; `null` se mai usata. */
+  last_seen_at: string | null;
+}
+
+export interface ServiceStatus {
+  name: string;
+  status: "ok" | "down" | "unconfigured";
+  detail?: string | null;
+}
+
+/** `GET /admin/overview` (mockup 5d). */
+export interface AdminOverview {
+  users_total: number;
+  users_new_7d: number;
+  blogs_total: number;
+  blogs_suspended: number;
+  posts_published: number;
+  queue_pending_comments: number;
+  queue_posts_in_review: number;
+  queue_hidden_posts: number;
+  audit_today: number;
+  services: ServiceStatus[];
+  deployment_mode: "solo" | "platform";
+}
+
+/** `GET /users/{username}/comments`: commenti approvati firmati con lo username. */
+export interface PublicComment {
+  id: string;
+  content: string;
+  created_at: string;
+  post_title: string;
+  permalink: string;
 }
 
 /** Elenco di piattaforma (dashboard/blog, riservato ad Amministratore/Super

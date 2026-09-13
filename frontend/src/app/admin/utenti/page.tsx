@@ -15,9 +15,8 @@ import type { AdminUser, PlatformRole } from "@/lib/types";
 
 const ROLES: PlatformRole[] = ["utente", "moderatore", "amministratore", "super_admin"];
 
-/** Tabella utenti (mockup 1g): ricerca, ruolo, MFA, stato, data di
- * iscrizione. Le colonne "blog" e "ultimo accesso" e l'export CSV arrivano
- * con i campi aggiuntivi di `AdminUser` (blocco B1). */
+/** Tabella utenti (mockup 1g): ricerca, ruolo, blog, MFA, ultimo accesso,
+ * stato, export CSV (generato nel browser dall'elenco caricato). */
 export default function DashboardUsersPage() {
   const { user: me, authFetch } = useAuth();
   const t = useTranslations("AdminUsers");
@@ -53,6 +52,21 @@ export default function DashboardUsersPage() {
 
   const canGrantPrivilegedRoles = me?.platform_role === "super_admin";
 
+  function exportCsv() {
+    if (!users) return;
+    const rows = [
+      ["username", "email", "platform_role", "is_active", "mfa_enabled", "blogs_count", "created_at", "last_seen_at"],
+      ...users.map((u) => [u.username, u.email, u.platform_role, u.is_active, u.mfa_enabled, u.blogs_count, u.created_at, u.last_seen_at ?? ""]),
+    ];
+    const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "notturni-utenti.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -60,7 +74,12 @@ export default function DashboardUsersPage() {
           <h1 className="font-serif text-[28px] font-medium leading-tight text-foreground">{t("title")}</h1>
           {users && <p className="text-sm text-muted">{t("summary", { count: users.length })}</p>}
         </div>
-        <SearchInput value={q} onChange={setQ} placeholder={t("search")} />
+        <div className="flex items-center gap-2">
+          <SearchInput value={q} onChange={setQ} placeholder={t("search")} />
+          <Button size="sm" variant="secondary" onClick={exportCsv} disabled={!users || users.length === 0}>
+            {t("exportCsv")}
+          </Button>
+        </div>
       </div>
       {error && <Alert kind="error">{error}</Alert>}
       {users === null && !error && <SkeletonRows rows={6} />}
@@ -72,8 +91,10 @@ export default function DashboardUsersPage() {
               <tr>
                 <th className="px-4 py-3">{t("col.user")}</th>
                 <th className="px-4 py-3">{t("col.role")}</th>
+                <th className="px-4 py-3">{t("col.blogs")}</th>
                 <th className="px-4 py-3">{t("col.mfa")}</th>
                 <th className="px-4 py-3">{t("col.since")}</th>
+                <th className="px-4 py-3">{t("col.lastSeen")}</th>
                 <th className="px-4 py-3">{t("col.status")}</th>
               </tr>
             </thead>
@@ -108,11 +129,15 @@ export default function DashboardUsersPage() {
                       </select>
                       {rowError[u.id] && <p className="mt-1 text-xs text-danger">{rowError[u.id]}</p>}
                     </td>
+                    <td className="px-4 py-3 text-muted">{u.blogs_count}</td>
                     <td className="px-4 py-3">
                       <Pill tone={u.mfa_enabled ? "ok" : "neutral"}>{u.mfa_enabled ? t("mfaOn") : t("mfaOff")}</Pill>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-muted">
                       {formatDate(u.created_at, locale, { day: "numeric", month: "short", year: "numeric" })}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-muted">
+                      {u.last_seen_at ? formatDate(u.last_seen_at, locale, { day: "numeric", month: "short", year: "numeric" }) : t("never")}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">

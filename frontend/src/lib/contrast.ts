@@ -28,3 +28,31 @@ export function contrastRatio(a: string, b: string): number | null {
   const [hi, lo] = la > lb ? [la, lb] : [lb, la];
   return (hi + 0.05) / (lo + 0.05);
 }
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0");
+  return `#${c(r)}${c(g)}${c(b)}`;
+}
+
+function mix(hex: string, target: [number, number, number], amount: number): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return hex;
+  return rgbToHex(
+    rgb[0] + (target[0] - rgb[0]) * amount,
+    rgb[1] + (target[1] - rgb[1]) * amount,
+    rgb[2] + (target[2] - rgb[2]) * amount
+  );
+}
+
+/** Variante scura derivata dalla palette chiara (mockup 2e "Genera variante
+ * scura"): sfondo e bordo verso il nero, testo e attenuato verso il bianco,
+ * primario schiarito quanto basta per restare leggibile su fondo scuro. */
+export function deriveDarkPalette(light: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (light.background) out.background = mix(light.background, [16, 16, 18], 0.9);
+  if (light.foreground) out.foreground = mix(light.foreground, [240, 236, 228], 0.88);
+  if (light.primary) out.primary = mix(light.primary, [255, 255, 255], 0.35);
+  if (light.muted) out.muted = mix(light.muted, [255, 255, 255], 0.2);
+  if (light.border) out.border = mix(light.border, [24, 24, 26], 0.85);
+  return out;
+}

@@ -6,17 +6,21 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { FeedPostCardClient } from "@/components/FeedPostCardClient";
+import { BlogDirectoryGridClient } from "@/components/home/BlogDirectoryClient";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/shell/SiteFooter";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { SkeletonRows } from "@/components/ui/States";
+import { EmptyState, SkeletonRows } from "@/components/ui/States";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { formatDate } from "@/lib/format";
 import { languageName } from "@/lib/languages";
 import { getSocialPlatform } from "@/lib/social-platforms";
-import type { Profile } from "@/lib/types";
+import type { Blog, Post, Profile, PublicComment } from "@/lib/types";
+
+type Tab = "posts" | "blogs" | "comments";
 
 function countryName(code: string, locale: string): string {
   try {
@@ -27,8 +31,9 @@ function countryName(code: string, locale: string): string {
 }
 
 /** Profilo pubblico (mockup 3e): intestazione con avatar, luogo e lingue,
- * bio, statistiche e link social. Le tab Post/Blog/Commenti richiedono
- * endpoint per utente non ancora esposti (blocco B1). */
+ * bio, statistiche, link social e tab Post/Blog/Commenti
+ * (`GET /users/{username}/posts|blogs|comments`, solo contenuti firmati con
+ * lo username — CLAUDE.md #8). */
 export default function PublicProfilePage() {
   const params = useParams<{ username: string }>();
   const { user, authFetch } = useAuth();
@@ -40,6 +45,16 @@ export default function PublicProfilePage() {
   const [followers, setFollowers] = useState<string[]>([]);
   const [isFollowing, setIsFollowing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("posts");
+  const [posts, setPosts] = useState<Post[] | null>(null);
+  const [blogs, setBlogs] = useState<Blog[] | null>(null);
+  const [comments, setComments] = useState<PublicComment[] | null>(null);
+
+  useEffect(() => {
+    api.users.publicPosts(params.username).then(setPosts).catch(() => setPosts([]));
+    api.users.publicBlogs(params.username).then(setBlogs).catch(() => setBlogs([]));
+    api.users.publicComments(params.username).then(setComments).catch(() => setComments([]));
+  }, [params.username]);
 
   const load = useCallback(() => {
     api.users
@@ -153,6 +168,68 @@ export default function PublicProfilePage() {
                 </ul>
               </section>
             )}
+
+            <section className="flex flex-col gap-4">
+              <div className="flex gap-1 border-b border-border">
+                {(["posts", "blogs", "comments"] as Tab[]).map((id) => {
+                  const count = id === "posts" ? posts?.length : id === "blogs" ? blogs?.length : comments?.length;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setTab(id)}
+                      className={`border-b-2 px-3.5 py-2 text-sm transition ${
+                        tab === id ? "border-primary font-medium text-foreground" : "border-transparent text-muted hover:text-foreground"
+                      }`}
+                    >
+                      {t(`tab.${id}`)}
+                      {count !== undefined && <span className="ml-1 text-muted">· {count}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+              {tab === "posts" &&
+                (posts === null ? (
+                  <SkeletonRows rows={3} />
+                ) : posts.length === 0 ? (
+                  <EmptyState glyph="✎" title={t("noPostsTitle")} body={t("noPostsBody")} />
+                ) : (
+                  <div className="flex flex-col">
+                    {posts.map((post) => (
+                      <FeedPostCardClient key={post.id} post={post} />
+                    ))}
+                  </div>
+                ))}
+              {tab === "blogs" &&
+                (blogs === null ? (
+                  <SkeletonRows rows={2} />
+                ) : blogs.length === 0 ? (
+                  <EmptyState glyph="◫" title={t("noBlogsTitle")} body={t("noBlogsBody")} />
+                ) : (
+                  <BlogDirectoryGridClient blogs={blogs} />
+                ))}
+              {tab === "comments" &&
+                (comments === null ? (
+                  <SkeletonRows rows={3} />
+                ) : comments.length === 0 ? (
+                  <EmptyState glyph="❝" title={t("noCommentsTitle")} body={t("noCommentsBody")} />
+                ) : (
+                  <ul className="flex flex-col rounded-xl border border-border bg-surface">
+                    {comments.map((c) => (
+                      <li key={c.id} className="flex flex-col gap-1 border-b border-border px-4 py-3 last:border-0">
+                        <p className="text-[15px] leading-relaxed text-foreground">“{c.content}”</p>
+                        <span className="text-[13px] text-muted">
+                          {t("on")}{" "}
+                          <Link href={c.permalink} className="text-foreground no-underline hover:underline">
+                            {c.post_title}
+                          </Link>{" "}
+                          · {formatDate(c.created_at, locale, { day: "numeric", month: "short", year: "numeric" })}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ))}
+            </section>
 
             <p className="text-[13px] leading-relaxed text-muted">{t("privacyNote")}</p>
           </div>

@@ -265,8 +265,29 @@ blog pubblici indicizzabili: `visibility=public`, non sospesi
 (`is_suspended=false`) e `search_indexing_enabled=true` — stesso criterio del
 `robots.txt` generato, più restrittivo del semplice "pubblico" usato dal feed
 dei post (che include anche i blog pubblici non indicizzabili). Parametri
-`limit` (default 30, max 100) e `offset` per la paginazione, più recenti
-prima. `owner_id` sempre `null` in questa lista (nessun viewer autenticato).
+`limit` (default 30, max 100) e `offset` per la paginazione. `q` cerca in
+slug/titolo/sottotitolo (sottostringa), `locale` filtra per lingua
+principale, `sort` è `active` (default: ultimo post pubblicato, poi
+creazione), `new` (creazione) o `followers`. Ogni voce è un blog più
+`post_count` (post effettivamente pubblicati), `follower_count` e
+`last_published_at` — i conteggi delle card della directory (mockup 4a/4c).
+`owner_id` sempre `null` in questa lista (nessun viewer autenticato).
+
+**`GET /api/v1/blogs/{slug}/overview`** — richiede sessione: proprietario o
+membro con qualunque ruolo (`403` altrimenti, `404` se il blog non esiste).
+Conteggi per la tab Panoramica del blog (todo/UX_REDESIGN.md B1, mockup 5a):
+
+```json
+{
+  "posts_total": 12, "posts_published": 9, "posts_scheduled": 1, "posts_draft": 1, "posts_in_review": 1,
+  "followers": 214, "members": 2, "pending_comments": 3, "approved_comments": 40, "media": 18,
+  "last_published_at": "2026-09-12T07:00:00Z"
+}
+```
+
+`posts_scheduled` sono i `published` con `published_at` futuro; `media` è il
+numero di immagini citate nei post (tabella `post_media`). Le letture
+aggregate (mockup 5a "Reads") arrivano con il blocco B2.
 
 **`GET /api/v1/blogs/mine`** — richiede sessione. Lista i blog di proprietà
 dell'utente.
@@ -332,6 +353,9 @@ e qualsiasi altra chiave) libero:
 
 - `palette`: al massimo 5 colori; ogni colore esadecimale non può superare il
   90% di saturazione HLS (palette "calma", CLAUDE.md § Estetica).
+- `palette_dark` (opzionale): stessi vincoli di `palette`; è la variante
+  scura applicata alle pagine pubbliche del blog quando il lettore usa il
+  tema scuro. Assente, in tema scuro vale la palette scura di piattaforma.
 - `typography`: al massimo 3 font distinti; se presenti, `heading_font` deve
   essere uno dei font serif curati (`Lora`, `Merriweather`, `Playfair
   Display`, `Source Serif 4`, `Crimson Pro`) e `body_font` uno dei font
@@ -1123,6 +1147,18 @@ l'utente, quindi il cambio è visibile subito ovunque (post, commenti,
 autocomplete `@menzioni`) — eccetto le `@menzioni` già scritte nel testo di
 post/pagine esistenti, salvate come testo semplice e non riscritte.
 
+**`GET /api/v1/users/{username}/blogs`**, **`.../posts`**, **`.../comments`**
+— pubblici, `404` se l'utente non esiste. Tab del profilo pubblico (mockup
+3e): blog pubblici non sospesi di proprietà dell'utente (stesso schema di
+`GET /blogs/{slug}`, `owner_id` a `null`), post pubblicati su blog pubblici
+(stesso schema del feed; `limit` default 20 max 50, `offset`) e commenti
+approvati su post pubblici (`{id, content, created_at, post_title,
+permalink}`, stessa paginazione). **Regola di privacy (CLAUDE.md #8)**: sono
+elencati solo i contenuti firmati pubblicamente con lo username — un blog
+con `default_author_display_name` diverso dallo username, i post firmati con
+quell'alias e i commenti lasciati con un alias restano fuori, altrimenti
+questi endpoint collegherebbero l'alias all'identità reale.
+
 **`GET /api/v1/users/me/follow-stats`** — richiede sessione. Somma i
 follower dell'utente (`UserFollow`) con quelli di tutti i suoi blog
 (`BlogFollow`), inclusi i blog che si presentano con un alias diverso dal
@@ -1284,9 +1320,23 @@ Consumati dalle sezioni
 — sotto il prefisso `/admin/*`, separato da `/dashboard/*` (sezioni
 personali), non un'app a parte — vedi ROADMAP.md.
 
+**`GET /api/v1/admin/overview`** — accetta anche `moderatore`. Panoramica
+di piattaforma (todo/UX_REDESIGN.md B1, mockup 5d): `users_total`,
+`users_new_7d`, `blogs_total`, `blogs_suspended`, `posts_published`, le code
+`queue_pending_comments`/`queue_posts_in_review`/`queue_hidden_posts`,
+`audit_today` (voci del registro dalla mezzanotte UTC), `deployment_mode` e
+`services`: lista `{name, status, detail?}` con `status` in `ok`/`down`/
+`unconfigured` per `postgres` (`SELECT 1`), `redis` (`PING`), `rabbitmq` e
+`storage` (connessione TCP con timeout 2 s; `storage` è sempre `ok` con
+`localstorage`) e `moderation` (`GET /health` del servizio, `unconfigured`
+se `NOCT_MODERATION_SERVICE_URL` è assente). Solo aggregati, nessun dato
+personale.
+
 **`GET /api/v1/admin/users`** — lista tutti gli utenti della piattaforma
-(id, username, email, `platform_role`, `is_active`, `mfa_enabled`). Query
-param opzionale `q`: filtra per username o email (`ilike`, sottostringa).
+(id, username, email, `platform_role`, `is_active`, `mfa_enabled`,
+`blogs_count` — blog di proprietà — e `last_seen_at`, ultimo uso di una
+sessione di refresh, `null` se mai usata). Query param opzionale `q`: filtra
+per username o email (`ilike`, sottostringa).
 
 **`PATCH /api/v1/admin/users/{user_id}`** — `{platform_role?, is_active?}`.
 
@@ -1409,7 +1459,10 @@ insieme), `tag` (filtra per tag normalizzato, es. `poesia` non `#Poesia` —
 vedi sezione "Tag" sopra), `category` (filtra per slug di categoria — vedi
 sezione "Categorie" sopra; essendo la categoria per-blog, blog diversi con
 una categoria omonima compaiono insieme, come già avviene per i tag),
-`limit` (default 20, massimo 50), `offset` (paginazione, default 0). Router
+`limit` (default 20, massimo 50), `offset` (paginazione, default 0),
+`following=true` (richiede sessione, `401` altrimenti — mockup 1c
+"Seguiti"): solo i post dei blog seguiti o scritti dagli utenti seguiti,
+con gli stessi vincoli di visibilità del resto del feed. Router
 separato da `/blogs/{slug}/posts` apposta: qui i post attraversano blog
 diversi, non sono scoped a uno slug/id specifico.
 

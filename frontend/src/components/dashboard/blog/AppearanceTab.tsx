@@ -11,7 +11,7 @@ import { FieldGroup, Label } from "@/components/ui/Field";
 import { SkeletonRows } from "@/components/ui/States";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { contrastRatio } from "@/lib/contrast";
+import { contrastRatio, deriveDarkPalette } from "@/lib/contrast";
 import { SANS_SERIF_FONTS, SERIF_FONTS, type BlogConfig } from "@/lib/types";
 
 import { errorMessage } from "./shared";
@@ -35,7 +35,7 @@ const LAYOUTS = ["standard", "magazine", "minimal"] as const;
 
 /** Tab Aspetto (mockup 2e): palette (5 colori) con preset e verifica AA,
  * tipografia dagli elenchi curati, corpo/misura/layout, anteprima live.
- * "Genera variante scura" richiede una chiave dedicata in blog_configs (B1). */
+ * "Genera variante scura" salva `palette_dark` (derivata da lib/contrast.ts). */
 export function AppearanceTab({ blogSlug, canEdit }: { blogSlug: string; canEdit: boolean }) {
   const { accessToken, authFetch } = useAuth();
   const t = useTranslations("Appearance");
@@ -44,6 +44,7 @@ export function AppearanceTab({ blogSlug, canEdit }: { blogSlug: string; canEdit
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [previewDark, setPreviewDark] = useState(false);
 
   useEffect(() => {
     api.blogs
@@ -77,12 +78,14 @@ export function AppearanceTab({ blogSlug, canEdit }: { blogSlug: string; canEdit
   if (!config) return error ? <Alert kind="error">{error}</Alert> : <SkeletonRows rows={4} />;
 
   const palette = config.palette ?? {};
+  const darkPalette = config.palette_dark;
   const typography = config.typography ?? {};
   const paletteEntries = Object.entries(palette);
-  const bg = palette.background ?? "#faf8f4";
-  const fg = palette.foreground ?? "#232220";
-  const primary = palette.primary ?? "#3d6b5e";
-  const muted = palette.muted ?? "#857e74";
+  const shown = previewDark && darkPalette ? darkPalette : palette;
+  const bg = shown.background ?? (previewDark ? "#18191b" : "#faf8f4");
+  const fg = shown.foreground ?? (previewDark ? "#ebe6de" : "#232220");
+  const primary = shown.primary ?? (previewDark ? "#83b8a5" : "#3d6b5e");
+  const muted = shown.muted ?? (previewDark ? "#968e82" : "#857e74");
   const textRatio = contrastRatio(fg, bg);
   const primaryRatio = contrastRatio(primary, bg);
   const mutedRatio = contrastRatio(muted, bg);
@@ -93,7 +96,7 @@ export function AppearanceTab({ blogSlug, canEdit }: { blogSlug: string; canEdit
   const previewStyle = {
     background: bg,
     color: fg,
-    borderColor: palette.border ?? "#e5dfd5",
+    borderColor: shown.border ?? (previewDark ? "#2f2e2b" : "#e5dfd5"),
     fontFamily: `"${typography.body_font ?? "Source Sans 3"}", system-ui, sans-serif`,
     fontSize: `${bodySize}px`,
   } as const;
@@ -141,6 +144,23 @@ export function AppearanceTab({ blogSlug, canEdit }: { blogSlug: string; canEdit
                 {t(`preset.${preset.id}`)}
               </button>
             ))}
+            <button
+              type="button"
+              disabled={!canEdit}
+              onClick={() => patch((p) => ({ ...p, palette_dark: deriveDarkPalette(p.palette ?? {}) }))}
+              className="rounded-full border border-border px-2.5 py-1 text-muted hover:text-foreground disabled:opacity-50"
+            >
+              {darkPalette ? t("regenerateDark") : t("generateDark")}
+            </button>
+            {darkPalette && canEdit && (
+              <button
+                type="button"
+                onClick={() => patch((p) => ({ ...p, palette_dark: undefined }))}
+                className="text-muted hover:text-foreground"
+              >
+                {t("removeDark")}
+              </button>
+            )}
             <span className={`ml-auto rounded-full px-2 py-0.5 text-xs font-semibold ${aaOk ? "bg-ok/15 text-ok" : "bg-danger/12 text-danger"}`}>
               {t("contrast")} · AA {aaOk ? "✓" : "✗"}
               {textRatio && ` · ${textRatio.toFixed(1)}:1`}
@@ -214,7 +234,14 @@ export function AppearanceTab({ blogSlug, canEdit }: { blogSlug: string; canEdit
       </div>
 
       <aside className="flex flex-col gap-2">
-        <SectionLabel>{t("preview")}</SectionLabel>
+        <div className="flex items-center justify-between">
+          <SectionLabel>{t("preview")}</SectionLabel>
+          {darkPalette && (
+            <button type="button" onClick={() => setPreviewDark((v) => !v)} className="text-xs text-muted hover:text-foreground">
+              {previewDark ? t("previewLight") : t("previewDark")}
+            </button>
+          )}
+        </div>
         <div className="rounded-xl border p-6 leading-[1.6] shadow-soft" style={previewStyle}>
           <div className="mb-4 flex items-center gap-4 border-b pb-3 text-[13px]" style={{ borderColor: previewStyle.borderColor }}>
             <span className="font-semibold" style={{ fontFamily: `"${typography.heading_font ?? "Lora"}", serif` }}>
@@ -241,7 +268,7 @@ export function AppearanceTab({ blogSlug, canEdit }: { blogSlug: string; canEdit
             1. {t("previewNote")}
           </p>
         </div>
-        <span className="text-xs text-muted">{t("previewHint")}</span>
+        <span className="text-xs text-muted">{darkPalette ? t("previewHintDark") : t("previewHint")}</span>
       </aside>
     </div>
   );

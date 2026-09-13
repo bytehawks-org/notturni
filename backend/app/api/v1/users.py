@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel
@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user
+from app.api.v1.blogs._common import BlogOut, _to_blog_out
+from app.api.v1.posts import PostOut, _posts_out
 from app.core.database import get_session
 from app.core.storage import avatar_public_url, delete_avatar, upload_avatar
 from app.domain import audit
@@ -15,7 +17,9 @@ from app.domain.gdpr import anonymize_and_deactivate_user, export_user_data
 from app.domain.i18n import validate_locale
 from app.domain.profile import validate_country_code, validate_fallback_languages
 from app.domain.usernames import validate_username
-from app.models.blog import Blog
+from app.models.blog import Blog, BlogVisibility
+from app.models.comment import Comment, CommentStatus
+from app.models.post import Post, PostStatus
 from app.models.follow import BlogFollow, UserFollow
 from app.models.social_link import SocialLink
 from app.models.user import PostAuthorNameStyle, User
@@ -324,6 +328,102 @@ async def unfollow_user(
     if follow is not None:
         await session.delete(follow)
         await session.commit()
+
+
+class PublicCommentOut(BaseModel):
+    id: uuid.UUID
+    content: str
+    created_at: datetime
+    post_title: str
+    permalink: str
+
+
+def _signed_as_username(display_name: str, user: User) -> bool:
+    return display_name.strip().lower() == user.username.lower()
+
+
+@router.get("/{username}/blogs", response_model=list[BlogOut])
+async def list_user_public_blogs(username: str, session: AsyncSession = Depends(get_session)) -> list[BlogOut]:
+    """Blog pubblici di un utente per la tab "Blog" del profilo (mockup 3e).
+    CLAUDE.md #8: un blog che si presenta con un alias diverso dallo username
+    non viene elencato — altrimenti questo endpoint collegherebbe l'alias
+    all'identità reale, cosa che il resto dell'API evita di proposito."""
+    user = await _get_user_or_404(session, username)
+    result = await session.execute(
+        select(Blog)
+        .where(Blog.owner_id == user.id, Blog.visibility == BlogVisibility.PUBLIC, Blog.is_suspended.is_(False))
+        .order_by(Blog.created_at)
+    )
+    return [
+        _to_blog_out(blog, None)
+        for blog in result.scalars().all()
+        if not blog.default_author_display_name or _signed_as_username(blog.default_author_display_name, user)
+    ]
+
+
+@router.get("/{username}/posts", response_model=list[PostOut])
+async def list_user_public_posts(
+    username: str, limit: int = 20, offset: int = 0, session: AsyncSession = Depends(get_session)
+) -> list[PostOut]:
+    """Post pubblicati di un utente su blog pubblici (tab "Post" del profilo).
+    Stessa regola di privacy di `/blogs`: solo i post firmati pubblicamente
+    con lo username, mai quelli firmati con un alias."""
+    user = await _get_user_or_404(session, username)
+    limit = max(1, min(limit, 50))
+    result = await session.execute(
+        select(Post, Blog)
+        .join(Blog, Post.blog_id == Blog.id)
+        .where(
+            Post.author_id == user.id,
+            Post.status == PostStatus.PUBLISHED,
+            Post.published_at <= datetime.now(timezone.utc),
+            Post.is_hidden.is_(False),
+            Blog.visibility == BlogVisibility.PUBLIC,
+            Blog.is_suspended.is_(False),
+        )
+        .order_by(Post.published_at.desc())
+        .limit(limit)
+        .offset(max(offset, 0))
+    )
+    pairs = [(post, blog) for post, blog in result.all() if _signed_as_username(post.author_display_name, user)]
+    return await _posts_out(session, pairs)
+
+
+@router.get("/{username}/comments", response_model=list[PublicCommentOut])
+async def list_user_public_comments(
+    username: str, limit: int = 20, offset: int = 0, session: AsyncSession = Depends(get_session)
+) -> list[PublicCommentOut]:
+    """Commenti approvati di un utente su post pubblici (tab "Commenti").
+    Stessa regola di privacy: solo quelli firmati con lo username."""
+    user = await _get_user_or_404(session, username)
+    limit = max(1, min(limit, 50))
+    result = await session.execute(
+        select(Comment, Post.title, Post.slug, Blog.slug)
+        .join(Post, Post.id == Comment.post_id)
+        .join(Blog, Blog.id == Post.blog_id)
+        .where(
+            Comment.author_id == user.id,
+            Comment.status == CommentStatus.APPROVED,
+            Post.status == PostStatus.PUBLISHED,
+            Post.is_hidden.is_(False),
+            Blog.visibility == BlogVisibility.PUBLIC,
+            Blog.is_suspended.is_(False),
+        )
+        .order_by(Comment.created_at.desc())
+        .limit(limit)
+        .offset(max(offset, 0))
+    )
+    return [
+        PublicCommentOut(
+            id=comment.id,
+            content=comment.content,
+            created_at=comment.created_at,
+            post_title=post_title,
+            permalink=f"/{blog_slug}/{post_slug}",
+        )
+        for comment, post_title, post_slug, blog_slug in result.all()
+        if _signed_as_username(comment.author_display_name, user)
+    ]
 
 
 @router.get("/{username}/followers", response_model=list[FollowerOut])

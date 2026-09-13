@@ -11,6 +11,7 @@ import type {
   Page,
   Post,
   PostTranslationSummary,
+  PublicBlog,
   TrendingTag,
 } from "./types";
 
@@ -167,22 +168,25 @@ export async function getPublicFeed(
   return (await res.json()) as Post[];
 }
 
-/** Directory pubblica dei blog indicizzabili (`GET /api/v1/blogs`, todo/UX_REDESIGN.md
- * mockup 4c). Nessun tag di rivalidazione dedicato: il backend non invalida
- * ancora questa lista alla modifica di visibilità/indicizzazione di un blog
- * (solo il tag `blog:{slug}` del blog stesso), quindi si affida alla sola
- * finestra a tempo `REVALIDATE_SECONDS` come le altre viste che degradano
- * senza webhook dedicato. */
-export async function getPublicBlogs(options: { limit?: number; offset?: number } = {}): Promise<Blog[]> {
+/** Directory pubblica dei blog indicizzabili (`GET /api/v1/blogs`, mockup
+ * 4a/4c): ricerca `q`, filtro `locale`, ordinamento `active|new|followers`,
+ * con i conteggi di post e follower. Nessun tag di rivalidazione dedicato:
+ * si affida alla finestra a tempo `REVALIDATE_SECONDS`. */
+export async function getPublicBlogs(
+  options: { limit?: number; offset?: number; q?: string; locale?: string; sort?: "active" | "new" | "followers" } = {}
+): Promise<PublicBlog[]> {
   const params = new URLSearchParams();
   if (options.limit) params.set("limit", String(options.limit));
   if (options.offset) params.set("offset", String(options.offset));
+  if (options.q) params.set("q", options.q);
+  if (options.locale) params.set("locale", options.locale);
+  if (options.sort) params.set("sort", options.sort);
   const qs = params.toString();
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs${qs ? `?${qs}` : ""}`, {
     next: { revalidate: REVALIDATE_SECONDS },
   });
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero della directory dei blog.`);
-  return (await res.json()) as Blog[];
+  return (await res.json()) as PublicBlog[];
 }
 
 /** Tag più usati tra i post pubblicati di recente, per la sezione "di tendenza" della homepage. */

@@ -52,10 +52,15 @@ def validate_blog_config(config: dict[str, Any]) -> None:
     font, titoli in serif/corpo in sans-serif, palette non aggressiva); il
     resto della struttura resta libero per non bloccare l'evoluzione di
     grafica/layout/disposizione."""
-    palette = config.get("palette")
-    if palette is not None:
+    # `palette_dark` (todo/UX_REDESIGN.md B1, mockup 2e "Genera variante
+    # scura"): stessi vincoli della palette chiara; assente = in tema scuro
+    # vale la palette scura di piattaforma.
+    for key in ("palette", "palette_dark"):
+        palette = config.get(key)
+        if palette is None:
+            continue
         if not isinstance(palette, dict):
-            raise ValueError("palette deve essere un oggetto {nome: colore}.")
+            raise ValueError(f"{key} deve essere un oggetto {{nome: colore}}.")
         if len(palette) > MAX_PALETTE_COLORS:
             raise ValueError(f"La palette può avere al massimo {MAX_PALETTE_COLORS} colori.")
         for name, value in palette.items():
