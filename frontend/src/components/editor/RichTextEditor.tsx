@@ -227,7 +227,7 @@ function useMentionAutocomplete(
   return (
     <ul
       style={{ position: "fixed", left: anchor.left, top: anchor.top, zIndex: 50 }}
-      className="max-h-56 w-64 overflow-auto rounded-lg border border-border bg-background py-1 text-sm shadow-lg"
+      className="max-h-56 w-64 overflow-auto rounded-lg border border-border bg-surface py-1 text-sm shadow-soft"
     >
       {items.map((item, i) => (
         <li key={item.username}>
@@ -237,11 +237,17 @@ function useMentionAutocomplete(
               e.preventDefault();
               applyMention(item);
             }}
-            className={`flex w-full items-center gap-1.5 px-3 py-1.5 text-left ${
+            className={`flex w-full items-center gap-2 px-3 py-1.5 text-left ${
               i === index ? "bg-primary/10 text-foreground" : "text-foreground/80 hover:bg-foreground/5"
             }`}
           >
-            <span className="text-muted">@</span>
+            <span
+              className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white"
+              style={{ background: mentionAvatarHue(item.username) }}
+              aria-hidden="true"
+            >
+              {item.username[0]?.toUpperCase()}
+            </span>
             <span className="font-medium">{item.username}</span>
             {item.display_name && <span className="truncate text-muted">· {item.display_name}</span>}
           </button>
@@ -250,6 +256,9 @@ function useMentionAutocomplete(
     </ul>
   );
 }
+
+const mentionAvatarHue = (s: string) =>
+  `oklch(0.55 0.06 ${[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % 360})`;
 
 const DEFAULT_TOOLBAR_STATE = {
   bold: false,
@@ -281,6 +290,7 @@ export function RichTextEditor({
 }: RichTextEditorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [notePopover, setNotePopover] = useState<{ left: number; top: number; text: string } | null>(null);
   // Snapshot preso una sola volta al primo render: il contenuto iniziale
   // dell'editor non deve rincorrere ogni cambio di `value` (sarebbe l'editor
   // stesso, tramite onUpdate, a farlo cambiare) — solo il caso "arrivato in
@@ -401,21 +411,28 @@ export function RichTextEditor({
     editor!.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
   }
 
+  /** Apre il popover della nota ancorato al cursore (mockup 1d), al posto del
+   * window.prompt bloccante — stesso principio delle pillole ALT/sensibile
+   * sulle immagini (SensitiveImageNodeView). */
+  function openNotePopover() {
+    if (!onNotesChange || !editor) return;
+    const coords = editor.view.coordsAtPos(editor.state.selection.from);
+    setNotePopover({ left: coords.left, top: coords.bottom + 8, text: "" });
+  }
+
   /** Inserisce al cursore il marcatore `[n](#nota-n)` (un vero nodo link, così
    * sopravvive al round-trip del serializzatore Markdown) e aggiunge la nota
    * all'elenco. */
-  function insertNote() {
-    if (!onNotesChange) return;
-    const text = window.prompt("Testo della nota");
-    if (text === null) return;
-    const trimmed = text.trim();
+  function confirmNote() {
+    if (!onNotesChange || !notePopover || !editor) return;
+    const trimmed = notePopover.text.trim();
     if (!trimmed) return;
     if (trimmed.length > MAX_NOTE_LENGTH) {
       setUploadError(`La nota supera i ${MAX_NOTE_LENGTH} caratteri.`);
       return;
     }
     const nextIdx = notes.reduce((max, n) => Math.max(max, n.idx), 0) + 1;
-    editor!
+    editor
       .chain()
       .focus()
       .insertContent({
@@ -427,6 +444,7 @@ export function RichTextEditor({
       .unsetMark("link")
       .run();
     onNotesChange([...notes, { idx: nextIdx, content: trimmed }]);
+    setNotePopover(null);
   }
 
   function updateNote(idx: number, content: string) {
@@ -533,7 +551,7 @@ export function RichTextEditor({
           <LinkIcon />
         </ToolbarButton>
         {onNotesChange && (
-          <ToolbarButton title="Nota a piè di pagina" onClick={insertNote}>
+          <ToolbarButton title="Nota a piè di pagina" onClick={openNotePopover}>
             <NoteIcon />
           </ToolbarButton>
         )}
@@ -618,6 +636,46 @@ export function RichTextEditor({
 
       <EditorContent editor={editor} />
       {mentionMenu}
+
+      {notePopover && (
+        <div
+          style={{ position: "fixed", left: notePopover.left, top: notePopover.top, zIndex: 50 }}
+          className="flex w-72 flex-col gap-2 rounded-lg border border-border bg-surface p-3 shadow-soft"
+        >
+          <div className="flex items-center justify-between font-mono text-[11px] uppercase tracking-[.06em] text-muted">
+            <span>Nota {notes.reduce((max, n) => Math.max(max, n.idx), 0) + 1}</span>
+          </div>
+          <textarea
+            autoFocus
+            rows={3}
+            maxLength={MAX_NOTE_LENGTH}
+            value={notePopover.text}
+            onChange={(e) => setNotePopover({ ...notePopover, text: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setNotePopover(null);
+            }}
+            placeholder="Testo della nota…"
+            className="rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
+          />
+          <div className="flex items-center gap-4 text-[13px]">
+            <button
+              type="button"
+              disabled={!notePopover.text.trim()}
+              onClick={confirmNote}
+              className="font-medium text-primary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Fatto
+            </button>
+            <button
+              type="button"
+              onClick={() => setNotePopover(null)}
+              className="ml-auto text-muted hover:text-foreground"
+            >
+              Annulla
+            </button>
+          </div>
+        </div>
+      )}
 
       {onNotesChange && notes.length > 0 && (
         <div className="mt-8 border-t border-border pt-4">

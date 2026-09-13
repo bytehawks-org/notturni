@@ -6,8 +6,10 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { SegmentedControl } from "@/components/ui/Controls";
 import { CategorySelect } from "@/components/editor/CategorySelect";
 import { CoverImageUpload } from "@/components/editor/CoverImageUpload";
+import { EditorRail } from "@/components/editor/EditorRail";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
 import { TagInput } from "@/components/editor/TagInput";
 import { TranslationsBar } from "@/components/editor/TranslationsBar";
@@ -22,26 +24,30 @@ function errorMessage(err: unknown): string {
   return err instanceof ApiClientError ? err.message : "Errore imprevisto.";
 }
 
-/** Stato di pubblicazione nella toolbar, stesso stile di CategorySelect. La
- * sola transizione possibile da qui è bozza → pubblicato (non c'è un modo
- * per tornare a bozza una volta pubblicato): una volta pubblicato il select
- * mostra una singola opzione disattivata, non un vero multi-stato. */
-function PostStatusSelect({ status, onPublish }: { status: Post["status"]; onPublish: () => void }) {
+function RailLabel({ children }: { children: React.ReactNode }) {
   return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[11px] font-medium uppercase tracking-wide text-muted">Stato</span>
-      <select
+    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[.04em] text-muted">{children}</span>
+  );
+}
+
+/** La sola transizione possibile da qui è bozza → pubblicato (non c'è un modo
+ * per tornare a bozza una volta pubblicato, né uno step di revisione
+ * raggiungibile dall'autore in questa vista — todo/UX_REDESIGN.md). */
+function PostStatusControl({ status, onPublish }: { status: Post["status"]; onPublish: () => void }) {
+  return (
+    <div>
+      <RailLabel>Stato</RailLabel>
+      <SegmentedControl
         value={status}
-        disabled={status === "published"}
-        onChange={(e) => {
-          if (e.target.value === "published") onPublish();
+        onChange={(v) => {
+          if (v === "published") onPublish();
         }}
-        className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-70"
-      >
-        <option value="draft">Bozza</option>
-        <option value="published">{status === "published" ? "Pubblicato" : "Pubblica ora"}</option>
-      </select>
-    </label>
+        options={[
+          { value: "draft", label: "Bozza" },
+          { value: "published", label: status === "published" ? "Pubblicato" : "Pubblica ora" },
+        ]}
+      />
+    </div>
   );
 }
 
@@ -55,12 +61,12 @@ function PostCommentsModeSelect({
   onChange: (value: CommentsMode | null) => void;
 }) {
   return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[11px] font-medium uppercase tracking-wide text-muted">Commenti</span>
+    <label className="flex flex-col">
+      <RailLabel>Commenti</RailLabel>
       <select
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value === "" ? null : (e.target.value as CommentsMode))}
-        className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/40"
+        className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
       >
         <option value="">Come il blog</option>
         {(Object.keys(COMMENTS_MODE_LABELS) as CommentsMode[]).map((m) => (
@@ -87,12 +93,12 @@ function PostCrawlingSelect({
   onChange: (value: boolean | null) => void;
 }) {
   return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[11px] font-medium uppercase tracking-wide text-muted">{label}</span>
+    <label className="flex flex-col">
+      <RailLabel>{label}</RailLabel>
       <select
         value={value === null ? "" : value ? "true" : "false"}
         onChange={(e) => onChange(e.target.value === "" ? null : e.target.value === "true")}
-        className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/40"
+        className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
       >
         <option value="">Come il blog</option>
         <option value="true">Consenti</option>
@@ -214,15 +220,21 @@ export default function PostEditorPage() {
   if (!post) return error ? <Alert kind="error">{error}</Alert> : <p className="text-sm text-muted">Caricamento…</p>;
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-y-2">
-        <Link href={`/dashboard/blogs/${params.slug}`} className="text-sm text-muted hover:text-foreground">
-          ← Torna al blog
-        </Link>
+    <div className="mx-auto max-w-[1080px]">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-y-2 border-b border-border pb-4">
+        <div className="flex min-w-0 items-center gap-3 text-sm text-muted">
+          <Link href={`/dashboard/blogs/${params.slug}`} className="hover:text-foreground">
+            ‹ {params.slug}
+          </Link>
+          <span className="text-border">|</span>
+          <span className="font-mono text-xs">
+            {post.status === "published" ? "Pubblicato" : "Bozza"} · {saving ? "salvataggio…" : "salvato"}
+          </span>
+        </div>
         <div className="flex flex-wrap items-center gap-4">
           {post.status === "published" && (
-            <Link href={post.permalink} className="text-sm text-primary hover:underline">
-              Vedi
+            <Link href={post.permalink} className="text-sm text-muted hover:text-foreground">
+              Anteprima ↗
             </Link>
           )}
           <Button type="submit" form={FORM_ID} variant="secondary" disabled={saving}>
@@ -231,77 +243,100 @@ export default function PostEditorPage() {
         </div>
       </div>
 
-      <form id={FORM_ID} onSubmit={handleSave}>
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          required
-          className="mb-8 w-full border-0 bg-transparent font-serif text-3xl font-semibold leading-tight text-foreground placeholder:text-muted/70 focus:outline-none sm:text-5xl"
-        />
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <form id={FORM_ID} onSubmit={handleSave} className="mx-auto w-full max-w-[680px]">
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            required
+            className="mb-6 w-full border-0 bg-transparent font-serif text-3xl font-semibold leading-tight text-foreground placeholder:text-muted/70 focus:outline-none sm:text-[42px]"
+          />
 
-        <div className="mb-8">
-          <TagInput value={tags} onChange={setTags} />
-        </div>
+          <div className="mb-8">
+            <CoverImageUpload
+              value={coverImageUrl}
+              isSensitive={coverImageIsSensitive}
+              categories={coverImageCategories}
+              onChange={(url, sensitive, categories) => {
+                setCoverImageUrl(url);
+                setCoverImageIsSensitive(sensitive);
+                setCoverImageCategories(categories);
+              }}
+              blogSlug={params.slug}
+              authFetch={authFetch}
+            />
+          </div>
 
-        <div className="mb-8">
-          <CoverImageUpload
-            value={coverImageUrl}
-            isSensitive={coverImageIsSensitive}
-            categories={coverImageCategories}
-            onChange={(url, sensitive, categories) => {
-              setCoverImageUrl(url);
-              setCoverImageIsSensitive(sensitive);
-              setCoverImageCategories(categories);
-            }}
+          <RichTextEditor
+            value={content}
+            onChange={setContent}
             blogSlug={params.slug}
             authFetch={authFetch}
+            notes={notes}
+            onNotesChange={setNotes}
           />
-        </div>
 
-        <RichTextEditor
-          value={content}
-          onChange={setContent}
-          blogSlug={params.slug}
-          authFetch={authFetch}
-          notes={notes}
-          onNotesChange={setNotes}
-          toolbarEnd={
-            <>
-              <CategorySelect blogSlug={params.slug} value={categoryId} onChange={setCategoryId} />
-              <PostCommentsModeSelect value={commentsMode} onChange={setCommentsMode} />
-              <PostCrawlingSelect
-                label="Motori di ricerca"
-                value={searchIndexingEnabled}
-                onChange={setSearchIndexingEnabled}
-              />
-              <PostCrawlingSelect label="Crawler IA/LLM" value={aiCrawlingEnabled} onChange={setAiCrawlingEnabled} />
-              <PostStatusSelect status={post.status} onPublish={handlePublish} />
-            </>
-          }
+          {error && (
+            <div className="mt-6">
+              <Alert kind="error">{error}</Alert>
+            </div>
+          )}
+          {saved && (
+            <div className="mt-6">
+              <Alert kind="success">Salvato.</Alert>
+            </div>
+          )}
+        </form>
+
+        <EditorRail
+          tabs={[
+            {
+              id: "post",
+              label: "Post",
+              content: (
+                <>
+                  <PostStatusControl status={post.status} onPublish={handlePublish} />
+                  <div>
+                    <RailLabel>Slug</RailLabel>
+                    <span className="block truncate rounded-lg border border-border bg-surface px-3 py-2.5 font-mono text-[13px] text-muted">
+                      /{params.slug}/<span className="text-foreground">{post.slug}</span>
+                    </span>
+                  </div>
+                  <CategorySelect blogSlug={params.slug} value={categoryId} onChange={setCategoryId} />
+                  <div>
+                    <RailLabel>Tag</RailLabel>
+                    <TagInput value={tags} onChange={setTags} />
+                  </div>
+                  <PostCommentsModeSelect value={commentsMode} onChange={setCommentsMode} />
+                  <PostCrawlingSelect
+                    label="Motori di ricerca"
+                    value={searchIndexingEnabled}
+                    onChange={setSearchIndexingEnabled}
+                  />
+                  <PostCrawlingSelect label="Crawler IA/LLM" value={aiCrawlingEnabled} onChange={setAiCrawlingEnabled} />
+                </>
+              ),
+            },
+            {
+              id: "translations",
+              label: "Traduzioni",
+              badge: translations.length,
+              content: (
+                <TranslationsBar
+                  currentId={post.id}
+                  currentLocale={post.locale}
+                  blogSlug={params.slug}
+                  translations={translations}
+                  hrefFor={(id) => `/dashboard/blogs/${params.slug}/posts/${id}`}
+                  suggestedLocales={fallbackLanguages}
+                  authFetch={authFetch}
+                  onAddTranslation={handleAddTranslation}
+                />
+              ),
+            },
+          ]}
         />
-
-        {error && (
-          <div className="mt-6">
-            <Alert kind="error">{error}</Alert>
-          </div>
-        )}
-        {saved && (
-          <div className="mt-6">
-            <Alert kind="success">Salvato.</Alert>
-          </div>
-        )}
-      </form>
-
-      <TranslationsBar
-        currentId={post.id}
-        currentLocale={post.locale}
-        blogSlug={params.slug}
-        translations={translations}
-        hrefFor={(id) => `/dashboard/blogs/${params.slug}/posts/${id}`}
-        suggestedLocales={fallbackLanguages}
-        authFetch={authFetch}
-        onAddTranslation={handleAddTranslation}
-      />
+      </div>
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { CategorySelect } from "@/components/editor/CategorySelect";
 import { CoverImageUpload } from "@/components/editor/CoverImageUpload";
+import { EditorRail } from "@/components/editor/EditorRail";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
 import { TagInput } from "@/components/editor/TagInput";
 import { ApiClientError, api } from "@/lib/api";
@@ -61,72 +62,89 @@ export default function NewPostPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-y-2">
+    <div className="mx-auto max-w-[1080px]">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-y-2 border-b border-border pb-4">
         <Link href={`/dashboard/blogs/${params.slug}`} className="text-sm text-muted hover:text-foreground">
-          ← Torna al blog
+          ‹ {params.slug}
         </Link>
         <Button type="submit" form={FORM_ID} disabled={submitting || !content.trim()}>
           {submitting ? "Creazione…" : "Crea bozza"}
         </Button>
       </div>
 
-      <form id={FORM_ID} onSubmit={handleSubmit}>
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Titolo"
-          required
-          className="mb-3 w-full border-0 bg-transparent font-serif text-3xl font-semibold leading-tight text-foreground placeholder:text-muted/70 focus:outline-none sm:text-5xl"
-        />
-
-        <div className="mb-8 flex flex-wrap items-center gap-1 text-sm text-muted">
-          <span>{params.slug}/</span>
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <form id={FORM_ID} onSubmit={handleSubmit} className="mx-auto w-full max-w-[680px]">
           <input
-            value={slug}
-            onChange={(e) => setSlug(e.target.value)}
-            placeholder="slug-del-post"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Titolo"
             required
-            className="border-0 bg-transparent p-0 text-foreground/70 placeholder:text-muted focus:text-foreground focus:outline-none"
-            style={{ width: `${Math.max(slug.length, 14) + 1}ch` }}
+            className="mb-3 w-full border-0 bg-transparent font-serif text-3xl font-semibold leading-tight text-foreground placeholder:text-muted/70 focus:outline-none sm:text-[42px]"
           />
-        </div>
 
-        <div className="mb-8">
-          <TagInput value={tags} onChange={setTags} />
-        </div>
+          <div className="mb-8 flex flex-wrap items-center gap-1 text-sm text-muted">
+            <span>{params.slug}/</span>
+            <input
+              value={slug}
+              onChange={(e) => setSlug(e.target.value)}
+              placeholder="slug-del-post"
+              required
+              className="border-0 bg-transparent p-0 text-foreground/70 placeholder:text-muted focus:text-foreground focus:outline-none"
+              style={{ width: `${Math.max(slug.length, 14) + 1}ch` }}
+            />
+          </div>
 
-        <div className="mb-8">
-          <CoverImageUpload
-            value={coverImageUrl}
-            isSensitive={coverImageIsSensitive}
-            categories={coverImageCategories}
-            onChange={(url, sensitive, categories) => {
-              setCoverImageUrl(url);
-              setCoverImageIsSensitive(sensitive);
-              setCoverImageCategories(categories);
-            }}
+          <div className="mb-8">
+            <CoverImageUpload
+              value={coverImageUrl}
+              isSensitive={coverImageIsSensitive}
+              categories={coverImageCategories}
+              onChange={(url, sensitive, categories) => {
+                setCoverImageUrl(url);
+                setCoverImageIsSensitive(sensitive);
+                setCoverImageCategories(categories);
+              }}
+              blogSlug={params.slug}
+              authFetch={authFetch}
+            />
+          </div>
+
+          <RichTextEditor
+            value={content}
+            onChange={setContent}
             blogSlug={params.slug}
             authFetch={authFetch}
+            notes={notes}
+            onNotesChange={setNotes}
           />
-        </div>
 
-        <RichTextEditor
-          value={content}
-          onChange={setContent}
-          blogSlug={params.slug}
-          authFetch={authFetch}
-          notes={notes}
-          onNotesChange={setNotes}
-          toolbarEnd={<CategorySelect blogSlug={params.slug} value={categoryId} onChange={setCategoryId} />}
+          {error && (
+            <div className="mt-6">
+              <Alert kind="error">{error}</Alert>
+            </div>
+          )}
+        </form>
+
+        <EditorRail
+          tabs={[
+            {
+              id: "post",
+              label: "Post",
+              content: (
+                <>
+                  <CategorySelect blogSlug={params.slug} value={categoryId} onChange={setCategoryId} />
+                  <div>
+                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[.04em] text-muted">
+                      Tag
+                    </span>
+                    <TagInput value={tags} onChange={setTags} />
+                  </div>
+                </>
+              ),
+            },
+          ]}
         />
-
-        {error && (
-          <div className="mt-6">
-            <Alert kind="error">{error}</Alert>
-          </div>
-        )}
-      </form>
+      </div>
     </div>
   );
 }
