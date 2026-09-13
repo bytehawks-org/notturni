@@ -483,7 +483,42 @@
     "type": {
       "deletion": "Cancellazione",
       "export": "Export"
-    }
+    },
+    "title": "Richieste GDPR",
+    "subtitle": "Scadenza legale 30 giorni · gli export si eseguono subito, le cancellazioni richiedono un secondo amministratore",
+    "newRequest": "Nuova richiesta (arrivata fuori banda)",
+    "newRequestNote": "Le richieste self-service degli utenti compaiono già qui come completate.",
+    "username": "Utente",
+    "note": "Nota",
+    "notePlaceholder": "chi ha chiesto e come (es. email del 12/09)",
+    "created": "Richiesta registrata",
+    "filter": {
+      "all": "Tutte",
+      "open": "Aperte",
+      "approved": "Approvate",
+      "completed": "Completate",
+      "rejected": "Rifiutate"
+    },
+    "emptyTitle": "Nessuna richiesta",
+    "emptyBody": "Le richieste GDPR compariranno qui con la loro scadenza.",
+    "createdBy": "inserita da @{username}",
+    "approvedBy": "approvata da @{username}",
+    "overdue": "scaduta",
+    "status": {
+      "open": "aperta",
+      "approved": "approvata",
+      "completed": "completata",
+      "rejected": "rifiutata"
+    },
+    "approve": "Approva",
+    "approved": "Richiesta approvata",
+    "runExport": "Esegui export",
+    "runDeletion": "Esegui cancellazione",
+    "exportDone": "Export scaricato e richiesta chiusa",
+    "deletionDone": "Account anonimizzato",
+    "reject": "Rifiuta",
+    "rejected": "Richiesta rifiutata",
+    "rejectTitle": "Rifiutare la richiesta di @{username}?"
   },
   "PlatformSettings": {
     "title": "Impostazioni piattaforma",
@@ -509,7 +544,14 @@
     "blogsModeration": "Blog e moderazione",
     "reserved": "Nomi di blog riservati",
     "defaultLocale": "Lingua predefinita dell'interfaccia",
-    "defaultLocaleNote": "Usata per i visitatori e i nuovi account; ogni utente può cambiarla nel profilo."
+    "defaultLocaleNote": "Usata per i visitatori e i nuovi account; ogni utente può cambiarla nel profilo.",
+    "superAdminOnly": "Solo il Super Admin può modificare le impostazioni di piattaforma.",
+    "lastUpdated": "ultima modifica {date}",
+    "deploymentNote": "Impostata nell'ambiente (NOCT_DEPLOYMENT_MODE): \"solo\" nasconde la gestione utenti.",
+    "registrationNote": "\"Su invito\" e \"Chiusa\" bloccano le nuove registrazioni con messaggi diversi; gli inviti non sono ancora gestiti dalla piattaforma.",
+    "ssoNote": "Solo i provider configurati nell'ambiente sono selezionabili; nessuna selezione = tutti quelli configurati.",
+    "reservedPlaceholder": "nome",
+    "savedToast": "Impostazioni salvate"
   },
   "Theme": {
     "light": "Chiaro",
@@ -539,7 +581,9 @@
     "registerIntro": "Uno spazio tuo per scrivere, nella tua lingua. Lo username resta modificabile in ogni momento.",
     "creating": "Creazione…",
     "haveAccount": "Hai già un account?",
-    "signIn": "Accedi"
+    "signIn": "Accedi",
+    "registrationClosed": "Le registrazioni sono chiuse su questa piattaforma.",
+    "registrationInvite": "Registrazione solo su invito: chiedi a chi gestisce la piattaforma."
   },
   "FragmentsPage": {
     "title": "Frammenti",
@@ -585,7 +629,7 @@
     "bio": "Bio",
     "bioPlaceholder": "Racconta qualcosa di te…",
     "interfaceLanguage": "Lingua dell'interfaccia",
-    "interfaceLanguageNote": "Solo etichette e menu: non cambia la lingua dei tuoi post.",
+    "interfaceLanguageNote": "Solo etichette e menu, non i tuoi post. Salvata sul tuo account: vale su tutti i dispositivi.",
     "followers": "Follower",
     "followersTotal": "<b>{count}</b> in totale, sommando chi ti segue con il tuo username e chi segue i tuoi blog — anche quelli che si presentano con un alias diverso dal tuo nome.",
     "alias": "alias: {alias}",

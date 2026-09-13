@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     # registrazione si chiude dopo il primo utente. "platform": multiutente,
     # comportamento CLAUDE.md di default. Vedi app/domain/auth.py.
     deployment_mode: Literal["solo", "platform"] = "platform"
+    # Lingua predefinita dell'interfaccia (todo/UX_REDESIGN.md B6): seme della
+    # riga `platform_config` alla prima installazione, poi modificabile dal
+    # Super Admin. Ogni utente può sovrascriverla nel profilo (users.ui_locale).
+    default_locale: Literal["it", "en"] = "it"
 
     # Bootstrap del primo Super Admin all'avvio del backend (CLAUDE.md #5),
     # per accedere all'area di amministrazione del dashboard senza

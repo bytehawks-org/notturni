@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import get_session
+from app.domain.platform_config import get_platform_config
 from app.core.http import client_ip
 from app.core.oauth import configured_providers, oauth
 from app.core.security import create_mfa_challenge_token, decode_mfa_challenge_token
@@ -121,6 +122,8 @@ class UserOut(BaseModel):
     display_name: str | None = None
     mfa_enabled: bool
     platform_role: PlatformRole
+    # B6: lingua dell'interfaccia scelta dall'utente (null = default piattaforma)
+    ui_locale: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -163,6 +166,15 @@ class MfaCodeRequest(BaseModel):
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 async def register(payload: RegisterRequest, session: AsyncSession = Depends(get_session)) -> User:
+    # B6: modalità di registrazione da platform_config (open/invite/closed)
+    platform = await get_platform_config(session)
+    if platform.registration_mode != "open":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Le registrazioni sono chiuse su questa piattaforma."
+            if platform.registration_mode == "closed"
+            else "Registrazione solo su invito: chiedi un invito a chi gestisce la piattaforma.",
+        )
     try:
         return await register_user(
             session, username=payload.username, email=payload.email, password=payload.password
@@ -364,9 +376,12 @@ async def disable_mfa(
 
 
 @router.get("/sso/{provider}/login")
-async def sso_login(provider: str, request: Request):
+async def sso_login(provider: str, request: Request, session: AsyncSession = Depends(get_session)):
     if provider not in configured_providers():
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, f"Provider '{provider}' non configurato.")
+    platform = await get_platform_config(session)
+    if platform.sso_providers and provider not in platform.sso_providers:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, f"Provider '{provider}' disattivato dall'amministratore.")
     redirect_uri = f"{settings.oauth_redirect_base_url}/api/v1/auth/sso/{provider}/callback"
     client = oauth.create_client(provider)
     return await client.authorize_redirect(request, redirect_uri)

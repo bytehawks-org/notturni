@@ -29,6 +29,7 @@ from app.domain.blog_rules import (
     validate_blog_subtitle,
 )
 from app.domain.i18n import validate_locale
+from app.domain.platform_config import get_platform_config
 from app.models.blog import Blog, BlogMembership, BlogVisibility
 from app.models.comment import CommentsMode
 from app.models.follow import BlogFollow
@@ -52,13 +53,14 @@ async def create_blog(
     session: AsyncSession = Depends(get_session),
 ) -> Blog:
     try:
-        validate_blog_slug(payload.slug)
+        platform = await get_platform_config(session)
+        validate_blog_slug(payload.slug, extra_reserved=platform.reserved_blog_names)
         validate_locale(payload.default_locale)
         if payload.subtitle:
             validate_blog_subtitle(payload.subtitle)
         if payload.description:
             validate_blog_description(payload.description)
-        await assert_can_create_blog(session, current_user.id)
+        await assert_can_create_blog(session, current_user.id, max_blogs=platform.max_blogs_per_user)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
@@ -220,6 +222,8 @@ async def update_blog(
     if payload.visibility is not None:
         blog.visibility = payload.visibility
     if payload.comments_mode is not None:
+        if payload.comments_mode == CommentsMode.EVERYONE and not (await get_platform_config(session)).anonymous_comments_allowed:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "I commenti anonimi sono disattivati su questa piattaforma.")
         if payload.comments_mode == CommentsMode.EVERYONE and not turnstile_configured():
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,

@@ -11,6 +11,8 @@ export interface CurrentUser {
   display_name: string | null;
   mfa_enabled: boolean;
   platform_role: PlatformRole;
+  /** B6: lingua dell'interfaccia scelta (null = default di piattaforma). */
+  ui_locale: string | null;
 }
 
 /** todo/USERS.md #2: cosa mostrare come nome autore sui propri post quando il
@@ -610,6 +612,43 @@ export interface InstanceConfig {
    * se l'istanza non ha il captcha configurato — in quel caso i commenti
    * aperti a tutti non sono selezionabili (vedi CommentsMode). */
   turnstile_site_key: string | null;
+  /** B6: valori pubblici di platform_config. */
+  default_locale: string;
+  registration_mode: "open" | "invite" | "closed";
+  sso_providers: string[];
+}
+
+/** `GET/PATCH /admin/config` (B6, mockup 5f), solo super admin. */
+export interface PlatformConfig {
+  default_locale: string;
+  registration_mode: "open" | "invite" | "closed";
+  sso_providers: string[];
+  sso_configured: string[];
+  mfa_required_for_admins: boolean;
+  reserved_blog_names: string[];
+  reserved_builtin: string[];
+  moderation_threshold: number;
+  max_blogs_per_user: number;
+  anonymous_comments_allowed: boolean;
+  updated_at: string | null;
+  infrastructure: Record<string, string | boolean | null>;
+}
+
+export type GdprRequestType = "export" | "deletion";
+export type GdprRequestStatus = "open" | "approved" | "completed" | "rejected";
+
+export interface GdprRequest {
+  id: string;
+  username: string;
+  type: GdprRequestType;
+  status: GdprRequestStatus;
+  deadline_at: string;
+  note: string | null;
+  created_by_username: string | null;
+  approved_by_username: string | null;
+  approved_at: string | null;
+  completed_at: string | null;
+  created_at: string;
 }
 
 export interface ApiError {

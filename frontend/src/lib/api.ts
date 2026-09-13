@@ -28,6 +28,9 @@ import type {
   CurrentUser,
   FollowStats,
   FragmentCollectionEntry,
+  GdprRequest,
+  GdprRequestStatus,
+  GdprRequestType,
   InstanceConfig,
   LinkBibliographyEntry,
   LoginResponse,
@@ -35,6 +38,7 @@ import type {
   MembershipBlog,
   Page,
   PageTranslationSummary,
+  PlatformConfig,
   PlatformRole,
   Post,
   PostAuthorNameStyle,
@@ -484,6 +488,7 @@ export const api = {
     updateMe: (
       token: string,
       payload: {
+        ui_locale?: string;
         /** Citabile ovunque come @username; unico, minuscolo (vedi
          * backend/app/domain/usernames.py). Assente non tocca. */
         username?: string;
@@ -599,6 +604,17 @@ export const api = {
 
   admin: {
     overview: (token: string) => request<AdminOverview>("/api/v1/admin/overview", { token }),
+    /** B6: impostazioni di piattaforma (solo super admin) e coda GDPR. */
+    getConfig: (token: string) => request<PlatformConfig>("/api/v1/admin/config", { token }),
+    updateConfig: (token: string, payload: Partial<Omit<PlatformConfig, "sso_configured" | "reserved_builtin" | "updated_at" | "infrastructure">>) =>
+      request<PlatformConfig>("/api/v1/admin/config", { method: "PATCH", token, body: payload }),
+    listGdpr: (token: string, status?: GdprRequestStatus) => request<GdprRequest[]>(withQuery("/api/v1/admin/gdpr", { status }), { token }),
+    createGdpr: (token: string, payload: { username: string; type: GdprRequestType; note: string }) =>
+      request<GdprRequest>("/api/v1/admin/gdpr", { method: "POST", token, body: payload }),
+    approveGdpr: (token: string, id: string) => request<GdprRequest>(`/api/v1/admin/gdpr/${id}/approve`, { method: "POST", token }),
+    rejectGdpr: (token: string, id: string, note: string) =>
+      request<GdprRequest>(`/api/v1/admin/gdpr/${id}/reject`, { method: "POST", token, body: { note } }),
+    executeGdpr: (token: string, id: string) => request<Record<string, unknown>>(`/api/v1/admin/gdpr/${id}/execute`, { method: "POST", token }),
     listUsers: (token: string, q?: string) =>
       request<AdminUser[]>(withQuery("/api/v1/admin/users", { q }), { token }),
     updateUser: (

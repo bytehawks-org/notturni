@@ -1230,7 +1230,7 @@ sezione Multilingua). `fallback_languages` sono pensate anche come le lingue
 verso cui l'utente potrà eventualmente tradurre i propri contenuti; massimo
 5.
 
-**`PATCH /api/v1/users/me`** — richiede sessione. Aggiorna `username`, `bio`,
+**`PATCH /api/v1/users/me`** (accetta anche `ui_locale`: `it`|`en`, `""` = torna al default di piattaforma — lingua dell'interfaccia, restituita da `GET /auth/me`) — richiede sessione. Aggiorna `username`, `bio`,
 `first_name`, `last_name`, `display_name`, `post_author_name_style`,
 `country`, `native_language`, `fallback_languages` (tutti opzionali). Per
 `first_name`/`last_name`/`display_name`/`country`/`native_language`: stringa
@@ -1438,6 +1438,53 @@ ruolo o attivazione), `PATCH /admin/blogs/{id}` (sospensione) e
 caratteri, `400` altrimenti) quando cambiano davvero lo stato; la nota
 finisce in `payload.note` della voce di audit. Nessuna nota richiesta se
 la richiesta non cambia nulla.
+
+### Impostazioni di piattaforma (todo/UX_REDESIGN.md B6, mockup 5f)
+
+**`GET /api/v1/admin/config`** / **`PATCH /api/v1/admin/config`** — solo
+`super_admin` (`403` altrimenti). Riga unica `platform_config`, creata al
+primo accesso con i default (`NOCT_DEFAULT_LOCALE` per la lingua, 5 blog,
+registrazione aperta). Campi: `default_locale` (`it`|`en`),
+`registration_mode` (`open`|`invite`|`closed` — `invite`/`closed` fanno
+rispondere `403` a `POST /auth/register`, con messaggi diversi),
+`sso_providers` (sottoinsieme dei provider configurati via env; vuoto =
+tutti quelli configurati; un provider escluso risponde `403` su
+`/auth/sso/{provider}/login`), `mfa_required_for_admins` (se attivo, un
+Amministratore/Super Admin senza MFA riceve `403` su tutta l'area admin
+finché non la attiva), `reserved_blog_names` (in aggiunta alla blacklist di
+codice `reserved_builtin`, sola lettura), `moderation_threshold` (0–1,
+passata al servizio di moderazione a ogni upload), `max_blogs_per_user`
+(1–100), `anonymous_comments_allowed` (se `false`, `comments_mode=everyone`
+non è più impostabile). La risposta include anche `infrastructure`: riepilogo
+di sola lettura dell'ambiente `NOCT_*` (mai segreti). Ogni modifica va nel
+registro (`platform.config_updated`, con `changes: {campo: {from, to}}`).
+`GET /api/v1/config` (pubblico) espone `default_locale`, `registration_mode`
+e `sso_providers` effettivi.
+
+### Richieste GDPR (B6, mockup 5f)
+
+**`GET /api/v1/admin/gdpr?status=`** — admin. Registro delle richieste
+`{id, username, type: export|deletion, status: open|approved|completed|
+rejected, deadline_at, note, created_by_username, approved_by_username,
+approved_at, completed_at, created_at}`, aperte prima e per scadenza (30
+giorni dalla ricezione, Art. 12). Le azioni self-service (`GET
+/users/me/export-data`, `DELETE /users/me`) lasciano una riga già
+`completed` con nota `self-service`.
+
+**`POST /api/v1/admin/gdpr`** — `{username, type, note}` (nota obbligatoria:
+chi/come ha chiesto). Inserisce una richiesta arrivata fuori banda.
+
+**`POST /api/v1/admin/gdpr/{id}/approve`** — seconda approvazione: per una
+`deletion` chi approva deve essere un admin **diverso** da chi l'ha inserita
+(`403` altrimenti). Un `export` non ne ha bisogno.
+
+**`POST /api/v1/admin/gdpr/{id}/execute`** — `export` (aperto o approvato):
+risponde con il JSON dei dati dell'utente (stesso formato di
+`/users/me/export-data`) e chiude la richiesta; `deletion`: solo se
+`approved`, anonimizza l'account come `DELETE /users/me` (`400` per un
+Super Admin). **`.../reject`** — `{note}` obbligatoria. Tutto nel registro
+(`gdpr.request_created|approved|rejected`, `gdpr.export_executed`,
+`gdpr.deletion_executed`).
 
 **`GET /api/v1/admin/users`** — lista tutti gli utenti della piattaforma
 (id, username, email, `platform_role`, `is_active`, `mfa_enabled`,

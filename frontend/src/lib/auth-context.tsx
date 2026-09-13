@@ -1,6 +1,10 @@
 "use client";
 
+import { useLocale } from "next-intl";
+import { useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+
+import { setUiLocale } from "@/i18n/actions";
 
 import { ApiClientError, api } from "./api";
 import type { CurrentUser, LoginResponse } from "./types";
@@ -31,6 +35,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // (ROADMAP.md "Sessione in localStorage", backend/app/api/v1/auth.py).
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const locale = useLocale();
+  const router = useRouter();
+
+  // B6: la lingua dell'interfaccia scelta nel profilo (users.ui_locale) vince
+  // sul cookie di questo browser — allineata all'avvio della sessione.
+  useEffect(() => {
+    if (user?.ui_locale && user.ui_locale !== locale) {
+      void setUiLocale(user.ui_locale).then(() => router.refresh());
+    }
+  }, [user?.ui_locale, locale, router]);
 
   useEffect(() => {
     api.auth

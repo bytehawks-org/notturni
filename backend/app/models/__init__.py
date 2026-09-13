@@ -15,8 +15,10 @@ from app.models.category import Category
 from app.models.comment import BlogBlockedAuthor, Comment, CommentsMode, CommentStatus
 from app.models.content_report import ContentReport, ReportReason, ReportStatus, ReportTargetType
 from app.models.follow import BlogFollow, UserFollow
+from app.models.gdpr_request import GdprRequest, GdprRequestStatus, GdprRequestType
 from app.models.mfa_email_code import MfaEmailCode
 from app.models.page import Page
+from app.models.platform_config import PlatformConfig
 from app.models.post import Post, PostStatus
 from app.models.post_fragment import PostFragment
 from app.models.post_link import post_links
@@ -68,6 +70,10 @@ __all__ = [
     "SsoIdentity",
     "SsoProvider",
     "Page",
+    "PlatformConfig",
+    "GdprRequest",
+    "GdprRequestType",
+    "GdprRequestStatus",
     "UserFollow",
     "BlogFollow",
     "SocialLink",

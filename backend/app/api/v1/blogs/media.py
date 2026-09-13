@@ -11,6 +11,7 @@ from app.api.v1.blogs._router import router
 from app.core.database import get_session
 from app.core.storage import content_public_url, upload_media
 from app.domain.moderation import classify_image
+from app.domain.platform_config import get_platform_config
 from app.models.blog import Blog, BlogMembership
 from app.models.follow import BlogFollow
 from app.models.user import User
@@ -47,7 +48,10 @@ async def upload_blog_media(
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
-    is_sensitive = await classify_image(content, file.filename or "image", file.content_type or "")
+    platform = await get_platform_config(session)
+    is_sensitive = await classify_image(
+        content, file.filename or "image", file.content_type or "", threshold=platform.moderation_threshold
+    )
     return MediaOut(url=content_public_url(object_key), is_sensitive=is_sensitive)
 
 

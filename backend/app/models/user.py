@@ -101,6 +101,9 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     # tra S3/MinIO e storage locale su filesystem senza persistere un host
     # specifico.
     avatar_object_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # B6: lingua dell'interfaccia scelta dall'utente (null = default di
+    # piattaforma). Solo etichette/menu, non i contenuti.
+    ui_locale: Mapped[str | None] = mapped_column(String(2), nullable=True)
 
     blogs: Mapped[list["Blog"]] = relationship(back_populates="owner")
     memberships: Mapped[list["BlogMembership"]] = relationship(back_populates="user")

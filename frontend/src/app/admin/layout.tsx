@@ -60,6 +60,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       ? [{ href: "/admin/moderazione-commenti", label: t("commentModeration"), icon: "◔", mobile: true } as NavItem]
       : []),
     ...(isAdmin ? [{ href: "/admin/registro", label: t("register"), icon: "≡", mobile: true } as NavItem] : []),
+    ...(isAdmin ? [{ href: "/admin/gdpr", label: t("gdprRequests"), icon: "⚖", mobile: false } as NavItem] : []),
+    ...(user.platform_role === "super_admin"
+      ? [{ href: "/admin/impostazioni", label: t("platformSettings"), icon: "⚙", mobile: false } as NavItem]
+      : []),
   ];
 
   return (

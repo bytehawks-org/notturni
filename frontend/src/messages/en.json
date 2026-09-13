@@ -483,7 +483,42 @@
     "type": {
       "deletion": "Deletion",
       "export": "Export"
-    }
+    },
+    "title": "GDPR requests",
+    "subtitle": "Legal deadline 30 days · exports run right away, deletions need a second admin",
+    "newRequest": "New request (received out of band)",
+    "newRequestNote": "Users' self-service requests already show up here as completed.",
+    "username": "User",
+    "note": "Note",
+    "notePlaceholder": "who asked and how (e.g. email of 12/09)",
+    "created": "Request recorded",
+    "filter": {
+      "all": "All",
+      "open": "Open",
+      "approved": "Approved",
+      "completed": "Completed",
+      "rejected": "Rejected"
+    },
+    "emptyTitle": "No requests",
+    "emptyBody": "GDPR requests will show up here with their deadline.",
+    "createdBy": "entered by @{username}",
+    "approvedBy": "approved by @{username}",
+    "overdue": "overdue",
+    "status": {
+      "open": "open",
+      "approved": "approved",
+      "completed": "completed",
+      "rejected": "rejected"
+    },
+    "approve": "Approve",
+    "approved": "Request approved",
+    "runExport": "Run export",
+    "runDeletion": "Run deletion",
+    "exportDone": "Export downloaded and request closed",
+    "deletionDone": "Account anonymised",
+    "reject": "Reject",
+    "rejected": "Request rejected",
+    "rejectTitle": "Reject the request of @{username}?"
   },
   "PlatformSettings": {
     "title": "Platform settings",
@@ -509,7 +544,14 @@
     "blogsModeration": "Blogs & moderation",
     "reserved": "Reserved blog names",
     "defaultLocale": "Default interface language",
-    "defaultLocaleNote": "Used for visitors and new accounts; each user can override it in their profile."
+    "defaultLocaleNote": "Used for visitors and new accounts; each user can override it in their profile.",
+    "superAdminOnly": "Only the Super Admin can change platform settings.",
+    "lastUpdated": "last change {date}",
+    "deploymentNote": "Set in the environment (NOCT_DEPLOYMENT_MODE): \"solo\" hides user management.",
+    "registrationNote": "\"Invite\" and \"Closed\" block new sign-ups with different messages; invitations are not managed by the platform yet.",
+    "ssoNote": "Only providers configured in the environment can be selected; no selection = all configured ones.",
+    "reservedPlaceholder": "name",
+    "savedToast": "Settings saved"
   },
   "Theme": {
     "light": "Light",
@@ -539,7 +581,9 @@
     "registerIntro": "A space of your own to write, in your language. The username can be changed at any time.",
     "creating": "Creating…",
     "haveAccount": "Already have an account?",
-    "signIn": "Sign in"
+    "signIn": "Sign in",
+    "registrationClosed": "Registrations are closed on this platform.",
+    "registrationInvite": "Registration by invitation only: ask whoever runs the platform."
   },
   "FragmentsPage": {
     "title": "Fragments",
@@ -585,7 +629,7 @@
     "bio": "Bio",
     "bioPlaceholder": "Tell something about yourself…",
     "interfaceLanguage": "Interface language",
-    "interfaceLanguageNote": "Labels and menus only: it never changes the language of your posts.",
+    "interfaceLanguageNote": "Labels and menus only, never your posts. Saved on your account: applies on every device.",
     "followers": "Followers",
     "followersTotal": "<b>{count}</b> in total, adding those who follow your username and those who follow your blogs — including the ones using an alias different from your name.",
     "alias": "alias: {alias}",

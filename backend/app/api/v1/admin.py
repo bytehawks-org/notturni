@@ -11,13 +11,20 @@ from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import require_platform_admin, require_platform_moderator
+from app.api.deps import require_platform_admin, require_platform_moderator, require_super_admin
 from app.core.config import settings
 from app.core.database import get_session
 from app.core.redis import get_redis
 from app.core.revalidation import blog_tag, feed_tag, post_tag, revalidate_frontend
 from app.domain import audit
 from app.domain.display_names import resolve_personal_display_name
+from app.domain.gdpr import anonymize_and_deactivate_user, export_user_data
+from app.domain.gdpr_queue import new_request
+from app.domain.platform_config import REGISTRATION_MODES, SSO_PROVIDER_NAMES, SUPPORTED_LOCALES, get_platform_config, touch
+from app.models.gdpr_request import GdprRequest, GdprRequestStatus, GdprRequestType
+from app.models.platform_config import PlatformConfig
+from app.core.oauth import configured_providers
+from app.domain.blog_rules import RESERVED_BLOG_SLUGS, SLUG_PATTERN
 from app.models.audit_log import AuditActorType, AuditLog
 from app.models.blog import Blog, BlogVisibility
 from app.models.comment import Comment, CommentStatus
@@ -840,3 +847,319 @@ async def list_all_comments(
             )
         )
     return out
+
+
+# ---------------------------------------------------------------------------
+# Impostazioni di piattaforma (todo/UX_REDESIGN.md B6, mockup 5f)
+# ---------------------------------------------------------------------------
+
+
+class PlatformConfigOut(BaseModel):
+    default_locale: str
+    registration_mode: str
+    sso_providers: list[str]
+    sso_configured: list[str]
+    mfa_required_for_admins: bool
+    reserved_blog_names: list[str]
+    reserved_builtin: list[str]
+    moderation_threshold: float
+    max_blogs_per_user: int
+    anonymous_comments_allowed: bool
+    updated_at: datetime | None
+    infrastructure: dict[str, str | bool | None]
+
+
+class PlatformConfigUpdateRequest(BaseModel):
+    default_locale: str | None = None
+    registration_mode: str | None = None
+    sso_providers: list[str] | None = None
+    mfa_required_for_admins: bool | None = None
+    reserved_blog_names: list[str] | None = None
+    moderation_threshold: float | None = None
+    max_blogs_per_user: int | None = None
+    anonymous_comments_allowed: bool | None = None
+
+
+def _config_out(config: PlatformConfig) -> PlatformConfigOut:
+    return PlatformConfigOut(
+        default_locale=config.default_locale,
+        registration_mode=config.registration_mode,
+        sso_providers=list(config.sso_providers),
+        sso_configured=sorted(configured_providers()),
+        mfa_required_for_admins=config.mfa_required_for_admins,
+        reserved_blog_names=list(config.reserved_blog_names),
+        reserved_builtin=sorted(RESERVED_BLOG_SLUGS),
+        moderation_threshold=config.moderation_threshold,
+        max_blogs_per_user=config.max_blogs_per_user,
+        anonymous_comments_allowed=config.anonymous_comments_allowed,
+        updated_at=config.updated_at,
+        # sola lettura: riepilogo dell'ambiente NOCT_* (mai segreti)
+        infrastructure={
+            "deployment_mode": settings.deployment_mode,
+            "instance_fqdn": settings.instance_fqdn,
+            "storage_backend": settings.storage_backend,
+            "s3_endpoint_url": settings.s3_endpoint_url if settings.storage_backend == "s3" else None,
+            "moderation_service": bool(settings.moderation_service_url),
+            "turnstile": bool(settings.turnstile_site_key),
+            "smtp": bool(settings.smtp_host),
+            "audit_retention_days": str(settings.audit_retention_days),
+        },
+    )
+
+
+@router.get("/config", response_model=PlatformConfigOut)
+async def get_admin_config(
+    current_user: User = Depends(require_super_admin),
+    session: AsyncSession = Depends(get_session),
+) -> PlatformConfigOut:
+    return _config_out(await get_platform_config(session))
+
+
+@router.patch("/config", response_model=PlatformConfigOut)
+async def update_admin_config(
+    payload: PlatformConfigUpdateRequest,
+    request: Request,
+    current_user: User = Depends(require_super_admin),
+    session: AsyncSession = Depends(get_session),
+) -> PlatformConfigOut:
+    """Solo Super Admin; ogni modifica finisce nel registro di audit con i
+    valori precedenti e nuovi (`platform.config_updated`)."""
+    config = await get_platform_config(session)
+    changes: dict[str, dict] = {}
+
+    def apply(field: str, value) -> None:
+        old = getattr(config, field)
+        if old != value:
+            changes[field] = {"from": old, "to": value}
+            setattr(config, field, value)
+
+    if payload.default_locale is not None:
+        if payload.default_locale not in SUPPORTED_LOCALES:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lingua non supportata.")
+        apply("default_locale", payload.default_locale)
+    if payload.registration_mode is not None:
+        if payload.registration_mode not in REGISTRATION_MODES:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Modalità di registrazione non valida.")
+        apply("registration_mode", payload.registration_mode)
+    if payload.sso_providers is not None:
+        unknown = set(payload.sso_providers) - set(SSO_PROVIDER_NAMES)
+        if unknown:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Provider sconosciuti: {', '.join(sorted(unknown))}.")
+        apply("sso_providers", sorted(set(payload.sso_providers)))
+    if payload.mfa_required_for_admins is not None:
+        apply("mfa_required_for_admins", payload.mfa_required_for_admins)
+    if payload.reserved_blog_names is not None:
+        cleaned = sorted({n.strip().lower() for n in payload.reserved_blog_names if n.strip()})
+        bad = [n for n in cleaned if not SLUG_PATTERN.fullmatch(n)]
+        if bad:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Nomi non validi: {', '.join(bad)}.")
+        apply("reserved_blog_names", cleaned)
+    if payload.moderation_threshold is not None:
+        if not 0 < payload.moderation_threshold <= 1:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "La soglia deve essere tra 0 e 1.")
+        apply("moderation_threshold", payload.moderation_threshold)
+    if payload.max_blogs_per_user is not None:
+        if not 1 <= payload.max_blogs_per_user <= 100:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Il massimo di blog per utente deve essere tra 1 e 100.")
+        apply("max_blogs_per_user", payload.max_blogs_per_user)
+    if payload.anonymous_comments_allowed is not None:
+        apply("anonymous_comments_allowed", payload.anonymous_comments_allowed)
+
+    if changes:
+        touch(config, by_id=current_user.id)
+        await audit.record(
+            session, action="platform.config_updated", actor=current_user, target_type="platform", request=request, payload={"changes": changes}
+        )
+        await session.commit()
+        await session.refresh(config)
+    return _config_out(config)
+
+
+# ---------------------------------------------------------------------------
+# Coda richieste GDPR (B6, mockup 5f)
+# ---------------------------------------------------------------------------
+
+
+class GdprRequestOut(BaseModel):
+    id: uuid.UUID
+    username: str
+    type: GdprRequestType
+    status: GdprRequestStatus
+    deadline_at: datetime
+    note: str | None
+    created_by_username: str | None
+    approved_by_username: str | None
+    approved_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+
+
+class GdprRequestCreate(BaseModel):
+    username: str
+    type: GdprRequestType
+    note: str
+
+
+async def _gdpr_out(session: AsyncSession, rows: list[GdprRequest]) -> list[GdprRequestOut]:
+    ids = {r.created_by_id for r in rows if r.created_by_id} | {r.approved_by_id for r in rows if r.approved_by_id}
+    names: dict[uuid.UUID, str] = {}
+    if ids:
+        names = dict((await session.execute(select(User.id, User.username).where(User.id.in_(ids)))).all())
+    return [
+        GdprRequestOut(
+            id=r.id,
+            username=r.username,
+            type=r.type,
+            status=r.status,
+            deadline_at=r.deadline_at,
+            note=r.note,
+            created_by_username=names.get(r.created_by_id) if r.created_by_id else None,
+            approved_by_username=names.get(r.approved_by_id) if r.approved_by_id else None,
+            approved_at=r.approved_at,
+            completed_at=r.completed_at,
+            created_at=r.created_at,
+        )
+        for r in rows
+    ]
+
+
+@router.get("/gdpr", response_model=list[GdprRequestOut])
+async def list_gdpr_requests(
+    status_filter: GdprRequestStatus | None = Query(None, alias="status"),
+    current_user: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_session),
+) -> list[GdprRequestOut]:
+    """Registro delle richieste GDPR: quelle self-service (già completate)
+    e quelle inserite dagli admin per richieste arrivate fuori banda. Aperte
+    prima, per scadenza."""
+    stmt = select(GdprRequest).order_by(GdprRequest.deadline_at)
+    if status_filter is not None:
+        stmt = stmt.where(GdprRequest.status == status_filter)
+    rows = list((await session.execute(stmt)).scalars().all())
+    rows.sort(key=lambda r: (r.status != GdprRequestStatus.OPEN, r.status != GdprRequestStatus.APPROVED, r.deadline_at))
+    return await _gdpr_out(session, rows)
+
+
+@router.post("/gdpr", response_model=GdprRequestOut, status_code=status.HTTP_201_CREATED)
+async def create_gdpr_request(
+    payload: GdprRequestCreate,
+    request: Request,
+    current_user: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_session),
+) -> GdprRequestOut:
+    """Inserisce una richiesta arrivata fuori banda (email, PEC) a nome di un
+    utente; la nota (chi/come ha chiesto) è obbligatoria e va nel registro."""
+    note = _require_note(payload.note)
+    user = (await session.execute(select(User).where(User.username == payload.username))).scalar_one_or_none()
+    if user is None or not user.is_active:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Utente non trovato.")
+    req = new_request(user=user, type_=payload.type, note=note, created_by_id=current_user.id)
+    session.add(req)
+    await audit.record(
+        session, action="gdpr.request_created", actor=current_user, target_type="user", target_id=user.id, request=request, payload={"type": payload.type.value, "note": note}
+    )
+    await session.commit()
+    await session.refresh(req)
+    return (await _gdpr_out(session, [req]))[0]
+
+
+async def _get_request(session: AsyncSession, request_id: uuid.UUID) -> GdprRequest:
+    req = await session.get(GdprRequest, request_id)
+    if req is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Richiesta non trovata.")
+    return req
+
+
+@router.post("/gdpr/{request_id}/approve", response_model=GdprRequestOut)
+async def approve_gdpr_request(
+    request_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_session),
+) -> GdprRequestOut:
+    """Seconda approvazione (mockup 5f "deletions need a second admin"): chi
+    approva deve essere un admin diverso da chi ha inserito la richiesta.
+    Un export non ha bisogno di approvazione: passa direttamente a `execute`."""
+    req = await _get_request(session, request_id)
+    if req.status != GdprRequestStatus.OPEN:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "La richiesta non è aperta.")
+    if req.type == GdprRequestType.DELETION and req.created_by_id == current_user.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Una cancellazione va approvata da un secondo amministratore.")
+    req.status = GdprRequestStatus.APPROVED
+    req.approved_by_id = current_user.id
+    req.approved_at = datetime.now(timezone.utc)
+    await audit.record(
+        session, action="gdpr.request_approved", actor=current_user, target_type="user", target_id=req.user_id, request=request, payload={"type": req.type.value}
+    )
+    await session.commit()
+    await session.refresh(req)
+    return (await _gdpr_out(session, [req]))[0]
+
+
+class GdprRejectRequest(BaseModel):
+    note: str
+
+
+@router.post("/gdpr/{request_id}/reject", response_model=GdprRequestOut)
+async def reject_gdpr_request(
+    request_id: uuid.UUID,
+    payload: GdprRejectRequest,
+    request: Request,
+    current_user: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_session),
+) -> GdprRequestOut:
+    """Rifiuto motivato (nota obbligatoria, nel registro)."""
+    req = await _get_request(session, request_id)
+    if req.status in (GdprRequestStatus.COMPLETED, GdprRequestStatus.REJECTED):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "La richiesta è già chiusa.")
+    note = _require_note(payload.note)
+    req.status = GdprRequestStatus.REJECTED
+    req.completed_at = datetime.now(timezone.utc)
+    req.note = f"{req.note or ''}\n[rifiutata] {note}".strip()
+    await audit.record(
+        session, action="gdpr.request_rejected", actor=current_user, target_type="user", target_id=req.user_id, request=request, payload={"type": req.type.value, "note": note}
+    )
+    await session.commit()
+    await session.refresh(req)
+    return (await _gdpr_out(session, [req]))[0]
+
+
+@router.post("/gdpr/{request_id}/execute")
+async def execute_gdpr_request(
+    request_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_session),
+):
+    """Esegue la richiesta: un **export** (aperto o approvato) restituisce il
+    JSON dei dati dell'utente (stesso formato di `GET /users/me/export-data`)
+    e chiude la richiesta; una **cancellazione** deve essere `approved` da un
+    secondo admin e anonimizza l'account (stessa procedura di
+    `DELETE /users/me`)."""
+    req = await _get_request(session, request_id)
+    user = await session.get(User, req.user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Utente non trovato.")
+    if req.type == GdprRequestType.EXPORT:
+        if req.status not in (GdprRequestStatus.OPEN, GdprRequestStatus.APPROVED):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "La richiesta è già chiusa.")
+        data = await export_user_data(session, user)
+        req.status = GdprRequestStatus.COMPLETED
+        req.completed_at = datetime.now(timezone.utc)
+        await audit.record(
+            session, action="gdpr.export_executed", actor=current_user, target_type="user", target_id=user.id, request=request
+        )
+        await session.commit()
+        return data
+    if req.status != GdprRequestStatus.APPROVED:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "La cancellazione richiede prima l'approvazione di un secondo amministratore.")
+    if user.platform_role == PlatformRole.SUPER_ADMIN:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Non è possibile cancellare un Super Admin da qui.")
+    await audit.record(
+        session, action="gdpr.deletion_executed", actor=current_user, target_type="user", target_id=user.id, request=request, payload={"username": user.username}
+    )
+    req.status = GdprRequestStatus.COMPLETED
+    req.completed_at = datetime.now(timezone.utc)
+    await anonymize_and_deactivate_user(session, user)
+    await session.commit()
+    return {"status": "completed"}

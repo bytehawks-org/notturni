@@ -122,11 +122,22 @@ PLATFORM_ADMIN_ROLES = {PlatformRole.SUPER_ADMIN, PlatformRole.AMMINISTRATORE}
 PLATFORM_MODERATION_ROLES = PLATFORM_ADMIN_ROLES | {PlatformRole.MODERATORE}
 
 
-async def require_platform_admin(current_user: User = Depends(get_current_user)) -> User:
+async def require_platform_admin(
+    current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)
+) -> User:
     """Per gli endpoint riservati alla gestione di piattaforma (es. pagine
-    statiche del sito principale): CLAUDE.md #1, ruoli Super Admin/Amministratore."""
+    statiche del sito principale): CLAUDE.md #1, ruoli Super Admin/Amministratore.
+    B6: se `platform_config.mfa_required_for_admins` è attivo, un admin senza
+    MFA non può usare l'area di amministrazione finché non la attiva."""
     if current_user.platform_role not in PLATFORM_ADMIN_ROLES:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Richiesto ruolo di amministratore.")
+    if not current_user.mfa_enabled:
+        from app.domain.platform_config import get_platform_config
+
+        if (await get_platform_config(session)).mfa_required_for_admins:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Questa piattaforma richiede l'autenticazione a due fattori agli amministratori: attivala nel profilo."
+            )
     return current_user
 
 
@@ -136,4 +147,11 @@ async def require_platform_moderator(current_user: User = Depends(get_current_us
     finora definito ma senza nessuna capacità reale collegata."""
     if current_user.platform_role not in PLATFORM_MODERATION_ROLES:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Richiesto ruolo di amministratore o moderatore.")
+    return current_user
+
+
+async def require_super_admin(current_user: User = Depends(require_platform_admin)) -> User:
+    """Solo Super Admin (impostazioni di piattaforma, B6)."""
+    if current_user.platform_role != PlatformRole.SUPER_ADMIN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Richiesto ruolo di Super Admin.")
     return current_user

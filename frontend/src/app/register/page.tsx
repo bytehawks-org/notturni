@@ -3,12 +3,12 @@
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { FieldGroup, Input, Label } from "@/components/ui/Field";
-import { ApiClientError } from "@/lib/api";
+import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
 export default function RegisterPage() {
@@ -22,6 +22,14 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [registrationMode, setRegistrationMode] = useState<"open" | "invite" | "closed" | null>(null);
+
+  useEffect(() => {
+    api.config
+      .get()
+      .then((c) => setRegistrationMode(c.registration_mode ?? "open"))
+      .catch(() => setRegistrationMode("open"));
+  }, []);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -46,6 +54,19 @@ export default function RegisterPage() {
           Notturni
         </Link>
 
+        {registrationMode && registrationMode !== "open" && (
+          <div className="mt-7 flex flex-col gap-3">
+            <h1 className="font-serif text-[30px] font-medium leading-[1.15] text-foreground">{t("createAccount")}</h1>
+            <Alert kind="info">{registrationMode === "closed" ? t("registrationClosed") : t("registrationInvite")}</Alert>
+            <p className="text-[13px] text-muted">
+              {t("haveAccount")}{" "}
+              <Link href="/login" className="text-primary no-underline hover:underline">
+                {t("signIn")}
+              </Link>
+            </p>
+          </div>
+        )}
+        {(!registrationMode || registrationMode === "open") && (
         <form onSubmit={handleSubmit} className="mt-7 flex flex-col gap-6">
           <div className="flex flex-col gap-1.5">
             <h1 className="font-serif text-[30px] font-medium leading-[1.15] text-foreground">{t("createAccount")}</h1>
@@ -103,6 +124,7 @@ export default function RegisterPage() {
             </Link>
           </p>
         </form>
+        )}
       </div>
     </main>
   );

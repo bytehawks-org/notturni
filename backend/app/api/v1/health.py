@@ -3,6 +3,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.oauth import configured_providers
+from app.domain.platform_config import get_platform_config
 from app.core.database import get_session
 from app.domain.seo import AI_CRAWLER_USER_AGENTS, build_crawl_directives, build_sitemap_entries
 
@@ -16,16 +18,24 @@ async def health(session: AsyncSession = Depends(get_session)) -> dict[str, str]
 
 
 @router.get("/config")
-async def public_config() -> dict[str, str | None]:
+async def public_config(session: AsyncSession = Depends(get_session)) -> dict[str, object]:
     """Pubblico, nessuna auth: usato dal dashboard per sapere se nascondere
     la voce Utenti in modalità "solo" senza dover già avere una sessione
     (CLAUDE.md #8, NOCT_DEPLOYMENT_MODE). `turnstile_site_key`: la site key
     di Cloudflare Turnstile (pensata per essere pubblica, a differenza della
     secret key — mai esposta) serve al frontend per sapere se può mostrare
     il widget captcha sui commenti aperti a tutti; `null` se non configurata."""
+    platform = await get_platform_config(session)
     return {
         "deployment_mode": settings.deployment_mode,
         "turnstile_site_key": settings.turnstile_site_key,
+        # B6: valori pubblici di platform_config (lingua predefinita
+        # dell'interfaccia, registrazioni aperte, provider SSO abilitati)
+        "default_locale": platform.default_locale,
+        "registration_mode": platform.registration_mode,
+        "sso_providers": sorted(
+            configured_providers() if not platform.sso_providers else configured_providers() & set(platform.sso_providers)
+        ),
     }
 
 

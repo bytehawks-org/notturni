@@ -15,7 +15,10 @@ from app.core.database import get_session
 from app.core.storage import avatar_public_url, delete_avatar, upload_avatar
 from app.domain import audit
 from app.domain.gdpr import anonymize_and_deactivate_user, export_user_data
+from app.domain.gdpr_queue import log_self_service_request
+from app.models.gdpr_request import GdprRequestType
 from app.domain.i18n import validate_locale
+from app.domain.platform_config import SUPPORTED_LOCALES
 from app.domain.profile import validate_country_code, validate_fallback_languages
 from app.domain.usernames import validate_username
 from app.models.blog import Blog, BlogVisibility
@@ -51,6 +54,8 @@ class ProfileUpdateRequest(BaseModel):
     native_language: str | None = None
     # assente: lascia invariate; lista (anche vuota) la sostituisce
     fallback_languages: list[str] | None = None
+    # B6: lingua dell'interfaccia ("" = torna al default di piattaforma)
+    ui_locale: str | None = None
 
 
 class SocialLinkCreateRequest(BaseModel):
@@ -179,6 +184,10 @@ async def update_profile(
             if existing.scalar_one_or_none() is not None:
                 raise HTTPException(status.HTTP_409_CONFLICT, "Username già in uso.")
             current_user.username = new_username
+    if payload.ui_locale is not None:
+        if payload.ui_locale and payload.ui_locale not in SUPPORTED_LOCALES:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lingua dell'interfaccia non supportata.")
+        current_user.ui_locale = payload.ui_locale or None
     if payload.bio is not None:
         current_user.bio = payload.bio
     if payload.first_name is not None:
@@ -499,7 +508,9 @@ async def export_my_data(
     dati collegati all'account in un unico JSON scaricabile — profilo, blog di
     proprietà, post e commenti scritti (ovunque), frammenti salvati, follow,
     token API (mai i segreti) ed eventi di audit di cui è l'attore."""
-    return await export_user_data(session, current_user)
+    data = await export_user_data(session, current_user)
+    await log_self_service_request(session, user=current_user, type_=GdprRequestType.EXPORT)
+    return data
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
@@ -523,5 +534,6 @@ async def delete_my_account(
         target_id=current_user.id,
         request=request,
     )
+    await log_self_service_request(session, user=current_user, type_=GdprRequestType.DELETION, commit=False)
     await anonymize_and_deactivate_user(session, current_user)
     await session.commit()

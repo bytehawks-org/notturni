@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 CLASSIFY_TIMEOUT_SECONDS = 15.0
 
 
-async def classify_image(content: bytes, filename: str, content_type: str) -> bool:
+async def classify_image(content: bytes, filename: str, content_type: str, threshold: float | None = None) -> bool:
     """True se l'immagine è stata segnalata come possibile contenuto
     sensibile. Se il servizio di moderazione non è configurato
     (NOCT_MODERATION_SERVICE_URL assente) o non risponde, ritorna False."""
@@ -32,6 +32,7 @@ async def classify_image(content: bytes, filename: str, content_type: str) -> bo
             response = await client.post(
                 f"{settings.moderation_service_url}/classify",
                 files={"file": (filename, content, content_type or "application/octet-stream")},
+                data={"threshold": str(threshold)} if threshold is not None else None,
             )
             response.raise_for_status()
             return bool(response.json()["is_sensitive"])
