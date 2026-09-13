@@ -44,7 +44,7 @@ import type {
   SocialLink,
 } from "./types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export class ApiClientError extends Error {
   status: number;
@@ -386,6 +386,8 @@ export const api = {
         token,
         body: publishedAt ? { published_at: publishedAt } : undefined,
       }),
+    /** Conteggio lettura aggregato (B2): pubblico, nessun dato del lettore. */
+    recordRead: (postId: string) => request<void>(`/api/v1/posts/${postId}/read`, { method: "POST" }),
     submitForReview: (token: string, postId: string) =>
       request<Post>(`/api/v1/posts/${postId}/submit-for-review`, { method: "POST", token }),
     returnToDraft: (token: string, postId: string) =>

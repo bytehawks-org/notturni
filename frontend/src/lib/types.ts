@@ -129,6 +129,11 @@ export interface BlogOverview {
   approved_comments: number;
   media: number;
   last_published_at: string | null;
+  /** Letture aggregate per giorno UTC, ultimi 30 giorni (giorni vuoti a 0). */
+  reads_30d: { day: string; reads: number }[];
+  reads_total_30d: number;
+  /** Byte su storage (media + backup); `null` se non calcolabile. */
+  storage_bytes: number | null;
 }
 
 export interface MembershipBlog {

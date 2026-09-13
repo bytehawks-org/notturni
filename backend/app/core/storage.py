@@ -234,3 +234,31 @@ def delete_avatar(object_key: str) -> None:
 
 def avatar_public_url(object_key: str) -> str:
     return _public_url(bucket=settings.s3_bucket_avatars, key=object_key)
+
+
+def blog_storage_bytes(*, user_ids: list[str], blog_id: str) -> int:
+    """Byte occupati dai file di un blog (media + backup Markdown) sotto i
+    prefissi `{site}/userdata/{user}/{blog}/` di ogni utente indicato
+    (proprietario e collaboratori: il prefisso è per chi ha caricato). Solo
+    lettura, per la card "Spazio" della panoramica (mockup 5a). Bloccante:
+    chiamare da `asyncio.to_thread`."""
+    total = 0
+    bucket = settings.s3_bucket_content
+    if settings.storage_backend == "localstorage":
+        for user_id in user_ids:
+            root = Path(settings.local_storage_base_path) / bucket / _userdata_prefix(user_id, blog_id)
+            if root.is_dir():
+                total += sum(p.stat().st_size for p in root.rglob("*") if p.is_file())
+        return total
+    client = get_s3_client()
+    try:
+        client.head_bucket(Bucket=bucket)
+    except Exception:  # noqa: BLE001 — bucket mai creato: nessun upload ancora fatto, 0 byte
+        return 0
+    paginator = client.get_paginator("list_objects_v2")
+    for user_id in user_ids:
+        prefix = f"{_userdata_prefix(user_id, blog_id)}/"
+        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+            for obj in page.get("Contents", []) or []:
+                total += int(obj.get("Size", 0))
+    return total

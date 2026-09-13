@@ -286,8 +286,22 @@ Conteggi per la tab Panoramica del blog (todo/UX_REDESIGN.md B1, mockup 5a):
 ```
 
 `posts_scheduled` sono i `published` con `published_at` futuro; `media` è il
-numero di immagini citate nei post (tabella `post_media`). Le letture
-aggregate (mockup 5a "Reads") arrivano con il blocco B2.
+numero di immagini citate nei post (tabella `post_media`). In più (B2):
+`reads_30d` — 30 voci `{day, reads}` (giorni UTC, quelli senza letture a 0),
+`reads_total_30d`, e `storage_bytes` — byte occupati su storage da media e
+backup Markdown del blog (prefissi `userdata/{utente}/{blog}/` di
+proprietario e collaboratori; `null` se lo storage non risponde, `0` se il
+bucket non è mai stato creato).
+
+**`POST /api/v1/posts/{post_id}/read`** — pubblico, `204`, nessun corpo.
+Conteggio letture aggregato per giorno (tabella `post_reads_daily`, mockup
+5a): nessun cookie, nessuna sessione, nessun IP o identificativo del lettore
+persistito — solo `+1` su (post, giorno UTC). Inviato dal browser
+(`navigator.sendBeacon`) dopo qualche secondo sulla pagina pubblica del
+post. Un limite per IP+post in Redis (1 ogni 6 ore, volatile) evita di
+contare i reload ravvicinati: oltre il limite la richiesta risponde comunque
+`204` senza contare. `404` per post non pubblicamente visibili (bozza,
+pianificato, nascosto, blog non pubblico o sospeso).
 
 **`GET /api/v1/blogs/mine`** — richiede sessione. Lista i blog di proprietà
 dell'utente.

@@ -252,7 +252,7 @@
     },
     "items": "{count} elementi",
     "reads": "Letture · ultimi 30 giorni",
-    "readsNote": "Le letture aggregate (senza cookie né tracciamento) arriveranno con il prossimo blocco.",
+    "readsNote": "Aggregate lato server, senza cookie né tracciamento del singolo lettore",
     "readsAria": "Letture giornaliere dal {from} al {to}",
     "activity": "Attività recente",
     "storage": "Spazio",
@@ -261,13 +261,15 @@
       "posts": "post pubblicati",
       "followers": "follower",
       "pendingComments": "commenti in attesa",
-      "members": "collaboratori"
+      "members": "collaboratori",
+      "reads": "letture · 30 giorni"
     },
     "nothingToDo": "Niente in sospeso.",
     "open": "Apri →",
     "mediaCount": "{count, plural, one {# immagine} other {# immagini}} nei post",
     "approvedComments": "{count, plural, one {# commento approvato} other {# commenti approvati}}",
-    "lastPublished": "Ultimo post pubblicato il {date}"
+    "lastPublished": "Ultimo post pubblicato il {date}",
+    "storageUnknown": "n/d"
   },
   "Comments": {
     "approveN": "Approva {count}",

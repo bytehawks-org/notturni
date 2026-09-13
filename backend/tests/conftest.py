@@ -212,11 +212,11 @@ class _FakePaginator:
         self._client = client
         self._operation_name = operation_name
 
-    def paginate(self, Bucket: str):  # noqa: N803
+    def paginate(self, Bucket: str, Prefix: str = ""):  # noqa: N803
         if Bucket not in self._client.buckets:
             raise FakeClientError("NoSuchBucket")
-        keys = [k for (b, k) in self._client.objects if b == Bucket]
-        yield {"Contents": [{"Key": k} for k in keys]}
+        items = [(k, v) for (b, k), v in self._client.objects.items() if b == Bucket and k.startswith(Prefix)]
+        yield {"Contents": [{"Key": k, "Size": len(v)} for k, v in items]}
 
 
 class _FakeExceptions:

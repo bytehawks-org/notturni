@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { PostActions } from "@/components/blog/PostActions";
 import { BlogHeaderActions } from "@/components/blog/PostHeaderActions";
 import { PostToc } from "@/components/blog/PostToc";
+import { ReadBeacon } from "@/components/blog/ReadBeacon";
 import { CommentsSection } from "@/components/CommentsSection";
 import { FragmentReader } from "@/components/FragmentReader";
 import { BlogHeader } from "@/components/shell/BlogHeader";
@@ -198,6 +199,7 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
             <div className="mt-10 xl:hidden">{rail}</div>
 
             <CommentsSection postId={post.id} mode={post.effective_comments_mode} />
+            <ReadBeacon postId={post.id} />
 
             <p className="mt-10 text-[13px] leading-relaxed text-muted">{t("privacyNote")}</p>
           </article>

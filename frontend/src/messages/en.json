@@ -252,7 +252,7 @@
     },
     "items": "{count} items",
     "reads": "Reads · last 30 days",
-    "readsNote": "Aggregated reads (no cookies, no tracking) will come with the next block.",
+    "readsNote": "Aggregated server-side, no cookies, no per-reader tracking",
     "readsAria": "Daily reads from {from} to {to}",
     "activity": "Recent activity",
     "storage": "Storage",
@@ -261,13 +261,15 @@
       "posts": "published posts",
       "followers": "followers",
       "pendingComments": "pending comments",
-      "members": "collaborators"
+      "members": "collaborators",
+      "reads": "reads · 30 days"
     },
     "nothingToDo": "Nothing pending.",
     "open": "Open →",
     "mediaCount": "{count, plural, one {# image} other {# images}} in posts",
     "approvedComments": "{count, plural, one {# approved comment} other {# approved comments}}",
-    "lastPublished": "Last post published on {date}"
+    "lastPublished": "Last post published on {date}",
+    "storageUnknown": "n/a"
   },
   "Comments": {
     "approveN": "Approve {count}",

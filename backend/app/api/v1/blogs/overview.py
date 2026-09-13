@@ -1,7 +1,8 @@
 """Panoramica del blog per la dashboard (todo/UX_REDESIGN.md B1, mockup 5a):
 conteggi aggregati, nessuna tabella nuova. Riservata a proprietario e membri."""
 
-from datetime import datetime, timezone
+import asyncio
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import Depends, HTTPException, status
 from pydantic import BaseModel
@@ -12,13 +13,20 @@ from app.api.deps import get_current_user
 from app.api.v1.blogs._common import _get_blog_or_404
 from app.api.v1.blogs._router import router
 from app.core.database import get_session
+from app.core.storage import blog_storage_bytes
 from app.domain.authorization import get_membership_role
 from app.models.blog import BlogMembership
 from app.models.comment import Comment, CommentStatus
 from app.models.follow import BlogFollow
 from app.models.post import Post, PostStatus
 from app.models.post_media import post_media
+from app.models.post_read import PostReadDaily
 from app.models.user import User
+
+
+class DailyReads(BaseModel):
+    day: date
+    reads: int
 
 
 class BlogOverviewOut(BaseModel):
@@ -33,6 +41,11 @@ class BlogOverviewOut(BaseModel):
     approved_comments: int
     media: int
     last_published_at: datetime | None
+    # B2: letture aggregate per giorno (ultimi 30 giorni, giorni vuoti a 0) e
+    # spazio occupato su storage (media + backup), `null` se non calcolabile.
+    reads_30d: list[DailyReads]
+    reads_total_30d: int
+    storage_bytes: int | None
 
 
 async def _count(session: AsyncSession, stmt) -> int:
@@ -66,7 +79,32 @@ async def blog_overview(
         )
     ).scalar_one()
 
+    since = (now - timedelta(days=29)).date()
+    rows = (
+        await session.execute(
+            select(PostReadDaily.day, func.sum(PostReadDaily.reads))
+            .where(PostReadDaily.post_id.in_(blog_posts), PostReadDaily.day >= since)
+            .group_by(PostReadDaily.day)
+        )
+    ).all()
+    by_day = {d: int(r) for d, r in rows}
+    reads_30d = [DailyReads(day=since + timedelta(days=i), reads=by_day.get(since + timedelta(days=i), 0)) for i in range(30)]
+
+    member_ids = (
+        await session.execute(select(BlogMembership.user_id).where(BlogMembership.blog_id == blog.id))
+    ).scalars().all()
+    uploader_ids = [str(blog.owner_id)] + [str(uid) for uid in member_ids if uid != blog.owner_id]
+    try:
+        storage_bytes: int | None = await asyncio.to_thread(
+            blog_storage_bytes, user_ids=uploader_ids, blog_id=str(blog.id)
+        )
+    except Exception:  # noqa: BLE001 — storage irraggiungibile: la card mostra "n/d", non un 500
+        storage_bytes = None
+
     return BlogOverviewOut(
+        reads_30d=reads_30d,
+        reads_total_30d=sum(d.reads for d in reads_30d),
+        storage_bytes=storage_bytes,
         posts_total=await _count(session, posts_by()),
         posts_published=await _count(session, posts_by(Post.status == PostStatus.PUBLISHED, Post.published_at <= now)),
         posts_scheduled=await _count(session, posts_by(Post.status == PostStatus.PUBLISHED, Post.published_at > now)),

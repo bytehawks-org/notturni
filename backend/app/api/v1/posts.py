@@ -2,8 +2,9 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy import delete, insert, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,10 +28,13 @@ from app.domain.notes import NoteInput, normalize_notes
 from app.domain.permalinks import build_permalink, validate_post_slug_not_reserved
 from app.domain.seo import effective_ai_crawling, effective_search_indexing
 from app.domain.tags import resolve_tags
-from app.models.blog import Blog, BlogMembership
+from app.models.blog import Blog, BlogMembership, BlogVisibility
 from app.models.comment import CommentsMode
 from app.models.category import Category
 from app.models.post import Post, PostStatus
+from app.models.post_read import PostReadDaily
+from app.domain.rate_limit import enforce_rate_limit
+from app.core.http import client_ip
 from app.models.post_link import post_links
 from app.models.post_media import post_media
 from app.models.post_note import post_notes
@@ -898,3 +902,42 @@ async def publish_post(
     if is_publicly_visible(post):
         await _revalidate_post(post, blog)
     return await _post_out(session, post, blog)
+
+
+@router.post("/posts/{post_id}/read", status_code=status.HTTP_204_NO_CONTENT)
+async def record_post_read(
+    post_id: uuid.UUID,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Conteggio letture aggregato per giorno (todo/UX_REDESIGN.md B2,
+    mockup 5a): pubblico, nessuna sessione né cookie, nessun dato del lettore
+    persistito — solo `+1` su (post, giorno UTC) in `post_reads_daily`.
+    Inviato dal browser dopo qualche secondo sulla pagina del post. Per non
+    contare i reload ravvicinati, un limite per IP+post in Redis (volatile):
+    oltre il limite la richiesta è accettata ma non contata. Post non
+    visibili pubblicamente: 404, come la pagina stessa."""
+    post = await session.get(Post, post_id)
+    if post is None or not is_publicly_visible(post):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Post non trovato.")
+    blog = await session.get(Blog, post.blog_id)
+    if blog is None or blog.is_suspended or blog.visibility != BlogVisibility.PUBLIC:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Post non trovato.")
+
+    ip = client_ip(request) or "unknown"
+    try:
+        await enforce_rate_limit(
+            f"read:{ip}:{post_id}", limit=1, window_seconds=6 * 3600, message="Lettura già contata."
+        )
+    except HTTPException:
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    today = datetime.now(timezone.utc).date()
+    stmt = pg_insert(PostReadDaily).values(post_id=post_id, day=today, reads=1)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[PostReadDaily.post_id, PostReadDaily.day],
+        set_={"reads": PostReadDaily.reads + 1},
+    )
+    await session.execute(stmt)
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

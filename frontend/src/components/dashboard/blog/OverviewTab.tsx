@@ -14,9 +14,45 @@ import type { BlogOverview } from "@/lib/types";
 
 import { errorMessage } from "./shared";
 
-/** Tab Panoramica (mockup 5a, todo/UX_REDESIGN.md B1): KPI e "richiede la
- * tua attenzione" da `GET /blogs/{slug}/overview`. Il grafico delle letture
- * aggregate e lo spazio occupato arrivano con il blocco B2. */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+/** Grafico a barre delle letture giornaliere (mockup 5a): solo aggregati
+ * lato server, nessun tracciamento del singolo lettore. */
+function ReadsChart({ data, ariaLabel }: { data: { day: string; reads: number }[]; ariaLabel: string }) {
+  const max = Math.max(1, ...data.map((d) => d.reads));
+  const w = 600;
+  const h = 120;
+  const gap = 4;
+  const bw = (w - gap * (data.length - 1)) / data.length;
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="h-28 w-full" role="img" aria-label={ariaLabel}>
+      {data.map((d, i) => {
+        const bh = Math.max(2, (d.reads / max) * (h - 8));
+        return (
+          <rect
+            key={d.day}
+            x={i * (bw + gap)}
+            y={h - bh}
+            width={bw}
+            height={bh}
+            rx={2}
+            className={d.reads > 0 ? "fill-primary" : "fill-border"}
+          >
+            <title>{`${d.day}: ${d.reads}`}</title>
+          </rect>
+        );
+      })}
+    </svg>
+  );
+}
+
+/** Tab Panoramica (mockup 5a, todo/UX_REDESIGN.md B1/B2): KPI, "richiede la
+ * tua attenzione", letture aggregate degli ultimi 30 giorni e spazio
+ * occupato, da `GET /blogs/{slug}/overview`. */
 export function OverviewTab({ blogSlug }: { blogSlug: string }) {
   const { authFetch } = useAuth();
   const t = useTranslations("Overview");
@@ -36,9 +72,12 @@ export function OverviewTab({ blogSlug }: { blogSlug: string }) {
   const kpis: [number, string][] = [
     [data.posts_published, t("kpi.posts")],
     [data.followers, t("kpi.followers")],
+    [data.reads_total_30d, t("kpi.reads")],
     [data.pending_comments, t("kpi.pendingComments")],
-    [data.members, t("kpi.members")],
   ];
+  const first = data.reads_30d[0]?.day ?? "";
+  const last = data.reads_30d[data.reads_30d.length - 1]?.day ?? "";
+  const fmtDay = (d: string) => formatDate(d, locale, { day: "numeric", month: "short" });
   const attention: { label: string; count: number; href: string }[] = [
     { label: t("attention.pendingComments"), count: data.pending_comments, href: `/dashboard/blogs/${blogSlug}?tab=comments` },
     { label: t("attention.inReview"), count: data.posts_in_review, href: `/dashboard/blogs/${blogSlug}?tab=posts` },
@@ -56,6 +95,17 @@ export function OverviewTab({ blogSlug }: { blogSlug: string }) {
           </div>
         ))}
       </div>
+      <Card className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <span className="font-mono text-[11px] uppercase tracking-[.08em] text-muted">{t("reads")}</span>
+          <span className="text-[13px] text-muted">{t("readsNote")}</span>
+        </div>
+        <ReadsChart data={data.reads_30d} ariaLabel={t("readsAria", { from: fmtDay(first), to: fmtDay(last) })} />
+        <div className="flex justify-between font-mono text-[11px] text-muted">
+          <span>{fmtDay(first)}</span>
+          <span>{fmtDay(last)}</span>
+        </div>
+      </Card>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
         <Card className="flex flex-col gap-3">
           <div className="flex items-baseline justify-between">
@@ -82,14 +132,15 @@ export function OverviewTab({ blogSlug }: { blogSlug: string }) {
         </Card>
         <Card className="flex flex-col gap-2 text-sm">
           <span className="font-mono text-[11px] uppercase tracking-[.08em] text-muted">{t("storage")}</span>
+          <span className="font-serif text-2xl text-foreground">{data.storage_bytes === null ? t("storageUnknown") : formatBytes(data.storage_bytes)}</span>
           <span className="text-foreground">{t("mediaCount", { count: data.media })}</span>
+          <span className="text-[13px] text-muted">{t("kpi.members")}: {data.members}</span>
           <span className="text-[13px] text-muted">{t("approvedComments", { count: data.approved_comments })}</span>
           {data.last_published_at && (
             <span className="text-[13px] text-muted">
               {t("lastPublished", { date: formatDate(data.last_published_at, locale, { day: "numeric", month: "short", year: "numeric" }) })}
             </span>
           )}
-          <span className="text-[13px] text-muted">{t("readsNote")}</span>
         </Card>
       </div>
     </div>

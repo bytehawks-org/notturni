@@ -21,6 +21,7 @@ from app.models.post_fragment import PostFragment
 from app.models.post_link import post_links
 from app.models.post_media import post_media
 from app.models.post_note import post_notes
+from app.models.post_read import PostReadDaily
 from app.models.social_link import SocialLink
 from app.models.sso_identity import SsoIdentity, SsoProvider
 from app.models.tag import Tag
@@ -47,6 +48,7 @@ __all__ = [
     "post_media",
     "post_links",
     "PostFragment",
+    "PostReadDaily",
     "Comment",
     "CommentStatus",
     "CommentsMode",
