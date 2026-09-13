@@ -293,3 +293,8 @@ def delete_blog_storage(*, user_ids: list[str], blog_id: str) -> int:
                 client.delete_object(Bucket=bucket, Key=obj["Key"])
                 removed += 1
     return removed
+
+
+def delete_content_object(object_key: str) -> None:
+    """Rimuove un singolo media dal bucket dei contenuti (libreria media, B7)."""
+    _delete_object(bucket=settings.s3_bucket_content, key=object_key)

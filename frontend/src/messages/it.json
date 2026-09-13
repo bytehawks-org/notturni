@@ -244,7 +244,8 @@
     "collaborators": "Collaboratori",
     "followers": "Follower",
     "appearance": "Aspetto",
-    "settings": "Impostazioni"
+    "settings": "Impostazioni",
+    "media": "Media"
   },
   "Overview": {
     "attention": {
@@ -1080,5 +1081,46 @@
     "hide": "Nascondi",
     "hideTitle": "Nascondere “{title}”?",
     "showTitle": "Mostrare di nuovo “{title}”?"
+  },
+  "MediaTab": {
+    "summary": "{count, plural, one {# file} other {# file}} · {size}",
+    "storedNote": "Immagini caricate dall'editor o da qui, archiviate sullo storage dell'istanza (S3-compatible o locale).",
+    "sync": "Importa dai post",
+    "synced": "Immagini dei post importate",
+    "upload": "Carica",
+    "uploaded": "Immagine caricata",
+    "filter": {
+      "all": "Tutte",
+      "unused": "Non usate",
+      "no-alt": "Senza alt",
+      "sensitive": "Con avviso"
+    },
+    "emptyTitle": "Nessuna immagine",
+    "emptyBody": "Carica un'immagine o importa quelle già citate nei post.",
+    "badge": {
+      "noAlt": "Senza alt",
+      "unused": "Non usata",
+      "sensitive": "Sensibile"
+    },
+    "missingAlt": "Testo alternativo mancante",
+    "in": "in",
+    "notUsed": "Non usata in nessun post",
+    "alt": "Testo alternativo",
+    "required": "richiesto",
+    "caption": "Didascalia",
+    "captionPlaceholder": "Facoltativa, mostrata sotto l'immagine",
+    "warning": "Avviso sui contenuti",
+    "none": "Nessuno",
+    "autoModeration": "Moderazione automatica",
+    "flagged": "segnalata",
+    "clean": "ok",
+    "neverLeaves": "l'immagine non lascia mai il server",
+    "usedIn": "Usata in",
+    "uploadedOn": "Caricata il {date}",
+    "saved": "Dettagli salvati",
+    "copyUrl": "Copia URL",
+    "urlCopied": "URL copiato",
+    "deleted": "Immagine eliminata",
+    "deleteBlocked": "Usata in un post: rimuovila prima dal contenuto"
   }
 }

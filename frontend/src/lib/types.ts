@@ -341,6 +341,33 @@ export interface BlockedAuthor {
   created_at: string;
 }
 
+/** Libreria media del blog (B7, mockup 3c). */
+export interface MediaUsage {
+  post_id: string;
+  post_slug: string;
+  post_title: string;
+  permalink: string;
+}
+
+export interface MediaFile {
+  id: string;
+  url: string;
+  content_type: string;
+  size_bytes: number;
+  alt_text: string;
+  caption: string | null;
+  categories: SensitivityCategory[];
+  is_sensitive: boolean;
+  uploader_username: string | null;
+  created_at: string;
+  used_in: MediaUsage[];
+}
+
+export interface MediaLibrary {
+  items: MediaFile[];
+  total_bytes: number;
+}
+
 /** GET /blogs/{slug}/comments — moderazione trasversale nel dashboard:
  * commenti di tutti i post del blog, ciascuno con titolo/slug del post. */
 export interface BlogComment extends Comment {

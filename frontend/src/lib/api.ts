@@ -35,6 +35,8 @@ import type {
   LinkBibliographyEntry,
   LoginResponse,
   MediaBibliographyEntry,
+  MediaFile,
+  MediaLibrary,
   MembershipBlog,
   Page,
   PageTranslationSummary,
@@ -249,6 +251,13 @@ export const api = {
         formData,
       });
     },
+    /** B7: libreria media (proprietario e collaboratori). */
+    mediaLibrary: (token: string, slug: string) => request<MediaLibrary>(`/api/v1/blogs/${slug}/media`, { token }),
+    syncMediaLibrary: (token: string, slug: string) => request<MediaLibrary>(`/api/v1/blogs/${slug}/media/sync`, { method: "POST", token }),
+    updateMedia: (token: string, slug: string, mediaId: string, payload: { alt_text?: string; caption?: string; categories?: SensitivityCategory[] }) =>
+      request<MediaFile>(`/api/v1/blogs/${slug}/media/${mediaId}`, { method: "PATCH", token, body: payload }),
+    deleteMedia: (token: string, slug: string, mediaId: string) =>
+      request<void>(`/api/v1/blogs/${slug}/media/${mediaId}`, { method: "DELETE", token }),
     listCategories: (slug: string) => request<Category[]>(`/api/v1/blogs/${slug}/categories`),
     createCategory: (token: string, slug: string, payload: { name: string; slug: string }) =>
       request<Category>(`/api/v1/blogs/${slug}/categories`, { method: "POST", token, body: payload }),

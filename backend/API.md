@@ -945,6 +945,32 @@ non deve mai far fallire un upload altrimenti riuscito (stesso principio
 già in atto per il backup dei post su S3). Non è pensato come barriera di
 sicurezza legale, solo come aiuto automatico all'autore.
 
+## Libreria media del blog (todo/UX_REDESIGN.md B7, mockup 3c)
+
+`POST /api/v1/blogs/{slug}/media` (upload, vedi sopra) ora registra ogni
+immagine in `media_files` e risponde anche con `media_id`.
+
+**`GET /api/v1/blogs/{slug}/media`** — proprietario e collaboratori
+(`403` altrimenti). `{items: [{id, url, content_type, size_bytes, alt_text,
+caption, categories, is_sensitive, uploader_username, created_at, used_in:
+[{post_id, post_slug, post_title, permalink}]}], total_bytes}`, dal più
+recente. `used_in` viene da `post_media` (immagini citate nei post).
+
+**`POST /api/v1/blogs/{slug}/media/sync`** — accesso in scrittura. Importa
+nella libreria le immagini citate nei post che non hanno ancora una riga
+(blog precedenti alla libreria): `size_bytes=0`, senza caricatore.
+Idempotente; risponde come `GET`.
+
+**`PATCH /api/v1/blogs/{slug}/media/{media_id}`** — `{alt_text?, caption?,
+categories?}` (categorie tra quelle di `SENSITIVITY_CATEGORIES`, `400`
+altrimenti). I post già scritti portano alt e avviso nel proprio Markdown e
+non vengono riscritti: i valori della libreria sono il default per gli usi
+futuri.
+
+**`DELETE /api/v1/blogs/{slug}/media/{media_id}`** — `204`; `409` se
+l'immagine è ancora citata in un post. Rimuove la riga e, se caricata via
+libreria, l'oggetto su storage.
+
 ## Anteprima di un link
 
 **`GET /api/v1/link-preview?url=<url>`** — pubblico, nessuna autenticazione

@@ -16,6 +16,7 @@ from app.models.comment import BlogBlockedAuthor, Comment, CommentsMode, Comment
 from app.models.content_report import ContentReport, ReportReason, ReportStatus, ReportTargetType
 from app.models.follow import BlogFollow, UserFollow
 from app.models.gdpr_request import GdprRequest, GdprRequestStatus, GdprRequestType
+from app.models.media_file import MediaFile
 from app.models.mfa_email_code import MfaEmailCode
 from app.models.page import Page
 from app.models.platform_config import PlatformConfig
@@ -67,6 +68,7 @@ __all__ = [
     "AuditArchiveRun",
     "UserSession",
     "MfaEmailCode",
+    "MediaFile",
     "SsoIdentity",
     "SsoProvider",
     "Page",

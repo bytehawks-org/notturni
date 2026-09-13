@@ -244,7 +244,8 @@
     "collaborators": "Collaborators",
     "followers": "Followers",
     "appearance": "Appearance",
-    "settings": "Settings"
+    "settings": "Settings",
+    "media": "Media"
   },
   "Overview": {
     "attention": {
@@ -1080,5 +1081,46 @@
     "hide": "Hide",
     "hideTitle": "Hide “{title}”?",
     "showTitle": "Show “{title}” again?"
+  },
+  "MediaTab": {
+    "summary": "{count, plural, one {# file} other {# files}} · {size}",
+    "storedNote": "Images uploaded from the editor or here, stored on the instance storage (S3-compatible or local).",
+    "sync": "Import from posts",
+    "synced": "Images from posts imported",
+    "upload": "Upload",
+    "uploaded": "Image uploaded",
+    "filter": {
+      "all": "All",
+      "unused": "Unused",
+      "no-alt": "No alt",
+      "sensitive": "With warning"
+    },
+    "emptyTitle": "No images",
+    "emptyBody": "Upload an image or import the ones already cited in posts.",
+    "badge": {
+      "noAlt": "No alt",
+      "unused": "Unused",
+      "sensitive": "Sensitive"
+    },
+    "missingAlt": "Alt text missing",
+    "in": "in",
+    "notUsed": "Not used in any post",
+    "alt": "Alt text",
+    "required": "required",
+    "caption": "Caption",
+    "captionPlaceholder": "Optional, shown under the image",
+    "warning": "Content warning",
+    "none": "None",
+    "autoModeration": "Auto-moderation",
+    "flagged": "flagged",
+    "clean": "clean",
+    "neverLeaves": "the image never leaves the server",
+    "usedIn": "Used in",
+    "uploadedOn": "Uploaded {date}",
+    "saved": "Details saved",
+    "copyUrl": "Copy URL",
+    "urlCopied": "URL copied",
+    "deleted": "Image deleted",
+    "deleteBlocked": "Used in a post: remove it from the content first"
   }
 }

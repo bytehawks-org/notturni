@@ -36,7 +36,8 @@ nuovo e/o funzionalità di dominio non ancora costruita).
 | B4 | 5b Coda commenti estesa | ✅ — backend: tabella `blog_blocked_authors` (utente o sha256 dell'email anonima, mai email/IP in chiaro), colonne `reported_to_platform`/`report_note`/`reported_at` su `comments`, `comments_auto_close_days` su `blogs` (migrazione `c9e3f4a5b6d7`); `POST /comments/{id}/report` (nota obbligatoria, audit), `POST /comments/{id}/block-author` (blocca + nasconde, audit), `GET/DELETE /blogs/{slug}/blocked`, `?reported=true` su elenco per blog e admin, chiusura automatica in `domain/comments_mode.py` (`effective_comments_mode` → `closed` dopo N giorni). Lo stato "nascosto" è il `rejected` esistente. Test in `backend/tests/test_comment_moderation_ext.py`. Frontend: `CommentsTab` con code In attesa/Approvati/Nascosti/Segnalati e conteggi, selezione multipla, risposta inline, blocco, segnalazione con nota, card regole (policy + chiusura a 90 giorni) e lista bloccati; `/admin/moderazione-commenti` con filtro Segnalati e nota. **Non fatto**: "Avvisami via email" (nessun canale email transazionale oltre all'OTP) |
 | B5 | 5e/5d Segnalazioni e nota di audit | ✅ — backend: tabella `content_reports` (una per lettore e bersaglio, migrazione `d0f4a5b6c7e8`), `POST /blogs/{slug}/report` e `POST /posts/{id}/report` (registrati, rate limit 10/h), `GET /admin/blogs` con `posts_count`/`reports_open` e filtri `visibility`/`state`, `GET /admin/blogs/{id}/reports` (pannello), `POST /admin/blogs/{id}/action` (sospendi/ripristina/nascondi post segnalati/disattiva proprietario/archivia, nota obbligatoria, chiude le segnalazioni), `reports_open` sui post admin, `queue_open_reports` nell'overview; **nota obbligatoria** anche su `PATCH /admin/users|blogs|posts` quando cambia lo stato (`payload.note` in audit). Test in `backend/tests/test_reports.py`. Frontend: `ReportButton` su header del blog e pagina del post, `/admin/blog` riscritto come tabella + pannello segnalazioni (mockup 5e), `/admin/moderazione` e `/admin/utenti` con `NoteDialog`, coda segnalazioni nella panoramica admin. **Non fatto**: segnalazione automatica "nome riservato" (i nomi riservati sono bloccati alla creazione, non esistono blog da segnalare), ricorso del proprietario |
 | B6 | 5f Impostazioni piattaforma, coda GDPR, lingua per account | ✅ — backend: tabella `platform_config` (riga unica, seme da `NOCT_DEFAULT_LOCALE`; migrazione `e1a5b6c7d8f9`) con `GET/PATCH /admin/config` (solo super admin, audit `platform.config_updated`) ed enforcement reale: `registration_mode` blocca `POST /auth/register`, `max_blogs_per_user` e `reserved_blog_names` alla creazione blog, `anonymous_comments_allowed` su `comments_mode=everyone`, `sso_providers` su `/auth/sso/{p}/login`, `mfa_required_for_admins` su tutta l'area admin (`require_platform_admin`), `moderation_threshold` passata al servizio di moderazione (`threshold` opzionale in `POST /classify`); `GET /config` pubblico espone `default_locale`/`registration_mode`/`sso_providers`. Tabella `gdpr_requests` con `GET/POST /admin/gdpr`, `approve` (seconda approvazione da un admin diverso per le cancellazioni), `execute` (export → JSON; cancellazione → anonimizzazione), `reject` con nota; export/cancellazione self-service registrati come completati. `users.ui_locale` in `PATCH /users/me` e `GET /auth/me`. Test in `backend/tests/test_platform_config.py`. Frontend: `/admin/impostazioni` (form 5f con infrastruttura in sola lettura), `/admin/gdpr` (tabella con scadenze, approva/esegui/rifiuta), voci nel menu admin, `/register` bloccata se le registrazioni non sono aperte, risoluzione lingua cookie → default di piattaforma → Accept-Language → it, preferenza per account copiata nel cookie al login e salvata dal selettore. **Non fatto**: inviti per la modalità "su invito" (oggi equivale a chiusa con messaggio diverso) |
-| B7–B9 | Funzionalità che richiedono tabelle nuove | ⚪ — vedi §4 |
+| B7 | 3c Libreria media | ✅ — backend: tabella `media_files` (migrazione `f2b6c7d8e9a0`) alimentata da ogni upload (`POST /blogs/{slug}/media` risponde anche `media_id`), `GET /blogs/{slug}/media` (proprietario e collaboratori: alt/didascalia/avviso, chi ha caricato, "usata in" da `post_media`, totale byte), `POST .../media/sync` (importa le immagini citate nei post precedenti alla libreria), `PATCH .../media/{id}` (alt, didascalia, categorie), `DELETE .../media/{id}` (409 se ancora usata; rimuove anche l'oggetto su storage). Test in `backend/tests/test_media_library.py`. Frontend: tab "Media" della scheda blog (`MediaTab`, mockup 3c): griglia con badge (senza alt / non usata / sensibile), filtri, upload e importazione, pannello con alt richiesto, didascalia, avviso, usata in, dettagli, copia URL, eliminazione. **Non fatto**: dimensioni in pixel e "EXIF rimossi" (nessuna elaborazione immagine lato backend; Pillow non è una dipendenza), quota di spazio per blog; i post già scritti non vengono riscritti quando cambiano alt/avviso in libreria |
+| B8–B9 | Funzionalità che richiedono tabelle nuove | ⚪ — vedi §4 |
 
 Ogni blocco è a sé (vedi CLAUDE.md §2): non anticipare il successivo senza
 indicazione esplicita.
@@ -45,9 +46,9 @@ indicazione esplicita.
 
 1a/1b, 1c/4a/4b, 1d, 1e/1f, 1g, 1h, 2a/2b/2c, 2e, 2f, 2g, 3a, 3d, 3e, 3f, 4c:
 fatti (vedi tabella sopra per i dettagli e le parti rimandate perché
-richiedono backend). Restano fuori, per scelta: 3c lightbox media (richiede
-una libreria media per blog, B7) e le voci del mockup senza nulla da collegare
-(SSO nel login, reset password, sessioni multiple, RSS, newsletter).
+richiedono backend). Restano fuori, per scelta, le voci del mockup senza nulla da collegare
+(SSO nel login, reset password, sessioni multiple, RSS, newsletter). 3c è
+fatto in B7.
 
 ## 2. Gap noti già in ROADMAP.md
 
@@ -61,7 +62,6 @@ una libreria media per blog, B7) e le voci del mockup senza nulla da collegare
 |---|---|---|
 | 2d, 3g Publications | Tabelle `publications`/`chapters`, route `/[blog]/pub/[nome]/[capitolo]`, gestione in dashboard con drag-to-order | ROADMAP.md §1 "Pubblicazioni" (⚪); `todo/PUBLICATIONS.md` |
 | 3b Gestione note | Note come entità di blog con `kind`/URL, duplicati, "citato in", import/export BibTeX | ROADMAP.md §1 "Note a piè di pagina + bibliografia automatica" |
-| 3c Libreria media + lightbox | `GET /blogs/{slug}/media`, alt/didascalia/avviso per immagine, quota storage | Nuovo |
 
 ## 4. Parte B — piano concordato (un blocco per sessione, in ordine di dipendenza)
 
@@ -73,7 +73,7 @@ una libreria media per blog, B7) e le voci del mockup senza nulla da collegare
 | B4 | 5b | ✅ fatto — vedi tabella sopra | ✅ |
 | B5 | 5e/5d | ✅ fatto — vedi tabella sopra | ✅ |
 | B6 | 5f | ✅ fatto — vedi tabella sopra | ✅ |
-| B7 | 3c | `GET /blogs/{slug}/media`, alt/didascalia/avviso su `post_media`, quota | Libreria media + lightbox |
+| B7 | 3c | ✅ fatto — vedi tabella sopra (tabella `media_files` invece di colonne su `post_media`) | ✅ |
 | B8 | 3b | Note come entità (`kind`, URL/DOI), duplicati, "citato in", import/export BibTeX | Gestione note; filtro per tipo in 2a |
 | B9 | 2d/3g | `publications`/`chapters`, route `/pub/[nome]/[capitolo]` | `PublicationIndex`, `ChapterNav`, drag-to-order, voce "Pubblicazioni" in header/home |
 
