@@ -7,6 +7,7 @@ import { PostActions } from "@/components/blog/PostActions";
 import { BlogHeaderActions } from "@/components/blog/PostHeaderActions";
 import { PostToc } from "@/components/blog/PostToc";
 import { ReadBeacon } from "@/components/blog/ReadBeacon";
+import { ReportButton } from "@/components/blog/ReportDialog";
 import { CommentsSection } from "@/components/CommentsSection";
 import { FragmentReader } from "@/components/FragmentReader";
 import { BlogHeader } from "@/components/shell/BlogHeader";
@@ -153,7 +154,10 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
                   </Link>
                 )}
               </div>
-              <PostActions permalink={post.permalink} title={post.title} citation={citation} />
+              <div className="flex flex-wrap items-center gap-4">
+                <PostActions permalink={post.permalink} title={post.title} citation={citation} />
+                <ReportButton target={{ type: "post", id: post.id }} />
+              </div>
             </header>
 
             {post.cover_image_url && post.cover_image_is_sensitive && (

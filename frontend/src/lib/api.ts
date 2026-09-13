@@ -12,11 +12,13 @@ import type {
   BibliographyEntry,
   BlockedAuthor,
   Blog,
+  BlogAdminAction,
   BlogComment,
   BlogConfig,
   BlogInvitation,
   BlogMember,
   BlogOverview,
+  BlogReports,
   BlogRole,
   BlogVisibility,
   Category,
@@ -41,6 +43,7 @@ import type {
   PostTranslationSummary,
   Profile,
   PublicComment,
+  ReportReason,
   SessionResponse,
   SocialLink,
 } from "./types";
@@ -461,6 +464,14 @@ export const api = {
   /** CLAUDE.md #1: anteprima di un link (titolo/descrizione/immagine Open
    * Graph), usata sia dall'editor sia dal rendering pubblico del post per i
    * link salvati come card. Pubblico, nessun token. */
+  reports: {
+    /** B5: segnalazione di un blog/post ai moderatori (sessione richiesta). */
+    reportBlog: (token: string, slug: string, reason: ReportReason, note?: string) =>
+      request<{ id: string }>(`/api/v1/blogs/${slug}/report`, { method: "POST", token, body: { reason, note } }),
+    reportPost: (token: string, postId: string, reason: ReportReason, note?: string) =>
+      request<{ id: string }>(`/api/v1/posts/${postId}/report`, { method: "POST", token, body: { reason, note } }),
+  },
+
   linkPreview: {
     get: (url: string) =>
       request<{ url: string; title: string | null; description: string | null; image: string | null }>(
@@ -593,15 +604,21 @@ export const api = {
     updateUser: (
       token: string,
       userId: string,
-      payload: Partial<{ platform_role: PlatformRole; is_active: boolean }>
+      payload: Partial<{ platform_role: PlatformRole; is_active: boolean; note: string }>
     ) => request<AdminUser>(`/api/v1/admin/users/${userId}`, { method: "PATCH", token, body: payload }),
     listBlogs: (token: string, q?: string) =>
       request<AdminBlog[]>(withQuery("/api/v1/admin/blogs", { q }), { token }),
-    updateBlog: (token: string, blogId: string, payload: { is_suspended: boolean }) =>
+    /** B5: `state` filtra per stato, `reported` = solo con segnalazioni aperte. */
+    listBlogsFiltered: (token: string, filters: Partial<{ q: string; visibility: string; state: string }> = {}) =>
+      request<AdminBlog[]>(withQuery("/api/v1/admin/blogs", filters), { token }),
+    blogReports: (token: string, blogId: string) => request<BlogReports>(`/api/v1/admin/blogs/${blogId}/reports`, { token }),
+    blogAction: (token: string, blogId: string, action: BlogAdminAction, note: string) =>
+      request<AdminBlog>(`/api/v1/admin/blogs/${blogId}/action`, { method: "POST", token, body: { action, note } }),
+    updateBlog: (token: string, blogId: string, payload: { is_suspended: boolean; note?: string }) =>
       request<AdminBlog>(`/api/v1/admin/blogs/${blogId}`, { method: "PATCH", token, body: payload }),
     listPosts: (token: string, q?: string) =>
       request<AdminPost[]>(withQuery("/api/v1/admin/posts", { q }), { token }),
-    updatePost: (token: string, postId: string, payload: { is_hidden: boolean }) =>
+    updatePost: (token: string, postId: string, payload: { is_hidden: boolean; note?: string }) =>
       request<AdminPost>(`/api/v1/admin/posts/${postId}`, { method: "PATCH", token, body: payload }),
     listAuditLog: (
       token: string,

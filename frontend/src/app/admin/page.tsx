@@ -38,6 +38,7 @@ export default function AdminHomePage() {
 
   const queueRows = overview
     ? [
+        { label: t("queue.reports"), value: overview.queue_open_reports, href: "/admin/blog?state=reported" },
         { label: t("queue.comments"), value: overview.queue_pending_comments, href: "/admin/moderazione-commenti" },
         { label: t("queue.review"), value: overview.queue_posts_in_review, href: "/admin/moderazione" },
         { label: t("queue.hidden"), value: overview.queue_hidden_posts, href: "/admin/moderazione" },

@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import Link from "next/link";
 
 import { FollowBlogButton } from "@/components/blog/FollowBlogButton";
+import { ReportButton } from "@/components/blog/ReportDialog";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/lib/auth-context";
 
@@ -27,6 +28,9 @@ export function BlogHeaderActions({ slug }: { slug: string }) {
           </Link>
         ))}
       <FollowBlogButton slug={slug} />
+      <span className="hidden sm:inline-flex">
+        <ReportButton target={{ type: "blog", slug }} />
+      </span>
     </>
   );
 }

@@ -66,7 +66,7 @@ async def test_admin_deactivation_is_recorded(
     target_id = next(u["id"] for u in users_res.json() if u["username"] == target.username)
 
     res = await client.patch(
-        f"/api/v1/admin/users/{target_id}", json={"is_active": False}, headers=admin.headers
+        f"/api/v1/admin/users/{target_id}", json={"is_active": False, "note": "test"}, headers=admin.headers
     )
     assert res.status_code == 200
 
@@ -87,14 +87,14 @@ async def test_role_change_records_old_and_new_value(
 
     res = await client.patch(
         f"/api/v1/admin/users/{target_id}",
-        json={"platform_role": "moderatore"},
+        json={"platform_role": "moderatore", "note": "test"},
         headers=admin.headers,
     )
     assert res.status_code == 200
 
     events = await _events(db_session, "user.role_change")
     assert len(events) == 1
-    assert events[0].payload == {"from": "utente", "to": "moderatore"}
+    assert events[0].payload == {"from": "utente", "to": "moderatore", "note": "test"}
 
 
 async def test_no_event_when_value_is_unchanged(
@@ -107,7 +107,7 @@ async def test_no_event_when_value_is_unchanged(
 
     # l'utente è già attivo: reinviare is_active=True non deve generare eventi
     res = await client.patch(
-        f"/api/v1/admin/users/{target_id}", json={"is_active": True}, headers=admin.headers
+        f"/api/v1/admin/users/{target_id}", json={"is_active": True, "note": "test"}, headers=admin.headers
     )
     assert res.status_code == 200
     assert await _events(db_session, "user.activated") == []
@@ -125,14 +125,14 @@ async def test_blog_suspension_is_recorded(
     blog_id = create_res.json()["id"]
 
     res = await client.patch(
-        f"/api/v1/admin/blogs/{blog_id}", json={"is_suspended": True}, headers=admin.headers
+        f"/api/v1/admin/blogs/{blog_id}", json={"is_suspended": True, "note": "test"}, headers=admin.headers
     )
     assert res.status_code == 200
 
     events = await _events(db_session, "blog.suspended")
     assert len(events) == 1
     assert str(events[0].blog_id) == blog_id
-    assert events[0].payload == {"slug": "audit-blog", "blog_alias": None}
+    assert events[0].payload == {"slug": "audit-blog", "blog_alias": None, "note": "test"}
 
 
 async def test_api_token_creation_is_recorded(
@@ -165,7 +165,7 @@ async def test_blog_alias_included_when_blog_has_one(
     blog_id = create_res.json()["id"]
 
     res = await client.patch(
-        f"/api/v1/admin/blogs/{blog_id}", json={"is_suspended": True}, headers=admin.headers
+        f"/api/v1/admin/blogs/{blog_id}", json={"is_suspended": True, "note": "test"}, headers=admin.headers
     )
     assert res.status_code == 200
 
@@ -213,7 +213,7 @@ async def test_audit_log_channel_field_and_filter(
     users_res = await client.get("/api/v1/admin/users", headers=admin.headers)
     target_id = next(u["id"] for u in users_res.json() if u["username"] == target.username)
     await client.patch(
-        f"/api/v1/admin/users/{target_id}", json={"platform_role": "moderatore"}, headers=admin.headers
+        f"/api/v1/admin/users/{target_id}", json={"platform_role": "moderatore", "note": "test"}, headers=admin.headers
     )
     # evento "api": creazione di un token via ApiToken opaco
     await client.post(

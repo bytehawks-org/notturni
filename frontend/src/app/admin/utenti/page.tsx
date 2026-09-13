@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { SearchInput } from "@/components/SearchInput";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { NoteDialog } from "@/components/ui/NoteDialog";
 import { Pill } from "@/components/ui/Pill";
 import { EmptyState, SkeletonRows } from "@/components/ui/States";
 import { ApiClientError, api } from "@/lib/api";
@@ -26,6 +27,7 @@ export default function DashboardUsersPage() {
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rowError, setRowError] = useState<Record<string, string>>({});
+  const [pending, setPending] = useState<{ user: AdminUser; payload: { platform_role?: PlatformRole; is_active?: boolean } } | null>(null);
 
   const errorMessage = useCallback(
     (err: unknown) => (err instanceof ApiClientError ? err.message : tc("unexpectedError")),
@@ -40,7 +42,7 @@ export default function DashboardUsersPage() {
 
   useEffect(load, [load]);
 
-  async function update(userId: string, payload: { platform_role?: PlatformRole; is_active?: boolean }) {
+  async function update(userId: string, payload: { platform_role?: PlatformRole; is_active?: boolean; note?: string }) {
     setRowError((prev) => ({ ...prev, [userId]: "" }));
     try {
       const updated = await authFetch((token) => api.admin.updateUser(token, userId, payload));
@@ -114,7 +116,7 @@ export default function DashboardUsersPage() {
                       <select
                         value={u.platform_role}
                         disabled={roleSelectDisabled}
-                        onChange={(e) => update(u.id, { platform_role: e.target.value as PlatformRole })}
+                        onChange={(e) => setPending({ user: u, payload: { platform_role: e.target.value as PlatformRole } })}
                         className="rounded-md border border-border bg-background px-2 py-1 text-sm disabled:opacity-50"
                       >
                         {ROLES.map((role) => (
@@ -143,7 +145,7 @@ export default function DashboardUsersPage() {
                       <div className="flex items-center gap-3">
                         <Pill tone={u.is_active ? "ok" : "danger"}>{u.is_active ? t("active") : t("inactive")}</Pill>
                         {u.id !== me?.id && (
-                          <Button size="sm" variant="secondary" onClick={() => update(u.id, { is_active: !u.is_active })}>
+                          <Button size="sm" variant="secondary" onClick={() => setPending({ user: u, payload: { is_active: !u.is_active } })}>
                             {u.is_active ? t("deactivate") : t("activate")}
                           </Button>
                         )}
@@ -156,6 +158,19 @@ export default function DashboardUsersPage() {
           </table>
         </div>
       )}
+      <NoteDialog
+        open={pending !== null}
+        title={pending ? t("noteTitle", { username: pending.user.username }) : ""}
+        confirmLabel={tc("confirm")}
+        danger={pending?.payload.is_active === false}
+        onCancel={() => setPending(null)}
+        onConfirm={(note) => {
+          if (!pending) return;
+          const { user, payload } = pending;
+          setPending(null);
+          void update(user.id, { ...payload, note });
+        }}
+      />
     </div>
   );
 }

@@ -434,6 +434,7 @@ export interface AdminOverview {
   queue_pending_comments: number;
   queue_posts_in_review: number;
   queue_hidden_posts: number;
+  queue_open_reports: number;
   audit_today: number;
   services: ServiceStatus[];
   deployment_mode: "solo" | "platform";
@@ -458,7 +459,34 @@ export interface AdminBlog {
   owner_username: string;
   visibility: BlogVisibility;
   is_suspended: boolean;
+  is_paused: boolean;
+  deleted_at: string | null;
   created_at: string;
+  posts_count: number;
+  reports_open: number;
+}
+
+export type ReportReason = "spam" | "abuse" | "illegal" | "other";
+export type BlogAdminAction = "suspend" | "restore" | "hide_reported_posts" | "deactivate_owner" | "dismiss";
+
+/** Segnalazione di un lettore (B5), come vista dal pannello admin. */
+export interface ReportDetail {
+  id: string;
+  target_type: "blog" | "post";
+  target_id: string;
+  post_slug: string | null;
+  post_title: string | null;
+  reason: ReportReason;
+  note: string | null;
+  reporter_username: string;
+  created_at: string;
+}
+
+export interface BlogReports {
+  blog: AdminBlog;
+  owner_mfa_enabled: boolean;
+  owner_email_domain: string;
+  reports: ReportDetail[];
 }
 
 /** Elenco di piattaforma (admin/moderazione, riservato ad
@@ -477,6 +505,7 @@ export interface AdminPost {
   is_hidden: boolean;
   published_at: string | null;
   created_at: string;
+  reports_open: number;
 }
 
 export const ADMIN_POST_STATUS_LABELS: Record<AdminPost["status"], string> = {

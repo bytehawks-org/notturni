@@ -1075,6 +1075,19 @@ Un autore bloccato riceve `403` su `POST /posts/{id}/comments` di quel blog.
 giorni da `published_at`, `effective_comments_mode` del post diventa
 `closed` (`403` ai nuovi commenti, i già scritti restano visibili).
 
+## Segnalazioni (todo/UX_REDESIGN.md B5)
+
+**`POST /api/v1/blogs/{slug}/report`** / **`POST /api/v1/posts/{post_id}/report`**
+— richiede sessione. `{reason: spam | abuse | illegal | other, note?}`
+(nota max 500 caratteri). Segnala un blog o un post pubblicamente
+visibile ai moderatori di piattaforma: `201` con `{id, target_type,
+target_id, reason, note, status, created_at}`. Una sola segnalazione per
+lettore e bersaglio (una seconda richiesta ritorna la prima, `201`); `400`
+se si segnala un proprio contenuto; `404` per contenuti non pubblici;
+`429` oltre 10 segnalazioni l'ora per utente. Le segnalazioni aperte
+compaiono nel pannello admin (`GET /api/v1/admin/blogs/{id}/reports`) e
+vengono chiuse dalle azioni admin.
+
 ## Frammenti
 
 Porzione di testo evidenziata dal lettore (con il mouse) su un post
@@ -1411,13 +1424,20 @@ personali), non un'app a parte — vedi ROADMAP.md.
 di piattaforma (todo/UX_REDESIGN.md B1, mockup 5d): `users_total`,
 `users_new_7d`, `blogs_total`, `blogs_suspended`, `posts_published`, le code
 `queue_pending_comments`/`queue_posts_in_review`/`queue_hidden_posts`,
-`audit_today` (voci del registro dalla mezzanotte UTC), `deployment_mode` e
+`queue_open_reports`, `audit_today` (voci del registro dalla mezzanotte UTC), `deployment_mode` e
 `services`: lista `{name, status, detail?}` con `status` in `ok`/`down`/
 `unconfigured` per `postgres` (`SELECT 1`), `redis` (`PING`), `rabbitmq` e
 `storage` (connessione TCP con timeout 2 s; `storage` è sempre `ok` con
 `localstorage`) e `moderation` (`GET /health` del servizio, `unconfigured`
 se `NOCT_MODERATION_SERVICE_URL` è assente). Solo aggregati, nessun dato
 personale.
+
+**Nota obbligatoria (B5, mockup 5e)**: `PATCH /admin/users/{id}` (cambio
+ruolo o attivazione), `PATCH /admin/blogs/{id}` (sospensione) e
+`PATCH /admin/posts/{id}` (nascondere/mostrare) richiedono `note` (almeno 3
+caratteri, `400` altrimenti) quando cambiano davvero lo stato; la nota
+finisce in `payload.note` della voce di audit. Nessuna nota richiesta se
+la richiesta non cambia nulla.
 
 **`GET /api/v1/admin/users`** — lista tutti gli utenti della piattaforma
 (id, username, email, `platform_role`, `is_active`, `mfa_enabled`,
@@ -1446,20 +1466,33 @@ primo utente in modalità `solo` e l'`UPDATE` manuale a DB in modalità
 `platform`.
 
 **`GET /api/v1/admin/blogs`** — lista tutti i blog della piattaforma (id,
-slug, title, `owner_username`, `visibility`, `is_suspended`, `created_at`).
-Query param opzionale `q`: filtra per slug, titolo o username del
-proprietario (`ilike`, sottostringa).
+slug, titolo, `owner_username`, `visibility`, `is_suspended`, `is_paused`,
+`deleted_at`, `posts_count`, `reports_open`). Query param opzionali: `q`
+(slug, titolo o proprietario), `visibility`, `state` (`active` |
+`suspended` | `paused` | `deleted` | `reported` — quest'ultimo: solo blog
+con segnalazioni aperte, ordinati per numero).
 
-**`PATCH /api/v1/admin/blogs/{blog_id}`** — `{is_suspended: bool}`. Un blog
-sospeso diventa irraggiungibile pubblicamente (`GET /api/v1/blogs/{slug}` →
-`404`, stesso trattamento di un blog `private` a cui non si ha accesso) e non
-scrivibile — **anche per il proprietario stesso**, indipendentemente da
-`visibility` (`app/domain/authorization.py::can_view_blog`/`can_write_posts`).
-Riattivabile con lo stesso endpoint (`is_suspended: false`). Nessun'altra
-conseguenza automatica (i post restano nel database, nessuna notifica al
-proprietario).
+**`PATCH /api/v1/admin/blogs/{blog_id}`** — `{is_suspended: bool, note}`. Un blog
+sospeso è irraggiungibile pubblicamente (il dettaglio resta leggibile con
+`is_suspended=true` per la pagina di avviso, vedi sezione Blog) e non
+scrivibile, proprietario incluso, finché non viene riattivato.
+Registrato nel registro di audit con la nota.
 
-**`GET /api/v1/admin/posts`** — lista tutti i post della piattaforma, dal più
+**`GET /api/v1/admin/blogs/{blog_id}/reports`** — pannello segnalazioni
+(mockup 5e): `{blog, owner_mfa_enabled, owner_email_domain, reports: [{id,
+target_type, target_id, post_slug, post_title, reason, note,
+reporter_username, created_at}]}` — solo le segnalazioni **aperte** sul
+blog e sui suoi post.
+
+**`POST /api/v1/admin/blogs/{blog_id}/action`** — `{action, note}` (nota
+obbligatoria). `action`: `suspend`, `restore`, `hide_reported_posts` (solo i
+post con segnalazioni aperte), `deactivate_owner` (disattiva l'account del
+proprietario e sospende il blog; `403` per un amministratore se non si è
+super admin), `dismiss` (archivia). Chiude tutte le segnalazioni aperte del
+blog (`actioned`, o `dismissed` per `dismiss`) e registra l'azione con la
+nota. Risponde con il blog aggiornato.
+
+**`GET /api/v1/admin/posts`** — lista tutti i post della piattaforma (con `reports_open`), dal più
 recente (id, title, slug, `blog_slug`, `blog_title`, `author_username`,
 `status`, `is_hidden`, `published_at`, `created_at`) — bozze/in
 revisione/pianificati inclusi, non solo i pubblicati. Query param opzionale

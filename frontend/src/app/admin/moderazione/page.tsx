@@ -1,90 +1,119 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { SearchInput } from "@/components/SearchInput";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { NoteDialog } from "@/components/ui/NoteDialog";
+import { Pill } from "@/components/ui/Pill";
+import { EmptyState, SkeletonRows } from "@/components/ui/States";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { ADMIN_POST_STATUS_LABELS, type AdminPost } from "@/lib/types";
+import { formatDate } from "@/lib/format";
+import { type AdminPost } from "@/lib/types";
 
-function errorMessage(err: unknown): string {
-  return err instanceof ApiClientError ? err.message : "Errore imprevisto.";
-}
-
+/** Moderazione post (mockup 5d/5e): tabella con segnalazioni aperte e
+ * nascondi/mostra con nota obbligatoria per il registro. */
 export default function DashboardModerationPage() {
   const { authFetch } = useAuth();
+  const t = useTranslations("AdminPosts");
+  const tc = useTranslations("Common");
+  const ts = useTranslations("Status");
+  const locale = useLocale();
   const [q, setQ] = useState("");
   const [posts, setPosts] = useState<AdminPost[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [rowError, setRowError] = useState<Record<string, string>>({});
+  const [pending, setPending] = useState<AdminPost | null>(null);
+
+  const errorMessage = useCallback((err: unknown) => (err instanceof ApiClientError ? err.message : tc("unexpectedError")), [tc]);
 
   const load = useCallback(() => {
     authFetch((token) => api.admin.listPosts(token, q))
       .then(setPosts)
       .catch((err) => setError(errorMessage(err)));
-  }, [authFetch, q]);
+  }, [authFetch, q, errorMessage]);
 
   useEffect(load, [load]);
 
-  async function handleToggleHidden(postId: string, is_hidden: boolean) {
-    setRowError((prev) => ({ ...prev, [postId]: "" }));
+  async function toggleHidden(post: AdminPost, note: string) {
+    setPending(null);
     try {
-      const updated = await authFetch((token) => api.admin.updatePost(token, postId, { is_hidden }));
-      setPosts((prev) => prev?.map((p) => (p.id === postId ? updated : p)) ?? null);
+      const updated = await authFetch((token) => api.admin.updatePost(token, post.id, { is_hidden: !post.is_hidden, note }));
+      setPosts((prev) => prev?.map((p) => (p.id === post.id ? updated : p)) ?? null);
     } catch (err) {
-      setRowError((prev) => ({ ...prev, [postId]: errorMessage(err) }));
+      setError(errorMessage(err));
     }
   }
 
+  const statusKey = (p: AdminPost) => (p.status === "pending_review" ? "review" : p.status);
+
   return (
-    <div>
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="font-serif text-2xl text-foreground">Moderazione post</h1>
-        <SearchInput value={q} onChange={setQ} placeholder="Cerca per titolo, slug, blog o autore…" />
+    <div className="mx-auto flex max-w-6xl flex-col gap-5">
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div className="flex flex-col gap-1">
+          <h1 className="font-serif text-[28px] font-medium leading-tight text-foreground">{t("title")}</h1>
+          <p className="text-sm text-muted">{t("subtitle")}</p>
+        </div>
+        <SearchInput value={q} onChange={setQ} placeholder={t("search")} />
       </div>
       {error && <Alert kind="error">{error}</Alert>}
-
-      <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-border text-muted">
-            <tr>
-              <th className="px-4 py-3">Titolo</th>
-              <th className="px-4 py-3">Blog</th>
-              <th className="px-4 py-3">Autore</th>
-              <th className="px-4 py-3">Stato</th>
-              <th className="px-4 py-3">Moderazione</th>
-            </tr>
-          </thead>
-          <tbody>
-            {posts?.map((p) => (
-              <tr key={p.id} className="border-b border-border last:border-0">
-                <td className="px-4 py-3 text-foreground">{p.title}</td>
-                <td className="px-4 py-3 text-muted">{p.blog_slug}</td>
-                <td className="px-4 py-3 text-muted">{p.author_username}</td>
-                <td className="px-4 py-3 text-muted">{ADMIN_POST_STATUS_LABELS[p.status]}</td>
-                <td className="px-4 py-3">
-                  <Button
-                    variant={p.is_hidden ? "primary" : "danger"}
-                    onClick={() => handleToggleHidden(p.id, !p.is_hidden)}
-                  >
-                    {p.is_hidden ? "Mostra" : "Nascondi"}
-                  </Button>
-                  {rowError[p.id] && <p className="mt-1 text-xs text-red-700">{rowError[p.id]}</p>}
-                </td>
-              </tr>
-            ))}
-            {posts !== null && posts.length === 0 && (
+      {posts === null && !error && <SkeletonRows rows={6} />}
+      {posts !== null && posts.length === 0 && <EmptyState glyph="✎" title={t("emptyTitle")} body={t("emptyBody")} />}
+      {posts && posts.length > 0 && (
+        <div className="overflow-x-auto rounded-xl border border-border bg-surface">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-border font-mono text-[11px] uppercase tracking-[.06em] text-muted">
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-muted">
-                  Nessun post trovato.
-                </td>
+                <th className="px-4 py-3">{t("col.post")}</th>
+                <th className="px-4 py-3">{t("col.blog")}</th>
+                <th className="px-4 py-3">{t("col.status")}</th>
+                <th className="px-4 py-3">{t("col.reports")}</th>
+                <th className="px-4 py-3">{t("col.moderation")}</th>
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {posts.map((p) => (
+                <tr key={p.id} className="border-b border-border last:border-0">
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col">
+                      <Link href={`/${p.blog_slug}/${p.slug}`} className="font-medium text-foreground no-underline hover:underline">
+                        {p.title}
+                      </Link>
+                      <span className="text-xs text-muted">
+                        @{p.author_username} · {formatDate(p.published_at ?? p.created_at, locale, { day: "numeric", month: "short", year: "numeric" })}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 font-mono text-xs text-muted">{p.blog_slug}</td>
+                  <td className="px-4 py-3">
+                    <span className="flex flex-wrap gap-1">
+                      <Pill tone={p.status === "published" ? "ok" : p.status === "pending_review" ? "warn" : "neutral"}>{ts(statusKey(p))}</Pill>
+                      {p.is_hidden && <Pill tone="danger">{ts("hidden")}</Pill>}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">{p.reports_open > 0 ? <Pill tone="warn">{p.reports_open}</Pill> : <span className="text-muted">0</span>}</td>
+                  <td className="px-4 py-3">
+                    <Button size="sm" variant={p.is_hidden ? "secondary" : "danger"} onClick={() => setPending(p)}>
+                      {p.is_hidden ? t("show") : t("hide")}
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <NoteDialog
+        open={pending !== null}
+        title={pending ? (pending.is_hidden ? t("showTitle", { title: pending.title }) : t("hideTitle", { title: pending.title })) : ""}
+        confirmLabel={pending?.is_hidden ? t("show") : t("hide")}
+        danger={!pending?.is_hidden}
+        onCancel={() => setPending(null)}
+        onConfirm={(note) => pending && toggleHidden(pending, note)}
+      />
     </div>
   );
 }

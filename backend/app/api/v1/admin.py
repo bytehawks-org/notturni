@@ -5,6 +5,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, field_validator, model_validator
+from sqlalchemy import update as sa_update
 import httpx
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +21,7 @@ from app.domain.display_names import resolve_personal_display_name
 from app.models.audit_log import AuditActorType, AuditLog
 from app.models.blog import Blog, BlogVisibility
 from app.models.comment import Comment, CommentStatus
+from app.models.content_report import ContentReport, ReportStatus, ReportTargetType
 from app.models.post import Post, PostStatus
 from app.models.user import PlatformRole, User
 from app.models.user_session import UserSession
@@ -71,9 +73,21 @@ async def _admin_users_out(session: AsyncSession, users: list[User]) -> list[Adm
     ]
 
 
+def _require_note(note: str | None) -> str:
+    """todo/UX_REDESIGN.md B5 (mockup 5e): ogni azione admin che cambia lo
+    stato di un utente/blog/post richiede una nota, che finisce nel registro
+    di audit (`payload.note`)."""
+    cleaned = (note or "").strip()
+    if len(cleaned) < 3:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Serve una nota per il registro (almeno 3 caratteri).")
+    return cleaned[:1000]
+
+
 class AdminUserUpdateRequest(BaseModel):
     platform_role: PlatformRole | None = None
     is_active: bool | None = None
+    # obbligatoria se cambia il ruolo o l'attivazione (B5)
+    note: str | None = None
 
 
 @router.get("/users", response_model=list[AdminUserOut])
@@ -101,6 +115,10 @@ async def update_user(
     target = await session.get(User, user_id)
     if target is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Utente non trovato.")
+    changes = (payload.platform_role is not None and payload.platform_role != target.platform_role) or (
+        payload.is_active is not None and payload.is_active != target.is_active
+    )
+    note = _require_note(payload.note) if changes else None
 
     if payload.platform_role is not None:
         touches_privileged_tier = (
@@ -119,7 +137,7 @@ async def update_user(
                 target_type="user",
                 target_id=target.id,
                 request=request,
-                payload={"from": target.platform_role.value, "to": payload.platform_role.value},
+                payload={"from": target.platform_role.value, "to": payload.platform_role.value, "note": note},
             )
         target.platform_role = payload.platform_role
 
@@ -134,6 +152,7 @@ async def update_user(
                 target_type="user",
                 target_id=target.id,
                 request=request,
+                payload={"note": note},
             )
         target.is_active = payload.is_active
 
@@ -157,6 +176,7 @@ class AdminOverviewOut(BaseModel):
     queue_pending_comments: int
     queue_posts_in_review: int
     queue_hidden_posts: int
+    queue_open_reports: int
     audit_today: int
     services: list[ServiceStatus]
     deployment_mode: str
@@ -233,6 +253,9 @@ async def admin_overview(
             select(func.count()).select_from(Post).where(Post.status == PostStatus.PENDING_REVIEW)
         ),
         queue_hidden_posts=await count(select(func.count()).select_from(Post).where(Post.is_hidden.is_(True))),
+        queue_open_reports=await count(
+            select(func.count()).select_from(ContentReport).where(ContentReport.status == ReportStatus.OPEN)
+        ),
         audit_today=await count(select(func.count()).select_from(AuditLog).where(AuditLog.occurred_at >= today)),
         services=await _check_services(session),
         deployment_mode=settings.deployment_mode,
@@ -246,12 +269,16 @@ class AdminBlogOut(BaseModel):
     owner_username: str
     visibility: BlogVisibility
     is_suspended: bool
+    is_paused: bool = False
+    deleted_at: datetime | None = None
     created_at: datetime
+    posts_count: int = 0
+    reports_open: int = 0
 
     model_config = {"from_attributes": True}
 
 
-def _to_admin_blog_out(blog: Blog) -> AdminBlogOut:
+def _to_admin_blog_out(blog: Blog, *, posts_count: int = 0, reports_open: int = 0) -> AdminBlogOut:
     return AdminBlogOut(
         id=blog.id,
         slug=blog.slug,
@@ -259,28 +286,72 @@ def _to_admin_blog_out(blog: Blog) -> AdminBlogOut:
         owner_username=blog.owner.username,
         visibility=blog.visibility,
         is_suspended=blog.is_suspended,
+        is_paused=blog.is_paused,
+        deleted_at=blog.deleted_at,
         created_at=blog.created_at,
+        posts_count=posts_count,
+        reports_open=reports_open,
     )
+
+
+async def _blog_counters(session: AsyncSession, blog_ids: list[uuid.UUID]) -> tuple[dict, dict]:
+    if not blog_ids:
+        return {}, {}
+    posts = dict((await session.execute(select(Post.blog_id, func.count()).where(Post.blog_id.in_(blog_ids)).group_by(Post.blog_id))).all())
+    reports = dict(
+        (
+            await session.execute(
+                select(ContentReport.blog_id, func.count())
+                .where(ContentReport.blog_id.in_(blog_ids), ContentReport.status == ReportStatus.OPEN)
+                .group_by(ContentReport.blog_id)
+            )
+        ).all()
+    )
+    return posts, reports
 
 
 class AdminBlogUpdateRequest(BaseModel):
     is_suspended: bool
+    # obbligatoria (B5): finisce nel registro di audit
+    note: str | None = None
 
 
 @router.get("/blogs", response_model=list[AdminBlogOut])
 async def list_blogs(
     q: str | None = None,
+    visibility: BlogVisibility | None = None,
+    state: Literal["active", "suspended", "paused", "deleted", "reported"] | None = None,
     current_user: User = Depends(require_platform_admin),
     session: AsyncSession = Depends(get_session),
 ) -> list[AdminBlogOut]:
+    """Tutti i blog con contatori (post, segnalazioni aperte). Filtri: `q`
+    (slug/titolo/proprietario), `visibility`, `state` (`active`, `suspended`,
+    `paused`, `deleted`, `reported` = con segnalazioni aperte)."""
     stmt = select(Blog).options(selectinload(Blog.owner)).order_by(Blog.created_at)
     if q:
         needle = f"%{q}%"
         stmt = stmt.join(User, Blog.owner_id == User.id).where(
             or_(Blog.slug.ilike(needle), Blog.title.ilike(needle), User.username.ilike(needle))
         )
-    result = await session.execute(stmt)
-    return [_to_admin_blog_out(blog) for blog in result.scalars().all()]
+    if visibility is not None:
+        stmt = stmt.where(Blog.visibility == visibility)
+    if state == "suspended":
+        stmt = stmt.where(Blog.is_suspended.is_(True))
+    elif state == "paused":
+        stmt = stmt.where(Blog.is_paused.is_(True))
+    elif state == "deleted":
+        stmt = stmt.where(Blog.deleted_at.is_not(None))
+    elif state == "active":
+        stmt = stmt.where(Blog.is_suspended.is_(False), Blog.is_paused.is_(False), Blog.deleted_at.is_(None))
+    elif state == "reported":
+        stmt = stmt.where(
+            Blog.id.in_(select(ContentReport.blog_id).where(ContentReport.status == ReportStatus.OPEN))
+        )
+    blogs = list((await session.execute(stmt)).scalars().all())
+    posts, reports = await _blog_counters(session, [b.id for b in blogs])
+    if state == "reported":
+        blogs.sort(key=lambda b: -int(reports.get(b.id, 0)))
+    return [_to_admin_blog_out(b, posts_count=int(posts.get(b.id, 0)), reports_open=int(reports.get(b.id, 0))) for b in blogs]
 
 
 @router.patch("/blogs/{blog_id}", response_model=AdminBlogOut)
@@ -298,7 +369,9 @@ async def update_blog(
     if blog is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Blog non trovato.")
 
-    if payload.is_suspended != blog.is_suspended:
+    was_changed = payload.is_suspended != blog.is_suspended
+    if was_changed:
+        note = _require_note(payload.note)
         await audit.record(
             session,
             action="blog.suspended" if payload.is_suspended else "blog.unsuspended",
@@ -307,9 +380,8 @@ async def update_blog(
             target_id=blog.id,
             blog_id=blog.id,
             request=request,
-            payload={"slug": blog.slug, "blog_alias": blog.default_author_display_name},
+            payload={"slug": blog.slug, "blog_alias": blog.default_author_display_name, "note": note},
         )
-    was_changed = payload.is_suspended != blog.is_suspended
     blog.is_suspended = payload.is_suspended
     await session.commit()
     await session.refresh(blog, attribute_names=["owner"])
@@ -317,7 +389,150 @@ async def update_blog(
         # la sospensione blocca lettura/scrittura pubbliche del blog: tutte le
         # sue pagine e la homepage vanno rigenerate.
         await revalidate_frontend([blog_tag(blog.slug), feed_tag()])
-    return _to_admin_blog_out(blog)
+    posts, reports = await _blog_counters(session, [blog.id])
+    return _to_admin_blog_out(blog, posts_count=int(posts.get(blog.id, 0)), reports_open=int(reports.get(blog.id, 0)))
+
+
+class ReportDetailOut(BaseModel):
+    id: uuid.UUID
+    target_type: ReportTargetType
+    target_id: uuid.UUID
+    post_slug: str | None
+    post_title: str | None
+    reason: str
+    note: str | None
+    reporter_username: str
+    created_at: datetime
+
+
+class BlogReportsOut(BaseModel):
+    blog: AdminBlogOut
+    owner_mfa_enabled: bool
+    owner_email_domain: str
+    reports: list[ReportDetailOut]
+
+
+@router.get("/blogs/{blog_id}/reports", response_model=BlogReportsOut)
+async def blog_reports(
+    blog_id: uuid.UUID,
+    current_user: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_session),
+) -> BlogReportsOut:
+    """Pannello segnalazioni di un blog (mockup 5e): segnalazioni aperte sul
+    blog e sui suoi post, con motivo, nota e chi ha segnalato."""
+    blog = (await session.execute(select(Blog).options(selectinload(Blog.owner)).where(Blog.id == blog_id))).scalar_one_or_none()
+    if blog is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Blog non trovato.")
+    rows = (
+        await session.execute(
+            select(ContentReport, User.username, Post.slug, Post.title)
+            .join(User, User.id == ContentReport.reporter_id)
+            .outerjoin(Post, (ContentReport.target_type == ReportTargetType.POST) & (Post.id == ContentReport.target_id))
+            .where(ContentReport.blog_id == blog.id, ContentReport.status == ReportStatus.OPEN)
+            .order_by(ContentReport.created_at.desc())
+        )
+    ).all()
+    posts, reports = await _blog_counters(session, [blog.id])
+    return BlogReportsOut(
+        blog=_to_admin_blog_out(blog, posts_count=int(posts.get(blog.id, 0)), reports_open=int(reports.get(blog.id, 0))),
+        owner_mfa_enabled=blog.owner.mfa_enabled,
+        owner_email_domain=blog.owner.email.rsplit("@", 1)[-1],
+        reports=[
+            ReportDetailOut(
+                id=r.id,
+                target_type=r.target_type,
+                target_id=r.target_id,
+                post_slug=post_slug,
+                post_title=post_title,
+                reason=r.reason.value,
+                note=r.note,
+                reporter_username=username,
+                created_at=r.created_at,
+            )
+            for r, username, post_slug, post_title in rows
+        ],
+    )
+
+
+class BlogActionRequest(BaseModel):
+    action: Literal["suspend", "restore", "hide_reported_posts", "deactivate_owner", "dismiss"]
+    note: str
+
+
+@router.post("/blogs/{blog_id}/action", response_model=AdminBlogOut)
+async def blog_action(
+    blog_id: uuid.UUID,
+    payload: BlogActionRequest,
+    request: Request,
+    current_user: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_session),
+) -> AdminBlogOut:
+    """Azione dal pannello segnalazioni (mockup 5e) con nota obbligatoria:
+    `suspend`/`restore` il blog, `hide_reported_posts` (solo i post con
+    segnalazioni aperte), `deactivate_owner` (l'account del proprietario,
+    solo super admin se il proprietario è admin), `dismiss` (archivia). In
+    tutti i casi le segnalazioni aperte del blog vengono chiuse
+    (`actioned`/`dismissed`) e l'azione finisce nel registro con la nota."""
+    note = _require_note(payload.note)
+    blog = (await session.execute(select(Blog).options(selectinload(Blog.owner)).where(Blog.id == blog_id))).scalar_one_or_none()
+    if blog is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Blog non trovato.")
+    tags = [blog_tag(blog.slug), feed_tag()]
+    audit_payload: dict = {"slug": blog.slug, "note": note, "action": payload.action}
+
+    if payload.action == "suspend":
+        blog.is_suspended = True
+        action = "blog.suspended"
+    elif payload.action == "restore":
+        blog.is_suspended = False
+        action = "blog.unsuspended"
+    elif payload.action == "hide_reported_posts":
+        reported_post_ids = select(ContentReport.target_id).where(
+            ContentReport.blog_id == blog.id,
+            ContentReport.target_type == ReportTargetType.POST,
+            ContentReport.status == ReportStatus.OPEN,
+        )
+        posts = (await session.execute(select(Post).where(Post.id.in_(reported_post_ids)))).scalars().all()
+        for post in posts:
+            post.is_hidden = True
+            tags.append(post_tag(blog.slug, post.slug))
+        audit_payload["hidden_posts"] = [p.slug for p in posts]
+        action = "blog.reported_posts_hidden"
+    elif payload.action == "deactivate_owner":
+        owner = blog.owner
+        if owner.platform_role in PRIVILEGED_ROLES and current_user.platform_role != PlatformRole.SUPER_ADMIN:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo un Super Admin può disattivare un amministratore.")
+        if owner.id == current_user.id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Non puoi disattivare il tuo stesso account.")
+        owner.is_active = False
+        blog.is_suspended = True
+        audit_payload["owner"] = owner.username
+        action = "user.deactivated"
+    else:
+        action = "blog.reports_dismissed"
+
+    new_status = ReportStatus.DISMISSED if payload.action == "dismiss" else ReportStatus.ACTIONED
+    await session.execute(
+        sa_update(ContentReport)
+        .where(ContentReport.blog_id == blog.id, ContentReport.status == ReportStatus.OPEN)
+        .values(status=new_status, resolved_at=datetime.now(timezone.utc), resolved_by_id=current_user.id)
+    )
+    await audit.record(
+        session,
+        action=action,
+        actor=current_user,
+        target_type="blog",
+        target_id=blog.id,
+        blog_id=blog.id,
+        request=request,
+        payload=audit_payload,
+    )
+    await session.commit()
+    await session.refresh(blog, attribute_names=["owner"])
+    if payload.action != "dismiss":
+        await revalidate_frontend(tags)
+    posts_c, reports_c = await _blog_counters(session, [blog.id])
+    return _to_admin_blog_out(blog, posts_count=int(posts_c.get(blog.id, 0)), reports_open=int(reports_c.get(blog.id, 0)))
 
 
 class AdminPostOut(BaseModel):
@@ -331,11 +546,12 @@ class AdminPostOut(BaseModel):
     is_hidden: bool
     published_at: datetime | None
     created_at: datetime
+    reports_open: int = 0
 
     model_config = {"from_attributes": True}
 
 
-def _to_admin_post_out(post: Post, blog: Blog, author: User) -> AdminPostOut:
+def _to_admin_post_out(post: Post, blog: Blog, author: User, reports_open: int = 0) -> AdminPostOut:
     return AdminPostOut(
         id=post.id,
         title=post.title,
@@ -347,11 +563,14 @@ def _to_admin_post_out(post: Post, blog: Blog, author: User) -> AdminPostOut:
         is_hidden=post.is_hidden,
         published_at=post.published_at,
         created_at=post.created_at,
+        reports_open=reports_open,
     )
 
 
 class AdminPostUpdateRequest(BaseModel):
     is_hidden: bool
+    # obbligatoria (B5): finisce nel registro di audit
+    note: str | None = None
 
 
 @router.get("/posts", response_model=list[AdminPostOut])
@@ -376,8 +595,23 @@ async def list_posts(
                 User.username.ilike(needle),
             )
         )
-    result = await session.execute(stmt)
-    return [_to_admin_post_out(post, blog, author) for post, blog, author in result.all()]
+    rows = (await session.execute(stmt)).all()
+    reports: dict = {}
+    if rows:
+        reports = dict(
+            (
+                await session.execute(
+                    select(ContentReport.target_id, func.count())
+                    .where(
+                        ContentReport.target_type == ReportTargetType.POST,
+                        ContentReport.status == ReportStatus.OPEN,
+                        ContentReport.target_id.in_([p.id for p, _b, _a in rows]),
+                    )
+                    .group_by(ContentReport.target_id)
+                )
+            ).all()
+        )
+    return [_to_admin_post_out(post, blog, author, int(reports.get(post.id, 0))) for post, blog, author in rows]
 
 
 @router.patch("/posts/{post_id}", response_model=AdminPostOut)
@@ -399,7 +633,9 @@ async def update_post(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Post non trovato.")
     post, blog, author = row
 
-    if payload.is_hidden != post.is_hidden:
+    was_changed = payload.is_hidden != post.is_hidden
+    if was_changed:
+        note = _require_note(payload.note)
         await audit.record(
             session,
             action="post.hidden" if payload.is_hidden else "post.unhidden",
@@ -408,9 +644,8 @@ async def update_post(
             target_id=post.id,
             blog_id=post.blog_id,
             request=request,
-            payload={"slug": post.slug, "blog_slug": blog.slug, "blog_alias": blog.default_author_display_name},
+            payload={"slug": post.slug, "blog_slug": blog.slug, "blog_alias": blog.default_author_display_name, "note": note},
         )
-    was_changed = payload.is_hidden != post.is_hidden
     post.is_hidden = payload.is_hidden
     await session.commit()
     await session.refresh(post)

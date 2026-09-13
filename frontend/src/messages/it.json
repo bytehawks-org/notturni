@@ -415,14 +415,15 @@
     "automatic": "automatica",
     "action": "Azione",
     "auditNote": "Nota per il registro",
-    "required": "Obbligatoria",
+    "required": "obbligatoria",
     "openBlog": "Apri il blog ↗",
     "col": {
       "blog": "Blog",
       "owner": "Proprietario",
       "visibility": "Visibilità",
       "posts": "Post",
-      "reports": "Segnalazioni"
+      "reports": "Segnalazioni",
+      "state": "Stato"
     },
     "vis": {
       "public": "Pubblico",
@@ -435,11 +436,41 @@
     "manage": "Gestisci",
     "act": {
       "suspend": "Sospendi il blog",
-      "suspendSub": "proprietario avvisato, può fare ricorso",
+      "suspendSub": "Irraggiungibile e non scrivibile, proprietario incluso; le segnalazioni vengono chiuse.",
       "hide_posts": "Nascondi solo i post segnalati",
       "deactivate_owner": "Disattiva l'account del proprietario",
-      "dismiss": "Archivia le segnalazioni"
-    }
+      "dismiss": "Archivia le segnalazioni",
+      "restore": "Ripristina il blog",
+      "restoreSub": "Revoca la sospensione.",
+      "hide_reported_posts": "Nascondi solo i post segnalati",
+      "hide_reported_postsSub": "Il blog resta attivo; i post con segnalazioni aperte vengono nascosti.",
+      "deactivate_ownerSub": "Blocca il login e sospende il blog.",
+      "dismissSub": "Nessuna azione sul blog, le segnalazioni vengono chiuse."
+    },
+    "title": "Tutti i blog",
+    "summary": "{count, plural, one {# blog} other {# blog}} · {reported} con segnalazioni aperte",
+    "search": "Slug, titolo o proprietario…",
+    "state": {
+      "all": "Tutti",
+      "reported": "Segnalati",
+      "active": "Attivi",
+      "suspended": "Sospesi",
+      "paused": "In pausa",
+      "deleted": "In cancellazione"
+    },
+    "emptyTitle": "Nessun blog",
+    "emptyBody": "Nessun blog corrisponde ai filtri.",
+    "created": "creato il {date}",
+    "mfaOn": "MFA attiva",
+    "mfaOff": "MFA off",
+    "noReports": "Nessuna segnalazione aperta: puoi comunque sospendere o ripristinare il blog.",
+    "reason": {
+      "spam": "Spam",
+      "abuse": "Abuso",
+      "illegal": "Illecito",
+      "other": "Altro"
+    },
+    "actionDone": "Azione registrata"
   },
   "Gdpr": {
     "col": {
@@ -857,7 +888,8 @@
       "comments": "Commenti in attesa",
       "review": "Post in revisione",
       "hidden": "Post nascosti",
-      "suspended": "Blog sospesi"
+      "suspended": "Blog sospesi",
+      "reports": "Segnalazioni aperte"
     },
     "usersDesc": "Ruoli, attivazione e MFA degli account.",
     "blogsDesc": "Elenco di piattaforma, sospensione.",
@@ -910,7 +942,8 @@
     "deactivate": "Disattiva",
     "activate": "Riattiva",
     "never": "Mai",
-    "exportCsv": "Esporta CSV"
+    "exportCsv": "Esporta CSV",
+    "noteTitle": "Modifica di @{username}"
   },
   "Tokens": {
     "title": "Token API",
@@ -963,5 +996,45 @@
     "reportNote": "Nota del blog",
     "approve": "Approva",
     "hide": "Nascondi"
+  },
+  "NoteDialog": {
+    "label": "Nota per il registro",
+    "required": "obbligatoria",
+    "placeholder": "Motivo dell'azione, come apparirà nel registro di audit"
+  },
+  "Report": {
+    "report": "Segnala",
+    "titleBlog": "Segnala questo blog",
+    "titlePost": "Segnala questo post",
+    "intro": "La segnalazione arriva ai moderatori della piattaforma. Una sola per contenuto.",
+    "reason": {
+      "spam": "Spam o pubblicità",
+      "abuse": "Abuso o molestie",
+      "illegal": "Contenuto illecito",
+      "other": "Altro"
+    },
+    "notePlaceholder": "Dettagli (facoltativi)",
+    "cancel": "Annulla",
+    "send": "Invia segnalazione",
+    "sent": "Segnalazione inviata ai moderatori",
+    "failed": "Impossibile inviare la segnalazione"
+  },
+  "AdminPosts": {
+    "title": "Moderazione post",
+    "subtitle": "Tutti i post della piattaforma con le segnalazioni aperte; nascondere o mostrare richiede una nota per il registro.",
+    "search": "Titolo, slug, blog o autore…",
+    "emptyTitle": "Nessun post",
+    "emptyBody": "Nessun post corrisponde alla ricerca.",
+    "col": {
+      "post": "Post",
+      "blog": "Blog",
+      "status": "Stato",
+      "reports": "Segnalazioni",
+      "moderation": "Moderazione"
+    },
+    "show": "Mostra",
+    "hide": "Nascondi",
+    "hideTitle": "Nascondere “{title}”?",
+    "showTitle": "Mostrare di nuovo “{title}”?"
   }
 }

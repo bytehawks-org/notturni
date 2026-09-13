@@ -415,14 +415,15 @@
     "automatic": "automatic",
     "action": "Action",
     "auditNote": "Note for the audit register",
-    "required": "Required",
+    "required": "required",
     "openBlog": "Open blog ↗",
     "col": {
       "blog": "Blog",
       "owner": "Owner",
       "visibility": "Visibility",
       "posts": "Posts",
-      "reports": "Reports"
+      "reports": "Reports",
+      "state": "State"
     },
     "vis": {
       "public": "Public",
@@ -435,11 +436,41 @@
     "manage": "Manage",
     "act": {
       "suspend": "Suspend blog",
-      "suspendSub": "owner notified, can appeal",
+      "suspendSub": "Unreachable and read-only, owner included; reports get closed.",
       "hide_posts": "Hide reported posts only",
       "deactivate_owner": "Deactivate owner account",
-      "dismiss": "Dismiss reports"
-    }
+      "dismiss": "Dismiss reports",
+      "restore": "Restore blog",
+      "restoreSub": "Lift the suspension.",
+      "hide_reported_posts": "Hide reported posts only",
+      "hide_reported_postsSub": "The blog stays up; posts with open reports get hidden.",
+      "deactivate_ownerSub": "Blocks login and suspends the blog.",
+      "dismissSub": "No action on the blog, reports get closed."
+    },
+    "title": "All blogs",
+    "summary": "{count, plural, one {# blog} other {# blogs}} · {reported} with open reports",
+    "search": "Slug, title or owner…",
+    "state": {
+      "all": "All",
+      "reported": "Reported",
+      "active": "Active",
+      "suspended": "Suspended",
+      "paused": "Paused",
+      "deleted": "Pending deletion"
+    },
+    "emptyTitle": "No blogs",
+    "emptyBody": "No blog matches the filters.",
+    "created": "created {date}",
+    "mfaOn": "MFA on",
+    "mfaOff": "MFA off",
+    "noReports": "No open reports: you can still suspend or restore the blog.",
+    "reason": {
+      "spam": "Spam",
+      "abuse": "Abuse",
+      "illegal": "Illegal",
+      "other": "Other"
+    },
+    "actionDone": "Action recorded"
   },
   "Gdpr": {
     "col": {
@@ -857,7 +888,8 @@
       "comments": "Pending comments",
       "review": "Posts in review",
       "hidden": "Hidden posts",
-      "suspended": "Suspended blogs"
+      "suspended": "Suspended blogs",
+      "reports": "Open reports"
     },
     "usersDesc": "Roles, activation and MFA of accounts.",
     "blogsDesc": "Platform list, suspension.",
@@ -910,7 +942,8 @@
     "deactivate": "Deactivate",
     "activate": "Reactivate",
     "never": "Never",
-    "exportCsv": "Export CSV"
+    "exportCsv": "Export CSV",
+    "noteTitle": "Change for @{username}"
   },
   "Tokens": {
     "title": "API tokens",
@@ -963,5 +996,45 @@
     "reportNote": "Blog's note",
     "approve": "Approve",
     "hide": "Hide"
+  },
+  "NoteDialog": {
+    "label": "Note for the register",
+    "required": "required",
+    "placeholder": "Reason for the action, as it will appear in the audit register"
+  },
+  "Report": {
+    "report": "Report",
+    "titleBlog": "Report this blog",
+    "titlePost": "Report this post",
+    "intro": "The report goes to the platform moderators. One per content.",
+    "reason": {
+      "spam": "Spam or advertising",
+      "abuse": "Abuse or harassment",
+      "illegal": "Illegal content",
+      "other": "Other"
+    },
+    "notePlaceholder": "Details (optional)",
+    "cancel": "Cancel",
+    "send": "Send report",
+    "sent": "Report sent to the moderators",
+    "failed": "Couldn't send the report"
+  },
+  "AdminPosts": {
+    "title": "Post moderation",
+    "subtitle": "All posts on the platform with their open reports; hiding or showing requires a note for the register.",
+    "search": "Title, slug, blog or author…",
+    "emptyTitle": "No posts",
+    "emptyBody": "No post matches the search.",
+    "col": {
+      "post": "Post",
+      "blog": "Blog",
+      "status": "Status",
+      "reports": "Reports",
+      "moderation": "Moderation"
+    },
+    "show": "Show",
+    "hide": "Hide",
+    "hideTitle": "Hide “{title}”?",
+    "showTitle": "Show “{title}” again?"
   }
 }
