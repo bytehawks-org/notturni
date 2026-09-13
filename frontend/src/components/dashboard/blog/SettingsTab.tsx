@@ -1,34 +1,39 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { Card, CardTitle } from "@/components/ui/Card";
-import { FieldGroup, Input, Label } from "@/components/ui/Field";
+import { Card, CardTitle, SectionLabel } from "@/components/ui/Card";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Toggle } from "@/components/ui/Controls";
+import { FieldGroup, Input, Label, TextArea } from "@/components/ui/Field";
+import { useToast } from "@/components/ui/Toast";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import {
-  BLOG_VISIBILITY_LABELS,
-  COMMENTS_MODE_LABELS,
-  type Blog,
-  type BlogVisibility,
-  type Category,
-  type CommentsMode,
-} from "@/lib/types";
+import { formatDate } from "@/lib/format";
+import { languageName } from "@/lib/languages";
+import { SITE_HOST } from "@/lib/site";
+import type { Blog, BlogMember, BlogVisibility, Category, CommentsMode } from "@/lib/types";
 
 import { errorMessage } from "./shared";
 
-export function SettingsTab({
-  blog,
-  canEdit,
-  onUpdated,
-}: {
-  blog: Blog;
-  canEdit: boolean;
-  onUpdated: (blog: Blog) => void;
-}) {
-  const { authFetch } = useAuth();
+const SECTIONS = ["identity", "visibility", "languages", "features", "domain", "danger"] as const;
+const VISIBILITIES: BlogVisibility[] = ["public", "members", "private"];
+const COMMENT_MODES: CommentsMode[] = ["members", "everyone", "closed"];
+
+/** Tab Impostazioni (mockup 5c): identità, visibilità, lingue, funzionalità,
+ * dominio (disattivato finché non arriva il routing per sottodominio) e
+ * zona pericolosa — trasferimento a un coautore, pausa, export ZIP,
+ * cancellazione con 30 giorni di tolleranza e ripristino. */
+export function SettingsTab({ blog, canEdit, onUpdated }: { blog: Blog; canEdit: boolean; onUpdated: (blog: Blog) => void }) {
+  const { user, authFetch } = useAuth();
+  const t = useTranslations("Settings");
+  const tc = useTranslations("Common");
+  const locale = useLocale();
+  const notify = useToast();
+
   const [title, setTitle] = useState(blog.title);
   const [subtitle, setSubtitle] = useState(blog.subtitle ?? "");
   const [description, setDescription] = useState(blog.description ?? "");
@@ -39,9 +44,46 @@ export function SettingsTab({
   const [searchIndexingEnabled, setSearchIndexingEnabled] = useState(blog.search_indexing_enabled);
   const [aiCrawlingEnabled, setAiCrawlingEnabled] = useState(blog.ai_crawling_enabled);
   const [defaultAuthorName, setDefaultAuthorName] = useState(blog.default_author_display_name ?? "");
+  const [extraLocales, setExtraLocales] = useState<string[]>(blog.extra_locales ?? []);
+  const [profileLanguages, setProfileLanguages] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+
+  const [members, setMembers] = useState<BlogMember[]>([]);
+  const [transferTo, setTransferTo] = useState("");
+  const [showTransfer, setShowTransfer] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    api.users
+      .profile(user.username)
+      .then((p) => setProfileLanguages([p.native_language, ...p.fallback_languages].filter((l): l is string => !!l)))
+      .catch(() => undefined);
+    if (canEdit) {
+      authFetch((token) => api.blogs.members(token, blog.slug))
+        .then(setMembers)
+        .catch(() => undefined);
+    }
+  }, [user, canEdit, authFetch, blog.slug]);
+
+  const run = useCallback(
+    async (key: string, fn: () => Promise<Blog | void>, done?: string) => {
+      setBusy(key);
+      setError(null);
+      try {
+        const updated = await fn();
+        if (updated) onUpdated(updated);
+        if (done) notify(done);
+      } catch (err) {
+        setError(errorMessage(err));
+      } finally {
+        setBusy(null);
+      }
+    },
+    [notify, onUpdated]
+  );
 
   async function handleSave() {
     setSaving(true);
@@ -59,10 +101,11 @@ export function SettingsTab({
           search_indexing_enabled: searchIndexingEnabled,
           ai_crawling_enabled: aiCrawlingEnabled,
           default_author_display_name: defaultAuthorName,
+          extra_locales: extraLocales,
         })
       );
       onUpdated(updated);
-      setSaved(true);
+      notify(t("savedToast"));
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -70,170 +113,287 @@ export function SettingsTab({
     }
   }
 
-  return (
-    <>
-      <Card>
-        <FieldGroup>
-          <Label htmlFor="blog-title">Titolo</Label>
-          <Input id="blog-title" value={title} onChange={(e) => setTitle(e.target.value)} disabled={!canEdit} />
-        </FieldGroup>
-        <FieldGroup>
-          <Label htmlFor="blog-subtitle">Sottotitolo (max 64)</Label>
-          <Input
-            id="blog-subtitle"
-            maxLength={64}
-            value={subtitle}
-            onChange={(e) => setSubtitle(e.target.value)}
-            disabled={!canEdit}
-          />
-        </FieldGroup>
-        <FieldGroup>
-          <Label htmlFor="blog-description">Descrizione breve (max 256)</Label>
-          <textarea
-            id="blog-description"
-            maxLength={256}
-            rows={3}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            disabled={!canEdit}
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground disabled:opacity-60"
-          />
-          <p className="mt-1 text-xs text-muted">{description.length}/256</p>
-        </FieldGroup>
-        <FieldGroup>
-          <Label htmlFor="blog-visibility">Visibilità</Label>
-          <select
-            id="blog-visibility"
-            value={visibility}
-            onChange={(e) => setVisibility(e.target.value as BlogVisibility)}
-            disabled={!canEdit}
-            className="w-full max-w-xs rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground disabled:opacity-60"
-          >
-            {(Object.keys(BLOG_VISIBILITY_LABELS) as BlogVisibility[]).map((v) => (
-              <option key={v} value={v}>
-                {BLOG_VISIBILITY_LABELS[v]}
-              </option>
-            ))}
-          </select>
-          <p className="mt-1 text-xs text-muted">
-            <strong>Pubblico</strong>: visibile a tutti e nel feed della homepage.{" "}
-            <strong>Solo iscritti</strong>: leggibile solo da chi ha un account.{" "}
-            <strong>Privato</strong>: diario visibile e scrivibile solo da te.
-          </p>
-        </FieldGroup>
-        <FieldGroup>
-          <Label htmlFor="blog-pen-name">Nome pubblico predefinito per gli autori</Label>
-          <Input
-            id="blog-pen-name"
-            placeholder="es. La redazione — lasciare vuoto per usare lo username"
-            value={defaultAuthorName}
-            onChange={(e) => setDefaultAuthorName(e.target.value)}
-            disabled={!canEdit}
-          />
-          <p className="mt-1 text-xs text-muted">
-            Nome pubblico degli autori sui post di questo blog. Se impostato, vale sempre e non
-            è sovrascrivibile dal singolo autore (todo/USERS.md #2).
-          </p>
-        </FieldGroup>
-        <FieldGroup>
-          <Label htmlFor="blog-comments-mode">Commenti</Label>
-          <select
-            id="blog-comments-mode"
-            value={commentsMode}
-            onChange={(e) => setCommentsMode(e.target.value as CommentsMode)}
-            disabled={!canEdit}
-            className="w-full max-w-xs rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground disabled:opacity-60"
-          >
-            {(Object.keys(COMMENTS_MODE_LABELS) as CommentsMode[]).map((m) => (
-              <option key={m} value={m}>
-                {COMMENTS_MODE_LABELS[m]}
-              </option>
-            ))}
-          </select>
-          <p className="mt-1 text-xs text-muted">
-            Default per tutti i post del blog — un singolo post può avere un&apos;impostazione
-            diversa dall&apos;editor. <strong>Aperti a tutti</strong> richiede un captcha
-            configurato per l&apos;istanza (chiedi a chi la gestisce se l&apos;opzione non è
-            disponibile); i commenti di chi non è registrato restano comunque moderati prima
-            della pubblicazione.
-          </p>
-        </FieldGroup>
-        <FieldGroup>
-          <label className="flex items-center gap-2 text-sm text-foreground">
-            <input
-              type="checkbox"
-              checked={mentionsEnabled}
-              onChange={(e) => setMentionsEnabled(e.target.checked)}
-              disabled={!canEdit}
-            />
-            Trasforma le @menzioni nei post in link al profilo dell&apos;utente citato
-          </label>
-        </FieldGroup>
-        <FieldGroup>
-          <label className="flex items-center gap-2 text-sm text-foreground">
-            <input
-              type="checkbox"
-              checked={staticPagesEnabled}
-              onChange={(e) => setStaticPagesEnabled(e.target.checked)}
-              disabled={!canEdit}
-            />
-            Pagine statiche (Chi sono, Contattami, ...) — disattiva di default
-          </label>
-        </FieldGroup>
-        <FieldGroup>
-          <label className="flex items-center gap-2 text-sm text-foreground">
-            <input
-              type="checkbox"
-              checked={searchIndexingEnabled}
-              onChange={(e) => setSearchIndexingEnabled(e.target.checked)}
-              disabled={!canEdit}
-            />
-            Consenti l&apos;indicizzazione da parte dei motori di ricerca
-          </label>
-          <label className="mt-2 flex items-center gap-2 text-sm text-foreground">
-            <input
-              type="checkbox"
-              checked={aiCrawlingEnabled}
-              onChange={(e) => setAiCrawlingEnabled(e.target.checked)}
-              disabled={!canEdit}
-            />
-            Consenti la scansione da parte di crawler IA/LLM (addestramento e assistenti)
-          </label>
-          <p className="mt-1 text-xs text-muted">
-            Entrambe attive di default. Applicate tramite robots.txt (Disallow mirato per i
-            crawler noti — GPTBot, ClaudeBot, CCBot, ...): una richiesta di rispetto, non un
-            blocco tecnico garantito. Disattivare i motori di ricerca esclude anche i crawler IA;
-            puoi anche lasciare i motori di ricerca attivi ed escludere solo l&apos;IA. Un singolo
-            post può restringere ulteriormente (mai riaprire) dall&apos;editor.
-          </p>
-        </FieldGroup>
-        <p className="mb-4 text-sm text-muted">Lingua di default: {blog.default_locale}</p>
-        {error && (
-          <div className="mb-4">
-            <Alert kind="error">{error}</Alert>
-          </div>
-        )}
-        {saved && (
-          <div className="mb-4">
-            <Alert kind="success">Salvato.</Alert>
-          </div>
-        )}
-        {canEdit && (
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? "Salvataggio…" : "Salva impostazioni"}
-          </Button>
-        )}
-      </Card>
+  async function handleExport() {
+    setBusy("export");
+    try {
+      const blob = await authFetch(async (token) => {
+        const res = await fetch(api.blogs.exportUrl(blog.slug), { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.blob();
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `notturni-${blog.slug}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(null);
+    }
+  }
 
-      <div className="mt-6">
+  const coauthors = members.filter((m) => m.role === "co_autore");
+  const addableLanguages = profileLanguages.filter((l) => l !== blog.default_locale && !extraLocales.includes(l));
+  const fieldCls = "w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20 disabled:opacity-60";
+
+  return (
+    <div className="grid gap-8 lg:grid-cols-[170px_minmax(0,1fr)]">
+      <nav className="hidden flex-col gap-0.5 text-sm text-muted lg:sticky lg:top-6 lg:flex lg:h-fit">
+        {SECTIONS.map((id) => (
+          <a key={id} href={`#settings-${id}`} className={`rounded-md px-2.5 py-1.5 no-underline hover:text-foreground ${id === "danger" ? "text-danger" : ""}`}>
+            {t(`sections.${id}`)}
+          </a>
+        ))}
+      </nav>
+
+      <div className="flex flex-col gap-10">
+        {blog.deleted_at && (
+          <Alert kind="error">
+            {t("deletedNotice", { date: formatDate(blog.deleted_at, locale) })}{" "}
+            <button type="button" className="font-semibold underline" onClick={() => run("restore", () => authFetch((tk) => api.blogs.restore(tk, blog.slug)), t("restoredToast"))}>
+              {t("danger.restoreAction")}
+            </button>
+          </Alert>
+        )}
+        {blog.is_paused && !blog.deleted_at && <Alert kind="info">{t("pausedNotice")}</Alert>}
+        {error && <Alert kind="error">{error}</Alert>}
+
+        <section id="settings-identity" className="flex scroll-mt-6 flex-col gap-4">
+          <CardTitle>{t("sections.identity")}</CardTitle>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FieldGroup className="mb-0">
+              <Label htmlFor="blog-title">{t("title")}</Label>
+              <Input id="blog-title" value={title} onChange={(e) => setTitle(e.target.value)} disabled={!canEdit} />
+            </FieldGroup>
+            <FieldGroup className="mb-0">
+              <Label htmlFor="blog-slug" hint={t("slugHint")}>
+                {t("slug")}
+              </Label>
+              <span className="flex items-center gap-1 rounded-lg border border-border bg-surface px-3 py-2.5 font-mono text-[13px] text-muted">
+                <span className="text-foreground">{blog.slug}</span>.{SITE_HOST}
+              </span>
+            </FieldGroup>
+            <FieldGroup className="mb-0">
+              <Label htmlFor="blog-subtitle" hint={`${subtitle.length} / 64`}>
+                {t("subtitle")}
+              </Label>
+              <Input id="blog-subtitle" maxLength={64} value={subtitle} onChange={(e) => setSubtitle(e.target.value)} disabled={!canEdit} />
+            </FieldGroup>
+            <FieldGroup className="mb-0">
+              <Label htmlFor="blog-pen-name">{t("defaultAuthor")}</Label>
+              <Input id="blog-pen-name" placeholder={t("defaultAuthorPlaceholder")} value={defaultAuthorName} onChange={(e) => setDefaultAuthorName(e.target.value)} disabled={!canEdit} />
+            </FieldGroup>
+          </div>
+          <FieldGroup className="mb-0">
+            <Label htmlFor="blog-description" hint={`${description.length} / 256`}>
+              {t("description")}
+            </Label>
+            <TextArea id="blog-description" maxLength={256} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} disabled={!canEdit} />
+          </FieldGroup>
+        </section>
+
+        <section id="settings-visibility" className="flex scroll-mt-6 flex-col gap-4">
+          <CardTitle>{t("sections.visibility")}</CardTitle>
+          <div className="grid gap-2.5 sm:grid-cols-3">
+            {VISIBILITIES.map((v) => (
+              <button
+                key={v}
+                type="button"
+                disabled={!canEdit}
+                onClick={() => setVisibility(v)}
+                className={`flex flex-col gap-0.5 rounded-lg border px-3.5 py-3 text-left transition ${visibility === v ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"}`}
+              >
+                <span className="text-sm font-semibold text-foreground">{t(`vis.${v}`)}</span>
+                <span className="text-[13px] text-muted">{t(`vis.${v}Sub`)}</span>
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface px-4 py-3">
+            <Toggle checked={searchIndexingEnabled} onChange={(v) => canEdit && setSearchIndexingEnabled(v)} label={t("indexing")} />
+            <span className="-mt-2 text-[13px] text-muted">{t("indexingSub")}</span>
+            <Toggle checked={aiCrawlingEnabled} onChange={(v) => canEdit && setAiCrawlingEnabled(v)} label={t("aiCrawling")} />
+            <span className="-mt-2 text-[13px] text-muted">{t("aiCrawlingSub")}</span>
+          </div>
+        </section>
+
+        <section id="settings-languages" className="flex scroll-mt-6 flex-col gap-4">
+          <CardTitle>{t("sections.languages")}</CardTitle>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-primary/10 px-3 py-1 text-[13px] text-primary">{t("primary", { lang: languageName(blog.default_locale, locale) })}</span>
+            {extraLocales.map((code) => (
+              <span key={code} className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-[13px]">
+                {languageName(code, locale)}
+                {canEdit && (
+                  <button type="button" onClick={() => setExtraLocales((prev) => prev.filter((c) => c !== code))} className="text-muted hover:text-foreground" aria-label={tc("remove")}>
+                    ×
+                  </button>
+                )}
+              </span>
+            ))}
+            {canEdit && addableLanguages.length > 0 && (
+              <select
+                value=""
+                onChange={(e) => e.target.value && setExtraLocales((prev) => [...prev, e.target.value])}
+                className="rounded-full border border-dashed border-border bg-transparent px-3 py-1 text-[13px] text-muted"
+              >
+                <option value="">{t("addLanguage")}</option>
+                {addableLanguages.map((code) => (
+                  <option key={code} value={code}>
+                    {languageName(code, locale)}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+          <span className="text-[13px] text-muted">{t("languagesNote")}</span>
+        </section>
+
+        <section id="settings-features" className="flex scroll-mt-6 flex-col gap-4">
+          <CardTitle>{t("sections.features")}</CardTitle>
+          <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface px-4 py-3">
+            <Toggle checked={mentionsEnabled} onChange={(v) => canEdit && setMentionsEnabled(v)} label={t("features.mentions")} />
+            <span className="-mt-2 text-[13px] text-muted">{t("features.mentionsSub")}</span>
+            <Toggle checked={staticPagesEnabled} onChange={(v) => canEdit && setStaticPagesEnabled(v)} label={t("features.pages")} />
+            <span className="-mt-2 text-[13px] text-muted">{t("features.pagesSub")}</span>
+          </div>
+          <div className="flex flex-col gap-2">
+            <SectionLabel>{t("commentsPolicy")}</SectionLabel>
+            <div className="grid gap-2.5 sm:grid-cols-3">
+              {COMMENT_MODES.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  disabled={!canEdit}
+                  onClick={() => setCommentsMode(m)}
+                  className={`flex flex-col gap-0.5 rounded-lg border px-3.5 py-3 text-left transition ${commentsMode === m ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"}`}
+                >
+                  <span className="text-sm font-semibold text-foreground">{t(`comments.${m}`)}</span>
+                  <span className="text-[13px] text-muted">{t(`comments.${m}Sub`)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="settings-domain" className="flex scroll-mt-6 flex-col gap-3 opacity-70">
+          <CardTitle>{t("sections.domain")}</CardTitle>
+          <FieldGroup className="mb-0 max-w-md">
+            <Label htmlFor="blog-domain">{t("customDomain")}</Label>
+            <Input id="blog-domain" disabled value={blog.custom_domain ?? ""} placeholder={`${blog.slug}.example.eu`} />
+          </FieldGroup>
+          <span className="text-[13px] text-muted">{t("domainNote", { host: `${blog.slug}.${SITE_HOST}` })}</span>
+        </section>
+
+        {canEdit && (
+          <div className="sticky bottom-4 flex justify-end lg:static">
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? tc("saving") : t("save")}
+            </Button>
+          </div>
+        )}
+
         <CategoriesSettings blogSlug={blog.slug} canEdit={canEdit} />
+
+        {canEdit && (
+          <section id="settings-danger" className="flex scroll-mt-6 flex-col gap-3">
+            <CardTitle>
+              <span className="text-danger">{t("dangerZone")}</span>
+            </CardTitle>
+            <div className="overflow-hidden rounded-xl border border-danger/40">
+              <DangerRow title={t("danger.transfer")} sub={t("danger.transferSub")}>
+                {!showTransfer ? (
+                  <Button size="sm" variant="secondary" disabled={coauthors.length === 0} onClick={() => setShowTransfer(true)}>
+                    {t("danger.transferAction")}
+                  </Button>
+                ) : (
+                  <form
+                    className="flex items-center gap-2"
+                    onSubmit={(e: FormEvent) => {
+                      e.preventDefault();
+                      void run("transfer", () => authFetch((tk) => api.blogs.transfer(tk, blog.slug, transferTo)), t("transferredToast")).then(() => setShowTransfer(false));
+                    }}
+                  >
+                    <select value={transferTo} onChange={(e) => setTransferTo(e.target.value)} required className={fieldCls}>
+                      <option value="">—</option>
+                      {coauthors.map((m) => (
+                        <option key={m.user_id} value={m.username}>
+                          @{m.username}
+                        </option>
+                      ))}
+                    </select>
+                    <Button size="sm" variant="danger" type="submit" disabled={!transferTo || busy === "transfer"}>
+                      {tc("confirm")}
+                    </Button>
+                    <Button size="sm" variant="ghost" type="button" onClick={() => setShowTransfer(false)}>
+                      {tc("cancel")}
+                    </Button>
+                  </form>
+                )}
+              </DangerRow>
+              <DangerRow title={blog.is_paused ? t("danger.resume") : t("danger.pause")} sub={t("danger.pauseSub")}>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={busy === "pause"}
+                  onClick={() => run("pause", () => authFetch((tk) => api.blogs.update(tk, blog.slug, { is_paused: !blog.is_paused })), blog.is_paused ? t("resumedToast") : t("pausedToast"))}
+                >
+                  {blog.is_paused ? t("danger.resumeAction") : t("danger.pauseAction")}
+                </Button>
+              </DangerRow>
+              <DangerRow title={t("danger.export")} sub={t("danger.exportSub")}>
+                <Button size="sm" variant="secondary" disabled={busy === "export"} onClick={handleExport}>
+                  {busy === "export" ? tc("loading") : t("danger.exportAction")}
+                </Button>
+              </DangerRow>
+              <DangerRow title={t("danger.delete")} sub={t("danger.deleteSub")}>
+                {blog.deleted_at ? (
+                  <Button size="sm" variant="secondary" disabled={busy === "restore"} onClick={() => run("restore", () => authFetch((tk) => api.blogs.restore(tk, blog.slug)), t("restoredToast"))}>
+                    {t("danger.restoreAction")}
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="danger" onClick={() => setShowDelete(true)}>
+                    {t("danger.deleteAction")}
+                  </Button>
+                )}
+              </DangerRow>
+            </div>
+            <ConfirmDialog
+              open={showDelete}
+              title={t("confirmTitle", { title: blog.title })}
+              body={t("confirmBody")}
+              confirmText={blog.slug}
+              confirmLabel={t("confirmLabel")}
+              onCancel={() => setShowDelete(false)}
+              onConfirm={() => {
+                setShowDelete(false);
+                void run("delete", () => authFetch((tk) => api.blogs.softDelete(tk, blog.slug, blog.slug)), t("deletedToast"));
+              }}
+            />
+          </section>
+        )}
       </div>
-    </>
+    </div>
+  );
+}
+
+function DangerRow({ title, sub, children }: { title: string; sub: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-3 border-b border-danger/20 px-4 py-4 last:border-0 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-0.5">
+        <span className="text-sm font-medium text-foreground">{title}</span>
+        <span className="text-[13px] text-muted">{sub}</span>
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
   );
 }
 
 function CategoriesSettings({ blogSlug, canEdit }: { blogSlug: string; canEdit: boolean }) {
   const { authFetch } = useAuth();
+  const t = useTranslations("Settings");
+  const tc = useTranslations("Common");
   const [categories, setCategories] = useState<Category[] | null>(null);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -268,47 +428,38 @@ function CategoriesSettings({ blogSlug, canEdit }: { blogSlug: string; canEdit: 
   }
 
   return (
-    <Card>
-      <CardTitle>Categorie</CardTitle>
-      <p className="mb-4 text-sm text-muted">
-        Tassonomia del blog: a differenza dei tag, un post ne ha al più una — pensata per una
-        classificazione più organica dei contenuti.
-      </p>
-      <ul className="mb-4 space-y-2">
+    <Card className="flex flex-col gap-3">
+      <CardTitle>{t("categories")}</CardTitle>
+      <p className="text-[13px] text-muted">{t("categoriesSub")}</p>
+      <ul className="flex flex-wrap gap-2">
         {categories?.map((c) => (
-          <li key={c.id} className="flex items-center justify-between text-sm">
-            <span className="text-foreground">{c.name}</span>
+          <li key={c.id} className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-[13px]">
+            {c.name}
             {canEdit && (
-              <button
-                type="button"
-                onClick={() => handleDelete(c.id)}
-                className="text-muted hover:text-foreground"
-              >
-                Rimuovi
+              <button type="button" onClick={() => handleDelete(c.id)} className="text-muted hover:text-foreground" aria-label={tc("remove")}>
+                ×
               </button>
             )}
           </li>
         ))}
-        {categories?.length === 0 && <p className="text-sm text-muted">Nessuna categoria.</p>}
+        {categories?.length === 0 && <li className="text-[13px] text-muted">{t("noCategories")}</li>}
       </ul>
       {canEdit && (
         <form onSubmit={handleAdd} className="flex flex-wrap items-end gap-3">
           <div>
-            <Label htmlFor="cat-name">Nome</Label>
+            <Label htmlFor="cat-name">{t("categoryName")}</Label>
             <Input id="cat-name" required value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div>
-            <Label htmlFor="cat-slug">Slug</Label>
+            <Label htmlFor="cat-slug">{t("categorySlug")}</Label>
             <Input id="cat-slug" required value={slug} onChange={(e) => setSlug(e.target.value)} />
           </div>
-          <Button type="submit">Aggiungi</Button>
+          <Button type="submit" size="sm">
+            {tc("add")}
+          </Button>
         </form>
       )}
-      {error && (
-        <div className="mt-3">
-          <Alert kind="error">{error}</Alert>
-        </div>
-      )}
+      {error && <Alert kind="error">{error}</Alert>}
     </Card>
   );
 }

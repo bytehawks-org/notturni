@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { BlogPageShell } from "@/components/blog/BlogPageShell";
+import { BlogStateNotice, blogIsOffline } from "@/components/blog/BlogStateNotice";
 import { BlogHeaderActions } from "@/components/blog/PostHeaderActions";
 import { BlogHeader } from "@/components/shell/BlogHeader";
 import { FilterChip } from "@/components/ui/Pill";
@@ -75,7 +76,16 @@ export default async function BlogMediaBibliographyPage({
     getTranslations("MediaPage"),
     getLocale(),
   ]);
-  if (!blog || !entries) notFound();
+  if (!blog) notFound();
+  if (blogIsOffline(blog)) {
+    return (
+      <BlogPageShell config={config}>
+        <BlogHeader slug={blogSlug} name={blog.title} current="media" />
+        <BlogStateNotice blog={blog} />
+      </BlogPageShell>
+    );
+  }
+  if (!entries) notFound();
 
   const byPost = new Map<string, { title: string; items: MediaBibliographyEntry[] }>();
   for (const entry of entries) {

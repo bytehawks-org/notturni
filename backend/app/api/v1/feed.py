@@ -16,6 +16,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_optional_current_user
+from app.domain.authorization import blog_publicly_listable_clause
 from app.api.v1.posts import PostOut, _posts_out
 from app.core.database import get_session
 from app.models.blog import Blog, BlogVisibility
@@ -65,8 +66,9 @@ async def list_feed(
             Post.status == PostStatus.PUBLISHED,
             Post.published_at <= datetime.now(timezone.utc),
             Post.is_hidden.is_(False),
-            # todo/BLOG.md #2: la raccolta della homepage mostra solo blog pubblici.
-            Blog.visibility == BlogVisibility.PUBLIC,
+            # todo/BLOG.md #2: la raccolta della homepage mostra solo blog pubblici
+            # (e non sospesi/in pausa/in cancellazione, B3).
+            blog_publicly_listable_clause(),
         )
         .order_by(Post.published_at.desc())
         .limit(limit)
@@ -119,7 +121,7 @@ async def list_trending_tags(
             Post.published_at >= since,
             Post.published_at <= datetime.now(timezone.utc),
             Post.is_hidden.is_(False),
-            Blog.visibility == BlogVisibility.PUBLIC,
+            blog_publicly_listable_clause(),
         )
         .group_by(Tag.name)
         .order_by(post_count.desc())

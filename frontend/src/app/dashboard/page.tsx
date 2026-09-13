@@ -303,7 +303,13 @@ export default function DashboardHomePage() {
                 slug={blog.slug}
                 subtitle={blog.subtitle}
                 visibility={blog.visibility}
-                meta={<span>{t("postsInBlog", { count: (posts ?? []).filter((p) => p.blog_id === blog.id).length })}</span>}
+                meta={
+                  <>
+                    <span>{t("postsInBlog", { count: (posts ?? []).filter((p) => p.blog_id === blog.id).length })}</span>
+                    {blog.deleted_at && <span className="font-semibold text-danger">{t("deletedBadge")}</span>}
+                    {blog.is_paused && !blog.deleted_at && <span className="font-semibold text-[#b8862b]">{t("pausedBadge")}</span>}
+                  </>
+                }
               />
             </Link>
           ))}

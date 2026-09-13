@@ -74,6 +74,9 @@ export default function BlogDetailPage() {
               {blog.slug}.{SITE_HOST}
             </span>
             <VisibilityLabel visibility={blog.visibility} />
+            {blog.deleted_at && <span className="font-semibold text-danger">{ta("deleted")}</span>}
+            {blog.is_paused && !blog.deleted_at && <span className="font-semibold text-[#b8862b]">{ta("paused")}</span>}
+            {blog.is_suspended && <span className="font-semibold text-danger">{ta("suspended")}</span>}
             {isOwner && <span>{ta("youAre", { role: ta("roles.owner") })}</span>}
           </div>
         </div>

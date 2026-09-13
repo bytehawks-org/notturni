@@ -101,6 +101,14 @@ export interface Blog {
   search_indexing_enabled: boolean;
   ai_crawling_enabled: boolean;
   default_locale: string;
+  /** Lingue secondarie del blog (informative), oltre a default_locale. */
+  extra_locales: string[];
+  /** Pausa volontaria del proprietario: i lettori vedono una pagina "in pausa". */
+  is_paused: boolean;
+  /** Sospensione da parte di un admin di piattaforma. */
+  is_suspended: boolean;
+  /** Cancellazione con tolleranza: ripristinabile finché il purge (30 giorni) non passa. */
+  deleted_at: string | null;
   /** Nome pubblico predefinito per i testi scritti su questo blog — vedi Post.author_display_name. */
   default_author_display_name: string | null;
   /** `null` per chiunque non sia il proprietario stesso (CLAUDE.md #8): non

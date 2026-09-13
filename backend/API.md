@@ -338,6 +338,51 @@ questo blog. Se valorizzato è **imposto** (nessun override per singolo
 autore o post — todo/USERS.md #2), a meno che il collaboratore non abbia un
 proprio alias di membership, che ha la precedenza. Stringa vuota `""` lo
 azzera, assente lo lascia invariato.
+`is_paused` (bool, B3 — mockup 5c "Pause this blog"): blog in pausa
+volontaria, i lettori non vedono più post e pagine (il dettaglio
+`GET /blogs/{slug}` resta leggibile con `is_paused=true` per mostrare la
+pagina "in pausa"), sparisce da feed/directory/sitemap; proprietario e
+collaboratori continuano a lavorarci dalla dashboard, nulla è cancellato.
+`extra_locales` (lista di codici ISO 639-1, B3): lingue secondarie del blog
+oltre a `default_locale`, informative (duplicati e lingua principale
+scartati; `400` se un codice non è valido).
+
+La risposta di `GET /blogs/{slug}` include anche `is_suspended`,
+`is_paused`, `deleted_at` ed `extra_locales`. Per un blog **pubblico**
+sospeso da un admin o in pausa, il dettaglio risponde `200` con i flag (e
+solo quello: post, pagine, bibliografia restano `404`), così la pagina
+pubblica può spiegare lo stato (mockup 3d). Un blog in attesa di
+cancellazione è `404` per chiunque tranne il proprietario.
+
+**`POST /api/v1/blogs/{slug}/transfer`** — `{username}`, solo il
+proprietario. Trasferisce la proprietà a un **coautore attuale** (`400` se
+l'utente non ha una membership `co_autore`, o ha già raggiunto il limite di
+blog; `404` se non esiste). Chi cede resta come coautore; la membership del
+nuovo proprietario viene rimossa. Registrato nel registro di audit
+(`blog.ownership_transferred`).
+
+**`GET /api/v1/blogs/{slug}/export`** — solo il proprietario. Scarica uno
+ZIP (`application/zip`) con tutto il contenuto del blog: `blog.json`, un
+Markdown per post in `posts/{locale}-{slug}.md` (front matter con titolo,
+stato, data, autore, categoria, tag, copertina; note in coda come
+`[^n]: …`), le pagine statiche in `pages/`, `comments.json` (tutti gli
+stati), `categories.json`, `media.json` (URL e alt delle immagini citate —
+i binari restano sullo storage) e `links.json`. Generato al volo, nessun
+link a scadenza.
+
+**`DELETE /api/v1/blogs/{slug}`** — `{confirm_slug}`, solo il proprietario;
+`400` se lo slug non corrisponde. Cancellazione con tolleranza (B3, mockup
+5c/3d): imposta `deleted_at`, il blog sparisce da pagine pubbliche, feed,
+directory e sitemap (resta in `GET /blogs/mine` con `deleted_at`
+valorizzato), i post non sono più scrivibili. Dopo 30 giorni il worker di
+manutenzione (`app/workers/audit_maintenance.py`, un giro al giorno) lo
+elimina definitivamente con post, commenti, frammenti, pagine, categorie,
+collaboratori, follower, configurazione e oggetti su storage
+(`app/domain/blog_lifecycle.py`). Idempotente. Audit `blog.deleted`.
+
+**`POST /api/v1/blogs/{slug}/restore`** — solo il proprietario. Annulla la
+cancellazione entro il periodo di tolleranza (`deleted_at` torna `null`).
+Audit `blog.restored`.
 
 **`POST /api/v1/blogs/{slug}/follow`** / **`DELETE .../follow`** — richiede
 sessione. Segui/smetti di seguire un blog; idempotenti (`204` anche se già

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { BlogPageShell } from "@/components/blog/BlogPageShell";
+import { BlogStateNotice, blogIsOffline } from "@/components/blog/BlogStateNotice";
 import { BlogHeaderActions } from "@/components/blog/PostHeaderActions";
 import { FeedPostCard } from "@/components/FeedPostCard";
 import { BlogHeader } from "@/components/shell/BlogHeader";
@@ -49,7 +50,16 @@ export default async function BlogHomePage({
     getPublicBlogConfig(blogSlug),
     getTranslations("BlogPage"),
   ]);
-  if (!blog || !posts) notFound();
+  if (!blog) notFound();
+  if (blogIsOffline(blog)) {
+    return (
+      <BlogPageShell config={config}>
+        <BlogHeader slug={blogSlug} name={blog.title} current="posts" />
+        <BlogStateNotice blog={blog} />
+      </BlogPageShell>
+    );
+  }
+  if (!posts) notFound();
   const visible = category ? posts.filter((p) => p.category?.slug === category) : posts;
 
   return (

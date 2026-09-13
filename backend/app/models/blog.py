@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    ARRAY,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -97,6 +98,19 @@ class Blog(Base, UUIDPKMixin, TimestampMixin):
     # riattivato, indipendentemente da `visibility` — vedi app/domain/authorization.py.
     # Mai impostabile dal proprietario, solo da PATCH /api/v1/admin/blogs/{id}.
     is_suspended: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # todo/UX_REDESIGN.md B3 (mockup 5c "danger zone"): pausa volontaria del
+    # proprietario — i lettori vedono una pagina "in pausa", proprietario e
+    # collaboratori continuano ad accedere in dashboard; nulla è cancellato.
+    is_paused: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Cancellazione con tolleranza: impostato da DELETE /blogs/{slug}, il blog
+    # sparisce dalle pagine pubbliche e resta ripristinabile dal proprietario
+    # finché il worker di manutenzione non lo elimina davvero dopo
+    # BLOG_DELETE_GRACE_DAYS (app/domain/blog_lifecycle.py).
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Lingue secondarie del blog oltre a default_locale (mockup 5c "Languages"):
+    # informative (header pubblico, directory), i post restano liberi di usare
+    # qualunque lingua.
+    extra_locales: Mapped[list[str]] = mapped_column(ARRAY(String(2)), default=list, nullable=False)
     # i18n (CLAUDE.md #1/#2): lingua di default del blog; i singoli post
     # possono avere traduzioni in altre lingue, vedi app/models/post.py
     default_locale: Mapped[str] = mapped_column(String(2), default=DEFAULT_LOCALE, nullable=False)

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user
+from app.domain.authorization import blog_publicly_listable_clause
 from app.api.v1.blogs._common import BlogOut, _to_blog_out
 from app.api.v1.posts import PostOut, _posts_out
 from app.core.database import get_session
@@ -351,7 +352,7 @@ async def list_user_public_blogs(username: str, session: AsyncSession = Depends(
     user = await _get_user_or_404(session, username)
     result = await session.execute(
         select(Blog)
-        .where(Blog.owner_id == user.id, Blog.visibility == BlogVisibility.PUBLIC, Blog.is_suspended.is_(False))
+        .where(Blog.owner_id == user.id, blog_publicly_listable_clause())
         .order_by(Blog.created_at)
     )
     return [
@@ -378,8 +379,7 @@ async def list_user_public_posts(
             Post.status == PostStatus.PUBLISHED,
             Post.published_at <= datetime.now(timezone.utc),
             Post.is_hidden.is_(False),
-            Blog.visibility == BlogVisibility.PUBLIC,
-            Blog.is_suspended.is_(False),
+            blog_publicly_listable_clause(),
         )
         .order_by(Post.published_at.desc())
         .limit(limit)
@@ -406,8 +406,7 @@ async def list_user_public_comments(
             Comment.status == CommentStatus.APPROVED,
             Post.status == PostStatus.PUBLISHED,
             Post.is_hidden.is_(False),
-            Blog.visibility == BlogVisibility.PUBLIC,
-            Blog.is_suspended.is_(False),
+            blog_publicly_listable_clause(),
         )
         .order_by(Comment.created_at.desc())
         .limit(limit)

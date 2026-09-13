@@ -18,6 +18,7 @@ from app.domain.authorization import (
     can_view_blog,
     can_write_posts,
     get_membership,
+    is_blog_publicly_readable,
     is_publicly_visible,
     publicly_visible_clause,
 )
@@ -921,7 +922,7 @@ async def record_post_read(
     if post is None or not is_publicly_visible(post):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Post non trovato.")
     blog = await session.get(Blog, post.blog_id)
-    if blog is None or blog.is_suspended or blog.visibility != BlogVisibility.PUBLIC:
+    if blog is None or not is_blog_publicly_readable(blog) or blog.visibility != BlogVisibility.PUBLIC:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Post non trovato.")
 
     ip = client_ip(request) or "unknown"

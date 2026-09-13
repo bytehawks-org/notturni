@@ -134,12 +134,14 @@ async def test_admin_suspends_blog_and_blocks_public_access(
     assert res.status_code == 200
     assert res.json()["is_suspended"] is True
 
+    # B3/B5 (mockup 3d): il dettaglio di un blog pubblico sospeso resta
+    # leggibile con `is_suspended=true`, così la pagina pubblica può spiegare
+    # lo stato; i contenuti (post) restano 404 per tutti, proprietario incluso.
     res = await client.get("/api/v1/blogs/blog-sospeso")
-    assert res.status_code == 404
-
-    # irraggiungibile anche per il proprietario stesso, non solo per gli anonimi
-    res = await client.get("/api/v1/blogs/blog-sospeso", headers=owner.headers)
-    assert res.status_code == 404
+    assert res.status_code == 200
+    assert res.json()["is_suspended"] is True
+    assert (await client.get("/api/v1/blogs/blog-sospeso/posts")).status_code == 404
+    assert (await client.get("/api/v1/blogs/blog-sospeso/posts", headers=owner.headers)).status_code == 404
 
     res = await client.patch(
         f"/api/v1/admin/blogs/{blog_id}", json={"is_suspended": False}, headers=admin.headers

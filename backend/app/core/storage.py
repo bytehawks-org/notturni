@@ -262,3 +262,34 @@ def blog_storage_bytes(*, user_ids: list[str], blog_id: str) -> int:
             for obj in page.get("Contents", []) or []:
                 total += int(obj.get("Size", 0))
     return total
+
+
+def delete_blog_storage(*, user_ids: list[str], blog_id: str) -> int:
+    """Cancella tutti gli oggetti di un blog (media + backup Markdown) sotto i
+    prefissi `{site}/userdata/{user}/{blog}/` degli utenti indicati — usato
+    dalla cancellazione definitiva (app/domain/blog_lifecycle.py). Ritorna il
+    numero di oggetti rimossi. Bloccante: chiamare da `asyncio.to_thread`."""
+    removed = 0
+    bucket = settings.s3_bucket_content
+    if settings.storage_backend == "localstorage":
+        import shutil
+
+        for user_id in user_ids:
+            root = Path(settings.local_storage_base_path) / bucket / _userdata_prefix(user_id, blog_id)
+            if root.is_dir():
+                removed += sum(1 for p in root.rglob("*") if p.is_file())
+                shutil.rmtree(root, ignore_errors=True)
+        return removed
+    client = get_s3_client()
+    try:
+        client.head_bucket(Bucket=bucket)
+    except Exception:  # noqa: BLE001
+        return 0
+    paginator = client.get_paginator("list_objects_v2")
+    for user_id in user_ids:
+        prefix = f"{_userdata_prefix(user_id, blog_id)}/"
+        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+            for obj in page.get("Contents", []) or []:
+                client.delete_object(Bucket=bucket, Key=obj["Key"])
+                removed += 1
+    return removed

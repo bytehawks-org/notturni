@@ -35,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.storage import get_audit_archive, upload_audit_archive
+from app.domain.blog_lifecycle import purge_deleted_blogs
 from app.models.audit_archive_run import AuditArchiveRun
 from app.models.audit_log import AuditLog
 
@@ -237,6 +238,11 @@ async def run_once() -> dict[str, Any]:
     async with SessionLocal() as session:
         archived = await archive(session)
         deleted = await prune(session)
+        # B3: cancellazione definitiva dei blog oltre il periodo di tolleranza
+        # (stesso giro giornaliero, stessa idempotenza).
+        purged_blogs = await purge_deleted_blogs(session)
+        if purged_blogs:
+            logger.info("Blog eliminati definitivamente: %d", purged_blogs)
     return {"archived_weeks": archived, "deleted_rows": deleted}
 
 

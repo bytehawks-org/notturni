@@ -61,6 +61,10 @@ class BlogUpdateRequest(BaseModel):
     # valore lo imposta; assente lascia invariato — stesso schema di
     # Post.cover_image_url in PATCH /posts/{id}.
     default_author_display_name: str | None = None
+    # B3 (mockup 5c): pausa volontaria e lingue secondarie (codici ISO 639-1,
+    # la lingua principale viene scartata se ripetuta).
+    is_paused: bool | None = None
+    extra_locales: list[str] | None = None
 
 
 class BlogOut(BaseModel):
@@ -77,6 +81,12 @@ class BlogOut(BaseModel):
     search_indexing_enabled: bool
     ai_crawling_enabled: bool
     default_locale: str
+    # B3: lingue secondarie (informative), pausa volontaria, sospensione da
+    # admin e cancellazione con tolleranza (`deleted_at`, ripristinabile).
+    extra_locales: list[str]
+    is_paused: bool
+    is_suspended: bool
+    deleted_at: datetime | None
     default_author_display_name: str | None
     # CLAUDE.md #8: presente solo per il proprietario stesso (usato lato
     # frontend per calcolare `isOwner`) — chiunque altro lo riceve a `null`,

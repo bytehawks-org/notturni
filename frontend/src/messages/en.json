@@ -228,7 +228,10 @@
       "reviewer": "reviewer",
       "mediator": "mediator"
     },
-    "notOwner": "You are not the owner of this blog: some actions are unavailable."
+    "notOwner": "You are not the owner of this blog: some actions are unavailable.",
+    "deleted": "pending deletion",
+    "paused": "paused",
+    "suspended": "suspended"
   },
   "BlogTabs": {
     "overview": "Overview",
@@ -327,7 +330,10 @@
       "pauseAction": "Pause",
       "export": "Export everything",
       "exportSub": "Markdown, images, notes, comments — ZIP link valid 7 days.",
-      "exportAction": "Request export"
+      "exportAction": "Request export",
+      "resume": "Reopen this blog",
+      "resumeAction": "Reopen",
+      "restoreAction": "Restore"
     },
     "save": "Save changes",
     "confirmTitle": "Delete blog “{title}”?",
@@ -340,7 +346,8 @@
       "features": "Features",
       "newsletter": "Newsletter",
       "domain": "Domain",
-      "danger-zone": "Danger zone"
+      "danger-zone": "Danger zone",
+      "danger": "Danger zone"
     },
     "vis": {
       "public": "Public",
@@ -363,7 +370,33 @@
       "publicationsSub": "Group posts into chapters under /pub/{name}",
       "brainMap": "Brain map",
       "brainMapSub": "Concept map from tags and [[references]] — experimental"
-    }
+    },
+    "slug": "Slug",
+    "defaultAuthorPlaceholder": "empty = the writer's username",
+    "aiCrawling": "Allow AI/LLM crawlers",
+    "aiCrawlingSub": "Training and assistants: applied via robots.txt, a request for respect rather than a technical block",
+    "commentsPolicy": "Comments",
+    "comments": {
+      "members": "Registered readers only",
+      "membersSub": "Default. Published right away, you can hide them later.",
+      "everyone": "Registered + anonymous",
+      "everyoneSub": "Anonymous comments wait in the moderation queue; requires the captcha configured on the instance.",
+      "closed": "Comments off",
+      "closedSub": "Existing comments stay visible."
+    },
+    "savedToast": "Settings saved",
+    "deletedNotice": "Blog pending deletion since {date}: it will be erased for good after 30 days.",
+    "pausedNotice": "The blog is paused: readers see a waiting page, you keep working on it from here.",
+    "restoredToast": "Blog restored",
+    "transferredToast": "Ownership transferred",
+    "pausedToast": "Blog paused",
+    "resumedToast": "Blog reopened",
+    "deletedToast": "Blog pending deletion: you have 30 days to restore it",
+    "categories": "Categories",
+    "categoriesSub": "Blog taxonomy: unlike tags, a post has at most one.",
+    "noCategories": "No categories.",
+    "categoryName": "Name",
+    "categorySlug": "Slug"
   },
   "Admin": {
     "openQueues": "Open queues",
@@ -651,7 +684,9 @@
     },
     "noPosts": "No posts in this view.",
     "commentsToModerate": "Comments to moderate",
-    "sharedWithMe": "Blogs shared with me"
+    "sharedWithMe": "Blogs shared with me",
+    "deletedBadge": "pending deletion",
+    "pausedBadge": "paused"
   },
   "Editor": {
     "status": "Status",
@@ -845,5 +880,14 @@
     "confirmRevoke": "Revoke this token? Whoever uses it will lose API access.",
     "emptyTitle": "No active tokens",
     "emptyBody": "Create a token to use the API from scripts or integrations."
+  },
+  "BlogState": {
+    "suspendedLabel": "Blog suspended",
+    "suspendedTitle": "This blog was suspended by a platform administrator.",
+    "suspendedBody": "Reading and writing are paused, including for the owner, until the suspension is lifted.",
+    "pausedLabel": "Paused",
+    "pausedTitle": "{title} is paused",
+    "pausedBody": "The author paused this blog: its content will be back when they reopen it. Nothing was deleted.",
+    "backHome": "← Back to the home"
   }
 }

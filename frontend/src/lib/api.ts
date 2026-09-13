@@ -179,6 +179,8 @@ export const api = {
       token: string,
       slug: string,
       payload: {
+        is_paused?: boolean;
+        extra_locales?: string[];
         title?: string;
         /** "" azzera; assente non tocca. */
         subtitle?: string;
@@ -218,6 +220,14 @@ export const api = {
       request<void>(`/api/v1/blogs/${slug}/follow`, { method: "DELETE", token }),
     followers: (slug: string) => request<{ username: string }[]>(`/api/v1/blogs/${slug}/followers`),
     overview: (token: string, slug: string) => request<BlogOverview>(`/api/v1/blogs/${slug}/overview`, { token }),
+    /** B3 (danger zone): trasferimento a un coautore, cancellazione con tolleranza, ripristino. */
+    transfer: (token: string, slug: string, username: string) =>
+      request<Blog>(`/api/v1/blogs/${slug}/transfer`, { method: "POST", token, body: { username } }),
+    softDelete: (token: string, slug: string, confirmSlug: string) =>
+      request<Blog>(`/api/v1/blogs/${slug}`, { method: "DELETE", token, body: { confirm_slug: confirmSlug } }),
+    restore: (token: string, slug: string) => request<Blog>(`/api/v1/blogs/${slug}/restore`, { method: "POST", token }),
+    /** URL dell'export ZIP (solo proprietario): scaricato con fetch + blob, vedi SettingsTab. */
+    exportUrl: (slug: string) => `${API_URL}/api/v1/blogs/${slug}/export`,
     /** Immagine da incorporare nel contenuto o da usare come cover di un post.
      * `is_sensitive`: risultato della moderazione automatica (nudità/contenuti
      * sensibili) fatta lato backend al momento dell'upload — vedi API.md. */

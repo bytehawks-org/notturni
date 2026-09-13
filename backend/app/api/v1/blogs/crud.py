@@ -21,6 +21,7 @@ from app.api.v1.blogs._router import router
 from app.core.captcha import turnstile_configured
 from app.core.database import get_session
 from app.core.revalidation import blog_tag, feed_tag, revalidate_frontend
+from app.domain.authorization import blog_publicly_listable_clause, is_blog_publicly_readable
 from app.domain.blog_rules import (
     assert_can_create_blog,
     validate_blog_description,
@@ -145,8 +146,7 @@ async def list_public_blogs(
         select(func.count()).select_from(BlogFollow).where(BlogFollow.blog_id == Blog.id).correlate(Blog).scalar_subquery()
     )
     stmt = select(Blog, post_count, follower_count, last_published).where(
-        Blog.visibility == BlogVisibility.PUBLIC,
-        Blog.is_suspended.is_(False),
+        blog_publicly_listable_clause(),
         Blog.search_indexing_enabled.is_(True),
     )
     if q:
@@ -179,6 +179,15 @@ async def get_blog(
     session: AsyncSession = Depends(get_session),
 ) -> BlogOut:
     blog = await _get_blog_or_404(session, slug)
+    if (
+        blog.deleted_at is None
+        and blog.visibility == BlogVisibility.PUBLIC
+        and not is_blog_publicly_readable(blog)
+    ):
+        # Blog pubblico in pausa o sospeso (B3/B5, mockup 3d): il dettaglio
+        # resta leggibile così la pagina può spiegare lo stato (`is_paused`/
+        # `is_suspended`); post e resto dei contenuti restano 404.
+        return _to_blog_out(blog, current_user)
     await _require_blog_viewable(session, current_user, blog)
     return _to_blog_out(blog, current_user)
 
@@ -228,6 +237,15 @@ async def update_blog(
         blog.ai_crawling_enabled = payload.ai_crawling_enabled
     if payload.default_author_display_name is not None:
         blog.default_author_display_name = payload.default_author_display_name or None
+    if payload.is_paused is not None:
+        blog.is_paused = payload.is_paused
+    if payload.extra_locales is not None:
+        try:
+            for code in payload.extra_locales:
+                validate_locale(code)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        blog.extra_locales = [c for c in dict.fromkeys(payload.extra_locales) if c != blog.default_locale]
 
     await session.commit()
     await session.refresh(blog)
