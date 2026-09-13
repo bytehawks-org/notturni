@@ -19,4 +19,7 @@ post_notes = Table(
     Column("post_id", UUID(as_uuid=True), ForeignKey("posts.id", ondelete="CASCADE"), primary_key=True),
     Column("idx", Integer, primary_key=True),
     Column("content", Text, nullable=False),
+    # B8: nota del blog a cui questa nota di post è agganciata (stesso testo
+    # normalizzato), impostata alla sincronizzazione; null per righe legacy
+    Column("note_id", UUID(as_uuid=True), ForeignKey("blog_notes.id", ondelete="SET NULL"), nullable=True, index=True),
 )

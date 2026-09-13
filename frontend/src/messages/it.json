@@ -239,7 +239,7 @@
     "pages": "Pagine",
     "publications": "Pubblicazioni",
     "taxonomy": "Categorie e tag",
-    "notes": "Note · Media · Link",
+    "notes": "Note",
     "comments": "Commenti",
     "collaborators": "Collaboratori",
     "followers": "Follower",
@@ -1122,5 +1122,41 @@
     "urlCopied": "URL copiato",
     "deleted": "Immagine eliminata",
     "deleteBlocked": "Usata in un post: rimuovila prima dal contenuto"
+  },
+  "NotesTab": {
+    "search": "Cerca nelle note…",
+    "exportBibtex": "Esporta BibTeX",
+    "importBibtex": "Importa BibTeX",
+    "newNote": "Nuova nota",
+    "filter": {
+      "all": "Tutte",
+      "unused": "Non usate",
+      "duplicates": "Duplicati?"
+    },
+    "emptyTitle": "Nessuna nota",
+    "emptyBody": "Le note a piè di pagina dei post compaiono qui automaticamente; puoi anche aggiungerne a mano o importarle da BibTeX.",
+    "importHint": "Incolla voci BibTeX (@book, @article, @misc…): titolo, autore, anno e URL/DOI vengono riconosciuti; le voci già presenti sono saltate.",
+    "imported": "{count, plural, =0 {Nessuna nota nuova} one {# nota importata} other {# note importate}}",
+    "col": {
+      "note": "Nota",
+      "kind": "Tipo",
+      "used": "Usata",
+      "updated": "Aggiornata"
+    },
+    "duplicate": "possibile duplicato",
+    "note": "Nota",
+    "text": "Testo",
+    "kind": "Tipo",
+    "url": "URL / DOI (facoltativo)",
+    "created": "Nota creata",
+    "saved": "Nota salvata",
+    "deleted": "Nota eliminata",
+    "notUsed": "Non citata in nessun post",
+    "noteN": "nota {n}",
+    "possibleDuplicate": "Possibile duplicato",
+    "mergeInto": "Unisci in {which}",
+    "this": "questa",
+    "other": "l'altra",
+    "merged": "Note unite"
   }
 }

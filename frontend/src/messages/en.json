@@ -239,7 +239,7 @@
     "pages": "Pages",
     "publications": "Publications",
     "taxonomy": "Categories & tags",
-    "notes": "Notes · Media · Links",
+    "notes": "Notes",
     "comments": "Comments",
     "collaborators": "Collaborators",
     "followers": "Followers",
@@ -1122,5 +1122,41 @@
     "urlCopied": "URL copied",
     "deleted": "Image deleted",
     "deleteBlocked": "Used in a post: remove it from the content first"
+  },
+  "NotesTab": {
+    "search": "Search notes…",
+    "exportBibtex": "Export BibTeX",
+    "importBibtex": "Import BibTeX",
+    "newNote": "New note",
+    "filter": {
+      "all": "All",
+      "unused": "Unused",
+      "duplicates": "Duplicates?"
+    },
+    "emptyTitle": "No notes",
+    "emptyBody": "Footnotes from your posts show up here automatically; you can also add them by hand or import from BibTeX.",
+    "importHint": "Paste BibTeX entries (@book, @article, @misc…): title, author, year and URL/DOI are recognised; existing entries are skipped.",
+    "imported": "{count, plural, =0 {No new notes} one {# note imported} other {# notes imported}}",
+    "col": {
+      "note": "Note",
+      "kind": "Kind",
+      "used": "Used",
+      "updated": "Updated"
+    },
+    "duplicate": "possible duplicate",
+    "note": "Note",
+    "text": "Text",
+    "kind": "Kind",
+    "url": "URL / DOI (optional)",
+    "created": "Note created",
+    "saved": "Note saved",
+    "deleted": "Note deleted",
+    "notUsed": "Not cited in any post",
+    "noteN": "note {n}",
+    "possibleDuplicate": "Possible duplicate",
+    "mergeInto": "Merge into {which}",
+    "this": "this one",
+    "other": "the other",
+    "merged": "Notes merged"
   }
 }

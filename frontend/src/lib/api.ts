@@ -17,6 +17,7 @@ import type {
   BlogConfig,
   BlogInvitation,
   BlogMember,
+  BlogNote,
   BlogOverview,
   BlogReports,
   BlogRole,
@@ -38,6 +39,7 @@ import type {
   MediaFile,
   MediaLibrary,
   MembershipBlog,
+  NoteKind,
   Page,
   PageTranslationSummary,
   PlatformConfig,
@@ -251,6 +253,18 @@ export const api = {
         formData,
       });
     },
+    /** B8: libreria note (proprietario e collaboratori). */
+    listNotes: (token: string, slug: string, q?: string) => request<BlogNote[]>(withQuery(`/api/v1/blogs/${slug}/notes`, { q }), { token }),
+    createNote: (token: string, slug: string, payload: { content: string; kind: NoteKind; url?: string | null }) =>
+      request<BlogNote>(`/api/v1/blogs/${slug}/notes`, { method: "POST", token, body: payload }),
+    updateNote: (token: string, slug: string, noteId: string, payload: { content?: string; kind?: NoteKind; url?: string | null }) =>
+      request<BlogNote>(`/api/v1/blogs/${slug}/notes/${noteId}`, { method: "PATCH", token, body: payload }),
+    deleteNote: (token: string, slug: string, noteId: string) => request<void>(`/api/v1/blogs/${slug}/notes/${noteId}`, { method: "DELETE", token }),
+    mergeNote: (token: string, slug: string, noteId: string, intoId: string) =>
+      request<BlogNote>(`/api/v1/blogs/${slug}/notes/${noteId}/merge`, { method: "POST", token, body: { into_id: intoId } }),
+    importNotes: (token: string, slug: string, bibtex: string) =>
+      request<BlogNote[]>(`/api/v1/blogs/${slug}/notes/import`, { method: "POST", token, body: { bibtex } }),
+    notesExportUrl: (slug: string) => `${API_URL}/api/v1/blogs/${slug}/notes/export.bib`,
     /** B7: libreria media (proprietario e collaboratori). */
     mediaLibrary: (token: string, slug: string) => request<MediaLibrary>(`/api/v1/blogs/${slug}/media`, { token }),
     syncMediaLibrary: (token: string, slug: string) => request<MediaLibrary>(`/api/v1/blogs/${slug}/media/sync`, { method: "POST", token }),

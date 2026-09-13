@@ -883,6 +883,43 @@ Idempotente se già pubblicato e non si passa un nuovo `published_at`
 (`published_at` esistente non viene toccato); passare una nuova data lo
 sovrascrive sempre, anche per ripianificare un post già pubblicato.
 
+## Libreria note del blog (todo/UX_REDESIGN.md B8, mockup 3b)
+
+Le note a piè di pagina dei post (`post_notes`) vengono agganciate, al
+salvataggio del post, a una **nota del blog** (`blog_notes`) con lo stesso
+testo normalizzato (minuscolo, senza punteggiatura/apostrofi): la nota è
+creata se manca, con `kind` stimato (`book` | `article` | `web` | `note`)
+e `url` estratto (DOI → `https://doi.org/…`). `GET /blogs/{slug}/bibliography`
+espone ora anche `kind` e `url` per ogni voce.
+
+**`GET /api/v1/blogs/{slug}/notes?q=`** — proprietario e collaboratori.
+`[{id, content, kind, url, created_at, updated_at, used_in: [{post_id,
+post_slug, post_title, idx}], possible_duplicates: [id, …]}]` dalla più
+recente; `possible_duplicates` = note dello stesso blog con gli stessi primi
+30 caratteri normalizzati.
+
+**`POST /api/v1/blogs/{slug}/notes`** — `{content, kind?, url?}` (accesso in
+scrittura; `400` se il tipo non è tra quelli previsti o l'URL non è http/https).
+
+**`PATCH /api/v1/blogs/{slug}/notes/{id}`** — `{content?, kind?, url?}`.
+Cambiare il testo lo aggiorna anche nei post che citano la nota.
+
+**`DELETE /api/v1/blogs/{slug}/notes/{id}`** — `204`; `409` se citata in
+un post.
+
+**`POST /api/v1/blogs/{slug}/notes/{id}/merge`** — `{into_id}`: le citazioni
+della nota passano alla destinazione (testo compreso), la sorgente viene
+eliminata. Risponde con la nota di destinazione.
+
+**`GET /api/v1/blogs/{slug}/notes/export.bib`** — BibTeX
+(`application/x-bibtex`): una voce `@book`/`@article`/`@misc` per nota con
+`note` = testo, più `url` e `year` quando ricavabili.
+
+**`POST /api/v1/blogs/{slug}/notes/import`** — `{bibtex}`: parser minimale
+(`author`/`title`/`journal`/`publisher`/`year`, oppure `note`; `url`/`doi`);
+le voci già presenti (testo normalizzato) vengono saltate. `201` con le
+note create; `400` se non riconosce nessuna voce.
+
 ## Media e backup
 
 Backend di storage selezionabile via `NOCT_STORAGE_BACKEND`: `s3` (default,

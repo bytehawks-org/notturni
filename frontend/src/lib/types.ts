@@ -266,7 +266,31 @@ export interface BibliographyCitation {
 
 export interface BibliographyEntry {
   content: string;
+  /** B8: tipo e URL dalla libreria note (null per voci legacy). */
+  kind: NoteKind | null;
+  url: string | null;
   citations: BibliographyCitation[];
+}
+
+export type NoteKind = "book" | "article" | "web" | "note";
+
+/** Libreria note del blog (B8, mockup 3b). */
+export interface NoteUsage {
+  post_id: string;
+  post_slug: string;
+  post_title: string;
+  idx: number;
+}
+
+export interface BlogNote {
+  id: string;
+  content: string;
+  kind: NoteKind;
+  url: string | null;
+  created_at: string;
+  updated_at: string;
+  used_in: NoteUsage[];
+  possible_duplicates: string[];
 }
 
 /** CLAUDE.md #4: come BibliographyCitation, ma con la data di pubblicazione

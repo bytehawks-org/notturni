@@ -29,9 +29,9 @@ export default async function BlogBibliographyPage({
   searchParams,
 }: {
   params: Promise<PageParams>;
-  searchParams: Promise<{ sort?: string }>;
+  searchParams: Promise<{ sort?: string; kind?: string }>;
 }) {
-  const [{ blogSlug }, { sort }] = await Promise.all([params, searchParams]);
+  const [{ blogSlug }, { sort, kind }] = await Promise.all([params, searchParams]);
   const [blog, entries, config, t] = await Promise.all([
     getPublicBlog(blogSlug),
     getBlogBibliography(blogSlug),
@@ -49,7 +49,18 @@ export default async function BlogBibliographyPage({
   }
   if (!entries) notFound();
   const tb = await getTranslations("Bibliography");
-  const sorted = sort === "cited" ? [...entries].sort((a, b) => b.citations.length - a.citations.length) : entries;
+  const filtered = kind ? entries.filter((e) => e.kind === kind) : entries;
+  const sorted = sort === "cited" ? [...filtered].sort((a, b) => b.citations.length - a.citations.length) : filtered;
+  const kinds = (["book", "article", "web", "note"] as const).filter((k) => entries.some((e) => e.kind === k));
+  const href = (next: { kind?: string; sort?: string }) => {
+    const p = new URLSearchParams();
+    const k = next.kind ?? kind;
+    const so = next.sort ?? sort;
+    if (k) p.set("kind", k);
+    if (so) p.set("sort", so);
+    const qs = p.toString();
+    return `/${blogSlug}/bibliografia${qs ? `?${qs}` : ""}`;
+  };
   const postCount = new Set(entries.flatMap((e) => e.citations.map((c) => c.permalink))).size;
 
   return (
@@ -61,12 +72,23 @@ export default async function BlogBibliographyPage({
           <p className="text-muted md:text-base">{t("subtitle", { notes: entries.length, posts: postCount })}</p>
         </div>
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
-          <span className="text-[13px] text-muted">{t("all", { count: entries.length })}</span>
+          <div className="flex flex-wrap gap-1.5">
+            <Link href={href({ kind: "" })} className="no-underline">
+              <FilterChip active={!kind}>{t("all", { count: entries.length })}</FilterChip>
+            </Link>
+            {kinds.map((k) => (
+              <Link key={k} href={href({ kind: k })} className="no-underline">
+                <FilterChip active={kind === k}>
+                  {tb(`kind.${k}`)} · {entries.filter((e) => e.kind === k).length}
+                </FilterChip>
+              </Link>
+            ))}
+          </div>
           <div className="flex gap-1.5">
-            <Link href={`/${blogSlug}/bibliografia`} className="no-underline">
+            <Link href={href({ sort: "" })} className="no-underline">
               <FilterChip active={sort !== "cited"}>{t("sortFirst")}</FilterChip>
             </Link>
-            <Link href={`/${blogSlug}/bibliografia?sort=cited`} className="no-underline">
+            <Link href={href({ sort: "cited" })} className="no-underline">
               <FilterChip active={sort === "cited"}>{t("sortCited")}</FilterChip>
             </Link>
           </div>
@@ -87,6 +109,14 @@ export default async function BlogBibliographyPage({
                     dangerouslySetInnerHTML={{ __html: renderNoteInline(entry.content) }}
                   />
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted">
+                    {entry.kind && (
+                      <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-[.06em]">{tb(`kind.${entry.kind}`)}</span>
+                    )}
+                    {entry.url && (
+                      <a href={entry.url} target="_blank" rel="noopener noreferrer nofollow" className="truncate text-primary no-underline hover:underline">
+                        {entry.url.replace(/^https?:\/\//, "")}
+                      </a>
+                    )}
                     <span>{tb("citedIn")}</span>
                     {entry.citations.map((c, j) => (
                       <Link key={`${c.permalink}-${c.idx}`} href={`${c.permalink}#fn-${c.idx}`} className="no-underline hover:underline">

@@ -40,6 +40,7 @@ from app.core.http import client_ip
 from app.models.post_link import post_links
 from app.models.post_media import post_media
 from app.models.post_note import post_notes
+from app.domain.blog_notes_sync import link_blog_notes
 from app.models.tag import Tag, post_tags
 from app.models.user import User
 
@@ -431,9 +432,12 @@ async def _sync_post_notes(session: AsyncSession, post: Post, notes: list[NoteIn
         await session.flush()
     await session.execute(delete(post_notes).where(post_notes.c.post_id == post.id))
     if notes:
+        # B8: ogni nota del post viene agganciata (o crea) la nota del blog con
+        # lo stesso testo normalizzato — è ciò che alimenta la libreria note
+        note_ids = await link_blog_notes(session, blog_id=post.blog_id, contents=[n.content for n in notes], created_by_id=post.author_id)
         await session.execute(
             insert(post_notes),
-            [{"post_id": post.id, "idx": n.idx, "content": n.content} for n in notes],
+            [{"post_id": post.id, "idx": n.idx, "content": n.content, "note_id": note_ids.get(n.content)} for n in notes],
         )
 
 

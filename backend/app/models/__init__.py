@@ -11,6 +11,7 @@ from app.models.blog import (
     BlogVisibility,
 )
 from app.models.blog_config import BlogConfig
+from app.models.blog_note import BlogNote
 from app.models.category import Category
 from app.models.comment import BlogBlockedAuthor, Comment, CommentsMode, CommentStatus
 from app.models.content_report import ContentReport, ReportReason, ReportStatus, ReportTargetType
@@ -45,6 +46,7 @@ __all__ = [
     "BlogInvitation",
     "BlogInvitationStatus",
     "BlogConfig",
+    "BlogNote",
     "Category",
     "Post",
     "PostStatus",
