@@ -719,7 +719,59 @@
     "approve": "Approve",
     "reject": "Reject",
     "emptyTitle": "No pending comments",
-    "emptyBody": "New comments waiting for moderation will show up here."
+    "emptyBody": "New comments waiting for moderation will show up here.",
+    "queue": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "hidden": "Hidden",
+      "reported": "Reported"
+    },
+    "empty": {
+      "pending": "No pending comments",
+      "approved": "No approved comments",
+      "hidden": "No hidden comments",
+      "reported": "No reported comments"
+    },
+    "selectAll": "Select all",
+    "approveN": "Approve {count}",
+    "hideN": "Hide {count}",
+    "registered": "registered",
+    "anonymous": "unregistered, pre-moderated",
+    "reportedPill": "reported",
+    "status": {
+      "pending": "pending",
+      "approved": "approved",
+      "rejected": "hidden"
+    },
+    "reportNote": "Report note",
+    "hide": "Hide",
+    "blockAuthor": "Block author",
+    "report": "Report to platform",
+    "reportHint": "The note is required and lands in the audit register: tell the moderators what is wrong.",
+    "reportNotePlaceholder": "e.g. spam with affiliate links",
+    "replyPlaceholder": "Write a reply…",
+    "send": "Send",
+    "approvedToast": "{count, plural, one {Comment approved} other {# comments approved}}",
+    "hiddenToast": "{count, plural, one {Comment hidden} other {# comments hidden}}",
+    "repliedToast": "Reply published",
+    "blockedToast": "Author blocked and comment hidden",
+    "reportedToast": "Report sent to the moderators",
+    "unblockedToast": "Author unblocked",
+    "policySaved": "Comment rules updated",
+    "policy": {
+      "members": "Registered readers only",
+      "membersSub": "Default. Published right away, you can hide them later.",
+      "everyone": "Registered + anonymous, pre-moderated",
+      "everyoneSub": "Anonymous comments wait in the queue before showing up (requires the instance captcha).",
+      "closed": "Comments off",
+      "closedSub": "Existing comments stay visible."
+    },
+    "autoClose": "Close comments after 90 days",
+    "blocked": "Blocked",
+    "noBlocked": "No blocked authors.",
+    "anonymousHashed": "anonymous, hashed email",
+    "unblock": "Unblock",
+    "policyTitle": "Comment rules"
   },
   "Appearance": {
     "palette": "Palette",
@@ -889,5 +941,27 @@
     "pausedTitle": "{title} is paused",
     "pausedBody": "The author paused this blog: its content will be back when they reopen it. Nothing was deleted.",
     "backHome": "← Back to the home"
+  },
+  "AdminComments": {
+    "title": "Comment moderation",
+    "subtitle": "Escalations from blog mediators and per-state queues across the platform.",
+    "filter": {
+      "reported": "Reported",
+      "pending": "Pending",
+      "approved": "Approved",
+      "rejected": "Hidden"
+    },
+    "emptyTitle": "Nothing to moderate",
+    "emptyBody": "Reported or pending comments will show up here.",
+    "on": "on",
+    "status": {
+      "pending": "pending",
+      "approved": "approved",
+      "rejected": "hidden"
+    },
+    "reported": "reported",
+    "reportNote": "Blog's note",
+    "approve": "Approve",
+    "hide": "Hide"
   }
 }

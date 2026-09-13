@@ -719,7 +719,59 @@
     "approve": "Approva",
     "reject": "Rifiuta",
     "emptyTitle": "Nessun commento in attesa",
-    "emptyBody": "I nuovi commenti da moderare compariranno qui."
+    "emptyBody": "I nuovi commenti da moderare compariranno qui.",
+    "queue": {
+      "pending": "In attesa",
+      "approved": "Approvati",
+      "hidden": "Nascosti",
+      "reported": "Segnalati"
+    },
+    "empty": {
+      "pending": "Nessun commento in attesa",
+      "approved": "Nessun commento approvato",
+      "hidden": "Nessun commento nascosto",
+      "reported": "Nessun commento segnalato"
+    },
+    "selectAll": "Seleziona tutti",
+    "approveN": "Approva {count}",
+    "hideN": "Nascondi {count}",
+    "registered": "iscritto",
+    "anonymous": "non iscritto, pre-moderato",
+    "reportedPill": "segnalato",
+    "status": {
+      "pending": "in attesa",
+      "approved": "approvato",
+      "rejected": "nascosto"
+    },
+    "reportNote": "Nota della segnalazione",
+    "hide": "Nascondi",
+    "blockAuthor": "Blocca autore",
+    "report": "Segnala alla piattaforma",
+    "reportHint": "La nota è obbligatoria e finisce nel registro: spiega ai moderatori cosa c'è che non va.",
+    "reportNotePlaceholder": "es. spam con link affiliati",
+    "replyPlaceholder": "Scrivi una risposta…",
+    "send": "Invia",
+    "approvedToast": "{count, plural, one {Commento approvato} other {# commenti approvati}}",
+    "hiddenToast": "{count, plural, one {Commento nascosto} other {# commenti nascosti}}",
+    "repliedToast": "Risposta pubblicata",
+    "blockedToast": "Autore bloccato e commento nascosto",
+    "reportedToast": "Segnalazione inviata ai moderatori",
+    "unblockedToast": "Autore sbloccato",
+    "policySaved": "Regole dei commenti aggiornate",
+    "policy": {
+      "members": "Solo lettori iscritti",
+      "membersSub": "Predefinito. Pubblicati subito, puoi nasconderli dopo.",
+      "everyone": "Iscritti + anonimi, pre-moderati",
+      "everyoneSub": "Gli anonimi restano in coda prima di apparire (richiede il captcha dell'istanza).",
+      "closed": "Commenti disattivati",
+      "closedSub": "I commenti esistenti restano visibili."
+    },
+    "autoClose": "Chiudi i commenti dopo 90 giorni",
+    "blocked": "Bloccati",
+    "noBlocked": "Nessun autore bloccato.",
+    "anonymousHashed": "anonimo, email in hash",
+    "unblock": "Sblocca",
+    "policyTitle": "Regole dei commenti"
   },
   "Appearance": {
     "palette": "Palette",
@@ -889,5 +941,27 @@
     "pausedTitle": "{title} è in pausa",
     "pausedBody": "L'autore ha messo il blog in pausa: i contenuti torneranno quando deciderà di riaprirlo. Nulla è stato cancellato.",
     "backHome": "← Torna alla home"
+  },
+  "AdminComments": {
+    "title": "Moderazione commenti",
+    "subtitle": "Segnalazioni dai mediatori dei blog e code per stato di tutta la piattaforma.",
+    "filter": {
+      "reported": "Segnalati",
+      "pending": "In attesa",
+      "approved": "Approvati",
+      "rejected": "Nascosti"
+    },
+    "emptyTitle": "Niente da moderare",
+    "emptyBody": "I commenti segnalati o in attesa compariranno qui.",
+    "on": "su",
+    "status": {
+      "pending": "in attesa",
+      "approved": "approvato",
+      "rejected": "nascosto"
+    },
+    "reported": "segnalato",
+    "reportNote": "Nota del blog",
+    "approve": "Approva",
+    "hide": "Nascondi"
   }
 }

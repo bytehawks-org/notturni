@@ -34,6 +34,7 @@ from app.models.comment import CommentsMode
 from app.models.category import Category
 from app.models.post import Post, PostStatus
 from app.models.post_read import PostReadDaily
+from app.domain.comments_mode import effective_comments_mode
 from app.domain.rate_limit import enforce_rate_limit
 from app.core.http import client_ip
 from app.models.post_link import post_links
@@ -378,7 +379,7 @@ async def _posts_out(
                 tags=effective_tags,
                 category=CategorySummaryOut.model_validate(category) if category else None,
                 comments_mode=post.comments_mode,
-                effective_comments_mode=post.comments_mode or blog.comments_mode,
+                effective_comments_mode=effective_comments_mode(post, blog),
                 search_indexing_enabled=post.search_indexing_enabled,
                 ai_crawling_enabled=post.ai_crawling_enabled,
                 effective_search_indexing_enabled=effective_search_indexing(post, blog),

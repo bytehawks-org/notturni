@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Integer,
     String,
     UniqueConstraint,
 )
@@ -111,6 +112,9 @@ class Blog(Base, UUIDPKMixin, TimestampMixin):
     # informative (header pubblico, directory), i post restano liberi di usare
     # qualunque lingua.
     extra_locales: Mapped[list[str]] = mapped_column(ARRAY(String(2)), default=list, nullable=False)
+    # B4 (mockup 5b "Close comments after N days"): trascorsi N giorni dalla
+    # pubblicazione di un post, i suoi commenti risultano chiusi. None = mai.
+    comments_auto_close_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # i18n (CLAUDE.md #1/#2): lingua di default del blog; i singoli post
     # possono avere traduzioni in altre lingue, vedi app/models/post.py
     default_locale: Mapped[str] = mapped_column(String(2), default=DEFAULT_LOCALE, nullable=False)

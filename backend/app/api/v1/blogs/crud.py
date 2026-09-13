@@ -239,6 +239,11 @@ async def update_blog(
         blog.default_author_display_name = payload.default_author_display_name or None
     if payload.is_paused is not None:
         blog.is_paused = payload.is_paused
+    if "comments_auto_close_days" in payload.model_fields_set:
+        days = payload.comments_auto_close_days
+        if days is not None and days < 0:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "comments_auto_close_days non può essere negativo.")
+        blog.comments_auto_close_days = days or None
     if payload.extra_locales is not None:
         try:
             for code in payload.extra_locales:

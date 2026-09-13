@@ -1047,6 +1047,34 @@ autorizzazione di `pending` (quindi utilizzabili anche da Amministratore/
 Super Admin/Moderatore su un commento di un blog di cui non hanno nessuna
 membership). Cambiano lo stato del commento.
 
+### Coda estesa (todo/UX_REDESIGN.md B4, mockup 5b)
+
+`GET /api/v1/blogs/{blog_slug}/comments` accetta anche `reported=true`
+(commenti segnalati alla piattaforma, qualunque stato). Ogni commento
+espone `reported_to_platform` e `report_note`. Lo stato `rejected` è il
+"nascosto" della coda (nessuno stato nuovo).
+
+**`POST /api/v1/comments/{comment_id}/report`** — `{note}` obbligatoria
+(`400` se vuota), stessa autorizzazione di `approve`. Segnala il commento ai
+moderatori di piattaforma: compare in `GET /api/v1/admin/comments?reported=true`
+con `report_note`/`reported_at`. Audit `comment.reported`.
+
+**`POST /api/v1/comments/{comment_id}/block-author`** — `{note?}`, stessa
+autorizzazione. Aggiunge l'autore alla lista dei bloccati del blog e porta il
+commento a `rejected`. Utente registrato → `user_id`; commento anonimo →
+sha256 dell'email (mai l'email in chiaro né l'IP). `400` se l'autore è il
+proprietario del blog o non è identificabile. Audit `comment.author_blocked`.
+Un autore bloccato riceve `403` su `POST /posts/{id}/comments` di quel blog.
+
+**`GET /api/v1/blogs/{blog_slug}/blocked`** / **`DELETE .../blocked/{block_id}`**
+— stessa autorizzazione. Lista `{id, label, is_anonymous, note, created_at}`
+(`label` è `@username` o il nome libero dell'anonimo) e sblocco (`204`).
+
+**Chiusura automatica**: `PATCH /api/v1/blogs/{slug}` accetta
+`comments_auto_close_days` (intero ≥ 0, `0`/`null` = mai): trascorsi N
+giorni da `published_at`, `effective_comments_mode` del post diventa
+`closed` (`403` ai nuovi commenti, i già scritti restano visibili).
+
 ## Frammenti
 
 Porzione di testo evidenziata dal lettore (con il mouse) su un post
@@ -1444,7 +1472,7 @@ da `status`, anche per l'autore. Nessuna notifica all'autore e nessun campo
 per la motivazione; il cambio di stato viene però registrato nel registro di
 audit (`post.hidden`/`post.unhidden`, vedi sotto).
 
-**`GET /api/v1/admin/comments`** — richiede `platform_role` in
+**`GET /api/v1/admin/comments`** (accetta anche `reported=true`: solo i commenti segnalati dai blog, con `report_note`/`reported_at`, dal più recente segnalato) — richiede `platform_role` in
 `amministratore`/`super_admin`/**`moderatore`** (unico endpoint di questa
 sezione aperto anche al ruolo Moderatore, ROADMAP.md §1). Commenti di *tutti*
 i blog della piattaforma nello stato indicato dal parametro opzionale

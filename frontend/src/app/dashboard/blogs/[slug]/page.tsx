@@ -119,7 +119,7 @@ export default function BlogDetailPage() {
       {tab === "overview" && <OverviewTab blogSlug={blog.slug} />}
       {tab === "posts" && <PostsTab blogSlug={blog.slug} canWrite={isOwner} />}
       {tab === "pages" && <PagesTab blog={blog} canWrite={isOwner} />}
-      {tab === "comments" && <CommentsTab blogSlug={blog.slug} canModerate={isOwner} />}
+      {tab === "comments" && <CommentsTab blog={blog} canModerate={isOwner} onBlogUpdated={setBlog} />}
       {tab === "appearance" && <AppearanceTab blogSlug={blog.slug} canEdit={isOwner} />}
       {tab === "collaborators" && isOwner && <CollaboratorsTab blogSlug={blog.slug} />}
       {tab === "settings" && <SettingsTab blog={blog} canEdit={isOwner} onUpdated={setBlog} />}

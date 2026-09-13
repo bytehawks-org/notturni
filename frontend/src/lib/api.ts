@@ -10,6 +10,7 @@ import type {
   AuditChannel,
   AuditLogEntry,
   BibliographyEntry,
+  BlockedAuthor,
   Blog,
   BlogComment,
   BlogConfig,
@@ -181,6 +182,7 @@ export const api = {
       payload: {
         is_paused?: boolean;
         extra_locales?: string[];
+        comments_auto_close_days?: number | null;
         title?: string;
         /** "" azzera; assente non tocca. */
         subtitle?: string;
@@ -427,8 +429,9 @@ export const api = {
       request<Comment[]>(`/api/v1/posts/${postId}/comments/pending`, { token }),
     /** Moderazione trasversale: commenti di tutti i post del blog in una sola
      * richiesta (default `pending`), invece di una fetch per post. */
-    listForBlog: (token: string, blogSlug: string, status: CommentStatus = "pending") =>
-      request<BlogComment[]>(`/api/v1/blogs/${blogSlug}/comments?status=${status}`, { token }),
+    /** B4: `reported` mostra i segnalati alla piattaforma (qualunque stato). */
+    listForBlog: (token: string, blogSlug: string, status: CommentStatus = "pending", reported = false) =>
+      request<BlogComment[]>(`/api/v1/blogs/${blogSlug}/comments?status=${status}${reported ? "&reported=true" : ""}`, { token }),
     create: (
       token: string | null,
       postId: string,
@@ -444,6 +447,13 @@ export const api = {
     ) => request<Comment>(`/api/v1/posts/${postId}/comments`, { method: "POST", token, body: payload }),
     approve: (token: string, commentId: string) =>
       request<Comment>(`/api/v1/comments/${commentId}/approve`, { method: "POST", token }),
+    report: (token: string, commentId: string, note: string) =>
+      request<Comment>(`/api/v1/comments/${commentId}/report`, { method: "POST", token, body: { note } }),
+    blockAuthor: (token: string, commentId: string, note?: string) =>
+      request<BlockedAuthor>(`/api/v1/comments/${commentId}/block-author`, { method: "POST", token, body: { note } }),
+    listBlocked: (token: string, blogSlug: string) => request<BlockedAuthor[]>(`/api/v1/blogs/${blogSlug}/blocked`, { token }),
+    unblock: (token: string, blogSlug: string, blockId: string) =>
+      request<void>(`/api/v1/blogs/${blogSlug}/blocked/${blockId}`, { method: "DELETE", token }),
     reject: (token: string, commentId: string) =>
       request<Comment>(`/api/v1/comments/${commentId}/reject`, { method: "POST", token }),
   },
@@ -607,8 +617,11 @@ export const api = {
         offset: string;
       }> = {}
     ) => request<AuditLogEntry[]>(withQuery("/api/v1/admin/audit-log", filters), { token }),
-    listComments: (token: string, filters: Partial<{ status: CommentStatus; q: string }> = {}) =>
-      request<AdminComment[]>(withQuery("/api/v1/admin/comments", filters), { token }),
+    listComments: (token: string, filters: Partial<{ status: CommentStatus; q: string; reported: boolean }> = {}) =>
+      request<AdminComment[]>(
+        withQuery("/api/v1/admin/comments", { status: filters.status, q: filters.q, reported: filters.reported ? "true" : undefined }),
+        { token }
+      ),
   },
 
   tokens: {

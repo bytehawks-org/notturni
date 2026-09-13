@@ -65,6 +65,9 @@ class BlogUpdateRequest(BaseModel):
     # la lingua principale viene scartata se ripetuta).
     is_paused: bool | None = None
     extra_locales: list[str] | None = None
+    # B4: chiusura automatica dei commenti N giorni dopo la pubblicazione
+    # del post (0 o null = mai).
+    comments_auto_close_days: int | None = None
 
 
 class BlogOut(BaseModel):
@@ -84,6 +87,7 @@ class BlogOut(BaseModel):
     # B3: lingue secondarie (informative), pausa volontaria, sospensione da
     # admin e cancellazione con tolleranza (`deleted_at`, ripristinabile).
     extra_locales: list[str]
+    comments_auto_close_days: int | None
     is_paused: bool
     is_suspended: bool
     deleted_at: datetime | None

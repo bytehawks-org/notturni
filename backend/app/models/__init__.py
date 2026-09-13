@@ -12,7 +12,7 @@ from app.models.blog import (
 )
 from app.models.blog_config import BlogConfig
 from app.models.category import Category
-from app.models.comment import Comment, CommentsMode, CommentStatus
+from app.models.comment import BlogBlockedAuthor, Comment, CommentsMode, CommentStatus
 from app.models.follow import BlogFollow, UserFollow
 from app.models.mfa_email_code import MfaEmailCode
 from app.models.page import Page
@@ -50,6 +50,7 @@ __all__ = [
     "PostFragment",
     "PostReadDaily",
     "Comment",
+    "BlogBlockedAuthor",
     "CommentStatus",
     "CommentsMode",
     "ApiToken",

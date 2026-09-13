@@ -103,6 +103,8 @@ export interface Blog {
   default_locale: string;
   /** Lingue secondarie del blog (informative), oltre a default_locale. */
   extra_locales: string[];
+  /** B4: chiusura automatica dei commenti N giorni dopo la pubblicazione (null = mai). */
+  comments_auto_close_days: number | null;
   /** Pausa volontaria del proprietario: i lettori vedono una pagina "in pausa". */
   is_paused: boolean;
   /** Sospensione da parte di un admin di piattaforma. */
@@ -323,6 +325,18 @@ export interface Comment {
   status: CommentStatus;
   content: string;
   created_at: string;
+  /** B4: segnalato ai moderatori di piattaforma dal proprietario/mediatore. */
+  reported_to_platform: boolean;
+  report_note: string | null;
+}
+
+/** B4: voce della lista dei bloccati di un blog. */
+export interface BlockedAuthor {
+  id: string;
+  label: string;
+  is_anonymous: boolean;
+  note: string | null;
+  created_at: string;
 }
 
 /** GET /blogs/{slug}/comments — moderazione trasversale nel dashboard:
@@ -479,6 +493,7 @@ export interface AdminComment extends BlogComment {
   blog_id: string;
   blog_slug: string;
   blog_title: string;
+  reported_at: string | null;
 }
 
 export type AuditActorType = "user" | "core_token" | "user_token" | "system" | "anonymous";

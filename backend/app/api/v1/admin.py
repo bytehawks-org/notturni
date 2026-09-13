@@ -532,6 +532,9 @@ class AdminCommentOut(BaseModel):
     status: CommentStatus
     content: str
     created_at: datetime
+    reported_to_platform: bool = False
+    report_note: str | None = None
+    reported_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -539,6 +542,7 @@ class AdminCommentOut(BaseModel):
 @router.get("/comments", response_model=list[AdminCommentOut])
 async def list_all_comments(
     status_filter: CommentStatus = Query(CommentStatus.PENDING, alias="status"),
+    reported: bool = False,
     q: str | None = None,
     current_user: User = Depends(require_platform_moderator),
     session: AsyncSession = Depends(get_session),
@@ -552,8 +556,8 @@ async def list_all_comments(
         select(Comment, Post.title, Post.slug, Blog.id, Blog.slug, Blog.title)
         .join(Post, Post.id == Comment.post_id)
         .join(Blog, Blog.id == Post.blog_id)
-        .where(Comment.status == status_filter)
-        .order_by(Comment.created_at.desc())
+        .where(Comment.reported_to_platform.is_(True) if reported else (Comment.status == status_filter))
+        .order_by(Comment.reported_at.desc().nulls_last() if reported else Comment.created_at.desc())
     )
     if q:
         needle = f"%{q}%"
@@ -595,6 +599,9 @@ async def list_all_comments(
                 status=comment.status,
                 content=comment.content,
                 created_at=comment.created_at,
+                reported_to_platform=comment.reported_to_platform,
+                report_note=comment.report_note,
+                reported_at=comment.reported_at,
             )
         )
     return out
