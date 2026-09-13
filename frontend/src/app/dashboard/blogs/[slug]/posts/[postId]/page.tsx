@@ -10,6 +10,7 @@ import { CategorySelect } from "@/components/editor/CategorySelect";
 import { CoverImageUpload } from "@/components/editor/CoverImageUpload";
 import { EditorRail } from "@/components/editor/EditorRail";
 import { PostStatusControl } from "@/components/editor/PostStatusControl";
+import { PublicationSelect } from "@/components/editor/PublicationSelect";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
 import { TagInput } from "@/components/editor/TagInput";
 import { TranslationsBar } from "@/components/editor/TranslationsBar";
@@ -103,6 +104,7 @@ export default function PostEditorPage() {
   const [coverImageCategories, setCoverImageCategories] = useState<SensitivityCategory[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [publicationId, setPublicationId] = useState<string | null>(null);
   const [commentsMode, setCommentsMode] = useState<CommentsMode | null>(null);
   const [searchIndexingEnabled, setSearchIndexingEnabled] = useState<boolean | null>(null);
   const [aiCrawlingEnabled, setAiCrawlingEnabled] = useState<boolean | null>(null);
@@ -126,6 +128,7 @@ export default function PostEditorPage() {
         setCoverImageCategories(p.cover_image_categories);
         setTags(p.manual_tags);
         setCategoryId(p.category?.id ?? null);
+        setPublicationId(p.publication?.id ?? null);
         setCommentsMode(p.comments_mode);
         setSearchIndexingEnabled(p.search_indexing_enabled);
         setAiCrawlingEnabled(p.ai_crawling_enabled);
@@ -161,6 +164,7 @@ export default function PostEditorPage() {
           cover_image_categories: coverImageCategories,
           tags,
           category_id: categoryId,
+          publication_id: publicationId,
           comments_mode: commentsMode,
           search_indexing_enabled: searchIndexingEnabled,
           ai_crawling_enabled: aiCrawlingEnabled,
@@ -296,6 +300,7 @@ export default function PostEditorPage() {
                     </span>
                   </div>
                   <CategorySelect blogSlug={params.slug} value={categoryId} onChange={setCategoryId} />
+                  <PublicationSelect blogSlug={params.slug} value={publicationId} onChange={setPublicationId} />
                   <div>
                     <RailLabel>Tag</RailLabel>
                     <TagInput value={tags} onChange={setTags} />

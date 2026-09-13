@@ -15,6 +15,7 @@ import { MyMembershipCard } from "@/components/dashboard/blog/MyMembershipCard";
 import { OverviewTab } from "@/components/dashboard/blog/OverviewTab";
 import { PagesTab } from "@/components/dashboard/blog/PagesTab";
 import { PostsTab } from "@/components/dashboard/blog/PostsTab";
+import { PublicationsTab } from "@/components/dashboard/blog/PublicationsTab";
 import { SettingsTab } from "@/components/dashboard/blog/SettingsTab";
 import { errorMessage } from "@/components/dashboard/blog/shared";
 import { Alert } from "@/components/ui/Alert";
@@ -25,8 +26,8 @@ import { useAuth } from "@/lib/auth-context";
 import { SITE_HOST } from "@/lib/site";
 import { type Blog } from "@/lib/types";
 
-type Tab = "overview" | "posts" | "pages" | "notes" | "media" | "comments" | "appearance" | "collaborators" | "settings";
-const TABS: Tab[] = ["overview", "posts", "pages", "notes", "media", "comments", "appearance", "collaborators", "settings"];
+type Tab = "overview" | "posts" | "pages" | "publications" | "notes" | "media" | "comments" | "appearance" | "collaborators" | "settings";
+const TABS: Tab[] = ["overview", "posts", "pages", "publications", "notes", "media", "comments", "appearance", "collaborators", "settings"];
 
 /** Scheda del blog in dashboard (mockup 5a-5c/2e/5g): intestazione con
  * visibilità e ruolo, azioni "Vedi il blog"/"Scrivi un post", tab
@@ -121,6 +122,7 @@ export default function BlogDetailPage() {
       {tab === "overview" && <OverviewTab blogSlug={blog.slug} />}
       {tab === "posts" && <PostsTab blogSlug={blog.slug} canWrite={isOwner} />}
       {tab === "pages" && <PagesTab blog={blog} canWrite={isOwner} />}
+      {tab === "publications" && <PublicationsTab blogSlug={blog.slug} canWrite={isOwner} />}
       {tab === "notes" && <NotesTab blogSlug={blog.slug} canWrite={isOwner} />}
       {tab === "media" && <MediaTab blogSlug={blog.slug} canWrite={isOwner} />}
       {tab === "comments" && <CommentsTab blog={blog} canModerate={isOwner} onBlogUpdated={setBlog} />}

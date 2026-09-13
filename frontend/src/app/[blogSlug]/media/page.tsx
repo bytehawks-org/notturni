@@ -10,7 +10,7 @@ import { BlogHeader } from "@/components/shell/BlogHeader";
 import { FilterChip } from "@/components/ui/Pill";
 import { SENSITIVITY_CATEGORY_LABELS } from "@/lib/content-media";
 import { formatDate } from "@/lib/format";
-import { getBlogMediaBibliography, getPublicBlog, getPublicBlogConfig } from "@/lib/server-api";
+import { getBlogMediaBibliography, getPublicBlog, getPublicBlogConfig, getPublicPublications } from "@/lib/server-api";
 import type { MediaBibliographyEntry } from "@/lib/types";
 
 interface PageParams {
@@ -77,10 +77,11 @@ export default async function BlogMediaBibliographyPage({
     getLocale(),
   ]);
   if (!blog) notFound();
+  const hasPublications = (await getPublicPublications(blogSlug).catch(() => [])).length > 0;
   if (blogIsOffline(blog)) {
     return (
       <BlogPageShell config={config}>
-        <BlogHeader slug={blogSlug} name={blog.title} current="media" />
+        <BlogHeader slug={blogSlug} name={blog.title} hasPublications={hasPublications} current="media" />
         <BlogStateNotice blog={blog} />
       </BlogPageShell>
     );
@@ -98,7 +99,7 @@ export default async function BlogMediaBibliographyPage({
 
   return (
     <BlogPageShell config={config}>
-      <BlogHeader slug={blogSlug} name={blog.title} current="media" actions={<BlogHeaderActions slug={blogSlug} />} />
+      <BlogHeader slug={blogSlug} name={blog.title} hasPublications={hasPublications} current="media" actions={<BlogHeaderActions slug={blogSlug} />} />
       <main className="mx-auto w-full max-w-[1184px] flex-1 px-5 py-10 lg:px-12 lg:py-14">
         <div className="flex flex-col gap-1.5">
           <h1 className="font-serif text-[34px] font-medium leading-[1.12] tracking-tight md:text-[40px]">{t("title")}</h1>

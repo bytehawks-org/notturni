@@ -8,7 +8,7 @@ import { BlogStateNotice, blogIsOffline } from "@/components/blog/BlogStateNotic
 import { BlogHeaderActions } from "@/components/blog/PostHeaderActions";
 import { BlogHeader } from "@/components/shell/BlogHeader";
 import { formatDate } from "@/lib/format";
-import { getBlogLinksBibliography, getPublicBlog, getPublicBlogConfig } from "@/lib/server-api";
+import { getBlogLinksBibliography, getPublicBlog, getPublicBlogConfig, getPublicPublications } from "@/lib/server-api";
 import type { LinkBibliographyEntry } from "@/lib/types";
 
 interface PageParams {
@@ -42,10 +42,11 @@ export default async function BlogLinksBibliographyPage({ params }: { params: Pr
     getLocale(),
   ]);
   if (!blog) notFound();
+  const hasPublications = (await getPublicPublications(blogSlug).catch(() => [])).length > 0;
   if (blogIsOffline(blog)) {
     return (
       <BlogPageShell config={config}>
-        <BlogHeader slug={blogSlug} name={blog.title} current="links" />
+        <BlogHeader slug={blogSlug} name={blog.title} hasPublications={hasPublications} current="links" />
         <BlogStateNotice blog={blog} />
       </BlogPageShell>
     );
@@ -61,7 +62,7 @@ export default async function BlogLinksBibliographyPage({ params }: { params: Pr
 
   return (
     <BlogPageShell config={config}>
-      <BlogHeader slug={blogSlug} name={blog.title} current="links" actions={<BlogHeaderActions slug={blogSlug} />} />
+      <BlogHeader slug={blogSlug} name={blog.title} hasPublications={hasPublications} current="links" actions={<BlogHeaderActions slug={blogSlug} />} />
       <main className="mx-auto w-full max-w-[1184px] flex-1 px-5 py-10 lg:px-12 lg:py-14">
         <div className="flex flex-col gap-1.5">
           <h1 className="font-serif text-[34px] font-medium leading-[1.12] tracking-tight md:text-[40px]">{t("title")}</h1>

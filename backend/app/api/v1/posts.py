@@ -32,6 +32,7 @@ from app.domain.tags import resolve_tags
 from app.models.blog import Blog, BlogMembership, BlogVisibility
 from app.models.comment import CommentsMode
 from app.models.category import Category
+from app.models.publication import Publication
 from app.models.post import Post, PostStatus
 from app.models.post_read import PostReadDaily
 from app.domain.comments_mode import effective_comments_mode
@@ -81,6 +82,8 @@ class PostCreateRequest(BaseModel):
     # Categoria (vedi app/domain/categories.py) — al più una, deve
     # appartenere allo stesso blog.
     category_id: uuid.UUID | None = None
+    # B9: pubblicazione di appartenenza (stesso schema tri-state di category_id)
+    publication_id: uuid.UUID | None = None
     # Note a piè di pagina (todo/EDITOR.md): elenco strutturato, non nel
     # corpo. Nel `content` il riferimento è il marcatore `[idx](#nota-idx)`.
     notes: list[NoteIn] | None = None
@@ -96,6 +99,8 @@ class PostTranslationRequest(BaseModel):
     cover_image_categories: list[str] = []
     tags: list[str] | None = None
     category_id: uuid.UUID | None = None
+    # B9: pubblicazione di appartenenza (stesso schema tri-state di category_id)
+    publication_id: uuid.UUID | None = None
     notes: list[NoteIn] | None = None
 
 
@@ -123,6 +128,8 @@ class PostUpdateRequest(BaseModel):
     # "campo assente" (non toccarla) — servirsi di model_fields_set in
     # update_post, non di un semplice "is not None".
     category_id: uuid.UUID | None = None
+    # B9: pubblicazione di appartenenza (stesso schema tri-state di category_id)
+    publication_id: uuid.UUID | None = None
     # assente: lascia invariate le note; lista (anche vuota `[]`): le sostituisce.
     notes: list[NoteIn] | None = None
     # Override di Blog.comments_mode per questo solo post; `null` esplicito
@@ -145,6 +152,14 @@ class CategorySummaryOut(BaseModel):
     id: uuid.UUID
     name: str
     slug: str
+
+    model_config = {"from_attributes": True}
+
+
+class PublicationSummaryOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    title: str
 
     model_config = {"from_attributes": True}
 
@@ -186,6 +201,9 @@ class PostOut(BaseModel):
     manual_tags: list[str]
     tags: list[str]
     category: CategorySummaryOut | None
+    # B9: pubblicazione di appartenenza e posizione esplicita del capitolo
+    publication: PublicationSummaryOut | None = None
+    chapter_order: int | None = None
     # None: eredita da Blog.comments_mode (vedi PATCH sopra per il tri-state
     # di scrittura). effective_comments_mode è invece sempre valorizzato: il
     # modo comodo per il frontend di sapere subito chi può commentare, senza
@@ -273,6 +291,14 @@ async def _resolve_author_display_name(session: AsyncSession, user: User, blog: 
     return _pick_author_display_name(membership, blog, user)
 
 
+async def _validate_publication(session: AsyncSession, blog: Blog, publication_id: uuid.UUID | None) -> None:
+    if publication_id is None:
+        return
+    publication = await session.get(Publication, publication_id)
+    if publication is None or publication.blog_id != blog.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Pubblicazione non valida per questo blog.")
+
+
 async def _validate_category(session: AsyncSession, blog: Blog, category_id: uuid.UUID | None) -> None:
     if category_id is None:
         return
@@ -305,6 +331,11 @@ async def _posts_out(
     post_ids = [post.id for post, _ in pairs]
     author_ids = {post.author_id for post, _ in pairs}
     category_ids = {post.category_id for post, _ in pairs if post.category_id}
+    publication_ids = {post.publication_id for post, _ in pairs if post.publication_id}
+    publications: dict[uuid.UUID, Publication] = {}
+    if publication_ids:
+        pub_rows = await session.execute(select(Publication).where(Publication.id.in_(publication_ids)))
+        publications = {p.id: p for p in pub_rows.scalars().all()}
     # coppie (autore, blog) per risolvere l'alias di membership del post giusto
     membership_keys = {(post.author_id, blog.id) for post, blog in pairs}
 
@@ -379,6 +410,8 @@ async def _posts_out(
                 manual_tags=post.manual_tags,
                 tags=effective_tags,
                 category=CategorySummaryOut.model_validate(category) if category else None,
+                publication=PublicationSummaryOut.model_validate(publications[post.publication_id]) if post.publication_id and post.publication_id in publications else None,
+                chapter_order=post.chapter_order,
                 comments_mode=post.comments_mode,
                 effective_comments_mode=effective_comments_mode(post, blog),
                 search_indexing_enabled=post.search_indexing_enabled,
@@ -534,6 +567,7 @@ async def create_post(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
     await _validate_category(session, blog, payload.category_id)
+    await _validate_publication(session, blog, payload.publication_id)
 
     post = Post(
         blog_id=blog.id,
@@ -548,6 +582,7 @@ async def create_post(
         cover_image_categories=payload.cover_image_categories,
         manual_tags=manual_tags,
         category_id=payload.category_id,
+        publication_id=payload.publication_id,
     )
     session.add(post)
     await _sync_post_tags(session, post, effective_tags)
@@ -610,6 +645,10 @@ async def add_post_translation(
         payload.category_id if "category_id" in payload.model_fields_set else original.category_id
     )
     await _validate_category(session, blog, category_id)
+    publication_id = (
+        payload.publication_id if "publication_id" in payload.model_fields_set else original.publication_id
+    )
+    await _validate_publication(session, blog, publication_id)
 
     translation = Post(
         blog_id=blog.id,
@@ -625,6 +664,7 @@ async def add_post_translation(
         cover_image_categories=payload.cover_image_categories,
         manual_tags=manual_tags,
         category_id=category_id,
+        publication_id=publication_id,
     )
     session.add(translation)
     await _sync_post_tags(session, translation, effective_tags)
@@ -789,6 +829,11 @@ async def update_post(
     if "category_id" in payload.model_fields_set:
         await _validate_category(session, blog, payload.category_id)
         post.category_id = payload.category_id
+    if "publication_id" in payload.model_fields_set:
+        await _validate_publication(session, blog, payload.publication_id)
+        if payload.publication_id != post.publication_id:
+            post.chapter_order = None
+        post.publication_id = payload.publication_id
 
     if "comments_mode" in payload.model_fields_set:
         if payload.comments_mode == CommentsMode.EVERYONE and not turnstile_configured():

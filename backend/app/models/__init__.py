@@ -23,6 +23,7 @@ from app.models.page import Page
 from app.models.platform_config import PlatformConfig
 from app.models.post import Post, PostStatus
 from app.models.post_fragment import PostFragment
+from app.models.publication import Publication
 from app.models.post_link import post_links
 from app.models.post_media import post_media
 from app.models.post_note import post_notes
@@ -54,6 +55,7 @@ __all__ = [
     "post_media",
     "post_links",
     "PostFragment",
+    "Publication",
     "PostReadDaily",
     "Comment",
     "BlogBlockedAuthor",

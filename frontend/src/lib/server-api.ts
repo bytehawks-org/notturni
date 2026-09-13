@@ -12,6 +12,8 @@ import type {
   Post,
   PostTranslationSummary,
   PublicBlog,
+  Publication,
+  PublicationDetail,
   TrendingTag,
 } from "./types";
 
@@ -264,4 +266,23 @@ export async function getPublicBlogCategories(slug: string): Promise<Category[]>
   });
   if (!res.ok) return [];
   return (await res.json()) as Category[];
+}
+
+/** B9: pubblicazioni pubbliche del blog (solo con capitoli pubblicati). */
+export async function getPublicPublications(slug: string): Promise<Publication[]> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}/publications`, {
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.blog(slug)] },
+  });
+  if (!res.ok) return [];
+  return (await res.json()) as Publication[];
+}
+
+/** B9: indice dei capitoli di una pubblicazione; `null` se non esiste o non ha capitoli pubblicati. */
+export async function getPublicPublication(slug: string, name: string): Promise<PublicationDetail | null> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}/publications/${name}`, {
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.blog(slug)] },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero della pubblicazione.`);
+  return (await res.json()) as PublicationDetail;
 }

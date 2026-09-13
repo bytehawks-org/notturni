@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { PostActions } from "@/components/blog/PostActions";
 import { BlogHeaderActions } from "@/components/blog/PostHeaderActions";
 import { PostToc } from "@/components/blog/PostToc";
+import { ChapterNav, ChapterProgress } from "@/components/publications/PublicationIndex";
 import { ReadBeacon } from "@/components/blog/ReadBeacon";
 import { ReportButton } from "@/components/blog/ReportDialog";
 import { CommentsSection } from "@/components/CommentsSection";
@@ -15,7 +16,7 @@ import { TagPills } from "@/components/TagPills";
 import { formatDate, readingMinutes } from "@/lib/format";
 import { languageName } from "@/lib/languages";
 import { excerpt, renderPost } from "@/lib/markdown";
-import { getPublicBlog, getPublicPostByPermalink, getPublicPostTranslations } from "@/lib/server-api";
+import { getPublicBlog, getPublicPostByPermalink, getPublicPostTranslations, getPublicPublication, getPublicPublications } from "@/lib/server-api";
 
 interface PageParams {
   blogSlug: string;
@@ -63,6 +64,13 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
   const translations = (await getPublicPostTranslations(post.id).catch(() => [])).filter(
     (tr) => tr.status === "published"
   );
+  // B9: capitolo di una pubblicazione → barra di avanzamento e prev/next
+  const [publication, publications] = await Promise.all([
+    post.publication ? getPublicPublication(blogSlug, post.publication.name).catch(() => null) : Promise.resolve(null),
+    getPublicPublications(blogSlug).catch(() => []),
+  ]);
+  const chapterIndex = publication ? publication.chapters.findIndex((c) => c.post_id === post.id) : -1;
+  const chapter = chapterIndex >= 0 && publication ? { current: chapterIndex + 1, total: publication.chapters.length, prev: publication.chapters[chapterIndex - 1], next: publication.chapters[chapterIndex + 1] } : null;
 
   const { html, headings } = await renderPost(post.content, {
     mentions: post.mentions_enabled,
@@ -125,7 +133,8 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
 
   return (
     <div className="flex flex-1 flex-col">
-      <BlogHeader slug={blogSlug} name={blogTitle} current="posts" actions={<BlogHeaderActions slug={blogSlug} />} />
+      <BlogHeader slug={blogSlug} name={blogTitle} current={chapter ? "publications" : "posts"} hasPublications={publications.length > 0} actions={<BlogHeaderActions slug={blogSlug} />} />
+      {chapter && <ChapterProgress current={chapter.current} total={chapter.total} />}
       <main className="mx-auto w-full max-w-[1184px] flex-1 px-5 py-10 lg:px-12 lg:py-14">
         <div className="grid gap-10 xl:grid-cols-[minmax(0,1fr)_680px_minmax(0,1fr)] xl:gap-12">
           <aside className="hidden xl:block">
@@ -136,6 +145,11 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
 
           <article className="mx-auto w-full max-w-[680px] min-w-0">
             <header className="flex flex-col gap-4">
+              {chapter && publication && (
+                <Link href={`/${blogSlug}/pub/${publication.name}`} className="font-mono text-[11px] uppercase tracking-[.08em] text-primary no-underline hover:underline">
+                  {publication.title} · {chapter.current}/{chapter.total}
+                </Link>
+              )}
               <h1 className="font-serif text-[34px] font-medium leading-[1.12] tracking-tight text-foreground md:text-[44px]">
                 {post.title}
               </h1>
@@ -201,6 +215,10 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
             )}
 
             <div className="mt-10 xl:hidden">{rail}</div>
+
+            {chapter && publication && (
+              <ChapterNav prev={chapter.prev} next={chapter.next} index={{ title: publication.title, href: `/${blogSlug}/pub/${publication.name}` }} />
+            )}
 
             <CommentsSection postId={post.id} mode={post.effective_comments_mode} />
             <ReadBeacon postId={post.id} />

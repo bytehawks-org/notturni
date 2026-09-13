@@ -10,7 +10,7 @@ import { FeedPostCard } from "@/components/FeedPostCard";
 import { BlogHeader } from "@/components/shell/BlogHeader";
 import { FilterChip } from "@/components/ui/Pill";
 import { SITE_HOST } from "@/lib/site";
-import { getPublicBlog, getPublicBlogCategories, getPublicBlogConfig, getPublicBlogPosts } from "@/lib/server-api";
+import { getPublicPublications, getPublicBlog, getPublicBlogCategories, getPublicBlogConfig, getPublicBlogPosts } from "@/lib/server-api";
 
 interface PageParams {
   blogSlug: string;
@@ -51,10 +51,11 @@ export default async function BlogHomePage({
     getTranslations("BlogPage"),
   ]);
   if (!blog) notFound();
+  const hasPublications = (await getPublicPublications(blogSlug).catch(() => [])).length > 0;
   if (blogIsOffline(blog)) {
     return (
       <BlogPageShell config={config}>
-        <BlogHeader slug={blogSlug} name={blog.title} current="posts" />
+        <BlogHeader slug={blogSlug} name={blog.title} hasPublications={hasPublications} current="posts" />
         <BlogStateNotice blog={blog} />
       </BlogPageShell>
     );
@@ -64,7 +65,7 @@ export default async function BlogHomePage({
 
   return (
     <BlogPageShell config={config}>
-      <BlogHeader slug={blogSlug} name={blog.title} current="posts" actions={<BlogHeaderActions slug={blogSlug} />} />
+      <BlogHeader slug={blogSlug} name={blog.title} hasPublications={hasPublications} current="posts" actions={<BlogHeaderActions slug={blogSlug} />} />
       <main className="mx-auto w-full max-w-[1184px] flex-1 px-5 py-10 lg:px-12 lg:py-14">
         <header className="grid gap-6 md:grid-cols-[72px_minmax(0,1fr)] md:gap-7">
           <span
@@ -110,6 +111,14 @@ export default async function BlogHomePage({
             )}
           </section>
           <aside className="flex flex-col gap-6 text-sm">
+            {hasPublications && (
+              <div className="flex flex-col gap-2 rounded-xl border border-border bg-surface px-[18px] py-4">
+                <span className="font-mono text-[11px] uppercase tracking-[.08em] text-muted">{t("publications")}</span>
+                <Link href={`/${blogSlug}/pub`} className="text-[13px] font-medium text-primary no-underline hover:underline">
+                  {t("publicationsLink")}
+                </Link>
+              </div>
+            )}
             <div className="flex flex-col gap-2 rounded-xl border border-border bg-surface px-[18px] py-4">
               <span className="font-mono text-[11px] uppercase tracking-[.08em] text-muted">{t("aboutBlog")}</span>
               <span className="text-[13px] leading-relaxed text-muted">

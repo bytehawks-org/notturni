@@ -883,6 +883,37 @@ Idempotente se già pubblicato e non si passa un nuovo `published_at`
 (`published_at` esistente non viene toccato); passare una nuova data lo
 sovrascrive sempre, anche per ripianificare un post già pubblicato.
 
+## Pubblicazioni (todo/PUBLICATIONS.md, todo/UX_REDESIGN.md B9, mockup 2d/3g)
+
+Una pubblicazione raccoglie post di un blog come capitoli sotto
+`/{blog}/pub/{name}`: ordine cronologico dal più vecchio, oppure esplicito
+(`Post.chapter_order`). Un post appartiene al più a una pubblicazione:
+`POST /blogs/{slug}/posts`, `POST /posts/{id}/translations` e
+`PATCH /posts/{id}` accettano `publication_id` (tri-state come
+`category_id`; `400` se non è del blog; cambiare pubblicazione azzera
+l'ordine). `PostOut` include `publication: {id, name, title} | null` e
+`chapter_order`.
+
+**`GET /api/v1/blogs/{slug}/publications`** — segue la visibilità del blog.
+`[{id, name, title, description, chapters_total, chapters_published,
+created_at}]`; i lettori vedono solo quelle con almeno un capitolo
+pubblicato, chi ha accesso in scrittura tutte.
+
+**`GET /api/v1/blogs/{slug}/publications/{name|id}`** — indice: come sopra
+più `chapters: [{n, post_id, slug, title, locale, status, published_at,
+permalink, reading_minutes, is_public}]`. Per i lettori solo capitoli
+pubblicati (`404` se nessuno); chi scrive vede anche bozze/pianificati con
+`is_public=false`.
+
+**`POST /api/v1/blogs/{slug}/publications`** — `{name, title, description?}`
+(accesso in scrittura; `name` = segmento URL, minuscole/numeri/trattini,
+`409` se già usato). **`PATCH .../{name|id}`** — stessi campi.
+**`DELETE .../{name|id}`** — `204`, i post restano senza pubblicazione.
+
+**`PUT /api/v1/blogs/{slug}/publications/{name|id}/order`** — `{post_ids}`
+nell'ordine voluto (mockup 3g drag-to-order); i post non elencati seguono
+in coda in ordine cronologico; `400` se un id non è della pubblicazione.
+
 ## Libreria note del blog (todo/UX_REDESIGN.md B8, mockup 3b)
 
 Le note a piè di pagina dei post (`post_notes`) vengono agganciate, al

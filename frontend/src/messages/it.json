@@ -151,7 +151,14 @@
     "next": "Successivo ›",
     "unpublished": "Non pubblicato",
     "read": "letto ✓",
-    "continue": "continua"
+    "continue": "continua",
+    "listTitle": "Pubblicazioni",
+    "listSubtitle": "Serie di post in ordine di lettura, con indice automatico.",
+    "none": "Nessuna pubblicazione con capitoli pubblicati.",
+    "chaptersOf": "{published} di {total} capitoli",
+    "label": "Pubblicazione",
+    "startReading": "Inizia a leggere",
+    "end": "Fine della pubblicazione"
   },
   "Home": {
     "eyebrow": "Open source · multilingua · hosting in UE · GDPR by design",
@@ -684,7 +691,9 @@
     "aboutBlog": "Su questo blog",
     "postsCount": "{count, plural, one {# post} other {# post}}",
     "language": "lingua {lang}",
-    "bibliographyLink": "Bibliografia del blog →"
+    "bibliographyLink": "Bibliografia del blog →",
+    "publications": "Pubblicazioni",
+    "publicationsLink": "Vedi le pubblicazioni →"
   },
   "CommentsSection": {
     "title": "Commenti",
@@ -1158,5 +1167,34 @@
     "this": "questa",
     "other": "l'altra",
     "merged": "Note unite"
+  },
+  "PublicationsTab": {
+    "publication": "Pubblicazione",
+    "noPublication": "Nessuna pubblicazione",
+    "intro": "Una pubblicazione raccoglie post come capitoli sotto /pub/{nome}, in ordine di lettura.",
+    "new": "Nuova pubblicazione",
+    "edit": "Modifica pubblicazione",
+    "emptyTitle": "Nessuna pubblicazione",
+    "emptyBody": "Crea una pubblicazione e assegnale i post dal rail dell'editor.",
+    "chaptersOf": "{published} di {total} capitoli pubblicati",
+    "chapters": "Capitoli",
+    "noChapters": "Nessun capitolo: assegna un post a questa pubblicazione dall'editor.",
+    "saveOrder": "Salva ordine",
+    "orderSaved": "Ordine salvato",
+    "orderHint": "Trascina o usa le frecce: senza un ordine esplicito i capitoli seguono la data di pubblicazione, dal più vecchio.",
+    "minutes": "{min} min",
+    "moveUp": "Sposta su",
+    "moveDown": "Sposta giù",
+    "title": "Titolo",
+    "name": "Nome nell'URL",
+    "nameHint": "minuscole, numeri e trattini",
+    "description": "Descrizione",
+    "created": "Pubblicazione creata",
+    "saved": "Pubblicazione salvata",
+    "deleted": "Pubblicazione eliminata",
+    "view": "Vedi",
+    "addHint": "Per aggiungere un capitolo apri il post nell'editor e scegli la pubblicazione nel pannello a destra.",
+    "deleteTitle": "Eliminare “{title}”?",
+    "deleteBody": "I post restano, solo senza pubblicazione. Digita il nome nell'URL per confermare."
   }
 }

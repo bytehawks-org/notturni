@@ -51,6 +51,8 @@ import type {
   PostTranslationSummary,
   Profile,
   PublicComment,
+  Publication,
+  PublicationDetail,
   ReportReason,
   SessionResponse,
   SocialLink,
@@ -253,6 +255,18 @@ export const api = {
         formData,
       });
     },
+    /** B9: pubblicazioni. */
+    listPublications: (slug: string, token?: string | null) => request<Publication[]>(`/api/v1/blogs/${slug}/publications`, { token }),
+    getPublication: (slug: string, ref: string, token?: string | null) =>
+      request<PublicationDetail>(`/api/v1/blogs/${slug}/publications/${ref}`, { token }),
+    createPublication: (token: string, slug: string, payload: { name: string; title: string; description?: string | null }) =>
+      request<Publication>(`/api/v1/blogs/${slug}/publications`, { method: "POST", token, body: payload }),
+    updatePublication: (token: string, slug: string, ref: string, payload: { name?: string; title?: string; description?: string | null }) =>
+      request<Publication>(`/api/v1/blogs/${slug}/publications/${ref}`, { method: "PATCH", token, body: payload }),
+    deletePublication: (token: string, slug: string, ref: string) =>
+      request<void>(`/api/v1/blogs/${slug}/publications/${ref}`, { method: "DELETE", token }),
+    orderPublication: (token: string, slug: string, ref: string, postIds: string[]) =>
+      request<PublicationDetail>(`/api/v1/blogs/${slug}/publications/${ref}/order`, { method: "PUT", token, body: { post_ids: postIds } }),
     /** B8: libreria note (proprietario e collaboratori). */
     listNotes: (token: string, slug: string, q?: string) => request<BlogNote[]>(withQuery(`/api/v1/blogs/${slug}/notes`, { q }), { token }),
     createNote: (token: string, slug: string, payload: { content: string; kind: NoteKind; url?: string | null }) =>
@@ -392,6 +406,7 @@ export const api = {
         cover_image_categories?: SensitivityCategory[];
         tags?: string[];
         category_id?: string | null;
+        publication_id?: string | null;
         notes?: PostNote[];
       }
     ) => request<Post>(`/api/v1/blogs/${blogSlug}/posts`, { method: "POST", token, body: payload }),
@@ -410,6 +425,8 @@ export const api = {
         tags?: string[];
         /** assente: non tocca la categoria; null: la rimuove; id: la imposta. */
         category_id?: string | null;
+        /** B9: stesso schema di category_id per la pubblicazione. */
+        publication_id?: string | null;
         /** assente: non tocca le note; lista (anche []): le sostituisce. */
         notes?: PostNote[];
         /** assente: non tocca; null: torna a ereditare da Blog.comments_mode;

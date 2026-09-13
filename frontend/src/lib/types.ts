@@ -227,6 +227,9 @@ export interface Post {
   tags: string[];
   /** Tassonomia del blog: al più una per post, a differenza dei tag. */
   category: Category | null;
+  /** B9: pubblicazione di appartenenza (al più una) e posizione esplicita del capitolo. */
+  publication: { id: string; name: string; title: string } | null;
+  chapter_order: number | null;
   /** Override di Blog.comments_mode per questo post: `null` eredita dal blog. */
   comments_mode: CommentsMode | null;
   /** Sempre valorizzato: comments_mode se impostato, altrimenti quello del blog. */
@@ -273,6 +276,34 @@ export interface BibliographyEntry {
 }
 
 export type NoteKind = "book" | "article" | "web" | "note";
+
+/** Pubblicazioni (B9, mockup 2d/3g). */
+export interface Publication {
+  id: string;
+  name: string;
+  title: string;
+  description: string | null;
+  chapters_total: number;
+  chapters_published: number;
+  created_at: string;
+}
+
+export interface Chapter {
+  n: number;
+  post_id: string;
+  slug: string;
+  title: string;
+  locale: string;
+  status: PostStatus;
+  published_at: string | null;
+  permalink: string;
+  reading_minutes: number;
+  is_public: boolean;
+}
+
+export interface PublicationDetail extends Publication {
+  chapters: Chapter[];
+}
 
 /** Libreria note del blog (B8, mockup 3b). */
 export interface NoteUsage {

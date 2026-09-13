@@ -151,7 +151,14 @@
     "next": "Next ›",
     "unpublished": "Unpublished",
     "read": "read ✓",
-    "continue": "continue"
+    "continue": "continue",
+    "listTitle": "Publications",
+    "listSubtitle": "Series of posts in reading order, with an automatic index.",
+    "none": "No publication with published chapters.",
+    "chaptersOf": "{published} of {total} chapters",
+    "label": "Publication",
+    "startReading": "Start reading",
+    "end": "End of the publication"
   },
   "Home": {
     "eyebrow": "Open source · multilingual · EU-hosted · GDPR by design",
@@ -684,7 +691,9 @@
     "aboutBlog": "About this blog",
     "postsCount": "{count, plural, one {# post} other {# posts}}",
     "language": "language {lang}",
-    "bibliographyLink": "Blog bibliography →"
+    "bibliographyLink": "Blog bibliography →",
+    "publications": "Publications",
+    "publicationsLink": "See the publications →"
   },
   "CommentsSection": {
     "title": "Comments",
@@ -1158,5 +1167,34 @@
     "this": "this one",
     "other": "the other",
     "merged": "Notes merged"
+  },
+  "PublicationsTab": {
+    "publication": "Publication",
+    "noPublication": "No publication",
+    "intro": "A publication collects posts as chapters under /pub/{name}, in reading order.",
+    "new": "New publication",
+    "edit": "Edit publication",
+    "emptyTitle": "No publications",
+    "emptyBody": "Create a publication and assign posts to it from the editor rail.",
+    "chaptersOf": "{published} of {total} chapters published",
+    "chapters": "Chapters",
+    "noChapters": "No chapters yet: assign a post to this publication from the editor.",
+    "saveOrder": "Save order",
+    "orderSaved": "Order saved",
+    "orderHint": "Drag or use the arrows: without an explicit order, chapters follow the publication date, oldest first.",
+    "minutes": "{min} min",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "title": "Title",
+    "name": "URL name",
+    "nameHint": "lowercase letters, digits and hyphens",
+    "description": "Description",
+    "created": "Publication created",
+    "saved": "Publication saved",
+    "deleted": "Publication deleted",
+    "view": "View",
+    "addHint": "To add a chapter open the post in the editor and pick the publication in the right rail.",
+    "deleteTitle": "Delete “{title}”?",
+    "deleteBody": "Posts stay, just without a publication. Type the URL name to confirm."
   }
 }

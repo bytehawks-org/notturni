@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { CategorySelect } from "@/components/editor/CategorySelect";
 import { CoverImageUpload } from "@/components/editor/CoverImageUpload";
 import { EditorRail } from "@/components/editor/EditorRail";
+import { PublicationSelect } from "@/components/editor/PublicationSelect";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
 import { TagInput } from "@/components/editor/TagInput";
 import { ApiClientError, api } from "@/lib/api";
@@ -31,6 +32,7 @@ export default function NewPostPage() {
   const [coverImageCategories, setCoverImageCategories] = useState<SensitivityCategory[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [publicationId, setPublicationId] = useState<string | null>(null);
   const [notes, setNotes] = useState<PostNote[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -50,6 +52,7 @@ export default function NewPostPage() {
           cover_image_categories: coverImageCategories,
           tags,
           category_id: categoryId,
+          publication_id: publicationId,
           notes,
         })
       );
@@ -133,6 +136,7 @@ export default function NewPostPage() {
               content: (
                 <>
                   <CategorySelect blogSlug={params.slug} value={categoryId} onChange={setCategoryId} />
+                  <PublicationSelect blogSlug={params.slug} value={publicationId} onChange={setPublicationId} />
                   <div>
                     <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[.04em] text-muted">
                       Tag

@@ -122,6 +122,15 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   solo lato client), interfaccia in italiano e inglese (`next-intl`,
   selettore nell'header e nel profilo — la lingua dei contenuti è a parte),
   palette personalizzata del blog applicata alle sue pagine pubbliche.
+- **Pubblicazioni:** serie di post come capitoli sotto `/{blog}/pub/{nome}`,
+  con indice automatico, ordine esplicito e navigazione tra capitoli.
+- **Gestione del blog:** panoramica con letture aggregate (senza cookie),
+  libreria media e libreria note (tipo, DOI, duplicati, BibTeX), coda
+  commenti con bloccati e segnalazioni, pausa/trasferimento/export ZIP/
+  cancellazione con 30 giorni di tolleranza.
+- **Amministrazione estesa:** segnalazioni dai lettori con pannello e nota di
+  audit obbligatoria, impostazioni di piattaforma persistite, coda richieste
+  GDPR con seconda approvazione, lingua dell'interfaccia (it/en).
 - **Self-hosting:** hostname/FQDN e modalità di installazione configurabili
   (`NOCT_INSTANCE_FQDN`, `NOCT_DEPLOYMENT_MODE=solo|platform`) — "solo" per un
   blog/sito personale a singolo proprietario (il primo utente registrato
@@ -144,10 +153,8 @@ In sintesi, ad alto livello (l'elenco completo, specifica per specifica, è in
 - **Routing per sottodominio** (`https://nomeutente.notturni.eu`) e dominio
   custom associato al blog — oggi ogni post è comunque raggiungibile senza
   sottodominio, via permalink su `notturni.eu`.
-- **"Pubblicazioni"**: raggruppare una serie di post in ordine cronologico,
-  come i capitoli di un libro o di un saggio — non ancora iniziato.
-- **Funzionalità GDPR dedicate** (export/cancellazione dati account, registro
-  consensi) oltre al rafforzamento via MFA già presente.
+- **Registro dei consensi** GDPR (export, cancellazione con coda e seconda
+  approvazione, cancellazione blog con tolleranza sono già presenti).
 - **Lock distribuiti** su Redis (il rate limiting invece è già in uso, su
   login e anteprima link) e **clusterizzazione** dei componenti in produzione
   (oggi Kubernetes a nodo singolo).
