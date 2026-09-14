@@ -1595,9 +1595,15 @@ finché non la attiva), `reserved_blog_names` (in aggiunta alla blacklist di
 codice `reserved_builtin`, sola lettura), `moderation_threshold` (0–1,
 passata al servizio di moderazione a ogni upload), `max_blogs_per_user`
 (1–100), `anonymous_comments_allowed` (se `false`, `comments_mode=everyone`
-non è più impostabile). La risposta include anche `infrastructure`: riepilogo
-di sola lettura dell'ambiente `NOCT_*` (mai segreti). Ogni modifica va nel
-registro (`platform.config_updated`, con `changes: {campo: {from, to}}`).
+non è più impostabile), `audit_retention_days` (7–3650, default seminato da
+`NOCT_AUDIT_RETENTION_DAYS`: giorni di conservazione degli eventi in
+`audit_log` prima della cancellazione periodica —
+`app/workers/audit_maintenance.py::prune`, letto dalla riga `platform_config`
+a ogni giro, non più dall'env dopo la creazione della riga). La risposta
+include anche `infrastructure`: riepilogo di sola lettura dell'ambiente
+`NOCT_*` (mai segreti, non include più `audit_retention_days` — ora un campo
+modificabile a sé, non un valore d'ambiente). Ogni modifica va nel registro
+(`platform.config_updated`, con `changes: {campo: {from, to}}`).
 `GET /api/v1/config` (pubblico) espone `default_locale`, `registration_mode`
 e `sso_providers` effettivi.
 

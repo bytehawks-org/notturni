@@ -9,9 +9,12 @@ da eseguire a intervalli (giornaliero va bene). Ogni giro fa, in ordine:
    attivo (S3/localstorage, bucket privato) e registra la cosa in
    `audit_archive_runs`. Disattivabile con `NOCT_AUDIT_ARCHIVE_ENABLED=false`.
 2. **prune** — cancella a batch gli eventi con `occurred_at` più vecchio di
-   `NOCT_AUDIT_RETENTION_DAYS`, ma **mai** più recenti dell'ultima settimana
-   archiviata: il watermark `max(audit_archive_runs.period_end)` è il limite
-   duro, così non si perde nulla che non sia già su storage.
+   `platform_config.audit_retention_days` (configurabile a runtime da un
+   Super Admin, `/admin/impostazioni` — `NOCT_AUDIT_RETENTION_DAYS` resta
+   solo il seme iniziale per un'installazione nuova), ma **mai** più recenti
+   dell'ultima settimana archiviata: il watermark
+   `max(audit_archive_runs.period_end)` è il limite duro, così non si perde
+   nulla che non sia già su storage.
 
 Uso (dalla directory backend/, con il venv attivo):
     python -m app.workers.audit_maintenance            # un giro e termina
@@ -36,6 +39,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.storage import get_audit_archive, upload_audit_archive
 from app.domain.blog_lifecycle import purge_deleted_blogs
+from app.domain.platform_config import get_platform_config
 from app.models.audit_archive_run import AuditArchiveRun
 from app.models.audit_log import AuditLog
 
@@ -155,14 +159,19 @@ async def archive(session: AsyncSession) -> list[dict[str, Any]]:
 
 
 async def prune(session: AsyncSession) -> int:
-    if settings.audit_retention_days < 7:
+    # Configurabile a runtime da un Super Admin (/admin/impostazioni,
+    # app/domain/platform_config.py) — NOCT_AUDIT_RETENTION_DAYS resta solo
+    # il seme iniziale per un'installazione nuova, non più il valore
+    # effettivo dopo la prima riga di platform_config.
+    retention_days = (await get_platform_config(session)).audit_retention_days
+    if retention_days < 7:
         logger.warning(
-            "NOCT_AUDIT_RETENTION_DAYS=%d è meno di una settimana: valore ignorato per la cancellazione",
-            settings.audit_retention_days,
+            "audit_retention_days=%d è meno di una settimana: valore ignorato per la cancellazione",
+            retention_days,
         )
         return 0
 
-    cutoff = _now_utc() - timedelta(days=settings.audit_retention_days)
+    cutoff = _now_utc() - timedelta(days=retention_days)
     floor = cutoff
 
     if settings.audit_archive_enabled:

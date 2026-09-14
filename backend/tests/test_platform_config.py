@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,6 +61,46 @@ async def test_public_config_exposes_defaults_and_super_admin_updates(
 
     audit = await client.get("/api/v1/admin/audit-log", params={"action": "platform.config_updated"}, headers=root.headers)
     assert audit.status_code == 200
+
+
+async def test_audit_retention_days_configurable_and_enforced(
+    client: AsyncClient, make_admin: Callable, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    from app.core.config import settings
+    from app.models.audit_log import AuditActorType, AuditLog
+    from app.workers import audit_maintenance as am
+
+    # scarico su storage disattivato: qui interessa solo il taglio per
+    # retention, non il watermark dell'archivio (già coperto da
+    # test_audit_maintenance.py).
+    monkeypatch.setattr(settings, "audit_archive_enabled", False)
+
+    root = await _super(make_admin, db_session, "pc-retention-root")
+    cfg = await client.get("/api/v1/admin/config", headers=root.headers)
+    assert cfg.status_code == 200 and cfg.json()["audit_retention_days"] == 105
+
+    bad = await client.patch("/api/v1/admin/config", json={"audit_retention_days": 3}, headers=root.headers)
+    assert bad.status_code == 400
+    too_long = await client.patch("/api/v1/admin/config", json={"audit_retention_days": 10000}, headers=root.headers)
+    assert too_long.status_code == 400
+
+    res = await client.patch("/api/v1/admin/config", json={"audit_retention_days": 30}, headers=root.headers)
+    assert res.status_code == 200
+    assert res.json()["audit_retention_days"] == 30
+
+    old_event = AuditLog(
+        occurred_at=datetime.now(timezone.utc) - timedelta(days=40),
+        actor_type=AuditActorType.SYSTEM,
+        action="test.event",
+        payload={},
+    )
+    db_session.add(old_event)
+    await db_session.commit()
+
+    deleted = await am.prune(db_session)
+    assert deleted == 1
 
 
 async def test_mfa_required_for_admins_blocks_admin_area(client: AsyncClient, make_admin: Callable, db_session: AsyncSession) -> None:

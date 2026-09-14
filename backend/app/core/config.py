@@ -130,6 +130,10 @@ class Settings(BaseSettings):
     # ancora archiviati su storage (vedi audit_archive_enabled): la finestra
     # non archiviata fa da limite duro, retention_days è solo l'obiettivo.
     # Default 105 = ~15 settimane, così sono sempre presenti almeno 90 giorni.
+    # Solo il seme iniziale di `platform_config.audit_retention_days`
+    # (app/domain/platform_config.py): dopo la creazione della riga, il
+    # valore effettivo si cambia a runtime da un Super Admin
+    # (/admin/impostazioni), non da qui.
     audit_retention_days: int = 105
     # Scarico periodico degli eventi su storage (S3/localstorage) per settimane
     # ISO chiuse, in NDJSON gzippato, prima della cancellazione dal database.

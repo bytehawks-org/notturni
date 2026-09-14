@@ -63,6 +63,7 @@ export default function PlatformSettingsPage() {
           moderation_threshold: draft.moderation_threshold,
           max_blogs_per_user: draft.max_blogs_per_user,
           anonymous_comments_allowed: draft.anonymous_comments_allowed,
+          audit_retention_days: draft.audit_retention_days,
         })
       );
       setConfig(updated);
@@ -204,6 +205,19 @@ export default function PlatformSettingsPage() {
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="max-blogs">{t("maxBlogs")}</Label>
             <Input id="max-blogs" type="number" min={1} max={100} value={draft.max_blogs_per_user} onChange={(e) => patch({ max_blogs_per_user: Number(e.target.value) })} className="w-24" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="audit-retention">{t("auditRetention")}</Label>
+            <Input
+              id="audit-retention"
+              type="number"
+              min={7}
+              max={3650}
+              value={draft.audit_retention_days}
+              onChange={(e) => patch({ audit_retention_days: Number(e.target.value) })}
+              className="w-24"
+            />
+            <span className="text-[13px] text-muted">{t("auditRetentionNote")}</span>
           </div>
         </div>
         <Toggle checked={draft.anonymous_comments_allowed} onChange={(v) => patch({ anonymous_comments_allowed: v })} label={t("anonComments")} />

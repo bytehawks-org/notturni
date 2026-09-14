@@ -718,6 +718,9 @@ export interface PlatformConfig {
   moderation_threshold: number;
   max_blogs_per_user: number;
   anonymous_comments_allowed: boolean;
+  /** Giorni di conservazione degli eventi in audit_log prima della
+   * cancellazione periodica (app/workers/audit_maintenance.py::prune). */
+  audit_retention_days: number;
   updated_at: string | null;
   infrastructure: Record<string, string | boolean | null>;
 }

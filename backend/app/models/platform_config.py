@@ -28,5 +28,10 @@ class PlatformConfig(Base):
     moderation_threshold: Mapped[float] = mapped_column(Float, nullable=False, default=0.8)
     max_blogs_per_user: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     anonymous_comments_allowed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Giorni di conservazione degli eventi in `audit_log` prima della
+    # cancellazione (app/workers/audit_maintenance.py::prune), seminata da
+    # NOCT_AUDIT_RETENTION_DAYS alla creazione della riga — poi controllata
+    # solo da qui, l'env resta il default per un'installazione nuova.
+    audit_retention_days: Mapped[int] = mapped_column(Integer, nullable=False, default=105)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)

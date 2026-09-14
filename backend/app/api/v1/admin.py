@@ -20,7 +20,15 @@ from app.domain import audit
 from app.domain.display_names import resolve_personal_display_name
 from app.domain.gdpr import anonymize_and_deactivate_user, export_user_data
 from app.domain.gdpr_queue import new_request
-from app.domain.platform_config import REGISTRATION_MODES, SSO_PROVIDER_NAMES, SUPPORTED_LOCALES, get_platform_config, touch
+from app.domain.platform_config import (
+    MAX_AUDIT_RETENTION_DAYS,
+    MIN_AUDIT_RETENTION_DAYS,
+    REGISTRATION_MODES,
+    SSO_PROVIDER_NAMES,
+    SUPPORTED_LOCALES,
+    get_platform_config,
+    touch,
+)
 from app.models.gdpr_request import GdprRequest, GdprRequestStatus, GdprRequestType
 from app.models.platform_config import PlatformConfig
 from app.core.oauth import configured_providers
@@ -865,6 +873,7 @@ class PlatformConfigOut(BaseModel):
     moderation_threshold: float
     max_blogs_per_user: int
     anonymous_comments_allowed: bool
+    audit_retention_days: int
     updated_at: datetime | None
     infrastructure: dict[str, str | bool | None]
 
@@ -878,6 +887,7 @@ class PlatformConfigUpdateRequest(BaseModel):
     moderation_threshold: float | None = None
     max_blogs_per_user: int | None = None
     anonymous_comments_allowed: bool | None = None
+    audit_retention_days: int | None = None
 
 
 def _config_out(config: PlatformConfig) -> PlatformConfigOut:
@@ -892,8 +902,12 @@ def _config_out(config: PlatformConfig) -> PlatformConfigOut:
         moderation_threshold=config.moderation_threshold,
         max_blogs_per_user=config.max_blogs_per_user,
         anonymous_comments_allowed=config.anonymous_comments_allowed,
+        audit_retention_days=config.audit_retention_days,
         updated_at=config.updated_at,
-        # sola lettura: riepilogo dell'ambiente NOCT_* (mai segreti)
+        # sola lettura: riepilogo dell'ambiente NOCT_* (mai segreti). La
+        # retention dell'audit log non ci sta più: da B6+ è configurabile a
+        # runtime (vedi audit_retention_days sopra), l'env resta solo il
+        # seme iniziale (app/domain/platform_config.py::get_platform_config).
         infrastructure={
             "deployment_mode": settings.deployment_mode,
             "instance_fqdn": settings.instance_fqdn,
@@ -902,7 +916,6 @@ def _config_out(config: PlatformConfig) -> PlatformConfigOut:
             "moderation_service": bool(settings.moderation_service_url),
             "turnstile": bool(settings.turnstile_site_key),
             "smtp": bool(settings.smtp_host),
-            "audit_retention_days": str(settings.audit_retention_days),
         },
     )
 
@@ -964,6 +977,13 @@ async def update_admin_config(
         apply("max_blogs_per_user", payload.max_blogs_per_user)
     if payload.anonymous_comments_allowed is not None:
         apply("anonymous_comments_allowed", payload.anonymous_comments_allowed)
+    if payload.audit_retention_days is not None:
+        if not MIN_AUDIT_RETENTION_DAYS <= payload.audit_retention_days <= MAX_AUDIT_RETENTION_DAYS:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"La conservazione del registro di audit deve essere tra {MIN_AUDIT_RETENTION_DAYS} e {MAX_AUDIT_RETENTION_DAYS} giorni.",
+            )
+        apply("audit_retention_days", payload.audit_retention_days)
 
     if changes:
         touch(config, by_id=current_user.id)

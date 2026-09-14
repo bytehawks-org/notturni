@@ -13,6 +13,11 @@ from app.models.platform_config import PlatformConfig
 REGISTRATION_MODES = ("open", "invite", "closed")
 SUPPORTED_LOCALES = ("it", "en")
 SSO_PROVIDER_NAMES = ("google", "microsoft", "github", "linkedin")
+# app/workers/audit_maintenance.py::prune: sotto una settimana il valore
+# viene ignorato (nessuna cancellazione) — stesso limite imposto qui in
+# validazione, così l'admin lo scopre subito invece che in un log del worker.
+MIN_AUDIT_RETENTION_DAYS = 7
+MAX_AUDIT_RETENTION_DAYS = 3650
 
 
 async def get_platform_config(session: AsyncSession) -> PlatformConfig:
@@ -28,6 +33,7 @@ async def get_platform_config(session: AsyncSession) -> PlatformConfig:
             moderation_threshold=0.8,
             max_blogs_per_user=MAX_BLOGS_PER_USER,
             anonymous_comments_allowed=True,
+            audit_retention_days=settings.audit_retention_days,
         )
         session.add(config)
         await session.commit()

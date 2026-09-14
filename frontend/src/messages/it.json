@@ -545,6 +545,8 @@
     "threshold": "Soglia moderazione immagini",
     "thresholdNote": "Sopra: sfocata e in coda. Fail-open se il servizio è giù.",
     "maxBlogs": "Blog massimi per utente",
+    "auditRetention": "Conservazione registro di audit (giorni)",
+    "auditRetentionNote": "Eventi più vecchi vengono cancellati dal database (archiviati su storage prima, se attivo). Minimo 7 giorni.",
     "anonComments": "Commenti anonimi (consentiti a livello di piattaforma)",
     "infra": "Infrastruttura",
     "infraNote": "Sola lettura: i valori vengono dall'ambiente NOCT_*.",

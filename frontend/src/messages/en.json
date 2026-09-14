@@ -545,6 +545,8 @@
     "threshold": "Image moderation threshold",
     "thresholdNote": "Above: blurred + queued. Fail-open if the service is down.",
     "maxBlogs": "Max blogs per user",
+    "auditRetention": "Audit log retention (days)",
+    "auditRetentionNote": "Older events are deleted from the database (archived to storage first, if enabled). Minimum 7 days.",
     "anonComments": "Anonymous comments (platform-wide allow)",
     "infra": "Infrastructure",
     "infraNote": "Read-only here: values come from NOCT_* environment.",
