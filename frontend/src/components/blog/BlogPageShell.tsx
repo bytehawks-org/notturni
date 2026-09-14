@@ -1,10 +1,11 @@
 import type { CSSProperties, ReactNode } from "react";
 
+import { BLOG_FONT_CLASSES, BLOG_FONT_VARS } from "@/lib/blog-fonts";
 import type { BlogConfig } from "@/lib/types";
 
-/** Copia di `DEFAULT_BLOG_CONFIG.palette` (backend/app/domain/blog_config.py):
+/** Copia di `DEFAULT_BLOG_CONFIG.palette`/`typography` (backend/app/domain/blog_config.py):
  * un blog mai personalizzato deve restare identico allo shell di piattaforma,
- * quindi la palette di default non viene iniettata. */
+ * quindi palette e font di default non vengono iniettati. */
 const DEFAULT_PALETTE: Record<string, string> = {
   background: "#fbf9f6",
   foreground: "#2b2a28",
@@ -12,6 +13,8 @@ const DEFAULT_PALETTE: Record<string, string> = {
   muted: "#a8a29a",
   border: "#e7e2da",
 };
+const DEFAULT_HEADING_FONT = "Lora";
+const DEFAULT_BODY_FONT = "Source Sans 3";
 
 const PALETTE_VARS: Record<string, string> = {
   background: "--background",
@@ -53,13 +56,61 @@ export function paletteStyle(config: BlogConfig | null): CSSProperties | null {
   return style as CSSProperties;
 }
 
-/** Wrapper delle pagine pubbliche di un blog: applica la palette custom come
- * variabili CSS sulla root (mockup 3f), così tutto ciò che sta dentro
- * (header, feed, post) legge i colori del blog. */
+/** `typography.body_size` valido (mockup 2e): 17/18/19px, corpo di default 18. */
+export function blogBodySize(config: BlogConfig | null): string {
+  const value = config?.typography?.body_size;
+  return typeof value === "string" && ["17", "18", "19"].includes(value) ? value : "18";
+}
+
+/** `typography.measure` valido: colonna di lettura stretta o normale. */
+export function blogMeasure(config: BlogConfig | null): "narrow" | "normal" {
+  return config?.typography?.measure === "narrow" ? "narrow" : "normal";
+}
+
+/** `layout` del blog (mockup 3f, `AppearanceTab`): influenza la disposizione
+ * del feed (standard = righe, magazine = griglia con copertina, minimal =
+ * lista compatta senza copertina) — vedi `FeedPostCard`. */
+export function blogLayout(config: BlogConfig | null): "standard" | "magazine" | "minimal" {
+  const value = config?.layout;
+  return value === "magazine" || value === "minimal" ? value : "standard";
+}
+
+/** Font titoli/corpo (mockup 2e) come variabili CSS `--font-heading`/`--font-body`
+ * puntate al font scelto tra quelli curati (`SERIF_FONTS`/`SANS_SERIF_FONTS`,
+ * self-hostati da `lib/blog-fonts.ts`); più la classe che rende disponibili
+ * quelle variabili. `null` se il blog usa i font di default di piattaforma
+ * (nessuna classe/variabile aggiuntiva da caricare). */
+function typographyStyle(config: BlogConfig | null): { style: CSSProperties; className: string } | null {
+  const typography = config?.typography ?? {};
+  const headingFont = typeof typography.heading_font === "string" ? typography.heading_font : DEFAULT_HEADING_FONT;
+  const bodyFont = typeof typography.body_font === "string" ? typography.body_font : DEFAULT_BODY_FONT;
+  if (headingFont === DEFAULT_HEADING_FONT && bodyFont === DEFAULT_BODY_FONT) return null;
+  const headingVar = BLOG_FONT_VARS[headingFont];
+  const bodyVar = BLOG_FONT_VARS[bodyFont];
+  const style: Record<string, string> = {};
+  if (headingVar) style["--font-heading"] = `var(${headingVar})`;
+  if (bodyVar) style["--font-body"] = `var(${bodyVar})`;
+  const className = [BLOG_FONT_CLASSES[headingFont], BLOG_FONT_CLASSES[bodyFont]].filter(Boolean).join(" ");
+  return { style: style as CSSProperties, className };
+}
+
+/** Wrapper delle pagine pubbliche di un blog: applica palette e tipografia
+ * custom come variabili CSS sulla root (mockup 2e/3f), così tutto ciò che sta
+ * dentro (header, feed, post) legge colori e font del blog. `--blog-body-size`
+ * è letto dalla pagina del post per la dimensione del corpo del testo. */
 export function BlogPageShell({ config, children }: { config: BlogConfig | null; children: ReactNode }) {
-  const style = paletteStyle(config);
+  const palette = paletteStyle(config);
+  const typography = typographyStyle(config);
+  const style: Record<string, string> = {
+    ...(palette as Record<string, string> | null),
+    ...(typography?.style as Record<string, string> | undefined),
+    "--blog-body-size": `${blogBodySize(config)}px`,
+  };
+  const className = ["flex flex-1 flex-col bg-background text-foreground", palette ? "blog-palette" : "", typography?.className ?? ""]
+    .filter(Boolean)
+    .join(" ");
   return (
-    <div className={`flex flex-1 flex-col bg-background text-foreground ${style ? "blog-palette" : ""}`} style={style ?? undefined}>
+    <div className={className} style={style as CSSProperties}>
       {children}
     </div>
   );

@@ -12,12 +12,18 @@ DEFAULT_BLOG_CONFIG: dict[str, Any] = {
         "muted": "#a8a29a",
         "border": "#e7e2da",
     },
-    "typography": {"heading_font": "Lora", "body_font": "Inter"},
+    "typography": {"heading_font": "Lora", "body_font": "Source Sans 3"},
     "layout": "standard",
 }
 
 MAX_PALETTE_COLORS = 5
 MAX_FONTS = 3
+
+# Chiavi note di `typography` che non sono un font (dimensione/misura del
+# corpo, mockup 2e): pur essendo stringhe come i nomi dei font, non devono
+# contare verso MAX_FONTS. Chiavi non riconosciute (compresi eventuali nomi
+# di font futuri) restano conteggiate, come da comportamento originale.
+NON_FONT_TYPOGRAPHY_KEYS = {"body_size", "measure"}
 
 # Estetica CLAUDE.md #4/#5: "titoli in serif, testo e link in sans-serif" —
 # elenco curato di Google Fonts coerenti con il tono elegante/moderno
@@ -77,7 +83,11 @@ def validate_blog_config(config: dict[str, Any]) -> None:
     if typography is not None:
         if not isinstance(typography, dict):
             raise ValueError("typography deve essere un oggetto.")
-        fonts = {v for v in typography.values() if isinstance(v, str)}
+        fonts = {
+            v
+            for k, v in typography.items()
+            if k not in NON_FONT_TYPOGRAPHY_KEYS and isinstance(v, str)
+        }
         if len(fonts) > MAX_FONTS:
             raise ValueError(f"Al massimo {MAX_FONTS} font distinti.")
 

@@ -1,8 +1,11 @@
+import type { CSSProperties } from "react";
+
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { BlogPageShell, blogMeasure } from "@/components/blog/BlogPageShell";
 import { PostActions } from "@/components/blog/PostActions";
 import { BlogHeaderActions } from "@/components/blog/PostHeaderActions";
 import { PostToc } from "@/components/blog/PostToc";
@@ -16,7 +19,7 @@ import { TagPills } from "@/components/TagPills";
 import { formatDate, readingMinutes } from "@/lib/format";
 import { languageName } from "@/lib/languages";
 import { excerpt, renderPost } from "@/lib/markdown";
-import { getPublicBlog, getPublicPostByPermalink, getPublicPostTranslations, getPublicPublication, getPublicPublications } from "@/lib/server-api";
+import { getPublicBlog, getPublicBlogConfig, getPublicPostByPermalink, getPublicPostTranslations, getPublicPublication, getPublicPublications } from "@/lib/server-api";
 
 interface PageParams {
   blogSlug: string;
@@ -53,13 +56,16 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
  * destra; colonna singola sotto, con il menu frammenti come bottom-sheet. */
 export default async function PublicPostPage({ params }: { params: Promise<PageParams> }) {
   const { blogSlug, postSlug } = await params;
-  const [post, blog, t, locale] = await Promise.all([
+  const [post, blog, config, t, locale] = await Promise.all([
     getPublicPostByPermalink(blogSlug, postSlug),
     getPublicBlog(blogSlug),
+    getPublicBlogConfig(blogSlug),
     getTranslations("PostPage"),
     getLocale(),
   ]);
   if (!post) notFound();
+  const measure = blogMeasure(config);
+  const articleWidth = measure === "narrow" ? "560px" : "680px";
   const tPost = await getTranslations("Post");
   const translations = (await getPublicPostTranslations(post.id).catch(() => [])).filter(
     (tr) => tr.status === "published"
@@ -132,18 +138,21 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
   );
 
   return (
-    <div className="flex flex-1 flex-col">
+    <BlogPageShell config={config}>
       <BlogHeader slug={blogSlug} name={blogTitle} current={chapter ? "publications" : "posts"} hasPublications={publications.length > 0} actions={<BlogHeaderActions slug={blogSlug} />} />
       {chapter && <ChapterProgress current={chapter.current} total={chapter.total} />}
       <main className="mx-auto w-full max-w-[1184px] flex-1 px-5 py-10 lg:px-12 lg:py-14">
-        <div className="grid gap-10 xl:grid-cols-[minmax(0,1fr)_680px_minmax(0,1fr)] xl:gap-12">
+        <div
+          className="grid gap-10 xl:grid-cols-[minmax(0,1fr)_var(--blog-article-width)_minmax(0,1fr)] xl:gap-12"
+          style={{ "--blog-article-width": articleWidth } as CSSProperties}
+        >
           <aside className="hidden xl:block">
             <div className="sticky top-8">
               <PostToc headings={headings} />
             </div>
           </aside>
 
-          <article className="mx-auto w-full max-w-[680px] min-w-0">
+          <article className="mx-auto w-full min-w-0" style={{ maxWidth: articleWidth }}>
             <header className="flex flex-col gap-4">
               {chapter && publication && (
                 <Link href={`/${blogSlug}/pub/${publication.name}`} className="font-mono text-[11px] uppercase tracking-[.08em] text-primary no-underline hover:underline">
@@ -200,13 +209,15 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
               </details>
             </div>
 
-            <FragmentReader
-              postId={post.id}
-              html={html}
-              permalink={post.permalink}
-              quoteAttribution={`${post.author_display_name}, ${post.title}`}
-              className="notturni-prose notturni-prose--reading mt-8 text-lg leading-[1.7]"
-            />
+            <div style={{ fontSize: "var(--blog-body-size)" }}>
+              <FragmentReader
+                postId={post.id}
+                html={html}
+                permalink={post.permalink}
+                quoteAttribution={`${post.author_display_name}, ${post.title}`}
+                className="notturni-prose notturni-prose--reading mt-8 leading-[1.7]"
+              />
+            </div>
 
             {post.tags.length > 0 && (
               <div className="mt-10">
@@ -231,6 +242,6 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
           </aside>
         </div>
       </main>
-    </div>
+    </BlogPageShell>
   );
 }

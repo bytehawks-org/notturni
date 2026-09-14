@@ -393,14 +393,20 @@ segue il blog.
 
 **`GET /api/v1/blogs/{slug}/config`** — pubblico. Configurazione di
 presentazione del blog (palette/tipografia/layout — vedi
-[ROADMAP.md](../ROADMAP.md#2-estetica) per i vincoli). JSON libero; se il
-proprietario non ha ancora salvato nulla, ritorna il default della
-piattaforma:
+[ROADMAP.md](../ROADMAP.md#2-estetica) per i vincoli), applicata dal frontend
+a tutte le pagine pubbliche del blog (`BlogPageShell`, todo/UX_REDESIGN.md
+B10): palette come variabili CSS, `typography.heading_font`/`body_font` come
+`--font-heading`/`--font-body` (font self-hostati al build, nessuna
+richiesta a Google a runtime), `body_size`/`measure` per dimensione del
+corpo e larghezza della colonna di lettura del post, `layout` per la
+disposizione del feed della home del blog. JSON libero; se il proprietario
+non ha ancora salvato nulla, ritorna il default della piattaforma (identico
+allo shell non personalizzato):
 
 ```json
 {
   "palette": {"background": "#fbf9f6", "foreground": "#2b2a28", "primary": "#3e6259", "muted": "#a8a29a", "border": "#e7e2da"},
-  "typography": {"heading_font": "Lora", "body_font": "Inter"},
+  "typography": {"heading_font": "Lora", "body_font": "Source Sans 3"},
   "layout": "standard"
 }
 ```
@@ -415,12 +421,16 @@ e qualsiasi altra chiave) libero:
 - `palette_dark` (opzionale): stessi vincoli di `palette`; è la variante
   scura applicata alle pagine pubbliche del blog quando il lettore usa il
   tema scuro. Assente, in tema scuro vale la palette scura di piattaforma.
-- `typography`: al massimo 3 font distinti; se presenti, `heading_font` deve
-  essere uno dei font serif curati (`Lora`, `Merriweather`, `Playfair
-  Display`, `Source Serif 4`, `Crimson Pro`) e `body_font` uno dei font
-  sans-serif curati (`Inter`, `Nunito Sans`, `Work Sans`, `Source Sans 3`,
-  `Karla`) — vedi `backend/app/domain/blog_config.py`. Altre chiavi restano
-  libere.
+- `typography`: al massimo 3 font distinti tra `heading_font`/`body_font`
+  (`body_size`/`measure`, pur essendo anch'esse stringhe, non contano verso
+  questo limite); se presenti, `heading_font` deve essere uno dei font serif
+  curati (`Lora`, `Merriweather`, `Playfair Display`, `Source Serif 4`,
+  `Crimson Pro`) e `body_font` uno dei font sans-serif curati (`Inter`,
+  `Nunito Sans`, `Work Sans`, `Source Sans 3`, `Karla`) — vedi
+  `backend/app/domain/blog_config.py`. `body_size` (`"17"`/`"18"`/`"19"`) e
+  `measure` (`"narrow"`/`"normal"`) non sono validati lato backend (solo
+  accettati); un valore diverso da quelli attesi è ignorato dal frontend, che
+  ricade sul default. Altre chiavi restano libere.
 
 **`POST /api/v1/blogs/{slug}/media`** — richiede sessione e accesso in
 scrittura al blog (proprietario/autore/co-autore). `multipart/form-data`,

@@ -3,7 +3,7 @@ import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { BlogPageShell } from "@/components/blog/BlogPageShell";
+import { BlogPageShell, blogLayout } from "@/components/blog/BlogPageShell";
 import { BlogStateNotice, blogIsOffline } from "@/components/blog/BlogStateNotice";
 import { BlogHeaderActions } from "@/components/blog/PostHeaderActions";
 import { FeedPostCard } from "@/components/FeedPostCard";
@@ -62,6 +62,7 @@ export default async function BlogHomePage({
   }
   if (!posts) notFound();
   const visible = category ? posts.filter((p) => p.category?.slug === category) : posts;
+  const layout = blogLayout(config);
 
   return (
     <BlogPageShell config={config}>
@@ -106,8 +107,14 @@ export default async function BlogHomePage({
             </div>
             {visible.length === 0 ? (
               <p className="py-10 text-center text-sm text-muted">{t("noPosts")}</p>
+            ) : layout === "magazine" ? (
+              <div className="grid gap-6 sm:grid-cols-2">
+                {visible.map((post) => (
+                  <FeedPostCard key={post.id} post={post} showBlog={false} variant="magazine" />
+                ))}
+              </div>
             ) : (
-              visible.map((post) => <FeedPostCard key={post.id} post={post} showBlog={false} />)
+              visible.map((post) => <FeedPostCard key={post.id} post={post} showBlog={false} variant={layout} />)
             )}
           </section>
           <aside className="flex flex-col gap-6 text-sm">

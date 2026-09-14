@@ -121,7 +121,8 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   chiaro/scuro/automatico (alba-tramonto in base alla posizione, calcolata
   solo lato client), interfaccia in italiano e inglese (`next-intl`,
   selettore nell'header e nel profilo — la lingua dei contenuti è a parte),
-  palette personalizzata del blog applicata alle sue pagine pubbliche.
+  palette, tipografia e layout personalizzati del blog applicati alle sue
+  pagine pubbliche.
 - **Pubblicazioni:** serie di post come capitoli sotto `/{blog}/pub/{nome}`,
   con indice automatico, ordine esplicito e navigazione tra capitoli.
 - **Gestione del blog:** panoramica con letture aggregate (senza cookie),
