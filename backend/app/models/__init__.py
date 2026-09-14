@@ -17,6 +17,7 @@ from app.models.comment import BlogBlockedAuthor, Comment, CommentsMode, Comment
 from app.models.content_report import ContentReport, ReportReason, ReportStatus, ReportTargetType
 from app.models.follow import BlogFollow, UserFollow
 from app.models.gdpr_request import GdprRequest, GdprRequestStatus, GdprRequestType
+from app.models.link_preview import LinkPreviewCache
 from app.models.media_file import MediaFile
 from app.models.mfa_email_code import MfaEmailCode
 from app.models.page import Page
@@ -73,6 +74,7 @@ __all__ = [
     "UserSession",
     "MfaEmailCode",
     "MediaFile",
+    "LinkPreviewCache",
     "SsoIdentity",
     "SsoProvider",
     "Page",

@@ -1113,13 +1113,23 @@ idoneo in partenza: schema diverso da `http`/`https`, o il cui hostname
 risolve a un indirizzo privato/loopback/link-local/riservato (mitigazione
 SSRF — `app/domain/link_preview.py::validate_previewable_url`; non è una
 barriera assoluta, stesso principio di "aiuto best-effort" già in atto per
-la moderazione automatica delle immagini sopra). **Nessuna cache**: ogni
-chiamata rifà il fetch (timeout 5s, corpo troncato a 512 KB). `429` oltre 30
+la moderazione automatica delle immagini sopra). `429` oltre 30
 richieste/minuto dallo stesso IP (rate limiting via Redis,
 `app/domain/rate_limit.py` — mitiga l'uso di questo endpoint come
 proxy/scanner verso terzi vista l'assenza di autenticazione; fail open se
-Redis non è raggiungibile). Una cache resta un possibile passo successivo,
-non fatto qui.
+Redis non è raggiungibile).
+
+**Cache a due livelli** (`app/domain/link_preview.py::get_cached_or_fetch_link_preview`),
+condivisa e deduplicata per URL — due post/utenti/blog che citano lo stesso
+link fanno un solo fetch reale, non uno ciascuno: Redis come cache calda
+(TTL 6h), la tabella `link_preview_cache` (una riga per URL, unique su
+`url_hash` = sha256 dell'URL) come fonte persistente che sopravvive a un
+riavvio/svuotamento di Redis. Un'anteprima con dati Open Graph reali resta
+valida una settimana prima di essere riverificata dal vivo; un fallimento
+(host irraggiungibile, non HTML, nessun meta tag, ...) solo 6 ore, per non
+restare bloccati più del necessario ma senza martellare un host che non
+risponde mai. Il fetch dal vivo resta come prima (timeout 8s, corpo troncato
+a ~3 MB o alla chiusura di `</head>`, redirect non seguiti).
 
 Usato dall'editor (`frontend/src/components/editor/LinkPreviewCard.tsx`)
 quando si incolla un URL da solo: il link resta testo semplice/cancellabile,

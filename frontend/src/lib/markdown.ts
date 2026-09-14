@@ -4,6 +4,7 @@ import DOMPurify from "isomorphic-dompurify";
 import { JSDOM } from "jsdom";
 import MarkdownIt from "markdown-it";
 
+import { REVALIDATE_SECONDS } from "./revalidate";
 import type { PostNote } from "./types";
 
 // Stessa risoluzione di server-api.ts::BACKEND_INTERNAL_URL — endpoint
@@ -76,8 +77,13 @@ async function resolveLinkCards(document: Document): Promise<void> {
 
       let preview: LinkPreviewData | null = null;
       try {
+        // Il backend ha una propria cache (Redis + tabella dedicata,
+        // condivisa/deduplicata per URL — app/domain/link_preview.py): non
+        // serve più `no-store` qui, la stessa finestra a tempo delle altre
+        // fetch pubbliche basta, e la pagina del post con una card di link
+        // può tornare cacheabile invece di restare sempre dinamica.
         const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/link-preview?url=${encodeURIComponent(href)}`, {
-          cache: "no-store",
+          next: { revalidate: REVALIDATE_SECONDS },
           signal: AbortSignal.timeout(LINK_PREVIEW_TIMEOUT_MS),
         });
         if (res.ok) preview = (await res.json()) as LinkPreviewData;
