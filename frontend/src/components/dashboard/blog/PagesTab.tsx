@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -15,6 +16,8 @@ import { errorMessage } from "./shared";
 
 export function PagesTab({ blog, canWrite }: { blog: Blog; canWrite: boolean }) {
   const { accessToken, authFetch } = useAuth();
+  const t = useTranslations("PagesTab");
+  const tc = useTranslations("Common");
   const [pages, setPages] = useState<Page[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,8 +25,8 @@ export function PagesTab({ blog, canWrite }: { blog: Blog; canWrite: boolean }) 
     api.blogs
       .listPages(blog.slug, blog.default_locale, accessToken)
       .then(setPages)
-      .catch((err) => setError(errorMessage(err)));
-  }, [blog.slug, blog.default_locale, accessToken]);
+      .catch((err) => setError(errorMessage(err, tc("unexpectedError"))));
+  }, [blog.slug, blog.default_locale, accessToken, tc]);
 
   useEffect(load, [load]);
 
@@ -34,17 +37,12 @@ export function PagesTab({ blog, canWrite }: { blog: Blog; canWrite: boolean }) 
       );
       setPages((prev) => prev?.map((p) => (p.id === pageId ? updated : p)) ?? null);
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, tc("unexpectedError")));
     }
   }
 
   if (!blog.static_pages_enabled) {
-    return (
-      <p className="text-sm text-muted">
-        Le pagine statiche non sono attive per questo blog: puoi attivarle dalla scheda
-        Impostazioni.
-      </p>
-    );
+    return <p className="text-sm text-muted">{t("notEnabled")}</p>;
   }
 
   return (
@@ -52,12 +50,12 @@ export function PagesTab({ blog, canWrite }: { blog: Blog; canWrite: boolean }) 
       {canWrite && (
         <div className="mb-4">
           <Link href={`/dashboard/blogs/${blog.slug}/pages/new`}>
-            <Button>Nuova pagina</Button>
+            <Button>{t("newPage")}</Button>
           </Link>
         </div>
       )}
       {error && <Alert kind="error">{error}</Alert>}
-      {pages !== null && pages.length === 0 && <p className="text-sm text-muted">Nessuna pagina.</p>}
+      {pages !== null && pages.length === 0 && <p className="text-sm text-muted">{t("empty")}</p>}
       <div className="flex flex-col gap-2.5">
         {pages?.map((page) => (
           <Card key={page.id} className="flex items-center justify-between p-4">
@@ -71,19 +69,19 @@ export function PagesTab({ blog, canWrite }: { blog: Blog; canWrite: boolean }) 
               <p className="flex items-center gap-2 text-sm text-muted">
                 <span>/{page.slug} · {page.locale}</span>
                 <Pill tone={page.is_published ? "ok" : "neutral"}>
-                  {page.is_published ? "Pubblicata" : "Bozza"}
+                  {page.is_published ? t("published") : t("draft")}
                 </Pill>
               </p>
             </div>
             <div className="flex items-center gap-3">
               {page.is_published && page.permalink && (
                 <Link href={page.permalink} className="text-sm text-primary hover:underline">
-                  Vedi
+                  {t("view")}
                 </Link>
               )}
               {canWrite && !page.is_published && (
                 <Button variant="secondary" onClick={() => handlePublish(page.id)}>
-                  Pubblica
+                  {t("publish")}
                 </Button>
               )}
             </div>

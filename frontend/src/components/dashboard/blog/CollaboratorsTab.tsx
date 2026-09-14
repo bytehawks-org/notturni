@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { Alert } from "@/components/ui/Alert";
@@ -16,26 +17,29 @@ import {
   type BlogRole,
 } from "@/lib/types";
 
-import { errorMessage, ROLE_LABELS } from "./shared";
+import { errorMessage, roleMessageKey } from "./shared";
 
 const hue = (s: string) => `oklch(0.55 0.06 ${[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % 360})`;
 
 export function CollaboratorsTab({ blogSlug }: { blogSlug: string }) {
   const { authFetch } = useAuth();
+  const t = useTranslations("CollaboratorsTab");
+  const ta = useTranslations("BlogAdmin");
+  const tc = useTranslations("Common");
   const [members, setMembers] = useState<BlogMember[] | null>(null);
   const [invitations, setInvitations] = useState<BlogInvitation[]>([]);
   const [username, setUsername] = useState("");
-  const [role, setRole] = useState<BlogRole>(INVITABLE_BLOG_ROLES[0].value);
+  const [role, setRole] = useState<BlogRole>(INVITABLE_BLOG_ROLES[0]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     authFetch((token) => api.blogs.members(token, blogSlug))
       .then(setMembers)
-      .catch((err) => setError(errorMessage(err)));
+      .catch((err) => setError(errorMessage(err, tc("unexpectedError"))));
     authFetch((token) => api.blogs.listInvitations(token, blogSlug))
       .then(setInvitations)
       .catch(() => undefined);
-  }, [authFetch, blogSlug]);
+  }, [authFetch, blogSlug, tc]);
 
   useEffect(load, [load]);
 
@@ -47,7 +51,7 @@ export function CollaboratorsTab({ blogSlug }: { blogSlug: string }) {
       setUsername("");
       load();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, tc("unexpectedError")));
     }
   }
 
@@ -56,7 +60,7 @@ export function CollaboratorsTab({ blogSlug }: { blogSlug: string }) {
       await authFetch((token) => api.blogs.revokeInvitation(token, blogSlug, invitationId));
       load();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, tc("unexpectedError")));
     }
   }
 
@@ -65,7 +69,7 @@ export function CollaboratorsTab({ blogSlug }: { blogSlug: string }) {
       await authFetch((token) => api.blogs.removeMember(token, blogSlug, userId));
       load();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, tc("unexpectedError")));
     }
   }
 
@@ -74,7 +78,7 @@ export function CollaboratorsTab({ blogSlug }: { blogSlug: string }) {
       await authFetch((token) => api.blogs.updateMemberRole(token, blogSlug, userId, newRole));
       load();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, tc("unexpectedError")));
     }
   }
 
@@ -85,9 +89,9 @@ export function CollaboratorsTab({ blogSlug }: { blogSlug: string }) {
       {error && <Alert kind="error">{error}</Alert>}
 
       <Card className="flex flex-col gap-3">
-        <CardTitle>Collaboratori</CardTitle>
+        <CardTitle>{t("title")}</CardTitle>
         {members !== null && members.length === 0 && (
-          <p className="text-sm text-muted">Nessun collaboratore.</p>
+          <p className="text-sm text-muted">{t("empty")}</p>
         )}
         {members && members.length > 0 && (
           <div className="overflow-hidden rounded-lg border border-border">
@@ -107,20 +111,20 @@ export function CollaboratorsTab({ blogSlug }: { blogSlug: string }) {
                   <div className="flex min-w-0 flex-col leading-tight">
                     <span className="text-foreground">@{m.username}</span>
                     {m.author_display_name && (
-                      <span className="truncate text-xs text-muted">firma come «{m.author_display_name}»</span>
+                      <span className="truncate text-xs text-muted">{t("signsAs", { alias: m.author_display_name })}</span>
                     )}
                   </div>
                 </div>
                 <span className="flex items-center gap-2.5">
-                  <Pill tone="primary">{ROLE_LABELS[m.role] ?? m.role}</Pill>
+                  <Pill tone="primary">{ta(`roles.${roleMessageKey(m.role)}`)}</Pill>
                   <select
                     value={m.role}
                     onChange={(e) => handleChangeRole(m.user_id, e.target.value as BlogRole)}
                     className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
                   >
                     {INVITABLE_BLOG_ROLES.map((r) => (
-                      <option key={r.value} value={r.value}>
-                        {r.label}
+                      <option key={r} value={r}>
+                        {ta(`roles.${roleMessageKey(r)}`)}
                       </option>
                     ))}
                   </select>
@@ -129,7 +133,7 @@ export function CollaboratorsTab({ blogSlug }: { blogSlug: string }) {
                     onClick={() => handleRemoveMember(m.user_id)}
                     className="text-muted hover:text-foreground"
                   >
-                    Rimuovi
+                    {t("remove")}
                   </button>
                 </span>
               </div>
@@ -140,12 +144,12 @@ export function CollaboratorsTab({ blogSlug }: { blogSlug: string }) {
 
       <Card className="flex flex-col gap-3">
         <div className="flex items-baseline justify-between">
-          <CardTitle>Invita un collaboratore</CardTitle>
-          <span className="text-[13px] text-muted">resta in attesa finché non lo accetta</span>
+          <CardTitle>{t("inviteTitle")}</CardTitle>
+          <span className="text-[13px] text-muted">{t("inviteHint")}</span>
         </div>
         <form onSubmit={handleInvite} className="flex flex-wrap items-end gap-3">
           <div>
-            <Label htmlFor="invite-username">Username</Label>
+            <Label htmlFor="invite-username">{t("username")}</Label>
             <Input
               id="invite-username"
               required
@@ -154,7 +158,7 @@ export function CollaboratorsTab({ blogSlug }: { blogSlug: string }) {
             />
           </div>
           <div>
-            <Label htmlFor="invite-role">Ruolo</Label>
+            <Label htmlFor="invite-role">{t("role")}</Label>
             <select
               id="invite-role"
               value={role}
@@ -162,13 +166,13 @@ export function CollaboratorsTab({ blogSlug }: { blogSlug: string }) {
               className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
             >
               {INVITABLE_BLOG_ROLES.map((r) => (
-                <option key={r.value} value={r.value}>
-                  {r.label}
+                <option key={r} value={r}>
+                  {ta(`roles.${roleMessageKey(r)}`)}
                 </option>
               ))}
             </select>
           </div>
-          <Button type="submit">Invia invito</Button>
+          <Button type="submit">{t("submit")}</Button>
         </form>
 
         {pending.length > 0 && (
@@ -176,15 +180,15 @@ export function CollaboratorsTab({ blogSlug }: { blogSlug: string }) {
             {pending.map((inv) => (
               <div key={inv.id} className="flex items-center justify-between border-b border-border px-4 py-2.5 text-sm last:border-0">
                 <span className="text-foreground">
-                  @{inv.invited_username} — {ROLE_LABELS[inv.role] ?? inv.role}{" "}
-                  <span className="text-muted">(in attesa)</span>
+                  @{inv.invited_username} — {ta(`roles.${roleMessageKey(inv.role)}`)}{" "}
+                  <span className="text-muted">{t("pending")}</span>
                 </span>
                 <button
                   type="button"
                   onClick={() => handleRevoke(inv.id)}
                   className="text-muted hover:text-foreground"
                 >
-                  Revoca
+                  {t("revoke")}
                 </button>
               </div>
             ))}

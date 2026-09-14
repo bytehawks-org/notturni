@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 
 import { Alert } from "@/components/ui/Alert";
@@ -7,44 +8,50 @@ import { Button } from "@/components/ui/Button";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import {
-  AUDIT_ACTION_LABELS,
-  AUDIT_ACTOR_TYPE_LABELS,
-  AUDIT_CHANNEL_LABELS,
+  AUDIT_ACTIONS,
+  AUDIT_CHANNELS,
   type AuditChannel,
   type AuditLogEntry,
 } from "@/lib/types";
 
 const PAGE_SIZE = 50;
 
-function errorMessage(err: unknown): string {
-  return err instanceof ApiClientError ? err.message : "Errore imprevisto.";
-}
-
-function actionLabel(action: string): string {
-  return AUDIT_ACTION_LABELS[action] ?? action;
-}
-
-function targetLabel(entry: AuditLogEntry): string {
-  if (!entry.target_type) return "—";
-  return entry.target_id ? `${entry.target_type} · ${entry.target_id.slice(0, 8)}` : entry.target_type;
-}
-
-function blogAliasLabel(entry: AuditLogEntry): string {
-  const alias = entry.payload.blog_alias;
-  return typeof alias === "string" && alias ? alias : "—";
-}
-
-function detailsLabel(payload: Record<string, unknown>): string {
-  return Object.keys(payload).length ? JSON.stringify(payload) : "—";
+function errorMessage(err: unknown, fallback: string): string {
+  return err instanceof ApiClientError ? err.message : fallback;
 }
 
 export default function DashboardAuditLogPage() {
   const { authFetch } = useAuth();
+  const t = useTranslations("AdminAuditLog");
+  const tc = useTranslations("Common");
   const [action, setAction] = useState("");
   const [channel, setChannel] = useState<AuditChannel | "">("");
   const [entries, setEntries] = useState<AuditLogEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
+
+  const actionLabel = useCallback(
+    (act: string): string => (t.has(`action.${act}`) ? t(`action.${act}`) : act),
+    [t]
+  );
+  const targetLabel = useCallback(
+    (entry: AuditLogEntry): string => {
+      if (!entry.target_type) return t("none");
+      return entry.target_id ? `${entry.target_type} · ${entry.target_id.slice(0, 8)}` : entry.target_type;
+    },
+    [t]
+  );
+  const blogAliasLabel = useCallback(
+    (entry: AuditLogEntry): string => {
+      const alias = entry.payload.blog_alias;
+      return typeof alias === "string" && alias ? alias : t("none");
+    },
+    [t]
+  );
+  const detailsLabel = useCallback(
+    (payload: Record<string, unknown>): string => (Object.keys(payload).length ? JSON.stringify(payload) : t("none")),
+    [t]
+  );
 
   const fetchPage = useCallback(
     (offset: number) =>
@@ -67,8 +74,8 @@ export default function DashboardAuditLogPage() {
         setHasMore(batch.length === PAGE_SIZE);
         setError(null);
       })
-      .catch((err) => setError(errorMessage(err)));
-  }, [fetchPage]);
+      .catch((err) => setError(errorMessage(err, tc("unexpectedError"))));
+  }, [fetchPage, tc]);
 
   useEffect(load, [load]);
 
@@ -78,47 +85,44 @@ export default function DashboardAuditLogPage() {
         setEntries((prev) => [...(prev ?? []), ...batch]);
         setHasMore(batch.length === PAGE_SIZE);
       })
-      .catch((err) => setError(errorMessage(err)));
+      .catch((err) => setError(errorMessage(err, tc("unexpectedError"))));
   }
 
   return (
     <div>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-serif text-2xl text-foreground">Registro di audit</h1>
+        <h1 className="font-serif text-2xl text-foreground">{t("title")}</h1>
         <div className="flex gap-3">
           <select
             value={channel}
             onChange={(e) => setChannel(e.target.value as AuditChannel | "")}
-            aria-label="Filtra per canale"
+            aria-label={t("filterChannel")}
             className="max-w-xs rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
           >
-            <option value="">Tutti i canali</option>
-            {Object.entries(AUDIT_CHANNEL_LABELS).map(([key, label]) => (
+            <option value="">{t("allChannels")}</option>
+            {AUDIT_CHANNELS.map((key) => (
               <option key={key} value={key}>
-                {label}
+                {t(`channel.${key}`)}
               </option>
             ))}
           </select>
           <select
             value={action}
             onChange={(e) => setAction(e.target.value)}
-            aria-label="Filtra per azione"
+            aria-label={t("filterAction")}
             className="max-w-xs rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
           >
-            <option value="">Tutte le azioni</option>
-            {Object.keys(AUDIT_ACTION_LABELS).map((key) => (
+            <option value="">{t("allActions")}</option>
+            {AUDIT_ACTIONS.map((key) => (
               <option key={key} value={key}>
-                {AUDIT_ACTION_LABELS[key]}
+                {actionLabel(key)}
               </option>
             ))}
           </select>
         </div>
       </div>
       <p className="mb-6 text-sm text-muted">
-        Azioni sensibili degli ultimi mesi. Gli eventi più vecchi della retention sono
-        archiviati su storage e non compaiono qui. Canale: <strong>Web</strong> = sessione da
-        dashboard/sito, <strong>API</strong> = token diretto, <strong>Sistema</strong> = processo
-        interno (bootstrap, job schedulati).
+        {t.rich("description", { b: (chunks) => <strong>{chunks}</strong> })}
       </p>
       {error && <Alert kind="error">{error}</Alert>}
 
@@ -126,14 +130,14 @@ export default function DashboardAuditLogPage() {
         <table className="w-full text-left text-sm">
           <thead className="border-b border-border text-muted">
             <tr>
-              <th className="px-4 py-3 whitespace-nowrap">Quando</th>
-              <th className="px-4 py-3">Azione</th>
-              <th className="px-4 py-3 whitespace-nowrap">Canale</th>
-              <th className="px-4 py-3">Attore</th>
-              <th className="px-4 py-3">Oggetto</th>
-              <th className="px-4 py-3">Alias blog</th>
-              <th className="px-4 py-3 whitespace-nowrap">IP</th>
-              <th className="px-4 py-3">Dettagli</th>
+              <th className="px-4 py-3 whitespace-nowrap">{t("col.when")}</th>
+              <th className="px-4 py-3">{t("col.action")}</th>
+              <th className="px-4 py-3 whitespace-nowrap">{t("col.channel")}</th>
+              <th className="px-4 py-3">{t("col.actor")}</th>
+              <th className="px-4 py-3">{t("col.target")}</th>
+              <th className="px-4 py-3">{t("col.blogAlias")}</th>
+              <th className="px-4 py-3 whitespace-nowrap">{t("col.ip")}</th>
+              <th className="px-4 py-3">{t("col.details")}</th>
             </tr>
           </thead>
           <tbody>
@@ -144,14 +148,14 @@ export default function DashboardAuditLogPage() {
                 </td>
                 <td className="px-4 py-3 text-foreground">{actionLabel(entry.action)}</td>
                 <td className="px-4 py-3 whitespace-nowrap text-muted">
-                  {AUDIT_CHANNEL_LABELS[entry.channel]}
+                  {t(`channel.${entry.channel}`)}
                 </td>
                 <td className="px-4 py-3 text-muted">
-                  {entry.actor_label ?? AUDIT_ACTOR_TYPE_LABELS[entry.actor_type]}
+                  {entry.actor_label ?? t(`actorType.${entry.actor_type}`)}
                 </td>
                 <td className="px-4 py-3 text-muted">{targetLabel(entry)}</td>
                 <td className="px-4 py-3 text-muted">{blogAliasLabel(entry)}</td>
-                <td className="px-4 py-3 whitespace-nowrap text-muted">{entry.ip ?? "—"}</td>
+                <td className="px-4 py-3 whitespace-nowrap text-muted">{entry.ip ?? t("none")}</td>
                 <td className="px-4 py-3 font-mono text-xs text-muted break-all">
                   {detailsLabel(entry.payload)}
                 </td>
@@ -160,7 +164,7 @@ export default function DashboardAuditLogPage() {
             {entries !== null && entries.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-4 py-6 text-center text-muted">
-                  Nessun evento registrato.
+                  {t("empty")}
                 </td>
               </tr>
             )}
@@ -171,7 +175,7 @@ export default function DashboardAuditLogPage() {
       {hasMore && (
         <div className="mt-4 flex justify-center">
           <Button variant="secondary" onClick={loadMore}>
-            Carica altri
+            {t("loadMore")}
           </Button>
         </div>
       )}

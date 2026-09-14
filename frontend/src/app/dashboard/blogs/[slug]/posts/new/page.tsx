@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
@@ -23,6 +24,8 @@ export default function NewPostPage() {
   const params = useParams<{ slug: string }>();
   const router = useRouter();
   const { authFetch } = useAuth();
+  const t = useTranslations("NewPostPage");
+  const tc = useTranslations("Common");
 
   const [slug, setSlug] = useState("");
   const [title, setTitle] = useState("");
@@ -58,7 +61,7 @@ export default function NewPostPage() {
       );
       router.push(`/dashboard/blogs/${params.slug}/posts/${post.id}`);
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Errore imprevisto.");
+      setError(err instanceof ApiClientError ? err.message : tc("unexpectedError"));
     } finally {
       setSubmitting(false);
     }
@@ -71,7 +74,7 @@ export default function NewPostPage() {
           ‹ {params.slug}
         </Link>
         <Button type="submit" form={FORM_ID} disabled={submitting || !content.trim()}>
-          {submitting ? "Creazione…" : "Crea bozza"}
+          {submitting ? t("creating") : t("createDraft")}
         </Button>
       </div>
 
@@ -80,7 +83,7 @@ export default function NewPostPage() {
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Titolo"
+            placeholder={t("titlePlaceholder")}
             required
             className="mb-3 w-full border-0 bg-transparent font-serif text-3xl font-semibold leading-tight text-foreground placeholder:text-muted/70 focus:outline-none sm:text-[42px]"
           />
@@ -90,7 +93,7 @@ export default function NewPostPage() {
             <input
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
-              placeholder="slug-del-post"
+              placeholder={t("slugPlaceholder")}
               required
               className="border-0 bg-transparent p-0 text-foreground/70 placeholder:text-muted focus:text-foreground focus:outline-none"
               style={{ width: `${Math.max(slug.length, 14) + 1}ch` }}
@@ -132,14 +135,14 @@ export default function NewPostPage() {
           tabs={[
             {
               id: "post",
-              label: "Post",
+              label: t("postTab"),
               content: (
                 <>
                   <CategorySelect blogSlug={params.slug} value={categoryId} onChange={setCategoryId} />
                   <PublicationSelect blogSlug={params.slug} value={publicationId} onChange={setPublicationId} />
                   <div>
                     <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[.04em] text-muted">
-                      Tag
+                      {t("tags")}
                     </span>
                     <TagInput value={tags} onChange={setTags} />
                   </div>

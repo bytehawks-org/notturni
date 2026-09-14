@@ -64,9 +64,9 @@ export const BLOG_VISIBILITY_LABELS: Record<BlogVisibility, string> = {
 export type BlogRole = "autore" | "co_autore" | "revisore" | "mediatore";
 
 /** Ruoli assegnabili invitando un collaboratore (todo/BLOG.md #3). */
-export const INVITABLE_BLOG_ROLES: { value: Extract<BlogRole, "co_autore" | "mediatore">; label: string }[] = [
-  { value: "co_autore", label: "Co-autore" },
-  { value: "mediatore", label: "Mediatore" },
+export const INVITABLE_BLOG_ROLES: Extract<BlogRole, "co_autore" | "mediatore">[] = [
+  "co_autore",
+  "mediatore",
 ];
 
 export const MAX_BLOG_SUBTITLE = 64;
@@ -76,11 +76,7 @@ export const MAX_BLOG_DESCRIPTION = 256;
  * override per singolo post (vedi Post.comments_mode/effective_comments_mode). */
 export type CommentsMode = "everyone" | "members" | "closed";
 
-export const COMMENTS_MODE_LABELS: Record<CommentsMode, string> = {
-  everyone: "Aperti a tutti (richiede captcha)",
-  members: "Solo utenti iscritti",
-  closed: "Chiusi",
-};
+export const COMMENTS_MODES: CommentsMode[] = ["everyone", "members", "closed"];
 
 export interface Blog {
   id: string;
@@ -633,36 +629,39 @@ export interface AuditLogEntry {
   payload: Record<string, unknown>;
 }
 
-export const AUDIT_ACTION_LABELS: Record<string, string> = {
-  "auth.login": "Accesso",
-  "auth.login_failed": "Accesso fallito",
-  "user.role_change": "Cambio ruolo",
-  "user.activated": "Utente riattivato",
-  "user.deactivated": "Utente disattivato",
-  "blog.suspended": "Blog sospeso",
-  "blog.unsuspended": "Blog riattivato",
-  "post.hidden": "Post nascosto",
-  "post.unhidden": "Post mostrato",
-  "comment.approved": "Commento approvato",
-  "comment.rejected": "Commento rifiutato",
-  "api_token.created": "API token creato",
-  "api_token.revoked": "API token revocato",
-  "user.account_deleted": "Account eliminato (GDPR)",
-};
+/** Azioni note del registro di audit (`backend/app/domain/audit.py` e
+ * chiamanti): solo gli identificativi, l'etichetta è in
+ * `messages/{it,en}.json` → `AdminAuditLog.action.<entità>.<evento>`
+ * (navigazione a percorso annidato sullo stesso punto dell'id). Un'azione
+ * non elencata qui (o senza etichetta tradotta) resta mostrata per intero —
+ * vedi `admin/registro/page.tsx::actionLabel`. */
+export const AUDIT_ACTIONS: string[] = [
+  "auth.login",
+  "auth.login_failed",
+  "user.role_change",
+  "user.activated",
+  "user.deactivated",
+  "user.account_deleted",
+  "blog.suspended",
+  "blog.unsuspended",
+  "blog.invitation_created",
+  "blog.invitation_accepted",
+  "blog.invitation_declined",
+  "blog.invitation_revoked",
+  "blog.member_role_changed",
+  "blog.member_removed",
+  "post.hidden",
+  "post.unhidden",
+  "comment.approved",
+  "comment.rejected",
+  "api_token.created",
+  "api_token.revoked",
+  "page.created",
+  "page.updated",
+  "page.deleted",
+];
 
-export const AUDIT_ACTOR_TYPE_LABELS: Record<AuditActorType, string> = {
-  user: "Utente",
-  core_token: "Token core",
-  user_token: "Token utente",
-  system: "Sistema",
-  anonymous: "Anonimo",
-};
-
-export const AUDIT_CHANNEL_LABELS: Record<AuditChannel, string> = {
-  web: "Web",
-  api: "API",
-  system: "Sistema",
-};
+export const AUDIT_CHANNELS: AuditChannel[] = ["web", "api", "system"];
 
 /** `/api/v1/tokens` (dashboard/token). Non include mai il valore in chiaro né
  * l'hash: quello arriva solo nella risposta di creazione (`token`), una

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
@@ -18,14 +19,12 @@ import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import type { SensitivityCategory } from "@/lib/content-media";
 import { displayPostStatus } from "@/lib/post-status";
-import { COMMENTS_MODE_LABELS, type CommentsMode, type Post, type PostNote, type PostTranslationSummary } from "@/lib/types";
+import { COMMENTS_MODES, type CommentsMode, type Post, type PostNote, type PostTranslationSummary } from "@/lib/types";
 
 const FORM_ID = "edit-post-form";
 
-const STATUS_LABEL = { draft: "Bozza", review: "In revisione", scheduled: "Pianificato", published: "Pubblicato" } as const;
-
-function errorMessage(err: unknown): string {
-  return err instanceof ApiClientError ? err.message : "Errore imprevisto.";
+function errorMessage(err: unknown, fallback: string): string {
+  return err instanceof ApiClientError ? err.message : fallback;
 }
 
 function RailLabel({ children }: { children: React.ReactNode }) {
@@ -43,18 +42,19 @@ function PostCommentsModeSelect({
   value: CommentsMode | null;
   onChange: (value: CommentsMode | null) => void;
 }) {
+  const t = useTranslations("PostEditorPage");
   return (
     <label className="flex flex-col">
-      <RailLabel>Commenti</RailLabel>
+      <RailLabel>{t("comments")}</RailLabel>
       <select
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value === "" ? null : (e.target.value as CommentsMode))}
         className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
       >
-        <option value="">Come il blog</option>
-        {(Object.keys(COMMENTS_MODE_LABELS) as CommentsMode[]).map((m) => (
+        <option value="">{t("inheritBlog")}</option>
+        {COMMENTS_MODES.map((m) => (
           <option key={m} value={m}>
-            {COMMENTS_MODE_LABELS[m]}
+            {t(`commentsMode.${m}`)}
           </option>
         ))}
       </select>
@@ -75,6 +75,7 @@ function PostCrawlingSelect({
   value: boolean | null;
   onChange: (value: boolean | null) => void;
 }) {
+  const t = useTranslations("PostEditorPage");
   return (
     <label className="flex flex-col">
       <RailLabel>{label}</RailLabel>
@@ -83,9 +84,9 @@ function PostCrawlingSelect({
         onChange={(e) => onChange(e.target.value === "" ? null : e.target.value === "true")}
         className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
       >
-        <option value="">Come il blog</option>
-        <option value="true">Consenti</option>
-        <option value="false">Blocca</option>
+        <option value="">{t("inheritBlog")}</option>
+        <option value="true">{t("allow")}</option>
+        <option value="false">{t("block")}</option>
       </select>
     </label>
   );
@@ -95,6 +96,9 @@ export default function PostEditorPage() {
   const params = useParams<{ slug: string; postId: string }>();
   const router = useRouter();
   const { user, accessToken, authFetch } = useAuth();
+  const t = useTranslations("PostEditorPage");
+  const tc = useTranslations("Common");
+  const tStatus = useTranslations("Status");
 
   const [post, setPost] = useState<Post | null>(null);
   const [title, setTitle] = useState("");
@@ -134,9 +138,9 @@ export default function PostEditorPage() {
         setAiCrawlingEnabled(p.ai_crawling_enabled);
         setNotes(p.notes);
       })
-      .catch((err) => setError(errorMessage(err)));
+      .catch((err) => setError(errorMessage(err, tc("unexpectedError"))));
     api.posts.translations(params.postId).then(setTranslations).catch(() => undefined);
-  }, [params.postId, accessToken]);
+  }, [params.postId, accessToken, tc]);
 
   // Le lingue di fallback del profilo (vedi dashboard/profile) popolano il
   // selettore lingua in "Aggiungi traduzione", invece di dover scrivere la sigla.
@@ -175,7 +179,7 @@ export default function PostEditorPage() {
       setNotes(updated.notes);
       setSaved(true);
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, tc("unexpectedError")));
     } finally {
       setSaving(false);
     }
@@ -186,7 +190,7 @@ export default function PostEditorPage() {
       const updated = await authFetch((token) => api.posts.publish(token, params.postId, publishedAt));
       setPost(updated);
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, tc("unexpectedError")));
     }
   }
 
@@ -197,7 +201,7 @@ export default function PostEditorPage() {
       );
       setPost(updated);
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, tc("unexpectedError")));
     }
   }
 
@@ -214,7 +218,7 @@ export default function PostEditorPage() {
     router.push(`/dashboard/blogs/${params.slug}/posts/${translated.id}`);
   }
 
-  if (!post) return error ? <Alert kind="error">{error}</Alert> : <p className="text-sm text-muted">Caricamento…</p>;
+  if (!post) return error ? <Alert kind="error">{error}</Alert> : <p className="text-sm text-muted">{t("loading")}</p>;
 
   return (
     <div className="mx-auto max-w-[1080px]">
@@ -225,17 +229,17 @@ export default function PostEditorPage() {
           </Link>
           <span className="text-border">|</span>
           <span className="font-mono text-xs">
-            {STATUS_LABEL[displayPostStatus(post)]} · {saving ? "salvataggio…" : "salvato"}
+            {tStatus(displayPostStatus(post))} · {saving ? t("savingInline") : t("savedInline")}
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-4">
           {post.status === "published" && (
             <Link href={post.permalink} className="text-sm text-muted hover:text-foreground">
-              Anteprima ↗
+              {t("preview")}
             </Link>
           )}
           <Button type="submit" form={FORM_ID} variant="secondary" disabled={saving}>
-            {saving ? "Salvataggio…" : "Salva"}
+            {saving ? t("savingButton") : t("saveButton")}
           </Button>
         </div>
       </div>
@@ -280,7 +284,7 @@ export default function PostEditorPage() {
           )}
           {saved && (
             <div className="mt-6">
-              <Alert kind="success">Salvato.</Alert>
+              <Alert kind="success">{t("savedAlert")}</Alert>
             </div>
           )}
         </form>
@@ -289,12 +293,12 @@ export default function PostEditorPage() {
           tabs={[
             {
               id: "post",
-              label: "Post",
+              label: t("postTab"),
               content: (
                 <>
                   <PostStatusControl post={post} onChangeStatus={handleChangeStatus} onPublish={handlePublish} />
                   <div>
-                    <RailLabel>Slug</RailLabel>
+                    <RailLabel>{t("slug")}</RailLabel>
                     <span className="block truncate rounded-lg border border-border bg-surface px-3 py-2.5 font-mono text-[13px] text-muted">
                       /{params.slug}/<span className="text-foreground">{post.slug}</span>
                     </span>
@@ -302,22 +306,22 @@ export default function PostEditorPage() {
                   <CategorySelect blogSlug={params.slug} value={categoryId} onChange={setCategoryId} />
                   <PublicationSelect blogSlug={params.slug} value={publicationId} onChange={setPublicationId} />
                   <div>
-                    <RailLabel>Tag</RailLabel>
+                    <RailLabel>{t("tags")}</RailLabel>
                     <TagInput value={tags} onChange={setTags} />
                   </div>
                   <PostCommentsModeSelect value={commentsMode} onChange={setCommentsMode} />
                   <PostCrawlingSelect
-                    label="Motori di ricerca"
+                    label={t("searchEngines")}
                     value={searchIndexingEnabled}
                     onChange={setSearchIndexingEnabled}
                   />
-                  <PostCrawlingSelect label="Crawler IA/LLM" value={aiCrawlingEnabled} onChange={setAiCrawlingEnabled} />
+                  <PostCrawlingSelect label={t("aiCrawlers")} value={aiCrawlingEnabled} onChange={setAiCrawlingEnabled} />
                 </>
               ),
             },
             {
               id: "translations",
-              label: "Traduzioni",
+              label: t("translationsTab"),
               badge: translations.length,
               content: (
                 <TranslationsBar

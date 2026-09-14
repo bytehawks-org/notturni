@@ -666,7 +666,11 @@
     "confirmDeleteLabel": "Per confermare, scrivi il tuo username (<b>{username}</b>)",
     "deleting": "Eliminazione…",
     "confirmDelete": "Conferma eliminazione",
-    "gdprNote": "I dati sono trattati nell'UE secondo il GDPR. La posizione usata per alba/tramonto del tema è calcolata sul tuo dispositivo e non ci viene mai inviata."
+    "gdprNote": "I dati sono trattati nell'UE secondo il GDPR. La posizione usata per alba/tramonto del tema è calcolata sul tuo dispositivo e non ci viene mai inviata.",
+    "nativeLanguageLabel": "Lingua madre",
+    "nativeLanguageNone": "Non specificata",
+    "fallbackLanguagesLabel": "Lingue di fallback",
+    "fallbackLanguagesHint": "(anche verso cui tradurre i tuoi contenuti — massimo {max})"
   },
   "PostPage": {
     "inThisPost": "In questo post",
@@ -773,6 +777,95 @@
     "deletedBadge": "in cancellazione",
     "pausedBadge": "in pausa"
   },
+  "PostEditorPage": {
+    "loading": "Caricamento…",
+    "savingInline": "salvataggio…",
+    "savedInline": "salvato",
+    "savingButton": "Salvataggio…",
+    "saveButton": "Salva",
+    "preview": "Anteprima ↗",
+    "savedAlert": "Salvato.",
+    "postTab": "Post",
+    "slug": "Slug",
+    "tags": "Tag",
+    "translationsTab": "Traduzioni",
+    "comments": "Commenti",
+    "inheritBlog": "Come il blog",
+    "searchEngines": "Motori di ricerca",
+    "aiCrawlers": "Crawler IA/LLM",
+    "allow": "Consenti",
+    "block": "Blocca",
+    "commentsMode": {
+      "everyone": "Aperti a tutti (richiede captcha)",
+      "members": "Solo utenti iscritti",
+      "closed": "Chiusi"
+    }
+  },
+  "NewPostPage": {
+    "creating": "Creazione…",
+    "createDraft": "Crea bozza",
+    "titlePlaceholder": "Titolo",
+    "slugPlaceholder": "slug-del-post",
+    "postTab": "Post",
+    "tags": "Tag"
+  },
+  "RichTextEditor": {
+    "placeholder": "Scrivi qualcosa...",
+    "heading1": "Titolo 1",
+    "heading2": "Titolo 2",
+    "heading3": "Titolo 3",
+    "bold": "Grassetto",
+    "italic": "Corsivo",
+    "strike": "Barrato",
+    "code": "Codice",
+    "link": "Link",
+    "note": "Nota a piè di pagina",
+    "quote": "Citazione",
+    "bulletList": "Elenco puntato",
+    "orderedList": "Elenco numerato",
+    "image": "Immagine",
+    "table": "Tabella",
+    "addColumn": "+col",
+    "addColumnTitle": "Aggiungi colonna",
+    "addRow": "+riga",
+    "addRowTitle": "Aggiungi riga",
+    "deleteTable": "✕tab",
+    "deleteTableTitle": "Elimina tabella",
+    "undo": "Annulla",
+    "redo": "Ripeti",
+    "linkPrompt": "URL del link",
+    "noteTooLong": "La nota supera i {max} caratteri.",
+    "uploadFailed": "Caricamento immagine non riuscito.",
+    "noteLabel": "Nota {n}",
+    "notePlaceholder": "Testo della nota…",
+    "done": "Fatto",
+    "cancel": "Annulla",
+    "footnotesTitle": "Note a piè di pagina",
+    "remove": "Rimuovi",
+    "footnoteHint": "Il riferimento nel testo è il numero cliccabile inserito col pulsante «Nota»."
+  },
+  "TranslationsBar": {
+    "alsoIn": "Anche in",
+    "addLanguage": "+ Aggiungi lingua",
+    "languagePlaceholder": "Lingua…",
+    "otherLanguage": "Un'altra lingua…",
+    "languageInputPlaceholder": "Lingua (es. en)",
+    "slugPlaceholder": "Slug",
+    "titlePlaceholder": "Titolo",
+    "creating": "Creazione…",
+    "createTranslation": "Crea traduzione",
+    "cancel": "Annulla"
+  },
+  "CoverImageUpload": {
+    "uploadFailed": "Caricamento immagine non riuscito.",
+    "sensitiveOverlay": "Contenuto sensibile — clicca per vedere",
+    "remove": "Rimuovi",
+    "warningOnContent": "Avviso sul contenuto",
+    "addWarning": "Aggiungi un avviso",
+    "coverAlt": "Copertina del post",
+    "uploading": "Caricamento…",
+    "uploadCta": "Carica immagine di copertina (16:9, 800 × 450 px)"
+  },
   "Editor": {
     "status": "Stato",
     "publishNow": "Pubblica ora",
@@ -796,6 +889,35 @@
     "noneInFilter": "Nessun post in questa vista.",
     "view": "Vedi",
     "publish": "Pubblica"
+  },
+  "PagesTab": {
+    "notEnabled": "Le pagine statiche non sono attive per questo blog: puoi attivarle dalla scheda Impostazioni.",
+    "newPage": "Nuova pagina",
+    "empty": "Nessuna pagina.",
+    "published": "Pubblicata",
+    "draft": "Bozza",
+    "view": "Vedi",
+    "publish": "Pubblica"
+  },
+  "CollaboratorsTab": {
+    "title": "Collaboratori",
+    "empty": "Nessun collaboratore.",
+    "signsAs": "firma come «{alias}»",
+    "remove": "Rimuovi",
+    "inviteTitle": "Invita un collaboratore",
+    "inviteHint": "resta in attesa finché non lo accetta",
+    "username": "Username",
+    "role": "Ruolo",
+    "submit": "Invia invito",
+    "pending": "(in attesa)",
+    "revoke": "Revoca"
+  },
+  "MyMembershipCard": {
+    "title": "Il mio nome su questo blog",
+    "label": "Alias autore",
+    "placeholder": "Lasciare vuoto per usare il nome predefinito del blog o il tuo alias di profilo",
+    "hint": "Con cui firmi i post scritti qui. Ha la precedenza sul nome predefinito del blog e sull'alias del tuo profilo.",
+    "saved": "Salvato."
   },
   "CommentsTab": {
     "ownerOnly": "Solo il proprietario può moderare i commenti.",
@@ -1090,6 +1212,79 @@
     "hide": "Nascondi",
     "hideTitle": "Nascondere “{title}”?",
     "showTitle": "Mostrare di nuovo “{title}”?"
+  },
+  "AdminPages": {
+    "title": "Pagine statiche",
+    "searchPlaceholder": "Cerca per titolo o slug…",
+    "language": "Lingua",
+    "newPage": "Nuova pagina",
+    "published": "pubblicata",
+    "draft": "bozza",
+    "close": "Chiudi",
+    "edit": "Modifica",
+    "emptyForLocale": "Nessuna pagina trovata per la lingua \"{locale}\".",
+    "createTitle": "Nuova pagina",
+    "slug": "Slug",
+    "titleField": "Titolo",
+    "publishNow": "Pubblica subito",
+    "create": "Crea",
+    "publishedCheckbox": "Pubblicata"
+  },
+  "AdminAuditLog": {
+    "title": "Registro di audit",
+    "allChannels": "Tutti i canali",
+    "allActions": "Tutte le azioni",
+    "filterChannel": "Filtra per canale",
+    "filterAction": "Filtra per azione",
+    "description": "Azioni sensibili degli ultimi mesi. Gli eventi più vecchi della retention sono archiviati su storage e non compaiono qui. Canale: <b>Web</b> = sessione da dashboard/sito, <b>API</b> = token diretto, <b>Sistema</b> = processo interno (bootstrap, job schedulati).",
+    "col": {
+      "when": "Quando",
+      "action": "Azione",
+      "channel": "Canale",
+      "actor": "Attore",
+      "target": "Oggetto",
+      "blogAlias": "Alias blog",
+      "ip": "IP",
+      "details": "Dettagli"
+    },
+    "empty": "Nessun evento registrato.",
+    "loadMore": "Carica altri",
+    "none": "—",
+    "actorType": {
+      "user": "Utente",
+      "core_token": "Token core",
+      "user_token": "Token utente",
+      "system": "Sistema",
+      "anonymous": "Anonimo"
+    },
+    "channel": {
+      "web": "Web",
+      "api": "API",
+      "system": "Sistema"
+    },
+    "action": {
+      "auth": { "login": "Accesso", "login_failed": "Accesso fallito" },
+      "user": {
+        "role_change": "Cambio ruolo",
+        "activated": "Utente riattivato",
+        "deactivated": "Utente disattivato",
+        "account_deleted": "Account eliminato (GDPR)"
+      },
+      "blog": {
+        "suspended": "Blog sospeso",
+        "unsuspended": "Blog riattivato",
+        "invitation_created": "Invito creato",
+        "invitation_accepted": "Invito accettato",
+        "invitation_declined": "Invito rifiutato",
+        "invitation_revoked": "Invito revocato",
+        "member_role_changed": "Ruolo collaboratore cambiato",
+        "member_removed": "Collaboratore rimosso"
+      },
+      "post": { "hidden": "Post nascosto", "unhidden": "Post mostrato" },
+      "comment": { "approved": "Commento approvato", "rejected": "Commento rifiutato" },
+      "api_token": { "created": "API token creato", "revoked": "API token revocato" },
+      "page": { "created": "Pagina creata", "updated": "Pagina modificata", "deleted": "Pagina eliminata" }
+    }
   },
   "MediaTab": {
     "summary": "{count, plural, one {# file} other {# file}} · {size}",

@@ -17,7 +17,7 @@ import { PagesTab } from "@/components/dashboard/blog/PagesTab";
 import { PostsTab } from "@/components/dashboard/blog/PostsTab";
 import { PublicationsTab } from "@/components/dashboard/blog/PublicationsTab";
 import { SettingsTab } from "@/components/dashboard/blog/SettingsTab";
-import { errorMessage, ROLE_LABELS } from "@/components/dashboard/blog/shared";
+import { errorMessage, roleMessageKey } from "@/components/dashboard/blog/shared";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { SkeletonRows } from "@/components/ui/States";
@@ -71,8 +71,8 @@ export default function BlogDetailPage() {
     api.blogs
       .get(slug, accessToken)
       .then(setBlog)
-      .catch((err) => setError(errorMessage(err)));
-  }, [slug, accessToken]);
+      .catch((err) => setError(errorMessage(err, tc("unexpectedError"))));
+  }, [slug, accessToken, tc]);
 
   useEffect(load, [load]);
 
@@ -112,7 +112,7 @@ export default function BlogDetailPage() {
             {blog.is_paused && !blog.deleted_at && <span className="font-semibold text-[#b8862b]">{ta("paused")}</span>}
             {blog.is_suspended && <span className="font-semibold text-danger">{ta("suspended")}</span>}
             {isOwner && <span>{ta("youAre", { role: ta("roles.owner") })}</span>}
-            {!isOwner && role && <span>{ta("youAre", { role: ROLE_LABELS[role] ?? role })}</span>}
+            {!isOwner && role && <span>{ta("youAre", { role: ta(`roles.${roleMessageKey(role)}`) })}</span>}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">

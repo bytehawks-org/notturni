@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import ImageExtension from "@tiptap/extension-image";
 import LinkExtension from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -288,6 +289,7 @@ export function RichTextEditor({
   toolbarEnd,
   stickyToolbar = true,
 }: RichTextEditorProps) {
+  const t = useTranslations("RichTextEditor");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [notePopover, setNotePopover] = useState<{ left: number; top: number; text: string } | null>(null);
@@ -304,7 +306,7 @@ export function RichTextEditor({
       StarterKit.configure({ link: false }),
       LinkExtension.configure({ openOnClick: false, autolink: true }),
       ImageExtension.extend({ addNodeView: sensitiveImageNodeView }),
-      Placeholder.configure({ placeholder: placeholder ?? "Scrivi qualcosa..." }),
+      Placeholder.configure({ placeholder: placeholder ?? t("placeholder") }),
       // resizable:false — una larghezza di colonna persistita non è
       // rappresentabile in una tabella Markdown a pipe, che non la prevede.
       // Table.addExtensions() dovrebbe includere già Row/Cell/Header da sé,
@@ -402,7 +404,7 @@ export function RichTextEditor({
 
   function setLink() {
     const previousUrl = editor!.getAttributes("link").href as string | undefined;
-    const url = window.prompt("URL del link", previousUrl ?? "https://");
+    const url = window.prompt(t("linkPrompt"), previousUrl ?? "https://");
     if (url === null) return;
     if (url === "") {
       editor!.chain().focus().extendMarkRange("link").unsetLink().run();
@@ -428,7 +430,7 @@ export function RichTextEditor({
     const trimmed = notePopover.text.trim();
     if (!trimmed) return;
     if (trimmed.length > MAX_NOTE_LENGTH) {
-      setUploadError(`La nota supera i ${MAX_NOTE_LENGTH} caratteri.`);
+      setUploadError(t("noteTooLong", { max: MAX_NOTE_LENGTH }));
       return;
     }
     const nextIdx = notes.reduce((max, n) => Math.max(max, n.idx), 0) + 1;
@@ -491,7 +493,7 @@ export function RichTextEditor({
         ])
         .run();
     } catch (err) {
-      setUploadError(err instanceof ApiClientError ? err.message : "Caricamento immagine non riuscito.");
+      setUploadError(err instanceof ApiClientError ? err.message : t("uploadFailed"));
     }
   }
 
@@ -508,21 +510,21 @@ export function RichTextEditor({
         )}
         <div className="flex flex-nowrap items-center gap-1 overflow-x-auto text-foreground/70 sm:flex-wrap sm:overflow-visible">
         <ToolbarButton
-          title="Titolo 1"
+          title={t("heading1")}
           active={state.heading1}
           onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
         >
           <span className="font-bold">H1</span>
         </ToolbarButton>
         <ToolbarButton
-          title="Titolo 2"
+          title={t("heading2")}
           active={state.heading2}
           onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
         >
           <span className="font-bold">H2</span>
         </ToolbarButton>
         <ToolbarButton
-          title="Titolo 3"
+          title={t("heading3")}
           active={state.heading3}
           onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
         >
@@ -531,27 +533,27 @@ export function RichTextEditor({
 
         <ToolbarDivider />
 
-        <ToolbarButton title="Grassetto" active={state.bold} onClick={() => editor.chain().focus().toggleBold().run()}>
+        <ToolbarButton title={t("bold")} active={state.bold} onClick={() => editor.chain().focus().toggleBold().run()}>
           <span className="font-bold">B</span>
         </ToolbarButton>
-        <ToolbarButton title="Corsivo" active={state.italic} onClick={() => editor.chain().focus().toggleItalic().run()}>
+        <ToolbarButton title={t("italic")} active={state.italic} onClick={() => editor.chain().focus().toggleItalic().run()}>
           <span className="italic">I</span>
         </ToolbarButton>
         <ToolbarButton
-          title="Barrato"
+          title={t("strike")}
           active={state.strike}
           onClick={() => editor.chain().focus().toggleStrike().run()}
         >
           <span className="line-through">S</span>
         </ToolbarButton>
-        <ToolbarButton title="Codice" active={state.code} onClick={() => editor.chain().focus().toggleCode().run()}>
+        <ToolbarButton title={t("code")} active={state.code} onClick={() => editor.chain().focus().toggleCode().run()}>
           <span className="font-mono text-xs">{"</>"}</span>
         </ToolbarButton>
-        <ToolbarButton title="Link" active={state.link} onClick={setLink}>
+        <ToolbarButton title={t("link")} active={state.link} onClick={setLink}>
           <LinkIcon />
         </ToolbarButton>
         {onNotesChange && (
-          <ToolbarButton title="Nota a piè di pagina" onClick={openNotePopover}>
+          <ToolbarButton title={t("note")} onClick={openNotePopover}>
             <NoteIcon />
           </ToolbarButton>
         )}
@@ -559,33 +561,33 @@ export function RichTextEditor({
         <ToolbarDivider />
 
         <ToolbarButton
-          title="Citazione"
+          title={t("quote")}
           active={state.blockquote}
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
         >
           <QuoteIcon />
         </ToolbarButton>
         <ToolbarButton
-          title="Elenco puntato"
+          title={t("bulletList")}
           active={state.bulletList}
           onClick={() => editor.chain().focus().toggleBulletList().run()}
         >
           <BulletListIcon />
         </ToolbarButton>
         <ToolbarButton
-          title="Elenco numerato"
+          title={t("orderedList")}
           active={state.orderedList}
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
         >
           <OrderedListIcon />
         </ToolbarButton>
         {blogSlug && (
-          <ToolbarButton title="Immagine" onClick={() => fileInputRef.current?.click()}>
+          <ToolbarButton title={t("image")} onClick={() => fileInputRef.current?.click()}>
             <ImageIcon />
           </ToolbarButton>
         )}
         <ToolbarButton
-          title="Tabella"
+          title={t("table")}
           active={state.inTable}
           onClick={() =>
             editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
@@ -595,24 +597,24 @@ export function RichTextEditor({
         </ToolbarButton>
         {state.inTable && (
           <>
-            <ToolbarButton title="Aggiungi colonna" onClick={() => editor.chain().focus().addColumnAfter().run()}>
-              <span className="text-xs">+col</span>
+            <ToolbarButton title={t("addColumnTitle")} onClick={() => editor.chain().focus().addColumnAfter().run()}>
+              <span className="text-xs">{t("addColumn")}</span>
             </ToolbarButton>
-            <ToolbarButton title="Aggiungi riga" onClick={() => editor.chain().focus().addRowAfter().run()}>
-              <span className="text-xs">+riga</span>
+            <ToolbarButton title={t("addRowTitle")} onClick={() => editor.chain().focus().addRowAfter().run()}>
+              <span className="text-xs">{t("addRow")}</span>
             </ToolbarButton>
-            <ToolbarButton title="Elimina tabella" onClick={() => editor.chain().focus().deleteTable().run()}>
-              <span className="text-xs text-red-700">✕tab</span>
+            <ToolbarButton title={t("deleteTableTitle")} onClick={() => editor.chain().focus().deleteTable().run()}>
+              <span className="text-xs text-red-700">{t("deleteTable")}</span>
             </ToolbarButton>
           </>
         )}
 
         <ToolbarDivider />
 
-        <ToolbarButton title="Annulla" disabled={!state.canUndo} onClick={() => editor.chain().focus().undo().run()}>
+        <ToolbarButton title={t("undo")} disabled={!state.canUndo} onClick={() => editor.chain().focus().undo().run()}>
           <UndoIcon />
         </ToolbarButton>
-        <ToolbarButton title="Ripeti" disabled={!state.canRedo} onClick={() => editor.chain().focus().redo().run()}>
+        <ToolbarButton title={t("redo")} disabled={!state.canRedo} onClick={() => editor.chain().focus().redo().run()}>
           <RedoIcon />
         </ToolbarButton>
         </div>
@@ -643,7 +645,7 @@ export function RichTextEditor({
           className="flex w-72 flex-col gap-2 rounded-lg border border-border bg-surface p-3 shadow-soft"
         >
           <div className="flex items-center justify-between font-mono text-[11px] uppercase tracking-[.06em] text-muted">
-            <span>Nota {notes.reduce((max, n) => Math.max(max, n.idx), 0) + 1}</span>
+            <span>{t("noteLabel", { n: notes.reduce((max, n) => Math.max(max, n.idx), 0) + 1 })}</span>
           </div>
           <textarea
             autoFocus
@@ -654,7 +656,7 @@ export function RichTextEditor({
             onKeyDown={(e) => {
               if (e.key === "Escape") setNotePopover(null);
             }}
-            placeholder="Testo della nota…"
+            placeholder={t("notePlaceholder")}
             className="rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
           />
           <div className="flex items-center gap-4 text-[13px]">
@@ -664,14 +666,14 @@ export function RichTextEditor({
               onClick={confirmNote}
               className="font-medium text-primary disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Fatto
+              {t("done")}
             </button>
             <button
               type="button"
               onClick={() => setNotePopover(null)}
               className="ml-auto text-muted hover:text-foreground"
             >
-              Annulla
+              {t("cancel")}
             </button>
           </div>
         </div>
@@ -679,7 +681,7 @@ export function RichTextEditor({
 
       {onNotesChange && notes.length > 0 && (
         <div className="mt-8 border-t border-border pt-4">
-          <p className="mb-2 text-xs uppercase tracking-wide text-muted">Note a piè di pagina</p>
+          <p className="mb-2 text-xs uppercase tracking-wide text-muted">{t("footnotesTitle")}</p>
           <ul className="space-y-2">
             {[...notes]
               .sort((a, b) => a.idx - b.idx)
@@ -698,14 +700,12 @@ export function RichTextEditor({
                     onClick={() => removeNote(note.idx)}
                     className="mt-1 text-xs text-muted hover:text-foreground"
                   >
-                    Rimuovi
+                    {t("remove")}
                   </button>
                 </li>
               ))}
           </ul>
-          <p className="mt-2 text-xs text-muted">
-            Il riferimento nel testo è il numero cliccabile inserito col pulsante «Nota».
-          </p>
+          <p className="mt-2 text-xs text-muted">{t("footnoteHint")}</p>
         </div>
       )}
     </div>
