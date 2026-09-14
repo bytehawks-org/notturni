@@ -150,6 +150,107 @@ async def test_api_token_creation_is_recorded(
     assert events[0].actor_type == AuditActorType.CORE_TOKEN
     assert events[0].actor_label == "test-core-token"
     assert events[0].payload == {"name": "figlio", "owner_type": "core"}
+    # Regressione: `target_id` restava NULL perché l'id (default Python-side)
+    # non era ancora assegnato all'oggetto senza un flush prima di leggerlo.
+    assert str(events[0].target_id) == res.json()["id"]
+
+
+async def test_blog_invitation_lifecycle_is_recorded(
+    client: AsyncClient, make_user: Callable, db_session: AsyncSession
+) -> None:
+    owner: AuthedUser = await make_user("audit-inv-owner")
+    guest: AuthedUser = await make_user("audit-inv-guest")
+    await client.post("/api/v1/blogs", json={"slug": "audit-inv-blog", "title": "x"}, headers=owner.headers)
+
+    invite = await client.post(
+        "/api/v1/blogs/audit-inv-blog/invitations",
+        json={"username": "audit-inv-guest", "role": "co_autore"},
+        headers=owner.headers,
+    )
+    assert invite.status_code == 201
+    inv_id = invite.json()["id"]
+
+    created = await _events(db_session, "blog.invitation_created")
+    assert len(created) == 1
+    assert str(created[0].target_id) == inv_id
+    assert created[0].payload == {"invited_username": "audit-inv-guest", "role": "co_autore", "blog_slug": "audit-inv-blog"}
+
+    accept = await client.post(f"/api/v1/blogs/received-invitations/{inv_id}/accept", headers=guest.headers)
+    assert accept.status_code == 200
+    accepted = await _events(db_session, "blog.invitation_accepted")
+    assert len(accepted) == 1
+    assert accepted[0].actor_label == f"{guest.username} <{guest.email}>"
+
+    members = await client.get("/api/v1/blogs/audit-inv-blog/members", headers=owner.headers)
+    guest_user_id = next(m["user_id"] for m in members.json() if m["username"] == guest.username)
+
+    role_change = await client.patch(
+        f"/api/v1/blogs/audit-inv-blog/members/{guest_user_id}",
+        json={"role": "mediatore"},
+        headers=owner.headers,
+    )
+    assert role_change.status_code == 200
+    changed = await _events(db_session, "blog.member_role_changed")
+    assert len(changed) == 1
+    assert changed[0].payload == {"from": "co_autore", "to": "mediatore", "blog_slug": "audit-inv-blog"}
+
+    removed = await client.delete(
+        f"/api/v1/blogs/audit-inv-blog/members/{guest_user_id}", headers=owner.headers
+    )
+    assert removed.status_code == 204
+    removed_events = await _events(db_session, "blog.member_removed")
+    assert len(removed_events) == 1
+    assert removed_events[0].payload == {"role": "mediatore", "blog_slug": "audit-inv-blog"}
+
+
+async def test_static_page_crud_is_recorded(
+    client: AsyncClient, make_admin: Callable, make_user: Callable, db_session: AsyncSession
+) -> None:
+    admin: AuthedUser = await make_admin("audit-page-admin")
+    owner: AuthedUser = await make_user("audit-page-owner")
+    await client.post(
+        "/api/v1/blogs", json={"slug": "audit-page-blog", "title": "x"}, headers=owner.headers
+    )
+    await client.patch(
+        "/api/v1/blogs/audit-page-blog",
+        json={"static_pages_enabled": True},
+        headers=owner.headers,
+    )
+
+    platform_page = await client.post(
+        "/api/v1/pages",
+        json={"slug": "chi-siamo-audit", "locale": "it", "title": "x", "content": "y"},
+        headers=admin.headers,
+    )
+    assert platform_page.status_code == 201
+    page_id = platform_page.json()["id"]
+    created = await _events(db_session, "page.created")
+    assert len(created) == 1
+    assert str(created[0].target_id) == page_id
+    assert created[0].blog_id is None
+
+    updated = await client.patch(
+        f"/api/v1/pages/{page_id}", json={"title": "y"}, headers=admin.headers
+    )
+    assert updated.status_code == 200
+    assert len(await _events(db_session, "page.updated")) == 1
+
+    blog_page = await client.post(
+        "/api/v1/blogs/audit-page-blog/pages",
+        json={"slug": "extra", "locale": "it", "title": "x", "content": "y"},
+        headers=owner.headers,
+    )
+    assert blog_page.status_code == 201
+    blog_page_id = blog_page.json()["id"]
+    blog_created = await _events(db_session, "page.created")
+    assert len(blog_created) == 2
+    assert str(blog_created[1].blog_id) is not None
+
+    deleted = await client.delete(
+        f"/api/v1/blogs/audit-page-blog/pages/{blog_page_id}", headers=owner.headers
+    )
+    assert deleted.status_code == 204
+    assert len(await _events(db_session, "page.deleted")) == 1
 
 
 async def test_blog_alias_included_when_blog_has_one(

@@ -1677,7 +1677,12 @@ amministrazione (`user.role_change` con `payload {from,to}`,
 `user.activated`/`user.deactivated`, `blog.suspended`/`blog.unsuspended`,
 `post.hidden`/`post.unhidden`, `comment.approved`/`comment.rejected`), API
 token (`api_token.created`/`api_token.revoked`), account (`user.
-account_deleted`, GDPR). Ogni riga porta:
+account_deleted`, GDPR), inviti e membership del blog
+(`blog.invitation_created`/`_accepted`/`_declined`/`_revoked`,
+`blog.member_role_changed` con `payload {from,to}`, `blog.member_removed`),
+pagine statiche (`page.created`/`page.updated`/`page.deleted`, sia di
+piattaforma sia di blog — `blog_id` presente solo per queste ultime). Ogni
+riga porta:
 
 - `actor_type`/`actor_id`/`actor_label` — chi: tipo di attore, il suo id (se
   applicabile) e uno snapshot leggibile `username <email>` al momento del

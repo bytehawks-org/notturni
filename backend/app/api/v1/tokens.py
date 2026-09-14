@@ -59,6 +59,11 @@ async def create_token(
         token_hash=token_hash,
     )
     session.add(new_token)
+    # `new_token.id` è un default Python-side (uuid.uuid4): senza un flush
+    # esplicito resta None finché non arriva l'INSERT, e finirebbe NULL nella
+    # riga di audit sotto (bug scoperto proprio così: `target_id` NULL in
+    # `audit_log` per ogni token creato).
+    await session.flush()
     await audit.record(
         session,
         action="api_token.created",

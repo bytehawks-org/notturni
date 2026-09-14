@@ -5,7 +5,7 @@ pubblicazioni su queste pagine: solo titolo/slug/lingua/contenuto."""
 
 import uuid
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +25,7 @@ from app.api.v1.pages import (
 )
 from app.core.database import get_session
 from app.core.revalidation import blog_page_tag, blog_tag, revalidate_frontend
+from app.domain import audit
 from app.domain.authorization import can_write_posts
 from app.domain.i18n import validate_locale
 from app.domain.pages import build_page_permalink, validate_page_slug
@@ -121,6 +122,7 @@ async def get_blog_page(
 async def create_blog_page(
     slug: str,
     payload: PageCreateRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> PageOut:
@@ -152,6 +154,17 @@ async def create_blog_page(
         updated_by_id=current_user.id,
     )
     session.add(page)
+    await session.flush()
+    await audit.record(
+        session,
+        action="page.created",
+        actor=current_user,
+        target_type="page",
+        target_id=page.id,
+        blog_id=blog.id,
+        request=request,
+        payload={"slug": page.slug, "locale": page.locale, "is_published": page.is_published, "blog_slug": blog.slug},
+    )
     await session.commit()
     await session.refresh(page)
     await revalidate_frontend([blog_tag(slug), blog_page_tag(slug, page.slug)])
@@ -226,6 +239,7 @@ async def update_blog_page(
     slug: str,
     page_id: uuid.UUID,
     payload: PageUpdateRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> PageOut:
@@ -259,6 +273,16 @@ async def update_blog_page(
         page.is_published = payload.is_published
     page.updated_by_id = current_user.id
 
+    await audit.record(
+        session,
+        action="page.updated",
+        actor=current_user,
+        target_type="page",
+        target_id=page.id,
+        blog_id=blog.id,
+        request=request,
+        payload={"slug": page.slug, "locale": page.locale, "is_published": page.is_published, "blog_slug": blog.slug},
+    )
     await session.commit()
     await session.refresh(page)
     await revalidate_frontend([blog_tag(slug), blog_page_tag(slug, page.slug)])
@@ -269,6 +293,7 @@ async def update_blog_page(
 async def delete_blog_page(
     slug: str,
     page_id: uuid.UUID,
+    request: Request,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> None:
@@ -276,7 +301,18 @@ async def delete_blog_page(
     await _require_blog_write_access(session, current_user, blog)
     page = await _get_blog_page_or_404(session, blog.id, page_id)
     page_slug = page.slug
+    page_id_value = page.id
 
     await session.delete(page)
+    await audit.record(
+        session,
+        action="page.deleted",
+        actor=current_user,
+        target_type="page",
+        target_id=page_id_value,
+        blog_id=blog.id,
+        request=request,
+        payload={"slug": page_slug, "blog_slug": blog.slug},
+    )
     await session.commit()
     await revalidate_frontend([blog_tag(slug), blog_page_tag(slug, page_slug)])
