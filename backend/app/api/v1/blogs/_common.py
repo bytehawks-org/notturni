@@ -92,6 +92,15 @@ class BlogOut(BaseModel):
     is_suspended: bool
     deleted_at: datetime | None
     default_author_display_name: str | None
+    # Cover del blog (facoltativa, banner della home pubblica) e favicon
+    # (facoltativa, icona di identità): vedi app/api/v1/blogs/branding.py.
+    # `favicon_url` è calcolato da `favicon_object_key` in `_to_blog_out`,
+    # mai un campo diretto del modello (stesso principio di `avatar_url` sul
+    # profilo utente).
+    cover_image_url: str | None = None
+    cover_image_is_sensitive: bool = False
+    cover_image_categories: list[str] = []
+    favicon_url: str | None = None
     # CLAUDE.md #8: presente solo per il proprietario stesso (usato lato
     # frontend per calcolare `isOwner`) — chiunque altro lo riceve a `null`,
     # perché è l'unico campo di Blog che punterebbe direttamente all'id

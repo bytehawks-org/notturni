@@ -91,7 +91,9 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   editing, permalink `/{blog}/pagina/{slug}`.
 - **Aspetto personalizzabile per blog:** palette/tipografia/layout in JSON
   libero (`blog_configs`), con i vincoli del blueprint (max 5 colori, max 3
-  font); nome pubblico predefinito per gli autori/co-autori del blog.
+  font); nome pubblico predefinito per gli autori/co-autori del blog;
+  immagine di copertina (banner della home pubblica) e favicon dedicata,
+  entrambe facoltative.
 - **Profilo utente:** bio estesa (nome, cognome, paese, lingua madre e lingue
   di fallback), username modificabile in qualsiasi momento (citato ovunque
   per id, non per stringa: il cambio si riflette subito su post, commenti e

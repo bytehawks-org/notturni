@@ -125,6 +125,31 @@ class Blog(Base, UUIDPKMixin, TimestampMixin):
     # per singolo post/autore.
     default_author_display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    # Immagine di copertina del blog (banner sulla home pubblica): stesso
+    # schema di Post.cover_image_url/_is_sensitive/_categories (moderazione
+    # automatica + avviso manuale, mai al posto l'uno dell'altro). Facoltativa.
+    cover_image_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    cover_image_is_sensitive: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    cover_image_categories: Mapped[list[str]] = mapped_column(ARRAY(String(20)), default=list, nullable=False)
+    # Favicon dedicata del blog (facoltativa): stesso schema di
+    # User.avatar_object_key — object key su storage, non moderata (icona
+    # dell'identità del blog, non contenuto). URL risolto a runtime in
+    # app/api/v1/blogs/branding.py, mai salvato qui.
+    favicon_object_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    @property
+    def favicon_url(self) -> str | None:
+        """URL pubblica risolta da `favicon_object_key` (mai salvata): una
+        `@property`, non una colonna, così ogni endpoint che serializza un
+        `Blog` in `BlogOut` (`response_model=...`, `model_validate`, ...) la
+        ottiene per attribute-access senza doverla ricalcolare a mano —
+        stesso bucket/URL pattern di `avatar_public_url`."""
+        if not self.favicon_object_key:
+            return None
+        from app.core.storage import blog_favicon_public_url
+
+        return blog_favicon_public_url(self.favicon_object_key)
+
     owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
 
     owner: Mapped["User"] = relationship(back_populates="blogs")

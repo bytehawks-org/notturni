@@ -255,6 +255,26 @@ export const api = {
         formData,
       });
     },
+    /** Immagine di copertina del blog (banner della home pubblica, facoltativa):
+     * stessa moderazione automatica di uploadMedia. */
+    uploadCoverImage: (token: string, slug: string, file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return request<Blog>(`/api/v1/blogs/${slug}/cover-image`, { method: "POST", token, formData });
+    },
+    /** Avviso manuale sui contenuti della cover già caricata, senza ricaricarla. */
+    updateCoverImageCategories: (token: string, slug: string, categories: string[]) =>
+      request<Blog>(`/api/v1/blogs/${slug}/cover-image`, { method: "PATCH", token, body: { categories } }),
+    deleteCoverImage: (token: string, slug: string) =>
+      request<Blog>(`/api/v1/blogs/${slug}/cover-image`, { method: "DELETE", token }),
+    /** Favicon dedicata del blog (facoltativa): nessuna moderazione, icona di identità. */
+    uploadFavicon: (token: string, slug: string, file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return request<Blog>(`/api/v1/blogs/${slug}/favicon`, { method: "POST", token, formData });
+    },
+    deleteFavicon: (token: string, slug: string) =>
+      request<Blog>(`/api/v1/blogs/${slug}/favicon`, { method: "DELETE", token }),
     /** B9: pubblicazioni. */
     listPublications: (slug: string, token?: string | null) => request<Publication[]>(`/api/v1/blogs/${slug}/publications`, { token }),
     getPublication: (slug: string, ref: string, token?: string | null) =>

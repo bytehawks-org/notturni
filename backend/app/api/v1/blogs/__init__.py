@@ -14,6 +14,7 @@ from app.api.v1.blogs import (  # noqa: F401,E402  (import per side-effect: regi
     crud,
     config,
     media,
+    branding,
     categories,
     bibliography,
     pages,

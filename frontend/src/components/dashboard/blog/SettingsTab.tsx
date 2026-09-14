@@ -10,6 +10,8 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Toggle } from "@/components/ui/Controls";
 import { FieldGroup, Input, Label, TextArea } from "@/components/ui/Field";
 import { useToast } from "@/components/ui/Toast";
+import { CoverImageUpload } from "@/components/editor/CoverImageUpload";
+import { FaviconUpload } from "@/components/dashboard/blog/FaviconUpload";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { formatDate } from "@/lib/format";
@@ -192,6 +194,48 @@ export function SettingsTab({ blog, canEdit, onUpdated }: { blog: Blog; canEdit:
             </Label>
             <TextArea id="blog-description" maxLength={256} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} disabled={!canEdit} />
           </FieldGroup>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FieldGroup className="mb-0">
+              <Label htmlFor="blog-cover" hint={t("coverImageHint")}>
+                {t("coverImage")}
+              </Label>
+              <div className="max-w-xs">
+                <CoverImageUpload
+                  value={blog.cover_image_url}
+                  isSensitive={blog.cover_image_is_sensitive}
+                  categories={blog.cover_image_categories}
+                  onChange={(url, sensitive, categories) => {
+                    if (url === null) {
+                      void authFetch((tk) => api.blogs.deleteCoverImage(tk, blog.slug)).then(onUpdated);
+                    } else if (url === blog.cover_image_url) {
+                      void authFetch((tk) => api.blogs.updateCoverImageCategories(tk, blog.slug, categories)).then(onUpdated);
+                    }
+                  }}
+                  onUpload={(file) =>
+                    authFetch((tk) => api.blogs.uploadCoverImage(tk, blog.slug, file)).then((updated) => {
+                      onUpdated(updated);
+                      return { url: updated.cover_image_url ?? "", is_sensitive: updated.cover_image_is_sensitive };
+                    })
+                  }
+                />
+              </div>
+            </FieldGroup>
+            <FieldGroup className="mb-0">
+              <Label htmlFor="blog-favicon" hint={t("faviconHint")}>
+                {t("favicon")}
+              </Label>
+              <FaviconUpload
+                value={blog.favicon_url}
+                onUpload={(file) =>
+                  authFetch((tk) => api.blogs.uploadFavicon(tk, blog.slug, file)).then((updated) => {
+                    onUpdated(updated);
+                    return updated.favicon_url;
+                  })
+                }
+                onRemove={() => authFetch((tk) => api.blogs.deleteFavicon(tk, blog.slug)).then(onUpdated)}
+              />
+            </FieldGroup>
+          </div>
         </section>
 
         <section id="settings-visibility" className="flex scroll-mt-6 flex-col gap-4">

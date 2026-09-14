@@ -432,6 +432,42 @@ e qualsiasi altra chiave) libero:
   accettati); un valore diverso da quelli attesi è ignorato dal frontend, che
   ricade sul default. Altre chiavi restano libere.
 
+**`POST /api/v1/blogs/{slug}/cover-image`** — richiede sessione, solo il
+proprietario (`403` altrimenti). `multipart/form-data`, campo `file`.
+Immagine di copertina del blog (banner della home pubblica, facoltativa):
+stessi formati/limite di dimensione e stessa moderazione automatica di
+`POST .../media` sotto — l'upload aggiorna `cover_image_url` e
+`cover_image_is_sensitive` (risultato della moderazione), azzera
+`cover_image_categories`. Sostituire una cover esistente non cancella
+l'oggetto precedente su storage (stessa scelta di `Post.cover_image_url`).
+Ritorna il `Blog` aggiornato (`BlogOut`).
+
+**`PATCH /api/v1/blogs/{slug}/cover-image`** — solo il proprietario, `400`
+se il blog non ha ancora una cover. `{"categories": ["nudity", ...]}`
+(vocabolario in `backend/app/domain/content_media.py::SENSITIVITY_CATEGORIES`):
+aggiorna l'avviso manuale sui contenuti senza ricaricare l'immagine, stesso
+principio del `PATCH /posts/{id}` quando cambia solo `cover_image_categories`
+— categorie non vuote forzano `cover_image_is_sensitive=true`. Ritorna il
+`Blog` aggiornato.
+
+**`DELETE /api/v1/blogs/{slug}/cover-image`** — solo il proprietario. Azzera
+cover/avviso/categorie (l'oggetto su storage non viene cancellato, stessa
+scelta di cui sopra). Ritorna il `Blog` aggiornato.
+
+**`POST /api/v1/blogs/{slug}/favicon`** — richiede sessione, solo il
+proprietario. `multipart/form-data`, campo `file`. Favicon dedicata del blog
+(facoltativa, mostrata nella scheda del browser sulle sue pagine pubbliche):
+PNG/JPEG/WEBP, max 512 KiB (`400` altrimenti) — **nessuna moderazione
+automatica**, a differenza di cover/media: è un'icona di identità, non
+contenuto, stesso principio dell'avatar utente (`POST /users/me/avatar`).
+Sostituire una favicon esistente **cancella** l'oggetto precedente su
+storage (a differenza della cover, qui l'oggetto è piccolo e dedicato, come
+l'avatar). Bucket pubblico degli avatar, prefisso `favicons/{blog_id}/`.
+Ritorna il `Blog` aggiornato.
+
+**`DELETE /api/v1/blogs/{slug}/favicon`** — solo il proprietario. Cancella
+l'oggetto su storage e azzera `favicon_url`. Ritorna il `Blog` aggiornato.
+
 **`POST /api/v1/blogs/{slug}/media`** — richiede sessione e accesso in
 scrittura al blog (proprietario/autore/co-autore). `multipart/form-data`,
 campo `file`. Formati ammessi: PNG, JPEG, WEBP, GIF; max 10 MiB (`400`

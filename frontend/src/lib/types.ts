@@ -111,6 +111,13 @@ export interface Blog {
   deleted_at: string | null;
   /** Nome pubblico predefinito per i testi scritti su questo blog — vedi Post.author_display_name. */
   default_author_display_name: string | null;
+  /** Banner della home pubblica (facoltativo): stessa moderazione automatica
+   * dei media di contenuto, avviso manuale indipendente dalle categorie. */
+  cover_image_url: string | null;
+  cover_image_is_sensitive: boolean;
+  cover_image_categories: SensitivityCategory[];
+  /** Favicon dedicata del blog (facoltativa): nessuna moderazione, icona di identità. */
+  favicon_url: string | null;
   /** `null` per chiunque non sia il proprietario stesso (CLAUDE.md #8): non
    * correla un blog che usa un alias con l'id dell'utente reale dietro. */
   owner_id: string | null;

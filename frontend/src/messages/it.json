@@ -316,6 +316,10 @@
     "slugHint": "min 4 caratteri · nomi riservati bloccati",
     "subtitle": "Sottotitolo",
     "description": "Descrizione breve",
+    "coverImage": "Immagine di copertina",
+    "coverImageHint": "Facoltativa, mostrata come banner sulla home pubblica del blog.",
+    "favicon": "Favicon",
+    "faviconHint": "Facoltativa, icona dedicata mostrata nella scheda del browser sulle pagine pubbliche del blog.",
     "defaultAuthor": "Nome autore predefinito su questo blog",
     "indexing": "Consenti l'indicizzazione da parte dei motori di ricerca",
     "indexingSub": "Controlla anche la presenza nella directory pubblica",
@@ -697,7 +701,9 @@
     "language": "lingua {lang}",
     "bibliographyLink": "Bibliografia del blog →",
     "publications": "Pubblicazioni",
-    "publicationsLink": "Vedi le pubblicazioni →"
+    "publicationsLink": "Vedi le pubblicazioni →",
+    "revealCover": "Rivela l'immagine di copertina",
+    "sensitiveCover": "Contenuto sensibile — clicca per vedere"
   },
   "CommentsSection": {
     "title": "Commenti",
@@ -855,6 +861,13 @@
     "creating": "Creazione…",
     "createTranslation": "Crea traduzione",
     "cancel": "Annulla"
+  },
+  "FaviconUpload": {
+    "uploadFailed": "Caricamento immagine non riuscito.",
+    "uploadCta": "Carica favicon (PNG/JPEG/WEBP, max 512 KiB)",
+    "uploading": "Caricamento…",
+    "remove": "Rimuovi",
+    "faviconAlt": "Favicon del blog"
   },
   "CoverImageUpload": {
     "uploadFailed": "Caricamento immagine non riuscito.",

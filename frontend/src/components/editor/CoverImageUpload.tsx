@@ -3,7 +3,7 @@
 import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 
-import { ApiClientError, api } from "@/lib/api";
+import { ApiClientError } from "@/lib/api";
 import type { SensitivityCategory } from "@/lib/content-media";
 import { ContentWarningModal } from "./ContentWarningModal";
 import { ImageIcon, ShieldIcon } from "./icons";
@@ -13,18 +13,23 @@ interface CoverImageUploadProps {
   isSensitive: boolean;
   categories: SensitivityCategory[];
   onChange: (url: string | null, isSensitive: boolean, categories: SensitivityCategory[]) => void;
-  blogSlug: string;
-  authFetch: <T>(fn: (token: string) => Promise<T>) => Promise<T>;
+  /** Esegue l'upload vero e proprio (endpoint diverso per la cover di un
+   * post — `POST /blogs/{slug}/media` — e quella di un blog — `POST
+   * /blogs/{slug}/cover-image`, vedi BlogCoverImageUpload): il componente
+   * resta agnostico su dove va a finire il file. */
+  onUpload: (file: File) => Promise<{ url: string; is_sensitive: boolean }>;
 }
 
-/** Area di caricamento della cover del post, stile fika.bar: 16:9, click per scegliere il file. */
+/** Area di caricamento di una cover 16:9, stile fika.bar: click per
+ * scegliere il file. Usata sia per la cover del post (editor) sia per la
+ * cover del blog (SettingsTab), che caricano su endpoint diversi — vedi
+ * `onUpload`. */
 export function CoverImageUpload({
   value,
   isSensitive,
   categories,
   onChange,
-  blogSlug,
-  authFetch,
+  onUpload,
 }: CoverImageUploadProps) {
   const t = useTranslations("CoverImageUpload");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -38,7 +43,7 @@ export function CoverImageUpload({
     setError(null);
     setRevealed(false);
     try {
-      const media = await authFetch((token) => api.blogs.uploadMedia(token, blogSlug, file));
+      const media = await onUpload(file);
       onChange(media.url, media.is_sensitive, []);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : t("uploadFailed"));
