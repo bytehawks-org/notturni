@@ -2,6 +2,8 @@ import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { PlatformMark } from "./PlatformMark";
+
 export interface BlogNavProps {
   slug: string;
   name: string;
@@ -27,7 +29,9 @@ export async function BlogHeader({ slug, name, current, hasPublications, actions
   return (
     <header className="border-b border-border">
       <div className="mx-auto flex h-[60px] max-w-7xl items-center justify-between gap-6 px-5 lg:px-12">
-        <div className="flex min-w-0 items-center gap-7">
+        <div className="flex min-w-0 items-center gap-4">
+          <PlatformMark />
+          <div className="h-5 w-px shrink-0 bg-border" aria-hidden="true" />
           <Link href={`/${slug}`} className="truncate font-serif text-[19px] font-semibold text-foreground no-underline">
             {name}
           </Link>

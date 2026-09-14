@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { PlatformMark } from "@/components/shell/PlatformMark";
 import { UiLanguagePicker } from "@/components/shell/UiLanguagePicker";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/Button";
@@ -23,9 +24,12 @@ export function SiteHeader() {
     <header className="border-b border-border">
       <div className="mx-auto flex h-[60px] w-full max-w-[1184px] items-center justify-between px-5 lg:px-12">
         <div className="flex items-center gap-7">
-          <Link href="/" className="font-serif text-[21px] font-semibold tracking-tight text-foreground no-underline">
-            Notturni
-          </Link>
+          <div className="flex items-center gap-2.5">
+            <PlatformMark />
+            <Link href="/" className="font-serif text-[21px] font-semibold tracking-tight text-foreground no-underline">
+              Notturni
+            </Link>
+          </div>
           <nav className="hidden gap-[26px] text-sm text-muted md:flex">
             {items.map(([href, label]) => (
               <Link
