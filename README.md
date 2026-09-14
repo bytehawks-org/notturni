@@ -132,6 +132,8 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   pagine pubbliche.
 - **Pubblicazioni:** serie di post come capitoli sotto `/{blog}/pub/{nome}`,
   con indice automatico, ordine esplicito e navigazione tra capitoli.
+- **RSS/Atom:** feed cronologico di piattaforma (`/feed.xml`, `/atom.xml`) e
+  per ogni blog (`/{blog}/feed.xml`, `/{blog}/atom.xml`), con autodiscovery.
 - **SEO:** canonical, Open Graph/Twitter card e dati strutturati JSON-LD
   (`BlogPosting`) su tutte le pagine pubbliche (post, home di piattaforma e
   di blog, bibliografia/media/link, pagine statiche, profilo utente),

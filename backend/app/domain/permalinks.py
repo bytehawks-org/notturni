@@ -9,10 +9,13 @@ resta invariata (CLAUDE.md #1).
 from app.models.post import Post
 
 # Segmenti statici già usati sotto /{blog_slug}/... dal frontend (pagina di
-# bibliografia/media/link del blog, elenco pagine statiche) — tolta la data
-# dal permalink, uno slug di post identico a uno di questi resterebbe
-# irraggiungibile (il segmento statico vince sempre su quello dinamico).
-RESERVED_POST_SLUGS = {"bibliografia", "link", "media", "pagina"}
+# bibliografia/media/link del blog, elenco pagine statiche, pubblicazioni,
+# feed RSS/Atom) — tolta la data dal permalink, uno slug di post identico a
+# uno di questi resterebbe irraggiungibile (il segmento statico vince sempre
+# su quello dinamico). "pub" era mancante da B9 (todo/UX_REDESIGN.md): un
+# post con questo slug sarebbe già stato catturato dalla route
+# `/[blogSlug]/pub`, corretto qui insieme all'aggiunta di feed.xml/atom.xml.
+RESERVED_POST_SLUGS = {"bibliografia", "link", "media", "pagina", "pub", "feed.xml", "atom.xml"}
 
 
 def build_permalink(blog_slug: str, post: Post) -> str:

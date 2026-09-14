@@ -24,7 +24,13 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
   return {
     title: blog.title,
     description,
-    alternates: { canonical: `/${blogSlug}` },
+    alternates: {
+      canonical: `/${blogSlug}`,
+      types: {
+        "application/rss+xml": `/${blogSlug}/feed.xml`,
+        "application/atom+xml": `/${blogSlug}/atom.xml`,
+      },
+    },
     robots: blog.search_indexing_enabled ? undefined : { index: false, follow: false },
     openGraph: { title: blog.title, description, type: "website", url: `/${blogSlug}` },
   };
@@ -147,6 +153,9 @@ export default async function BlogHomePage({
               </span>
               <Link href={`/${blogSlug}/bibliografia`} className="text-[13px] font-medium text-primary no-underline hover:underline">
                 {t("bibliographyLink")}
+              </Link>
+              <Link href={`/${blogSlug}/feed.xml`} className="text-[13px] font-medium text-primary no-underline hover:underline">
+                {t("rssLink")}
               </Link>
             </div>
           </aside>

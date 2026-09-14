@@ -18,7 +18,10 @@ import {
 } from "@/lib/server-api";
 
 export const metadata: Metadata = {
-  alternates: { canonical: "/" },
+  alternates: {
+    canonical: "/",
+    types: { "application/rss+xml": "/feed.xml", "application/atom+xml": "/atom.xml" },
+  },
   openGraph: { type: "website", url: "/" },
 };
 
@@ -96,6 +99,9 @@ export default async function Home({
               ))}
               <Link href={localeHref("")} className="no-underline">
                 <FilterChip active={!locale}>{t("allLanguages")}</FilterChip>
+              </Link>
+              <Link href="/feed.xml" className="ml-1 text-[13px] text-muted no-underline hover:text-foreground">
+                {t("rssLink")}
               </Link>
             </div>
           </div>
