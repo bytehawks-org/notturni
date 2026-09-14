@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ARRAY, Boolean, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import ARRAY, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -33,5 +33,15 @@ class PlatformConfig(Base):
     # NOCT_AUDIT_RETENTION_DAYS alla creazione della riga — poi controllata
     # solo da qui, l'env resta il default per un'installazione nuova.
     audit_retention_days: Mapped[int] = mapped_column(Integer, nullable=False, default=105)
+    # Footer mostrato su ogni pagina pubblica, di piattaforma e di ogni blog
+    # (richiesta esplicita): 3 colonne di Markdown libero (immagini/link) più
+    # una barra inferiore. Colonne 1/2 sono il default, il proprietario di un
+    # blog può sovrascriverle per il proprio (`blog_configs.footer`, vedi
+    # app/domain/blog_config.py) — la colonna 3 e la barra inferiore restano
+    # sempre e solo di piattaforma, nessun override possibile da nessun blog.
+    footer_column1_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)
+    footer_column2_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)
+    footer_column3_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)
+    footer_bottom_bar_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)

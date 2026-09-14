@@ -39,6 +39,23 @@ async def public_config(session: AsyncSession = Depends(get_session)) -> dict[st
     }
 
 
+@router.get("/footer")
+async def public_footer(session: AsyncSession = Depends(get_session)) -> dict[str, str | None]:
+    """Pubblico, nessuna auth: footer mostrato su ogni pagina pubblica di
+    piattaforma e di ogni blog (richiesta esplicita). Markdown grezzo, non
+    ancora renderizzato (il frontend lo fa al momento della lettura, stesso
+    principio dei post — vedi API.md). Le colonne 1/2 sono solo il *default*:
+    un blog può sovrascriverle per sé in `blog_configs.footer` (mai la
+    colonna 3 né `bottom_bar`, sempre e solo di piattaforma)."""
+    platform = await get_platform_config(session)
+    return {
+        "column1": platform.footer_column1_markdown,
+        "column2": platform.footer_column2_markdown,
+        "column3": platform.footer_column3_markdown,
+        "bottom_bar": platform.footer_bottom_bar_markdown,
+    }
+
+
 @router.get("/seo/crawl-directives")
 async def crawl_directives(session: AsyncSession = Depends(get_session)) -> dict[str, list[str]]:
     """Pubblico, nessuna auth: usato da `frontend/src/app/robots.ts` per

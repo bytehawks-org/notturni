@@ -103,6 +103,91 @@ async def test_audit_retention_days_configurable_and_enforced(
     assert deleted == 1
 
 
+async def test_footer_is_public_and_configurable_only_by_super_admin(
+    client: AsyncClient, make_admin: Callable, make_user: Callable, db_session: AsyncSession
+) -> None:
+    pub = await client.get("/api/v1/footer")
+    assert pub.status_code == 200
+    # bottom_bar è seminato di default (stesso contenuto che la SiteFooter
+    # mostrava in modo fisso prima di questo blocco), le colonne no.
+    assert pub.json()["column1"] is None
+    assert pub.json()["column2"] is None
+    assert pub.json()["column3"] is None
+    assert pub.json()["bottom_bar"]
+
+    admin: AuthedUser = await make_admin("footer-admin")
+    forbidden = await client.patch(
+        "/api/v1/admin/config", json={"footer_column1_markdown": "x"}, headers=admin.headers
+    )
+    assert forbidden.status_code == 403
+
+    root = await _super(make_admin, db_session, "footer-root")
+    too_long = await client.patch(
+        "/api/v1/admin/config",
+        json={"footer_column1_markdown": "x" * 5001},
+        headers=root.headers,
+    )
+    assert too_long.status_code == 400
+
+    res = await client.patch(
+        "/api/v1/admin/config",
+        json={
+            "footer_column1_markdown": "**Col 1**",
+            "footer_column2_markdown": "Col 2",
+            "footer_column3_markdown": "Col 3 (sempre piattaforma)",
+            "footer_bottom_bar_markdown": "© Notturni",
+        },
+        headers=root.headers,
+    )
+    assert res.status_code == 200
+    assert res.json()["footer_column1_markdown"] == "**Col 1**"
+
+    pub2 = await client.get("/api/v1/footer")
+    assert pub2.json() == {
+        "column1": "**Col 1**",
+        "column2": "Col 2",
+        "column3": "Col 3 (sempre piattaforma)",
+        "bottom_bar": "© Notturni",
+    }
+
+    # "" azzera una colonna senza toccare le altre
+    cleared = await client.patch(
+        "/api/v1/admin/config", json={"footer_column1_markdown": ""}, headers=root.headers
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["footer_column1_markdown"] is None
+    assert cleared.json()["footer_column2_markdown"] == "Col 2"
+
+
+async def test_blog_can_override_only_footer_columns_1_and_2(
+    client: AsyncClient, make_user: Callable
+) -> None:
+    owner: AuthedUser = await make_user("footer-owner")
+    await client.post("/api/v1/blogs", json={"slug": "footer-blog", "title": "x"}, headers=owner.headers)
+
+    ok = await client.put(
+        "/api/v1/blogs/footer-blog/config",
+        json={"footer": {"column1": "Il mio footer", "column2": "Altro testo"}},
+        headers=owner.headers,
+    )
+    assert ok.status_code == 200
+    assert ok.json()["footer"] == {"column1": "Il mio footer", "column2": "Altro testo"}
+
+    bad_key = await client.put(
+        "/api/v1/blogs/footer-blog/config",
+        json={"footer": {"column3": "non dovrebbe essere permesso"}},
+        headers=owner.headers,
+    )
+    assert bad_key.status_code == 400
+
+    too_long = await client.put(
+        "/api/v1/blogs/footer-blog/config",
+        json={"footer": {"column1": "x" * 5001}},
+        headers=owner.headers,
+    )
+    assert too_long.status_code == 400
+
+
 async def test_mfa_required_for_admins_blocks_admin_area(client: AsyncClient, make_admin: Callable, db_session: AsyncSession) -> None:
     root = await _super(make_admin, db_session, "mfa-root")
     other: AuthedUser = await make_admin("mfa-other")

@@ -275,6 +275,24 @@ export async function getPublicUserProfile(username: string): Promise<Profile | 
   return (await res.json()) as Profile;
 }
 
+export interface PlatformFooter {
+  column1: string | null;
+  column2: string | null;
+  column3: string | null;
+  bottom_bar: string | null;
+}
+
+/** Footer di piattaforma (Markdown grezzo, non ancora renderizzato), mostrato
+ * su ogni pagina pubblica di piattaforma e di ogni blog. Pubblico, un solo
+ * tag di invalidazione condiviso (non per-blog). */
+export async function getPlatformFooter(): Promise<PlatformFooter> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/footer`, {
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.platformFooter()] },
+  });
+  if (!res.ok) return { column1: null, column2: null, column3: null, bottom_bar: null };
+  return (await res.json()) as PlatformFooter;
+}
+
 /** Categorie del blog per i filtri della sua home pubblica (mockup 3f). */
 export async function getPublicBlogCategories(slug: string): Promise<Category[]> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}/categories`, {

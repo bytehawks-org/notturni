@@ -186,6 +186,10 @@ export interface BlogConfig {
   palette_dark?: Record<string, string>;
   typography?: Record<string, string>;
   layout?: string;
+  /** Override per questo blog delle sole colonne 1/2 del footer di
+   * piattaforma (Markdown libero) — mai la colonna 3 né la barra inferiore,
+   * sempre e solo di piattaforma. Assente/vuoto: eredita il default. */
+  footer?: { column1?: string | null; column2?: string | null };
   [key: string]: unknown;
 }
 
@@ -721,6 +725,14 @@ export interface PlatformConfig {
   /** Giorni di conservazione degli eventi in audit_log prima della
    * cancellazione periodica (app/workers/audit_maintenance.py::prune). */
   audit_retention_days: number;
+  /** Footer mostrato su ogni pagina pubblica, di piattaforma e di ogni blog
+   * (Markdown libero, immagini/link inclusi). Colonne 1/2 sono il default,
+   * sovrascrivibile per singolo blog in BlogConfig.footer; colonna 3 e
+   * bottom bar sono sempre e solo di piattaforma. `null` = vuota. */
+  footer_column1_markdown: string | null;
+  footer_column2_markdown: string | null;
+  footer_column3_markdown: string | null;
+  footer_bottom_bar_markdown: string | null;
   updated_at: string | null;
   infrastructure: Record<string, string | boolean | null>;
 }

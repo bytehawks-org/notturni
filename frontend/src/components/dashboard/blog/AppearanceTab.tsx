@@ -7,7 +7,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card, CardTitle, SectionLabel } from "@/components/ui/Card";
 import { SegmentedControl } from "@/components/ui/Controls";
-import { FieldGroup, Label } from "@/components/ui/Field";
+import { FieldGroup, Label, TextArea } from "@/components/ui/Field";
 import { SkeletonRows } from "@/components/ui/States";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -59,6 +59,8 @@ export function AppearanceTab({ blogSlug, canEdit }: { blogSlug: string; canEdit
   }
   const updatePaletteColor = (key: string, value: string) => patch((p) => ({ ...p, palette: { ...p.palette, [key]: value } }));
   const updateTypography = (key: string, value: string) => patch((p) => ({ ...p, typography: { ...p.typography, [key]: value } }));
+  const updateFooter = (key: "column1" | "column2", value: string) =>
+    patch((p) => ({ ...p, footer: { ...p.footer, [key]: value } }));
 
   async function handleSave() {
     if (!config) return;
@@ -80,6 +82,7 @@ export function AppearanceTab({ blogSlug, canEdit }: { blogSlug: string; canEdit
   const palette = config.palette ?? {};
   const darkPalette = config.palette_dark;
   const typography = config.typography ?? {};
+  const footer = config.footer ?? {};
   const paletteEntries = Object.entries(palette);
   const shown = previewDark && darkPalette ? darkPalette : palette;
   const bg = shown.background ?? (previewDark ? "#18191b" : "#faf8f4");
@@ -219,6 +222,39 @@ export function AppearanceTab({ blogSlug, canEdit }: { blogSlug: string; canEdit
               options={LAYOUTS.map((l) => ({ value: l, label: t(`layout.${l}`) }))}
               onChange={(v) => canEdit && patch((p) => ({ ...p, layout: v }))}
             />
+          </div>
+        </Card>
+
+        <Card className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
+            <CardTitle>{t("footerOverride")}</CardTitle>
+            <span className="text-[13px] text-muted">{t("footerOverrideHint")}</span>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FieldGroup className="mb-0">
+              <Label htmlFor="footer-override-col1">{t("footerOverrideColumn1")}</Label>
+              <TextArea
+                id="footer-override-col1"
+                rows={4}
+                maxLength={5000}
+                disabled={!canEdit}
+                value={(footer.column1 as string) ?? ""}
+                onChange={(e) => updateFooter("column1", e.target.value)}
+                placeholder={t("footerOverridePlaceholder")}
+              />
+            </FieldGroup>
+            <FieldGroup className="mb-0">
+              <Label htmlFor="footer-override-col2">{t("footerOverrideColumn2")}</Label>
+              <TextArea
+                id="footer-override-col2"
+                rows={4}
+                maxLength={5000}
+                disabled={!canEdit}
+                value={(footer.column2 as string) ?? ""}
+                onChange={(e) => updateFooter("column2", e.target.value)}
+                placeholder={t("footerOverridePlaceholder")}
+              />
+            </FieldGroup>
           </div>
         </Card>
 

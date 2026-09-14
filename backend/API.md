@@ -430,7 +430,15 @@ e qualsiasi altra chiave) libero:
   `backend/app/domain/blog_config.py`. `body_size` (`"17"`/`"18"`/`"19"`) e
   `measure` (`"narrow"`/`"normal"`) non sono validati lato backend (solo
   accettati); un valore diverso da quelli attesi è ignorato dal frontend, che
-  ricade sul default. Altre chiavi restano libere.
+  ricade sul default.
+- `footer` (opzionale): override per questo blog delle sole colonne 1/2 del
+  footer di piattaforma (`GET /api/v1/footer`) — `{"column1": "...",
+  "column2": "..."}`, Markdown libero, max 5000 caratteri ciascuna, nessun'altra
+  chiave ammessa (`400` altrimenti: non è possibile sovrascrivere `column3` né
+  `bottom_bar`, sempre e solo di piattaforma). Assente/vuoto: il blog eredita
+  il default di piattaforma per entrambe.
+
+Altre chiavi restano libere.
 
 **`POST /api/v1/blogs/{slug}/cover-image`** — richiede sessione, solo il
 proprietario (`403` altrimenti). `multipart/form-data`, campo `file`.
@@ -1602,10 +1610,30 @@ non è più impostabile), `audit_retention_days` (7–3650, default seminato da
 a ogni giro, non più dall'env dopo la creazione della riga). La risposta
 include anche `infrastructure`: riepilogo di sola lettura dell'ambiente
 `NOCT_*` (mai segreti, non include più `audit_retention_days` — ora un campo
-modificabile a sé, non un valore d'ambiente). Ogni modifica va nel registro
-(`platform.config_updated`, con `changes: {campo: {from, to}}`).
+modificabile a sé, non un valore d'ambiente), `footer_column1_markdown`/
+`footer_column2_markdown`/`footer_column3_markdown`/`footer_bottom_bar_markdown`
+(Markdown libero, max 5000 caratteri ciascuno, `""` azzera — footer mostrato
+su ogni pagina pubblica di piattaforma e di ogni blog, vedi `GET /api/v1/footer`
+sotto; le colonne 1/2 sono solo il default, sovrascrivibile per singolo blog
+in `PUT /blogs/{slug}/config` — mai la 3 né `bottom_bar`, sempre e solo di
+piattaforma). Ogni modifica va nel registro (`platform.config_updated`, con
+`changes: {campo: {from, to}}`) e, se cambia un campo `footer_*`, invalida la
+cache del frontend sul tag condiviso `platform-footer` (tutte le pagine
+pubbliche, non solo quelle di un blog).
 `GET /api/v1/config` (pubblico) espone `default_locale`, `registration_mode`
 e `sso_providers` effettivi.
+
+**`GET /api/v1/footer`** — pubblico, nessuna auth. Footer di piattaforma,
+Markdown grezzo non ancora renderizzato (il frontend lo fa al momento della
+lettura, stesso principio dei post):
+
+```json
+{"column1": "...", "column2": "...", "column3": "...", "bottom_bar": "..."}
+```
+
+Ogni chiave è `null` se non configurata (nessun default se non per
+`bottom_bar`, seminato alla creazione della riga `platform_config` con un
+link al repository — comunque modificabile/azzerabile in qualsiasi momento).
 
 ### Richieste GDPR (B6, mockup 5f)
 

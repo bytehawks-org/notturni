@@ -15,13 +15,14 @@ from app.api.deps import require_platform_admin, require_platform_moderator, req
 from app.core.config import settings
 from app.core.database import get_session
 from app.core.redis import get_redis
-from app.core.revalidation import blog_tag, feed_tag, post_tag, revalidate_frontend
+from app.core.revalidation import blog_tag, feed_tag, platform_footer_tag, post_tag, revalidate_frontend
 from app.domain import audit
 from app.domain.display_names import resolve_personal_display_name
 from app.domain.gdpr import anonymize_and_deactivate_user, export_user_data
 from app.domain.gdpr_queue import new_request
 from app.domain.platform_config import (
     MAX_AUDIT_RETENTION_DAYS,
+    MAX_FOOTER_MARKDOWN_LENGTH,
     MIN_AUDIT_RETENTION_DAYS,
     REGISTRATION_MODES,
     SSO_PROVIDER_NAMES,
@@ -874,6 +875,13 @@ class PlatformConfigOut(BaseModel):
     max_blogs_per_user: int
     anonymous_comments_allowed: bool
     audit_retention_days: int
+    # Footer di piattaforma (mostrato anche su ogni blog, con override
+    # possibile solo per le colonne 1/2 — vedi Blog): null = colonna/barra
+    # vuota, non mostrata.
+    footer_column1_markdown: str | None
+    footer_column2_markdown: str | None
+    footer_column3_markdown: str | None
+    footer_bottom_bar_markdown: str | None
     updated_at: datetime | None
     infrastructure: dict[str, str | bool | None]
 
@@ -888,6 +896,12 @@ class PlatformConfigUpdateRequest(BaseModel):
     max_blogs_per_user: int | None = None
     anonymous_comments_allowed: bool | None = None
     audit_retention_days: int | None = None
+    # "" azzera (colonna/barra vuota), assente non tocca — stesso schema di
+    # BlogUpdateRequest.subtitle.
+    footer_column1_markdown: str | None = None
+    footer_column2_markdown: str | None = None
+    footer_column3_markdown: str | None = None
+    footer_bottom_bar_markdown: str | None = None
 
 
 def _config_out(config: PlatformConfig) -> PlatformConfigOut:
@@ -903,6 +917,10 @@ def _config_out(config: PlatformConfig) -> PlatformConfigOut:
         max_blogs_per_user=config.max_blogs_per_user,
         anonymous_comments_allowed=config.anonymous_comments_allowed,
         audit_retention_days=config.audit_retention_days,
+        footer_column1_markdown=config.footer_column1_markdown,
+        footer_column2_markdown=config.footer_column2_markdown,
+        footer_column3_markdown=config.footer_column3_markdown,
+        footer_bottom_bar_markdown=config.footer_bottom_bar_markdown,
         updated_at=config.updated_at,
         # sola lettura: riepilogo dell'ambiente NOCT_* (mai segreti). La
         # retention dell'audit log non ci sta più: da B6+ è configurabile a
@@ -984,6 +1002,15 @@ async def update_admin_config(
                 f"La conservazione del registro di audit deve essere tra {MIN_AUDIT_RETENTION_DAYS} e {MAX_AUDIT_RETENTION_DAYS} giorni.",
             )
         apply("audit_retention_days", payload.audit_retention_days)
+    for field in ("footer_column1_markdown", "footer_column2_markdown", "footer_column3_markdown", "footer_bottom_bar_markdown"):
+        value = getattr(payload, field)
+        if value is not None:
+            if len(value) > MAX_FOOTER_MARKDOWN_LENGTH:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"Il testo del footer supera i {MAX_FOOTER_MARKDOWN_LENGTH} caratteri.",
+                )
+            apply(field, value or None)
 
     if changes:
         touch(config, by_id=current_user.id)
@@ -992,6 +1019,10 @@ async def update_admin_config(
         )
         await session.commit()
         await session.refresh(config)
+        if any(f.startswith("footer_") for f in changes):
+            # mostrato su ogni pagina pubblica di piattaforma e di ogni blog:
+            # un solo tag condiviso, invalida tutto in un colpo.
+            await revalidate_frontend([platform_footer_tag()])
     return _config_out(config)
 
 

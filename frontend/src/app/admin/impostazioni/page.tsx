@@ -7,7 +7,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card, CardTitle, SectionLabel } from "@/components/ui/Card";
 import { SegmentedControl, Toggle } from "@/components/ui/Controls";
-import { Input, Label } from "@/components/ui/Field";
+import { Input, Label, TextArea } from "@/components/ui/Field";
 import { SkeletonRows } from "@/components/ui/States";
 import { useToast } from "@/components/ui/Toast";
 import { ApiClientError, api } from "@/lib/api";
@@ -64,6 +64,10 @@ export default function PlatformSettingsPage() {
           max_blogs_per_user: draft.max_blogs_per_user,
           anonymous_comments_allowed: draft.anonymous_comments_allowed,
           audit_retention_days: draft.audit_retention_days,
+          footer_column1_markdown: draft.footer_column1_markdown ?? "",
+          footer_column2_markdown: draft.footer_column2_markdown ?? "",
+          footer_column3_markdown: draft.footer_column3_markdown ?? "",
+          footer_bottom_bar_markdown: draft.footer_bottom_bar_markdown ?? "",
         })
       );
       setConfig(updated);
@@ -221,6 +225,63 @@ export default function PlatformSettingsPage() {
           </div>
         </div>
         <Toggle checked={draft.anonymous_comments_allowed} onChange={(v) => patch({ anonymous_comments_allowed: v })} label={t("anonComments")} />
+      </Card>
+
+      <Card className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1">
+          <CardTitle>{t("footer")}</CardTitle>
+          <p className="text-[13px] text-muted">{t("footerNote")}</p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="footer-col1">{t("footerColumn1")}</Label>
+            <TextArea
+              id="footer-col1"
+              rows={4}
+              maxLength={5000}
+              value={draft.footer_column1_markdown ?? ""}
+              onChange={(e) => patch({ footer_column1_markdown: e.target.value })}
+              placeholder={t("footerMarkdownPlaceholder")}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="footer-col2">{t("footerColumn2")}</Label>
+            <TextArea
+              id="footer-col2"
+              rows={4}
+              maxLength={5000}
+              value={draft.footer_column2_markdown ?? ""}
+              onChange={(e) => patch({ footer_column2_markdown: e.target.value })}
+              placeholder={t("footerMarkdownPlaceholder")}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="footer-col3" hint={t("footerColumn3Hint")}>
+              {t("footerColumn3")}
+            </Label>
+            <TextArea
+              id="footer-col3"
+              rows={4}
+              maxLength={5000}
+              value={draft.footer_column3_markdown ?? ""}
+              onChange={(e) => patch({ footer_column3_markdown: e.target.value })}
+              placeholder={t("footerMarkdownPlaceholder")}
+            />
+          </div>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="footer-bottom-bar" hint={t("footerBottomBarHint")}>
+            {t("footerBottomBar")}
+          </Label>
+          <TextArea
+            id="footer-bottom-bar"
+            rows={2}
+            maxLength={5000}
+            value={draft.footer_bottom_bar_markdown ?? ""}
+            onChange={(e) => patch({ footer_bottom_bar_markdown: e.target.value })}
+            placeholder={t("footerMarkdownPlaceholder")}
+          />
+        </div>
       </Card>
 
       <Card className="flex flex-col gap-3">

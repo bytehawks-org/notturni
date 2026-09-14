@@ -186,6 +186,15 @@ export function renderNoteInline(markdown: string): string {
   return DOMPurify.sanitize(renderer.renderInline(markdown.trim()));
 }
 
+/** Rende un blocco di Markdown libero (immagini, link, paragrafi) senza la
+ * pipeline completa di `renderMarkdown`: niente parse JSDOM aggiuntivo, niente
+ * card di anteprima dei link (fetch di rete verso siti esterni) né avvolgimento
+ * delle immagini sensibili — non ha senso per un footer mostrato su ogni
+ * pagina della piattaforma e di ogni blog. Solo render + sanificazione. */
+export function renderSimpleMarkdown(markdown: string): string {
+  return DOMPurify.sanitize(renderer.render(markdown.trim()));
+}
+
 function plainText(html: string): string {
   return DOMPurify.sanitize(html, { ALLOWED_TAGS: [] }).replace(/\s+/g, " ").trim();
 }

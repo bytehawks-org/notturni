@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+import { SiteFooter } from "@/components/shell/SiteFooter";
 import { getPublicUserProfile } from "@/lib/server-api";
 
 interface PageParams {
@@ -35,5 +36,10 @@ export async function generateMetadata({
 }
 
 export default function UserProfileLayout({ children }: { children: ReactNode }) {
-  return children;
+  return (
+    <>
+      {children}
+      <SiteFooter />
+    </>
+  );
 }

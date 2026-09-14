@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 
+import { SiteFooter } from "@/components/shell/SiteFooter";
 import { BLOG_FONT_CLASSES, BLOG_FONT_VARS } from "@/lib/blog-fonts";
 import type { BlogConfig } from "@/lib/types";
 
@@ -112,6 +113,7 @@ export function BlogPageShell({ config, children }: { config: BlogConfig | null;
   return (
     <div className={className} style={style as CSSProperties}>
       {children}
+      <SiteFooter blogConfig={config} />
     </div>
   );
 }

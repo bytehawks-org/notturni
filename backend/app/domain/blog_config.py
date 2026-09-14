@@ -2,6 +2,8 @@ import colorsys
 import re
 from typing import Any
 
+from app.domain.platform_config import MAX_FOOTER_MARKDOWN_LENGTH
+
 # Stessa palette/tipografia di default della piattaforma (frontend/src/app/globals.css),
 # così un blog non personalizzato appare identico allo shell di base.
 DEFAULT_BLOG_CONFIG: dict[str, Any] = {
@@ -101,3 +103,21 @@ def validate_blog_config(config: dict[str, Any]) -> None:
             raise ValueError(
                 f"body_font deve essere un font sans-serif tra: {', '.join(sorted(SANS_SERIF_FONTS))}."
             )
+
+    # Override per il proprio blog delle sole colonne 1/2 del footer di
+    # piattaforma (richiesta esplicita): colonna 3 e barra inferiore restano
+    # sempre e solo di piattaforma, non fanno parte di questo schema.
+    footer = config.get("footer")
+    if footer is not None:
+        if not isinstance(footer, dict):
+            raise ValueError("footer deve essere un oggetto.")
+        unknown = set(footer) - {"column1", "column2"}
+        if unknown:
+            raise ValueError(f"Chiavi non valide in footer: {', '.join(sorted(unknown))}.")
+        for key, value in footer.items():
+            if value is None:
+                continue
+            if not isinstance(value, str):
+                raise ValueError(f"footer.{key} deve essere una stringa Markdown.")
+            if len(value) > MAX_FOOTER_MARKDOWN_LENGTH:
+                raise ValueError(f"footer.{key} supera i {MAX_FOOTER_MARKDOWN_LENGTH} caratteri.")

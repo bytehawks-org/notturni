@@ -47,6 +47,13 @@ def blog_page_tag(blog_slug: str, page_slug: str) -> str:
     return f"blog-page:{blog_slug}:{page_slug}"
 
 
+def platform_footer_tag() -> str:
+    """Footer di piattaforma (colonne 1-3 + barra inferiore), mostrato su
+    ogni pagina pubblica di piattaforma e di ogni blog — un solo tag
+    condiviso, non per-blog."""
+    return "platform-footer"
+
+
 async def revalidate_frontend(tags: list[str]) -> None:
     """Invalida i tag indicati sulla cache del frontend. Da chiamare dopo il
     `commit` di un path di scrittura. Non solleva mai: logga un warning e

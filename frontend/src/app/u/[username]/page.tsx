@@ -9,7 +9,6 @@ import { useCallback, useEffect, useState } from "react";
 import { FeedPostCardClient } from "@/components/FeedPostCardClient";
 import { BlogDirectoryGridClient } from "@/components/home/BlogDirectoryClient";
 import { SiteHeader } from "@/components/SiteHeader";
-import { SiteFooter } from "@/components/shell/SiteFooter";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { EmptyState, SkeletonRows } from "@/components/ui/States";
@@ -235,7 +234,6 @@ export default function PublicProfilePage() {
           </div>
         )}
       </main>
-      <SiteFooter />
     </>
   );
 }

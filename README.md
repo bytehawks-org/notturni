@@ -108,6 +108,11 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   di gestione del proprietario. Chi possiede un blog vede, solo nel proprio
   profilo, il totale dei follower sommato tra username e alias, oltre al
   conteggio separato per ciascuna entità.
+- **Footer di piattaforma:** 3 colonne + barra inferiore in Markdown libero
+  (immagini/link inclusi), gestite da un Super Admin, mostrate su ogni pagina
+  pubblica — di piattaforma e di ogni blog. Le colonne 1/2 sono un default
+  sovrascrivibile per singolo blog dal suo proprietario; colonna 3 e barra
+  inferiore restano sempre e solo di piattaforma.
 - **Amministrazione:** sezioni sotto `/admin`, visibili solo ad
   Amministratore/Super Admin, con un campo di ricerca in ogni sezione —
   Utenti (ruolo, attivazione; l'assegnazione dei ruoli di amministrazione è
