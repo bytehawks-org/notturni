@@ -18,7 +18,14 @@ interface PageParams {
 export async function generateMetadata({ params }: { params: Promise<PageParams> }): Promise<Metadata> {
   const { blogSlug } = await params;
   const [blog, t] = await Promise.all([getPublicBlog(blogSlug), getTranslations("BlogNav")]);
-  return { title: blog ? `${t("links")} — ${blog.title}` : t("links") };
+  if (!blog) return { title: t("links") };
+  const title = `${t("links")} — ${blog.title}`;
+  return {
+    title,
+    alternates: { canonical: `/${blogSlug}/link` },
+    robots: blog.search_indexing_enabled ? undefined : { index: false, follow: false },
+    openGraph: { title, type: "website", url: `/${blogSlug}/link` },
+  };
 }
 
 function hostOf(url: string): string {

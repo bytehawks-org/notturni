@@ -11,6 +11,7 @@ import type {
   Page,
   Post,
   PostTranslationSummary,
+  Profile,
   PublicBlog,
   Publication,
   PublicationDetail,
@@ -257,6 +258,21 @@ export async function getPublicBlogConfig(slug: string): Promise<BlogConfig | nu
   });
   if (!res.ok) return null;
   return (await res.json()) as BlogConfig;
+}
+
+/** Profilo pubblico (mockup 3e, `GET /users/{username}`, nessuna autenticazione
+ * richiesta lato backend): usato solo per i `<meta>` della pagina
+ * `/u/{username}` (Client Component, ne rifà la propria fetch autenticata per
+ * i dati interattivi — follow/tab). Nessun tag di invalidazione: il backend
+ * non notifica ancora le modifiche al profilo, resta la sola finestra a
+ * tempo (come senza `NOCT_REVALIDATE_SECRET` configurato altrove). */
+export async function getPublicUserProfile(username: string): Promise<Profile | null> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/users/${username}`, {
+    next: { revalidate: REVALIDATE_SECONDS },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero del profilo.`);
+  return (await res.json()) as Profile;
 }
 
 /** Categorie del blog per i filtri della sua home pubblica (mockup 3f). */

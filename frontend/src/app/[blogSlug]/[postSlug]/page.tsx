@@ -6,6 +6,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { BlogPageShell, blogMeasure } from "@/components/blog/BlogPageShell";
+import { JsonLd } from "@/components/blog/JsonLd";
 import { PostActions } from "@/components/blog/PostActions";
 import { BlogHeaderActions } from "@/components/blog/PostHeaderActions";
 import { PostToc } from "@/components/blog/PostToc";
@@ -20,6 +21,7 @@ import { formatDate, readingMinutes } from "@/lib/format";
 import { languageName } from "@/lib/languages";
 import { excerpt, renderPost } from "@/lib/markdown";
 import { getPublicBlog, getPublicBlogConfig, getPublicPostByPermalink, getPublicPostTranslations, getPublicPublication, getPublicPublications } from "@/lib/server-api";
+import { SITE_URL } from "@/lib/site";
 
 interface PageParams {
   blogSlug: string;
@@ -88,6 +90,24 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
   const publishedDate = post.published_at ? formatDate(post.published_at, locale) : null;
   const citation = `${post.author_display_name}, “${post.title}”, ${blogTitle}${publishedDate ? `, ${publishedDate}.` : "."}`;
 
+  // Dati strutturati Schema.org (SEO, todo/UX_REDESIGN.md): `dateModified`
+  // non è tracciato separatamente da `created_at`/`published_at` nel modello
+  // (nessun campo "ultima modifica" sul post), quindi resta assente invece
+  // di riportare un valore non affidabile.
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    headline: post.title,
+    description: excerpt(post.content),
+    url: `${SITE_URL}${post.permalink}`,
+    mainEntityOfPage: `${SITE_URL}${post.permalink}`,
+    datePublished: post.published_at ?? undefined,
+    inLanguage: post.locale,
+    author: { "@type": "Person", name: post.author_display_name },
+    isPartOf: { "@type": "Blog", name: blogTitle, url: `${SITE_URL}/${blogSlug}` },
+    ...(post.cover_image_url && !post.cover_image_is_sensitive ? { image: post.cover_image_url } : {}),
+  };
+
   const rail = (
     <div className="flex flex-col gap-6 text-[13px]">
       {post.notes.length > 0 && (
@@ -139,6 +159,7 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
 
   return (
     <BlogPageShell config={config}>
+      <JsonLd data={jsonLd} />
       <BlogHeader slug={blogSlug} name={blogTitle} current={chapter ? "publications" : "posts"} hasPublications={publications.length > 0} actions={<BlogHeaderActions slug={blogSlug} />} />
       {chapter && <ChapterProgress current={chapter.current} total={chapter.total} />}
       <main className="mx-auto w-full max-w-[1184px] flex-1 px-5 py-10 lg:px-12 lg:py-14">

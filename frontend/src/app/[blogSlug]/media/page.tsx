@@ -20,7 +20,14 @@ interface PageParams {
 export async function generateMetadata({ params }: { params: Promise<PageParams> }): Promise<Metadata> {
   const { blogSlug } = await params;
   const [blog, t] = await Promise.all([getPublicBlog(blogSlug), getTranslations("BlogNav")]);
-  return { title: blog ? `${t("media")} — ${blog.title}` : t("media") };
+  if (!blog) return { title: t("media") };
+  const title = `${t("media")} — ${blog.title}`;
+  return {
+    title,
+    alternates: { canonical: `/${blogSlug}/media` },
+    robots: blog.search_indexing_enabled ? undefined : { index: false, follow: false },
+    openGraph: { title, type: "website", url: `/${blogSlug}/media` },
+  };
 }
 
 function MediaFigure({ entry, locale, defaultLocale }: { entry: MediaBibliographyEntry; locale: string; defaultLocale: string }) {

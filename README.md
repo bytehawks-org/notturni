@@ -125,6 +125,11 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   pagine pubbliche.
 - **Pubblicazioni:** serie di post come capitoli sotto `/{blog}/pub/{nome}`,
   con indice automatico, ordine esplicito e navigazione tra capitoli.
+- **SEO:** canonical, Open Graph/Twitter card e dati strutturati JSON-LD
+  (`BlogPosting`) su tutte le pagine pubbliche (post, home di piattaforma e
+  di blog, bibliografia/media/link, pagine statiche, profilo utente),
+  `sitemap.xml`/`robots.txt` generati dinamicamente e coerenti con l'opt-in
+  crawler per blog/post.
 - **Gestione del blog:** panoramica con letture aggregate (senza cookie),
   libreria media e libreria note (tipo, DOI, duplicati, BibTeX), coda
   commenti con bloccati e segnalazioni, pausa/trasferimento/export ZIP/

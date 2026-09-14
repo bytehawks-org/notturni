@@ -23,11 +23,15 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { blogSlug, pageSlug } = await params;
   const { locale = "it" } = await searchParams;
-  const page = await getPublicPage(blogSlug, pageSlug, locale);
+  const [page, blog] = await Promise.all([getPublicPage(blogSlug, pageSlug, locale), getPublicBlog(blogSlug)]);
   if (!page) return {};
+  const description = excerpt(page.content);
   return {
     title: page.title,
-    description: excerpt(page.content),
+    description,
+    alternates: { canonical: `/${blogSlug}/pagina/${pageSlug}` },
+    robots: blog?.search_indexing_enabled === false ? { index: false, follow: false } : undefined,
+    openGraph: { title: page.title, description, type: "website", url: `/${blogSlug}/pagina/${pageSlug}` },
   };
 }
 
