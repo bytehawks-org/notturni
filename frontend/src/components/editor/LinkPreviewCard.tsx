@@ -15,9 +15,13 @@ import { CloseIcon } from "./icons";
  *
  * Nessun dato dell'anteprima (titolo/descrizione/immagine) è salvato nel
  * documento: solo l'URL. Il titolo/descrizione/immagine si (ri)caricano ad
- * ogni apertura dell'editor tramite GET /api/v1/link-preview, così restano
- * sempre aggiornati — stesso principio "niente snapshot" già scelto per il
- * nome pubblico dell'autore (CLAUDE.md #1). Nel Markdown il nodo è salvato
+ * ogni apertura dell'editor tramite GET /api/v1/link-preview — stesso
+ * principio "niente snapshot" già scelto per il nome pubblico dell'autore
+ * (CLAUDE.md #1), anche se il backend ora tiene una propria cache
+ * (Redis + tabella dedicata, deduplicata per URL — app/domain/link_preview.py)
+ * invece di rifare il fetch dell'URL esterno a ogni apertura: un'anteprima
+ * riuscita resta valida fino a una settimana prima di essere riverificata
+ * dal vivo. Nel Markdown il nodo è salvato
  * come un link con `title="card"` (`[url](url "card")`, stessa convenzione
  * di `sensitive` sulle immagini) — vedi il plugin ProseMirror più sotto per
  * come un link con quel marcatore, caricato da un post esistente, si

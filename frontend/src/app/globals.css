@@ -5,49 +5,83 @@
    l'attributo data-theme su <html>; @media (prefers-color-scheme) copre solo
    l'istante prima che il JS idrati (vedi script anti-flash in layout.tsx). */
 :root {
-  --background: #fbf9f6;
-  --foreground: #2b2a28;
-  --primary: #3e6259;
-  --muted: #a8a29a;
-  --border-color: #e7e2da;
+  --background: #faf8f4;
+  /* Tinta della stessa famiglia del background (non un sesto colore di
+     palette, come il fragment-highlight sotto): superfici sollevate — card,
+     sidebar. */
+  --surface: #ffffff;
+  --foreground: #232220;
+  --primary: #3d6b5e;
+  --muted: #857e74;
+  --border-color: #e5dfd5;
+  --shadow: 0 1px 2px rgb(35 34 32 / 5%), 0 8px 24px rgb(35 34 32 / 6%);
   /* Evidenziatore dei frammenti salvati (task frammenti): colore funzionale,
      non un sesto colore di palette — stesso principio delle sovrapposizioni
      dei contenuti sensibili sopra, indipendenti dai 5 colori di CLAUDE.md #5. */
   --fragment-highlight: rgb(56 189 248 / 22%);
-  --fragment-highlight-border: rgb(14 165 233 / 45%);
+  --fragment-highlight-border: rgb(14 165 233 / 50%);
+  /* Colori funzionali (stato, sensibilità, banda di visibilità blog): non
+     parte della palette di 5 colori, stesso principio del fragment-highlight
+     sopra. */
+  --ok: #3f8a5f;
+  --warn: #9a6b1a;
+  --warn-bg: rgb(217 164 65 / 16%);
+  --info: #3d6b8a;
+  --danger: #b3462e;
+  --sensitive: #c9873a;
+  --vis-public: #3f8a5f;
+  --vis-members: #d9a441;
+  --vis-private: repeating-linear-gradient(135deg, #8b2e2e 0 6px, #232220 6px 12px);
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
   --color-foreground: var(--foreground);
   --color-primary: var(--primary);
   --color-muted: var(--muted);
   --color-border: var(--border-color);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-info: var(--info);
+  --color-danger: var(--danger);
+  --color-sensitive: var(--sensitive);
+  --shadow-soft: var(--shadow);
   --font-sans: var(--font-body);
   --font-serif: var(--font-heading);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --background: #1c1b19;
-    --foreground: #ece7e0;
-    --primary: #6fa593;
-    --muted: #8f877b;
-    --border-color: #35322d;
+    --background: #18191b;
+    --surface: #1f2023;
+    --foreground: #ebe6de;
+    --primary: #83b8a5;
+    --muted: #968e82;
+    --border-color: #2f2e2b;
+    --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 35%);
+    --fragment-highlight: rgb(56 189 248 / 18%);
+    --fragment-highlight-border: rgb(56 189 248 / 45%);
   }
 }
 
 :root[data-theme="dark"] {
-  --background: #1c1b19;
-  --foreground: #ece7e0;
-  --primary: #6fa593;
-  --muted: #8f877b;
-  --border-color: #35322d;
+  --background: #18191b;
+  --surface: #1f2023;
+  --foreground: #ebe6de;
+  --primary: #83b8a5;
+  --muted: #968e82;
+  --border-color: #2f2e2b;
+  --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 35%);
+  --fragment-highlight: rgb(56 189 248 / 18%);
+  --fragment-highlight-border: rgb(56 189 248 / 45%);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
 }
 
 /* Tipografia condivisa per il contenuto Markdown dei post: sia nell'editor
@@ -64,6 +98,27 @@ body {
 }
 .notturni-prose h1 {
   font-size: 1.75em;
+}
+/* Titoli ancorabili dall'indice "In questo post" (mockup 1a): margine per
+   non finire sotto l'header al click. */
+.notturni-prose h2,
+.notturni-prose h3 {
+  scroll-margin-top: 1.5rem;
+}
+/* Colonna di lettura del post pubblico (mockup 1a): titoli più ariosi del
+   Markdown "compatto" usato nell'editor. */
+.notturni-prose--reading h2 {
+  font-size: 1.55em;
+  font-weight: 500;
+  margin-top: 1.6em;
+}
+.notturni-prose--reading h3 {
+  font-size: 1.2em;
+  font-weight: 500;
+}
+.notturni-prose--reading blockquote {
+  font-family: var(--font-serif);
+  font-size: 1.05em;
 }
 .notturni-prose h2 {
   font-size: 1.4em;
@@ -325,4 +380,17 @@ body {
 .fragment-quote {
   padding-left: 1rem;
   border-left: 3px solid var(--fragment-highlight-border);
+}
+
+/* Palette personalizzata di un blog (mockup 3f, components/blog/BlogPageShell.tsx):
+   le variabili arrivano come style inline sulla root della pagina e valgono
+   per il tema chiaro. In modalità scura si torna alla palette scura di
+   piattaforma, salvo `palette_dark` del blog (variabili `--blog-dark-*`). */
+:root[data-theme="dark"] .blog-palette {
+  --background: var(--blog-dark-background, #18191b) !important;
+  --surface: var(--blog-dark-surface, #1f2023) !important;
+  --foreground: var(--blog-dark-foreground, #ebe6de) !important;
+  --primary: var(--blog-dark-primary, #83b8a5) !important;
+  --muted: var(--blog-dark-muted, #968e82) !important;
+  --border-color: var(--blog-dark-border, #2f2e2b) !important;
 }

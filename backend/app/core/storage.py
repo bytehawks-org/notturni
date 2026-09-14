@@ -232,5 +232,97 @@ def delete_avatar(object_key: str) -> None:
     _delete_object(bucket=settings.s3_bucket_avatars, key=object_key)
 
 
+MAX_FAVICON_SIZE_BYTES = 512 * 1024  # 512 KiB — icona, non contenuto
+
+
+def upload_blog_favicon(*, blog_id: uuid.UUID, content: bytes, content_type: str) -> str:
+    """{bucket_avatars}/favicons/{blog_id}/{uuid}.{ext} — stesso bucket
+    pubblico degli avatar (icona di identità, non contenuto: nessuna
+    moderazione automatica, a differenza di upload_media)."""
+    if content_type not in ALLOWED_AVATAR_CONTENT_TYPES:
+        raise ValueError("Formato immagine non supportato (usare PNG, JPEG o WEBP).")
+    if len(content) > MAX_FAVICON_SIZE_BYTES:
+        raise ValueError("L'immagine supera la dimensione massima di 512 KiB.")
+
+    extension = ALLOWED_AVATAR_CONTENT_TYPES[content_type]
+    object_key = f"favicons/{blog_id}/{uuid.uuid4()}.{extension}"
+
+    ensure_public_bucket(settings.s3_bucket_avatars)
+    _put_object(bucket=settings.s3_bucket_avatars, key=object_key, content=content, content_type=content_type)
+    return object_key
+
+
+def delete_blog_favicon(object_key: str) -> None:
+    _delete_object(bucket=settings.s3_bucket_avatars, key=object_key)
+
+
+def blog_favicon_public_url(object_key: str) -> str:
+    return _public_url(bucket=settings.s3_bucket_avatars, key=object_key)
+
+
 def avatar_public_url(object_key: str) -> str:
     return _public_url(bucket=settings.s3_bucket_avatars, key=object_key)
+
+
+def blog_storage_bytes(*, user_ids: list[str], blog_id: str) -> int:
+    """Byte occupati dai file di un blog (media + backup Markdown) sotto i
+    prefissi `{site}/userdata/{user}/{blog}/` di ogni utente indicato
+    (proprietario e collaboratori: il prefisso è per chi ha caricato). Solo
+    lettura, per la card "Spazio" della panoramica (mockup 5a). Bloccante:
+    chiamare da `asyncio.to_thread`."""
+    total = 0
+    bucket = settings.s3_bucket_content
+    if settings.storage_backend == "localstorage":
+        for user_id in user_ids:
+            root = Path(settings.local_storage_base_path) / bucket / _userdata_prefix(user_id, blog_id)
+            if root.is_dir():
+                total += sum(p.stat().st_size for p in root.rglob("*") if p.is_file())
+        return total
+    client = get_s3_client()
+    try:
+        client.head_bucket(Bucket=bucket)
+    except Exception:  # noqa: BLE001 — bucket mai creato: nessun upload ancora fatto, 0 byte
+        return 0
+    paginator = client.get_paginator("list_objects_v2")
+    for user_id in user_ids:
+        prefix = f"{_userdata_prefix(user_id, blog_id)}/"
+        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+            for obj in page.get("Contents", []) or []:
+                total += int(obj.get("Size", 0))
+    return total
+
+
+def delete_blog_storage(*, user_ids: list[str], blog_id: str) -> int:
+    """Cancella tutti gli oggetti di un blog (media + backup Markdown) sotto i
+    prefissi `{site}/userdata/{user}/{blog}/` degli utenti indicati — usato
+    dalla cancellazione definitiva (app/domain/blog_lifecycle.py). Ritorna il
+    numero di oggetti rimossi. Bloccante: chiamare da `asyncio.to_thread`."""
+    removed = 0
+    bucket = settings.s3_bucket_content
+    if settings.storage_backend == "localstorage":
+        import shutil
+
+        for user_id in user_ids:
+            root = Path(settings.local_storage_base_path) / bucket / _userdata_prefix(user_id, blog_id)
+            if root.is_dir():
+                removed += sum(1 for p in root.rglob("*") if p.is_file())
+                shutil.rmtree(root, ignore_errors=True)
+        return removed
+    client = get_s3_client()
+    try:
+        client.head_bucket(Bucket=bucket)
+    except Exception:  # noqa: BLE001
+        return 0
+    paginator = client.get_paginator("list_objects_v2")
+    for user_id in user_ids:
+        prefix = f"{_userdata_prefix(user_id, blog_id)}/"
+        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+            for obj in page.get("Contents", []) or []:
+                client.delete_object(Bucket=bucket, Key=obj["Key"])
+                removed += 1
+    return removed
+
+
+def delete_content_object(object_key: str) -> None:
+    """Rimuove un singolo media dal bucket dei contenuti (libreria media, B7)."""
+    _delete_object(bucket=settings.s3_bucket_content, key=object_key)

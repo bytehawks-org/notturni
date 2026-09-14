@@ -4,10 +4,17 @@ import { REVALIDATE_SECONDS, revalidateTags } from "./revalidate";
 import type {
   BibliographyEntry,
   Blog,
+  BlogConfig,
+  Category,
   LinkBibliographyEntry,
   MediaBibliographyEntry,
   Page,
   Post,
+  PostTranslationSummary,
+  Profile,
+  PublicBlog,
+  Publication,
+  PublicationDetail,
   TrendingTag,
 } from "./types";
 
@@ -164,6 +171,27 @@ export async function getPublicFeed(
   return (await res.json()) as Post[];
 }
 
+/** Directory pubblica dei blog indicizzabili (`GET /api/v1/blogs`, mockup
+ * 4a/4c): ricerca `q`, filtro `locale`, ordinamento `active|new|followers`,
+ * con i conteggi di post e follower. Nessun tag di rivalidazione dedicato:
+ * si affida alla finestra a tempo `REVALIDATE_SECONDS`. */
+export async function getPublicBlogs(
+  options: { limit?: number; offset?: number; q?: string; locale?: string; sort?: "active" | "new" | "followers" } = {}
+): Promise<PublicBlog[]> {
+  const params = new URLSearchParams();
+  if (options.limit) params.set("limit", String(options.limit));
+  if (options.offset) params.set("offset", String(options.offset));
+  if (options.q) params.set("q", options.q);
+  if (options.locale) params.set("locale", options.locale);
+  if (options.sort) params.set("sort", options.sort);
+  const qs = params.toString();
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs${qs ? `?${qs}` : ""}`, {
+    next: { revalidate: REVALIDATE_SECONDS },
+  });
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero della directory dei blog.`);
+  return (await res.json()) as PublicBlog[];
+}
+
 /** Tag più usati tra i post pubblicati di recente, per la sezione "di tendenza" della homepage. */
 export async function getTrendingTags(
   options: { days?: number; limit?: number } = {}
@@ -210,4 +238,85 @@ export async function getSitemapEntries(): Promise<SitemapEntries> {
   });
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero delle voci della sitemap.`);
   return (await res.json()) as SitemapEntries;
+}
+
+/** Traduzioni (famiglia `translation_group_id`) di un post pubblico — per i
+ * link "Italiano · English" nella colonna laterale del post (mockup 1a). */
+export async function getPublicPostTranslations(postId: string): Promise<PostTranslationSummary[]> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/posts/${postId}/translations`, {
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.feed()] },
+  });
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero delle traduzioni del post.`);
+  return (await res.json()) as PostTranslationSummary[];
+}
+
+/** Palette/tipografia del blog (`GET /blogs/{slug}/config`, pubblico per i
+ * blog pubblici) — applicata alla root delle pagine del blog (mockup 3f). */
+export async function getPublicBlogConfig(slug: string): Promise<BlogConfig | null> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}/config`, {
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.blog(slug)] },
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as BlogConfig;
+}
+
+/** Profilo pubblico (mockup 3e, `GET /users/{username}`, nessuna autenticazione
+ * richiesta lato backend): usato solo per i `<meta>` della pagina
+ * `/u/{username}` (Client Component, ne rifà la propria fetch autenticata per
+ * i dati interattivi — follow/tab). Nessun tag di invalidazione: il backend
+ * non notifica ancora le modifiche al profilo, resta la sola finestra a
+ * tempo (come senza `NOCT_REVALIDATE_SECRET` configurato altrove). */
+export async function getPublicUserProfile(username: string): Promise<Profile | null> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/users/${username}`, {
+    next: { revalidate: REVALIDATE_SECONDS },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero del profilo.`);
+  return (await res.json()) as Profile;
+}
+
+export interface PlatformFooter {
+  column1: string | null;
+  column2: string | null;
+  column3: string | null;
+  bottom_bar: string | null;
+}
+
+/** Footer di piattaforma (Markdown grezzo, non ancora renderizzato), mostrato
+ * su ogni pagina pubblica di piattaforma e di ogni blog. Pubblico, un solo
+ * tag di invalidazione condiviso (non per-blog). */
+export async function getPlatformFooter(): Promise<PlatformFooter> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/footer`, {
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.platformFooter()] },
+  });
+  if (!res.ok) return { column1: null, column2: null, column3: null, bottom_bar: null };
+  return (await res.json()) as PlatformFooter;
+}
+
+/** Categorie del blog per i filtri della sua home pubblica (mockup 3f). */
+export async function getPublicBlogCategories(slug: string): Promise<Category[]> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}/categories`, {
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.blog(slug)] },
+  });
+  if (!res.ok) return [];
+  return (await res.json()) as Category[];
+}
+
+/** B9: pubblicazioni pubbliche del blog (solo con capitoli pubblicati). */
+export async function getPublicPublications(slug: string): Promise<Publication[]> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}/publications`, {
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.blog(slug)] },
+  });
+  if (!res.ok) return [];
+  return (await res.json()) as Publication[];
+}
+
+/** B9: indice dei capitoli di una pubblicazione; `null` se non esiste o non ha capitoli pubblicati. */
+export async function getPublicPublication(slug: string, name: string): Promise<PublicationDetail | null> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}/publications/${name}`, {
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.blog(slug)] },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero della pubblicazione.`);
+  return (await res.json()) as PublicationDetail;
 }

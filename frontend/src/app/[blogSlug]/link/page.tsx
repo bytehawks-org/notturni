@@ -1,82 +1,138 @@
 import type { Metadata } from "next";
+import { getLocale, getTranslations } from "next-intl/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { SiteHeader } from "@/components/SiteHeader";
-import { getBlogLinksBibliography, getPublicBlog } from "@/lib/server-api";
+import { BlogPageShell } from "@/components/blog/BlogPageShell";
+import { BlogStateNotice, blogIsOffline } from "@/components/blog/BlogStateNotice";
+import { BlogHeaderActions } from "@/components/blog/PostHeaderActions";
+import { BlogHeader } from "@/components/shell/BlogHeader";
+import { formatDate } from "@/lib/format";
+import { getBlogLinksBibliography, getPublicBlog, getPublicBlogConfig, getPublicPublications } from "@/lib/server-api";
+import type { LinkBibliographyEntry } from "@/lib/types";
 
 interface PageParams {
   blogSlug: string;
 }
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<PageParams>;
-}): Promise<Metadata> {
+export async function generateMetadata({ params }: { params: Promise<PageParams> }): Promise<Metadata> {
   const { blogSlug } = await params;
-  const blog = await getPublicBlog(blogSlug);
-  return { title: blog ? `Link — ${blog.title}` : "Link" };
+  const [blog, t] = await Promise.all([getPublicBlog(blogSlug), getTranslations("BlogNav")]);
+  if (!blog) return { title: t("links") };
+  const title = `${t("links")} — ${blog.title}`;
+  return {
+    title,
+    alternates: { canonical: `/${blogSlug}/link` },
+    robots: blog.search_indexing_enabled ? undefined : { index: false, follow: false },
+    openGraph: { title, type: "website", url: `/${blogSlug}/link` },
+  };
 }
 
-/** CLAUDE.md #4: come la bibliografia delle note (/[blogSlug]/bibliografia),
- * ma per i link citati nei post pubblicati. */
-export default async function BlogLinksBibliographyPage({
-  params,
-}: {
-  params: Promise<PageParams>;
-}) {
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+/** /{blog}/link (mockup 2c/3a): tutti gli URL citati nei post pubblicati,
+ * raggruppati per sito e ordinati per numero di link. */
+export default async function BlogLinksBibliographyPage({ params }: { params: Promise<PageParams> }) {
   const { blogSlug } = await params;
-  const [blog, entries] = await Promise.all([getPublicBlog(blogSlug), getBlogLinksBibliography(blogSlug)]);
-  if (!blog || !entries) notFound();
+  const [blog, entries, config, t, tl, locale] = await Promise.all([
+    getPublicBlog(blogSlug),
+    getBlogLinksBibliography(blogSlug),
+    getPublicBlogConfig(blogSlug),
+    getTranslations("LinksPage"),
+    getTranslations("Links"),
+    getLocale(),
+  ]);
+  if (!blog) notFound();
+  const hasPublications = (await getPublicPublications(blogSlug).catch(() => [])).length > 0;
+  if (blogIsOffline(blog)) {
+    return (
+      <BlogPageShell config={config}>
+        <BlogHeader slug={blogSlug} name={blog.title} hasPublications={hasPublications} current="links" />
+        <BlogStateNotice blog={blog} />
+      </BlogPageShell>
+    );
+  }
+  if (!entries) notFound();
+
+  const groups = new Map<string, LinkBibliographyEntry[]>();
+  for (const entry of entries) {
+    const host = hostOf(entry.url);
+    groups.set(host, [...(groups.get(host) ?? []), entry]);
+  }
+  const sortedGroups = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
 
   return (
-    <div className="flex flex-1 flex-col">
-      <SiteHeader />
-      <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-12">
-        <Link href={`/${blogSlug}`} className="text-sm text-muted hover:text-foreground">
-          ← {blogSlug}
-        </Link>
-
-        <h1 className="mt-6 font-serif text-4xl font-semibold leading-tight text-foreground">Link</h1>
-        <p className="mt-2 text-sm text-muted">
-          Tutti i link citati nei post di <span className="text-foreground">{blog.title}</span>, con
-          l&apos;elenco dei post che li usano e la data di pubblicazione.
-        </p>
-
+    <BlogPageShell config={config}>
+      <BlogHeader slug={blogSlug} name={blog.title} hasPublications={hasPublications} current="links" actions={<BlogHeaderActions slug={blogSlug} />} />
+      <main className="mx-auto w-full max-w-[1184px] flex-1 px-5 py-10 lg:px-12 lg:py-14">
+        <div className="flex flex-col gap-1.5">
+          <h1 className="font-serif text-[34px] font-medium leading-[1.12] tracking-tight md:text-[40px]">{t("title")}</h1>
+          <p className="text-muted md:text-base">{t("subtitle")}</p>
+        </div>
         {entries.length === 0 ? (
-          <p className="mt-10 text-sm text-muted">Nessun link, per ora.</p>
+          <p className="py-10 text-center text-sm text-muted">{t("empty")}</p>
         ) : (
-          <ol className="mt-10 space-y-6">
-            {entries.map((entry, i) => (
-              <li key={i} className="border-b border-border pb-6 last:border-0">
-                <a
-                  href={entry.url}
-                  target="_blank"
-                  rel="noopener noreferrer nofollow"
-                  className="text-base text-primary hover:underline"
+          <div className="mt-6 flex flex-col gap-4 md:gap-8">
+            {sortedGroups.map(([host, items]) => {
+              const postCount = new Set(items.flatMap((i) => i.citations.map((c) => c.permalink))).size;
+              return (
+                <section
+                  key={host}
+                  className="flex flex-col gap-2.5 border-t border-border pt-3.5 md:grid md:grid-cols-[220px_minmax(0,1fr)] md:gap-7 md:pt-6"
                 >
-                  {entry.link_text || entry.url}
-                </a>
-                <p className="mt-1 text-xs text-muted">{entry.url}</p>
-                <p className="mt-2 text-xs text-muted">
-                  Citato in:{" "}
-                  {entry.citations.map((c, j) => (
-                    <span key={`${c.permalink}-${j}`}>
-                      {j > 0 && ", "}
-                      <Link href={c.permalink} className="text-primary hover:underline">
-                        {c.post_title}
-                        {c.locale !== blog.default_locale ? ` (${c.locale})` : ""}
-                      </Link>
-                      {c.used_at && <span> ({new Date(c.used_at).toLocaleDateString("it-IT")})</span>}
+                  <div className="flex items-baseline justify-between md:flex-col md:items-start md:gap-1">
+                    <h2 className="font-serif text-[17px] md:text-[19px]">{host}</h2>
+                    <span className="text-xs text-muted md:text-[13px]">
+                      {tl("count", { count: items.length })}
+                      {postCount > 1 && ` · ${tl("posts", { count: postCount })}`}
                     </span>
-                  ))}
-                </p>
-              </li>
-            ))}
-          </ol>
+                  </div>
+                  <ul className="flex flex-col gap-2.5 md:gap-3.5">
+                    {items.map((entry) => {
+                      const first = entry.citations[0];
+                      return (
+                        <li key={entry.url} className="flex min-w-0 flex-col gap-0.5 md:grid md:grid-cols-[minmax(0,1fr)_170px] md:gap-4">
+                          <div className="flex min-w-0 flex-col gap-0.5">
+                            <a
+                              href={entry.url}
+                              target="_blank"
+                              rel="noopener noreferrer nofollow"
+                              className="text-[15px] font-medium text-foreground no-underline hover:text-primary md:text-base"
+                            >
+                              {entry.link_text || entry.url}
+                            </a>
+                            <span className="hidden truncate font-mono text-[13px] text-muted md:block">{entry.url}</span>
+                          </div>
+                          {first && (
+                            <span className="text-xs text-muted md:text-right md:text-[13px] md:leading-snug">
+                              {tl("in")}{" "}
+                              <Link href={first.permalink} className="no-underline hover:underline">
+                                {first.post_title}
+                              </Link>
+                              {first.used_at && (
+                                <>
+                                  <br className="hidden md:block" /> · {formatDate(first.used_at, locale, { day: "numeric", month: "short", year: "numeric" })}
+                                </>
+                              )}
+                              {entry.citations.length > 1 && ` +${entry.citations.length - 1}`}
+                            </span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              );
+            })}
+          </div>
         )}
       </main>
-    </div>
+    </BlogPageShell>
   );
 }

@@ -2,10 +2,12 @@
 # localmente sul nodo finché non c'è un registro in CI/CD.
 #
 # Job schedulato (non un Deployment): archivia su storage le settimane ISO
-# chiuse di audit_log e cancella gli eventi oltre NOCT_AUDIT_RETENTION_DAYS,
-# senza mai toccare quelli non ancora archiviati. È il primo manifest di tipo
-# worker in questi file (i consumer di coda in compose.yaml non hanno ancora
-# un equivalente K8s — vedi README).
+# chiuse di audit_log e cancella gli eventi oltre
+# platform_config.audit_retention_days (configurabile a runtime da un Super
+# Admin, /admin/impostazioni — NOCT_AUDIT_RETENTION_DAYS resta solo il seme
+# iniziale), senza mai toccare quelli non ancora archiviati. È il primo
+# manifest di tipo worker in questi file (i consumer di coda in compose.yaml
+# non hanno ancora un equivalente K8s — vedi README).
 apiVersion: batch/v1
 kind: CronJob
 metadata:

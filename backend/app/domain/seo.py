@@ -14,7 +14,7 @@ non aggiungerebbe nulla.
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.authorization import publicly_visible_clause
+from app.domain.authorization import blog_publicly_listable_clause, publicly_visible_clause
 from app.domain.permalinks import build_permalink
 from app.models.blog import Blog, BlogVisibility
 from app.models.post import Post
@@ -68,7 +68,7 @@ async def build_crawl_directives(session: AsyncSession) -> dict[str, list[str]]:
     ai_disallow: list[str] = []
 
     blogs_result = await session.execute(
-        select(Blog).where(Blog.visibility == BlogVisibility.PUBLIC, Blog.is_suspended.is_(False))
+        select(Blog).where(blog_publicly_listable_clause())
     )
     blogs = list(blogs_result.scalars().all())
     blogs_by_id = {blog.id: blog for blog in blogs}
@@ -111,6 +111,8 @@ async def build_sitemap_entries(session: AsyncSession) -> dict[str, list[dict[st
         select(Blog).where(
             Blog.visibility == BlogVisibility.PUBLIC,
             Blog.is_suspended.is_(False),
+            Blog.is_paused.is_(False),
+            Blog.deleted_at.is_(None),
             Blog.search_indexing_enabled.is_(True),
         )
     )

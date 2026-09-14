@@ -1,9 +1,12 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { FragmentMenu, type FragmentSelection } from "@/components/blog/FragmentMenu";
 import { Alert } from "@/components/ui/Alert";
+import { useToast } from "@/components/ui/Toast";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -12,28 +15,34 @@ import {
   normalizeFragmentText,
   unwrapFragmentMark,
 } from "@/lib/highlight-fragments";
-import { MAX_FRAGMENT_RATIO, type PostFragment } from "@/lib/types";
+import { type PostFragment } from "@/lib/types";
 
-type SelectionMenu =
-  | { mode: "save"; top: number; left: number; text: string; tooLong: boolean }
-  | { mode: "remove"; top: number; left: number; fragmentIds: string[] };
+type SelectionMenu = { sel: FragmentSelection; fragmentIds: string[] };
 
 /** Contenuto reso del post (HTML già sanificato lato server, vedi
  * lib/markdown.ts) con evidenziazione e salvataggio dei frammenti: selezione
- * con il mouse → menu contestuale → salvataggio → raccolta unificata
+ * → menu contestuale (mockup 1a/1b) → salvataggio → raccolta unificata
  * (/dashboard/frammenti). I frammenti già salvati dall'utente su questo post
- * vengono ri-evidenziati ad ogni lettura, non solo entrando dalla pagina di
- * raccolta. */
+ * vengono ri-evidenziati ad ogni lettura. "Copia link"/"Cita" funzionano
+ * anche da anonimi: sono pure operazioni sugli appunti. */
 export function FragmentReader({
   postId,
   html,
   className,
+  permalink,
+  quoteAttribution,
 }: {
   postId: string;
   html: string;
   className: string;
+  /** URL assoluto o relativo del post, per "Copia link"/"Cita". */
+  permalink: string;
+  /** "Autore, Titolo" da accodare alla citazione. */
+  quoteAttribution: string;
 }) {
   const { user, loading, authFetch } = useAuth();
+  const t = useTranslations("Fragment");
+  const notify = useToast();
   const containerRef = useRef<HTMLDivElement>(null);
   const [fragments, setFragments] = useState<PostFragment[]>([]);
   const [menu, setMenu] = useState<SelectionMenu | null>(null);
@@ -51,7 +60,7 @@ export function FragmentReader({
     if (containerRef.current) highlightFragments(containerRef.current, fragments);
   }, [fragments, html]);
 
-  const handleMouseUp = useCallback(() => {
+  const handleSelectionEnd = useCallback(() => {
     const container = containerRef.current;
     const selection = window.getSelection();
     if (!container || !selection || selection.isCollapsed || selection.rangeCount === 0) {
@@ -65,61 +74,75 @@ export function FragmentReader({
     }
     const rect = range.getBoundingClientRect();
     setError(null);
-
-    // ri-selezionare (anche solo in parte) un frammento già evidenziato
-    // propone di rimuoverlo, invece di salvarne uno nuovo.
-    const overlapping = findOverlappingFragmentIds(container, range);
-    if (overlapping.length > 0) {
-      setMenu({ mode: "remove", top: rect.top, left: rect.left + rect.width / 2, fragmentIds: overlapping });
-      return;
-    }
-
     const text = normalizeFragmentText(selection.toString());
     if (!text) {
       setMenu(null);
       return;
     }
-    const totalLength = normalizeFragmentText(container.textContent ?? "").length;
-    const maxLength = Math.max(1, Math.floor(totalLength * MAX_FRAGMENT_RATIO));
-    setMenu({
-      mode: "save",
+    const totalLength = Math.max(1, normalizeFragmentText(container.textContent ?? "").length);
+    const sel: FragmentSelection = {
+      text,
+      words: text.split(/\s+/).filter(Boolean).length,
+      ratio: text.length / totalLength,
       top: rect.top,
       left: rect.left + rect.width / 2,
-      text,
-      tooLong: text.length > maxLength,
-    });
+    };
+    // ri-selezionare (anche solo in parte) un frammento già evidenziato
+    // propone di rimuoverlo, invece di salvarne uno nuovo.
+    setMenu({ sel, fragmentIds: findOverlappingFragmentIds(container, range) });
   }, []);
 
   useEffect(() => {
-    document.addEventListener("mouseup", handleMouseUp);
+    document.addEventListener("mouseup", handleSelectionEnd);
+    document.addEventListener("touchend", handleSelectionEnd);
     // lo scroll non fa scattare mouseup: il menu resterebbe ancorato a una
     // posizione (position: fixed) non più sotto la selezione.
-    const closeOnScroll = () => setMenu(null);
+    const closeOnScroll = () => setMenu((m) => (m && window.innerWidth >= 768 ? null : m));
     window.addEventListener("scroll", closeOnScroll, true);
     return () => {
-      document.removeEventListener("mouseup", handleMouseUp);
+      document.removeEventListener("mouseup", handleSelectionEnd);
+      document.removeEventListener("touchend", handleSelectionEnd);
       window.removeEventListener("scroll", closeOnScroll, true);
     };
-  }, [handleMouseUp]);
+  }, [handleSelectionEnd]);
+
+  function close() {
+    window.getSelection()?.removeAllRanges();
+    setMenu(null);
+  }
+
+  async function copy(text: string, doneMessage: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      notify(doneMessage);
+    } catch {
+      notify(t("copyFailed"), "warn");
+    }
+    close();
+  }
+
+  function absolutePermalink(): string {
+    return permalink.startsWith("http") ? permalink : `${window.location.origin}${permalink}`;
+  }
 
   async function handleSave(isPublic: boolean) {
-    if (!menu || menu.mode !== "save" || menu.tooLong) return;
+    if (!menu || menu.sel.ratio > 0.15) return;
     setSaving(true);
     setError(null);
     try {
-      const fragment = await authFetch((token) => api.fragments.create(token, postId, menu.text, isPublic));
+      const fragment = await authFetch((token) => api.fragments.create(token, postId, menu.sel.text, isPublic));
       setFragments((prev) => (prev.some((f) => f.id === fragment.id) ? prev : [...prev, fragment]));
-      window.getSelection()?.removeAllRanges();
-      setMenu(null);
+      notify(t("savedToast"));
+      close();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Impossibile salvare il frammento.");
+      setError(err instanceof ApiClientError ? err.message : t("saveError"));
     } finally {
       setSaving(false);
     }
   }
 
   async function handleRemove() {
-    if (!menu || menu.mode !== "remove") return;
+    if (!menu || menu.fragmentIds.length === 0) return;
     setSaving(true);
     setError(null);
     try {
@@ -128,10 +151,9 @@ export function FragmentReader({
         for (const id of menu.fragmentIds) unwrapFragmentMark(containerRef.current, id);
       }
       setFragments((prev) => prev.filter((f) => !menu.fragmentIds.includes(f.id)));
-      window.getSelection()?.removeAllRanges();
-      setMenu(null);
+      close();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Impossibile rimuovere il frammento.");
+      setError(err instanceof ApiClientError ? err.message : t("removeError"));
     } finally {
       setSaving(false);
     }
@@ -141,54 +163,33 @@ export function FragmentReader({
     <>
       <div ref={containerRef} className={className} dangerouslySetInnerHTML={{ __html: html }} />
       {menu && (
-        <div
-          className="fragment-menu"
-          style={{ top: menu.top, left: menu.left }}
-          // impedisce che il mousedown sul menu tolga il focus dal testo e
-          // collassi la selezione prima che il click arrivi al bottone
-          onMouseDown={(e) => e.preventDefault()}
-        >
-          {loading ? null : !user ? (
-            <Link href="/login" className="fragment-menu-link">
-              Accedi per salvare i frammenti
-            </Link>
-          ) : menu.mode === "remove" ? (
-            <button
-              type="button"
-              className="fragment-menu-button fragment-menu-button--remove"
-              onClick={handleRemove}
-              disabled={saving}
-            >
-              {saving ? "Rimuovo…" : menu.fragmentIds.length > 1 ? "Rimuovi frammenti" : "Rimuovi frammento"}
-            </button>
-          ) : menu.tooLong ? (
-            <span className="fragment-menu-hint">Seleziona una porzione più breve (max 15% del post)</span>
-          ) : (
-            <div className="fragment-menu-actions">
-              <button
-                type="button"
-                className="fragment-menu-button"
-                onClick={() => handleSave(false)}
-                disabled={saving}
-              >
-                {saving ? "Salvo…" : "Salva (privato)"}
-              </button>
-              <button
-                type="button"
-                className="fragment-menu-button"
-                onClick={() => handleSave(true)}
-                disabled={saving}
-              >
-                Salva (pubblico)
-              </button>
-            </div>
-          )}
-        </div>
+        <FragmentMenu
+          sel={menu.sel}
+          saved={menu.fragmentIds.length > 0}
+          signedIn={!loading && !!user}
+          busy={saving}
+          onSave={handleSave}
+          onRemove={handleRemove}
+          onCopyLink={() => copy(absolutePermalink(), t("linkCopied"))}
+          onQuote={() => copy(`“${menu.sel.text}”\n— ${quoteAttribution}\n${absolutePermalink()}`, t("quoteCopied"))}
+          onClose={close}
+        />
       )}
       {error && (
         <div className="mt-4">
           <Alert kind="error">{error}</Alert>
         </div>
+      )}
+      {user && fragments.length > 0 && (
+        <aside className="mt-8 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-surface px-4 py-3 text-[13px] text-muted">
+          <span>
+            <span className="font-semibold text-foreground">{t("yourFragments")}</span>{" "}
+            {t("savedFromPost", { count: fragments.length })}
+          </span>
+          <Link href="/dashboard/frammenti" className="font-medium text-primary no-underline hover:underline">
+            {t("openShelf")}
+          </Link>
+        </aside>
       )}
     </>
   );

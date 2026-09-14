@@ -260,6 +260,49 @@ ricade sulla preferenza di profilo di chi scrive (`username` di default).
 le `@username` nel contenuto dei post in link al profilo citato — vedi
 "Menzioni `@username`" nella sezione Post.
 
+**`GET /api/v1/blogs`** — pubblico, nessuna sessione richiesta. Directory dei
+blog pubblici indicizzabili: `visibility=public`, non sospesi
+(`is_suspended=false`) e `search_indexing_enabled=true` — stesso criterio del
+`robots.txt` generato, più restrittivo del semplice "pubblico" usato dal feed
+dei post (che include anche i blog pubblici non indicizzabili). Parametri
+`limit` (default 30, max 100) e `offset` per la paginazione. `q` cerca in
+slug/titolo/sottotitolo (sottostringa), `locale` filtra per lingua
+principale, `sort` è `active` (default: ultimo post pubblicato, poi
+creazione), `new` (creazione) o `followers`. Ogni voce è un blog più
+`post_count` (post effettivamente pubblicati), `follower_count` e
+`last_published_at` — i conteggi delle card della directory (mockup 4a/4c).
+`owner_id` sempre `null` in questa lista (nessun viewer autenticato).
+
+**`GET /api/v1/blogs/{slug}/overview`** — richiede sessione: proprietario o
+membro con qualunque ruolo (`403` altrimenti, `404` se il blog non esiste).
+Conteggi per la tab Panoramica del blog (todo/UX_REDESIGN.md B1, mockup 5a):
+
+```json
+{
+  "posts_total": 12, "posts_published": 9, "posts_scheduled": 1, "posts_draft": 1, "posts_in_review": 1,
+  "followers": 214, "members": 2, "pending_comments": 3, "approved_comments": 40, "media": 18,
+  "last_published_at": "2026-09-12T07:00:00Z"
+}
+```
+
+`posts_scheduled` sono i `published` con `published_at` futuro; `media` è il
+numero di immagini citate nei post (tabella `post_media`). In più (B2):
+`reads_30d` — 30 voci `{day, reads}` (giorni UTC, quelli senza letture a 0),
+`reads_total_30d`, e `storage_bytes` — byte occupati su storage da media e
+backup Markdown del blog (prefissi `userdata/{utente}/{blog}/` di
+proprietario e collaboratori; `null` se lo storage non risponde, `0` se il
+bucket non è mai stato creato).
+
+**`POST /api/v1/posts/{post_id}/read`** — pubblico, `204`, nessun corpo.
+Conteggio letture aggregato per giorno (tabella `post_reads_daily`, mockup
+5a): nessun cookie, nessuna sessione, nessun IP o identificativo del lettore
+persistito — solo `+1` su (post, giorno UTC). Inviato dal browser
+(`navigator.sendBeacon`) dopo qualche secondo sulla pagina pubblica del
+post. Un limite per IP+post in Redis (1 ogni 6 ore, volatile) evita di
+contare i reload ravvicinati: oltre il limite la richiesta risponde comunque
+`204` senza contare. `404` per post non pubblicamente visibili (bozza,
+pianificato, nascosto, blog non pubblico o sospeso).
+
 **`GET /api/v1/blogs/mine`** — richiede sessione. Lista i blog di proprietà
 dell'utente.
 
@@ -295,6 +338,51 @@ questo blog. Se valorizzato è **imposto** (nessun override per singolo
 autore o post — todo/USERS.md #2), a meno che il collaboratore non abbia un
 proprio alias di membership, che ha la precedenza. Stringa vuota `""` lo
 azzera, assente lo lascia invariato.
+`is_paused` (bool, B3 — mockup 5c "Pause this blog"): blog in pausa
+volontaria, i lettori non vedono più post e pagine (il dettaglio
+`GET /blogs/{slug}` resta leggibile con `is_paused=true` per mostrare la
+pagina "in pausa"), sparisce da feed/directory/sitemap; proprietario e
+collaboratori continuano a lavorarci dalla dashboard, nulla è cancellato.
+`extra_locales` (lista di codici ISO 639-1, B3): lingue secondarie del blog
+oltre a `default_locale`, informative (duplicati e lingua principale
+scartati; `400` se un codice non è valido).
+
+La risposta di `GET /blogs/{slug}` include anche `is_suspended`,
+`is_paused`, `deleted_at` ed `extra_locales`. Per un blog **pubblico**
+sospeso da un admin o in pausa, il dettaglio risponde `200` con i flag (e
+solo quello: post, pagine, bibliografia restano `404`), così la pagina
+pubblica può spiegare lo stato (mockup 3d). Un blog in attesa di
+cancellazione è `404` per chiunque tranne il proprietario.
+
+**`POST /api/v1/blogs/{slug}/transfer`** — `{username}`, solo il
+proprietario. Trasferisce la proprietà a un **coautore attuale** (`400` se
+l'utente non ha una membership `co_autore`, o ha già raggiunto il limite di
+blog; `404` se non esiste). Chi cede resta come coautore; la membership del
+nuovo proprietario viene rimossa. Registrato nel registro di audit
+(`blog.ownership_transferred`).
+
+**`GET /api/v1/blogs/{slug}/export`** — solo il proprietario. Scarica uno
+ZIP (`application/zip`) con tutto il contenuto del blog: `blog.json`, un
+Markdown per post in `posts/{locale}-{slug}.md` (front matter con titolo,
+stato, data, autore, categoria, tag, copertina; note in coda come
+`[^n]: …`), le pagine statiche in `pages/`, `comments.json` (tutti gli
+stati), `categories.json`, `media.json` (URL e alt delle immagini citate —
+i binari restano sullo storage) e `links.json`. Generato al volo, nessun
+link a scadenza.
+
+**`DELETE /api/v1/blogs/{slug}`** — `{confirm_slug}`, solo il proprietario;
+`400` se lo slug non corrisponde. Cancellazione con tolleranza (B3, mockup
+5c/3d): imposta `deleted_at`, il blog sparisce da pagine pubbliche, feed,
+directory e sitemap (resta in `GET /blogs/mine` con `deleted_at`
+valorizzato), i post non sono più scrivibili. Dopo 30 giorni il worker di
+manutenzione (`app/workers/audit_maintenance.py`, un giro al giorno) lo
+elimina definitivamente con post, commenti, frammenti, pagine, categorie,
+collaboratori, follower, configurazione e oggetti su storage
+(`app/domain/blog_lifecycle.py`). Idempotente. Audit `blog.deleted`.
+
+**`POST /api/v1/blogs/{slug}/restore`** — solo il proprietario. Annulla la
+cancellazione entro il periodo di tolleranza (`deleted_at` torna `null`).
+Audit `blog.restored`.
 
 **`POST /api/v1/blogs/{slug}/follow`** / **`DELETE .../follow`** — richiede
 sessione. Segui/smetti di seguire un blog; idempotenti (`204` anche se già
@@ -305,14 +393,20 @@ segue il blog.
 
 **`GET /api/v1/blogs/{slug}/config`** — pubblico. Configurazione di
 presentazione del blog (palette/tipografia/layout — vedi
-[ROADMAP.md](../ROADMAP.md#2-estetica) per i vincoli). JSON libero; se il
-proprietario non ha ancora salvato nulla, ritorna il default della
-piattaforma:
+[ROADMAP.md](../ROADMAP.md#2-estetica) per i vincoli), applicata dal frontend
+a tutte le pagine pubbliche del blog (`BlogPageShell`, todo/UX_REDESIGN.md
+B10): palette come variabili CSS, `typography.heading_font`/`body_font` come
+`--font-heading`/`--font-body` (font self-hostati al build, nessuna
+richiesta a Google a runtime), `body_size`/`measure` per dimensione del
+corpo e larghezza della colonna di lettura del post, `layout` per la
+disposizione del feed della home del blog. JSON libero; se il proprietario
+non ha ancora salvato nulla, ritorna il default della piattaforma (identico
+allo shell non personalizzato):
 
 ```json
 {
   "palette": {"background": "#fbf9f6", "foreground": "#2b2a28", "primary": "#3e6259", "muted": "#a8a29a", "border": "#e7e2da"},
-  "typography": {"heading_font": "Lora", "body_font": "Inter"},
+  "typography": {"heading_font": "Lora", "body_font": "Source Sans 3"},
   "layout": "standard"
 }
 ```
@@ -324,12 +418,63 @@ e qualsiasi altra chiave) libero:
 
 - `palette`: al massimo 5 colori; ogni colore esadecimale non può superare il
   90% di saturazione HLS (palette "calma", CLAUDE.md § Estetica).
-- `typography`: al massimo 3 font distinti; se presenti, `heading_font` deve
-  essere uno dei font serif curati (`Lora`, `Merriweather`, `Playfair
-  Display`, `Source Serif 4`, `Crimson Pro`) e `body_font` uno dei font
-  sans-serif curati (`Inter`, `Nunito Sans`, `Work Sans`, `Source Sans 3`,
-  `Karla`) — vedi `backend/app/domain/blog_config.py`. Altre chiavi restano
-  libere.
+- `palette_dark` (opzionale): stessi vincoli di `palette`; è la variante
+  scura applicata alle pagine pubbliche del blog quando il lettore usa il
+  tema scuro. Assente, in tema scuro vale la palette scura di piattaforma.
+- `typography`: al massimo 3 font distinti tra `heading_font`/`body_font`
+  (`body_size`/`measure`, pur essendo anch'esse stringhe, non contano verso
+  questo limite); se presenti, `heading_font` deve essere uno dei font serif
+  curati (`Lora`, `Merriweather`, `Playfair Display`, `Source Serif 4`,
+  `Crimson Pro`) e `body_font` uno dei font sans-serif curati (`Inter`,
+  `Nunito Sans`, `Work Sans`, `Source Sans 3`, `Karla`) — vedi
+  `backend/app/domain/blog_config.py`. `body_size` (`"17"`/`"18"`/`"19"`) e
+  `measure` (`"narrow"`/`"normal"`) non sono validati lato backend (solo
+  accettati); un valore diverso da quelli attesi è ignorato dal frontend, che
+  ricade sul default.
+- `footer` (opzionale): override per questo blog delle sole colonne 1/2 del
+  footer di piattaforma (`GET /api/v1/footer`) — `{"column1": "...",
+  "column2": "..."}`, Markdown libero, max 5000 caratteri ciascuna, nessun'altra
+  chiave ammessa (`400` altrimenti: non è possibile sovrascrivere `column3` né
+  `bottom_bar`, sempre e solo di piattaforma). Assente/vuoto: il blog eredita
+  il default di piattaforma per entrambe.
+
+Altre chiavi restano libere.
+
+**`POST /api/v1/blogs/{slug}/cover-image`** — richiede sessione, solo il
+proprietario (`403` altrimenti). `multipart/form-data`, campo `file`.
+Immagine di copertina del blog (banner della home pubblica, facoltativa):
+stessi formati/limite di dimensione e stessa moderazione automatica di
+`POST .../media` sotto — l'upload aggiorna `cover_image_url` e
+`cover_image_is_sensitive` (risultato della moderazione), azzera
+`cover_image_categories`. Sostituire una cover esistente non cancella
+l'oggetto precedente su storage (stessa scelta di `Post.cover_image_url`).
+Ritorna il `Blog` aggiornato (`BlogOut`).
+
+**`PATCH /api/v1/blogs/{slug}/cover-image`** — solo il proprietario, `400`
+se il blog non ha ancora una cover. `{"categories": ["nudity", ...]}`
+(vocabolario in `backend/app/domain/content_media.py::SENSITIVITY_CATEGORIES`):
+aggiorna l'avviso manuale sui contenuti senza ricaricare l'immagine, stesso
+principio del `PATCH /posts/{id}` quando cambia solo `cover_image_categories`
+— categorie non vuote forzano `cover_image_is_sensitive=true`. Ritorna il
+`Blog` aggiornato.
+
+**`DELETE /api/v1/blogs/{slug}/cover-image`** — solo il proprietario. Azzera
+cover/avviso/categorie (l'oggetto su storage non viene cancellato, stessa
+scelta di cui sopra). Ritorna il `Blog` aggiornato.
+
+**`POST /api/v1/blogs/{slug}/favicon`** — richiede sessione, solo il
+proprietario. `multipart/form-data`, campo `file`. Favicon dedicata del blog
+(facoltativa, mostrata nella scheda del browser sulle sue pagine pubbliche):
+PNG/JPEG/WEBP, max 512 KiB (`400` altrimenti) — **nessuna moderazione
+automatica**, a differenza di cover/media: è un'icona di identità, non
+contenuto, stesso principio dell'avatar utente (`POST /users/me/avatar`).
+Sostituire una favicon esistente **cancella** l'oggetto precedente su
+storage (a differenza della cover, qui l'oggetto è piccolo e dedicato, come
+l'avatar). Bucket pubblico degli avatar, prefisso `favicons/{blog_id}/`.
+Ritorna il `Blog` aggiornato.
+
+**`DELETE /api/v1/blogs/{slug}/favicon`** — solo il proprietario. Cancella
+l'oggetto su storage e azzera `favicon_url`. Ritorna il `Blog` aggiornato.
 
 **`POST /api/v1/blogs/{slug}/media`** — richiede sessione e accesso in
 scrittura al blog (proprietario/autore/co-autore). `multipart/form-data`,
@@ -792,6 +937,74 @@ Idempotente se già pubblicato e non si passa un nuovo `published_at`
 (`published_at` esistente non viene toccato); passare una nuova data lo
 sovrascrive sempre, anche per ripianificare un post già pubblicato.
 
+## Pubblicazioni (todo/PUBLICATIONS.md, todo/UX_REDESIGN.md B9, mockup 2d/3g)
+
+Una pubblicazione raccoglie post di un blog come capitoli sotto
+`/{blog}/pub/{name}`: ordine cronologico dal più vecchio, oppure esplicito
+(`Post.chapter_order`). Un post appartiene al più a una pubblicazione:
+`POST /blogs/{slug}/posts`, `POST /posts/{id}/translations` e
+`PATCH /posts/{id}` accettano `publication_id` (tri-state come
+`category_id`; `400` se non è del blog; cambiare pubblicazione azzera
+l'ordine). `PostOut` include `publication: {id, name, title} | null` e
+`chapter_order`.
+
+**`GET /api/v1/blogs/{slug}/publications`** — segue la visibilità del blog.
+`[{id, name, title, description, chapters_total, chapters_published,
+created_at}]`; i lettori vedono solo quelle con almeno un capitolo
+pubblicato, chi ha accesso in scrittura tutte.
+
+**`GET /api/v1/blogs/{slug}/publications/{name|id}`** — indice: come sopra
+più `chapters: [{n, post_id, slug, title, locale, status, published_at,
+permalink, reading_minutes, is_public}]`. Per i lettori solo capitoli
+pubblicati (`404` se nessuno); chi scrive vede anche bozze/pianificati con
+`is_public=false`.
+
+**`POST /api/v1/blogs/{slug}/publications`** — `{name, title, description?}`
+(accesso in scrittura; `name` = segmento URL, minuscole/numeri/trattini,
+`409` se già usato). **`PATCH .../{name|id}`** — stessi campi.
+**`DELETE .../{name|id}`** — `204`, i post restano senza pubblicazione.
+
+**`PUT /api/v1/blogs/{slug}/publications/{name|id}/order`** — `{post_ids}`
+nell'ordine voluto (mockup 3g drag-to-order); i post non elencati seguono
+in coda in ordine cronologico; `400` se un id non è della pubblicazione.
+
+## Libreria note del blog (todo/UX_REDESIGN.md B8, mockup 3b)
+
+Le note a piè di pagina dei post (`post_notes`) vengono agganciate, al
+salvataggio del post, a una **nota del blog** (`blog_notes`) con lo stesso
+testo normalizzato (minuscolo, senza punteggiatura/apostrofi): la nota è
+creata se manca, con `kind` stimato (`book` | `article` | `web` | `note`)
+e `url` estratto (DOI → `https://doi.org/…`). `GET /blogs/{slug}/bibliography`
+espone ora anche `kind` e `url` per ogni voce.
+
+**`GET /api/v1/blogs/{slug}/notes?q=`** — proprietario e collaboratori.
+`[{id, content, kind, url, created_at, updated_at, used_in: [{post_id,
+post_slug, post_title, idx}], possible_duplicates: [id, …]}]` dalla più
+recente; `possible_duplicates` = note dello stesso blog con gli stessi primi
+30 caratteri normalizzati.
+
+**`POST /api/v1/blogs/{slug}/notes`** — `{content, kind?, url?}` (accesso in
+scrittura; `400` se il tipo non è tra quelli previsti o l'URL non è http/https).
+
+**`PATCH /api/v1/blogs/{slug}/notes/{id}`** — `{content?, kind?, url?}`.
+Cambiare il testo lo aggiorna anche nei post che citano la nota.
+
+**`DELETE /api/v1/blogs/{slug}/notes/{id}`** — `204`; `409` se citata in
+un post.
+
+**`POST /api/v1/blogs/{slug}/notes/{id}/merge`** — `{into_id}`: le citazioni
+della nota passano alla destinazione (testo compreso), la sorgente viene
+eliminata. Risponde con la nota di destinazione.
+
+**`GET /api/v1/blogs/{slug}/notes/export.bib`** — BibTeX
+(`application/x-bibtex`): una voce `@book`/`@article`/`@misc` per nota con
+`note` = testo, più `url` e `year` quando ricavabili.
+
+**`POST /api/v1/blogs/{slug}/notes/import`** — `{bibtex}`: parser minimale
+(`author`/`title`/`journal`/`publisher`/`year`, oppure `note`; `url`/`doi`);
+le voci già presenti (testo normalizzato) vengono saltate. `201` con le
+note create; `400` se non riconosce nessuna voce.
+
 ## Media e backup
 
 Backend di storage selezionabile via `NOCT_STORAGE_BACKEND`: `s3` (default,
@@ -854,6 +1067,32 @@ non deve mai far fallire un upload altrimenti riuscito (stesso principio
 già in atto per il backup dei post su S3). Non è pensato come barriera di
 sicurezza legale, solo come aiuto automatico all'autore.
 
+## Libreria media del blog (todo/UX_REDESIGN.md B7, mockup 3c)
+
+`POST /api/v1/blogs/{slug}/media` (upload, vedi sopra) ora registra ogni
+immagine in `media_files` e risponde anche con `media_id`.
+
+**`GET /api/v1/blogs/{slug}/media`** — proprietario e collaboratori
+(`403` altrimenti). `{items: [{id, url, content_type, size_bytes, alt_text,
+caption, categories, is_sensitive, uploader_username, created_at, used_in:
+[{post_id, post_slug, post_title, permalink}]}], total_bytes}`, dal più
+recente. `used_in` viene da `post_media` (immagini citate nei post).
+
+**`POST /api/v1/blogs/{slug}/media/sync`** — accesso in scrittura. Importa
+nella libreria le immagini citate nei post che non hanno ancora una riga
+(blog precedenti alla libreria): `size_bytes=0`, senza caricatore.
+Idempotente; risponde come `GET`.
+
+**`PATCH /api/v1/blogs/{slug}/media/{media_id}`** — `{alt_text?, caption?,
+categories?}` (categorie tra quelle di `SENSITIVITY_CATEGORIES`, `400`
+altrimenti). I post già scritti portano alt e avviso nel proprio Markdown e
+non vengono riscritti: i valori della libreria sono il default per gli usi
+futuri.
+
+**`DELETE /api/v1/blogs/{slug}/media/{media_id}`** — `204`; `409` se
+l'immagine è ancora citata in un post. Rimuove la riga e, se caricata via
+libreria, l'oggetto su storage.
+
 ## Anteprima di un link
 
 **`GET /api/v1/link-preview?url=<url>`** — pubblico, nessuna autenticazione
@@ -874,13 +1113,23 @@ idoneo in partenza: schema diverso da `http`/`https`, o il cui hostname
 risolve a un indirizzo privato/loopback/link-local/riservato (mitigazione
 SSRF — `app/domain/link_preview.py::validate_previewable_url`; non è una
 barriera assoluta, stesso principio di "aiuto best-effort" già in atto per
-la moderazione automatica delle immagini sopra). **Nessuna cache**: ogni
-chiamata rifà il fetch (timeout 5s, corpo troncato a 512 KB). `429` oltre 30
+la moderazione automatica delle immagini sopra). `429` oltre 30
 richieste/minuto dallo stesso IP (rate limiting via Redis,
 `app/domain/rate_limit.py` — mitiga l'uso di questo endpoint come
 proxy/scanner verso terzi vista l'assenza di autenticazione; fail open se
-Redis non è raggiungibile). Una cache resta un possibile passo successivo,
-non fatto qui.
+Redis non è raggiungibile).
+
+**Cache a due livelli** (`app/domain/link_preview.py::get_cached_or_fetch_link_preview`),
+condivisa e deduplicata per URL — due post/utenti/blog che citano lo stesso
+link fanno un solo fetch reale, non uno ciascuno: Redis come cache calda
+(TTL 6h), la tabella `link_preview_cache` (una riga per URL, unique su
+`url_hash` = sha256 dell'URL) come fonte persistente che sopravvive a un
+riavvio/svuotamento di Redis. Un'anteprima con dati Open Graph reali resta
+valida una settimana prima di essere riverificata dal vivo; un fallimento
+(host irraggiungibile, non HTML, nessun meta tag, ...) solo 6 ore, per non
+restare bloccati più del necessario ma senza martellare un host che non
+risponde mai. Il fetch dal vivo resta come prima (timeout 8s, corpo troncato
+a ~3 MB o alla chiusura di `</head>`, redirect non seguiti).
 
 Usato dall'editor (`frontend/src/components/editor/LinkPreviewCard.tsx`)
 quando si incolla un URL da solo: il link resta testo semplice/cancellabile,
@@ -955,6 +1204,47 @@ richiesta per ogni post — per la versione trasversale su tutti i blog vedi
 autorizzazione di `pending` (quindi utilizzabili anche da Amministratore/
 Super Admin/Moderatore su un commento di un blog di cui non hanno nessuna
 membership). Cambiano lo stato del commento.
+
+### Coda estesa (todo/UX_REDESIGN.md B4, mockup 5b)
+
+`GET /api/v1/blogs/{blog_slug}/comments` accetta anche `reported=true`
+(commenti segnalati alla piattaforma, qualunque stato). Ogni commento
+espone `reported_to_platform` e `report_note`. Lo stato `rejected` è il
+"nascosto" della coda (nessuno stato nuovo).
+
+**`POST /api/v1/comments/{comment_id}/report`** — `{note}` obbligatoria
+(`400` se vuota), stessa autorizzazione di `approve`. Segnala il commento ai
+moderatori di piattaforma: compare in `GET /api/v1/admin/comments?reported=true`
+con `report_note`/`reported_at`. Audit `comment.reported`.
+
+**`POST /api/v1/comments/{comment_id}/block-author`** — `{note?}`, stessa
+autorizzazione. Aggiunge l'autore alla lista dei bloccati del blog e porta il
+commento a `rejected`. Utente registrato → `user_id`; commento anonimo →
+sha256 dell'email (mai l'email in chiaro né l'IP). `400` se l'autore è il
+proprietario del blog o non è identificabile. Audit `comment.author_blocked`.
+Un autore bloccato riceve `403` su `POST /posts/{id}/comments` di quel blog.
+
+**`GET /api/v1/blogs/{blog_slug}/blocked`** / **`DELETE .../blocked/{block_id}`**
+— stessa autorizzazione. Lista `{id, label, is_anonymous, note, created_at}`
+(`label` è `@username` o il nome libero dell'anonimo) e sblocco (`204`).
+
+**Chiusura automatica**: `PATCH /api/v1/blogs/{slug}` accetta
+`comments_auto_close_days` (intero ≥ 0, `0`/`null` = mai): trascorsi N
+giorni da `published_at`, `effective_comments_mode` del post diventa
+`closed` (`403` ai nuovi commenti, i già scritti restano visibili).
+
+## Segnalazioni (todo/UX_REDESIGN.md B5)
+
+**`POST /api/v1/blogs/{slug}/report`** / **`POST /api/v1/posts/{post_id}/report`**
+— richiede sessione. `{reason: spam | abuse | illegal | other, note?}`
+(nota max 500 caratteri). Segnala un blog o un post pubblicamente
+visibile ai moderatori di piattaforma: `201` con `{id, target_type,
+target_id, reason, note, status, created_at}`. Una sola segnalazione per
+lettore e bersaglio (una seconda richiesta ritorna la prima, `201`); `400`
+se si segnala un proprio contenuto; `404` per contenuti non pubblici;
+`429` oltre 10 segnalazioni l'ora per utente. Le segnalazioni aperte
+compaiono nel pannello admin (`GET /api/v1/admin/blogs/{id}/reports`) e
+vengono chiuse dalle azioni admin.
 
 ## Frammenti
 
@@ -1098,7 +1388,7 @@ sezione Multilingua). `fallback_languages` sono pensate anche come le lingue
 verso cui l'utente potrà eventualmente tradurre i propri contenuti; massimo
 5.
 
-**`PATCH /api/v1/users/me`** — richiede sessione. Aggiorna `username`, `bio`,
+**`PATCH /api/v1/users/me`** (accetta anche `ui_locale`: `it`|`en`, `""` = torna al default di piattaforma — lingua dell'interfaccia, restituita da `GET /auth/me`) — richiede sessione. Aggiorna `username`, `bio`,
 `first_name`, `last_name`, `display_name`, `post_author_name_style`,
 `country`, `native_language`, `fallback_languages` (tutti opzionali). Per
 `first_name`/`last_name`/`display_name`/`country`/`native_language`: stringa
@@ -1114,6 +1404,18 @@ in uso); l'id resta la vera chiave con cui il resto del sistema referenzia
 l'utente, quindi il cambio è visibile subito ovunque (post, commenti,
 autocomplete `@menzioni`) — eccetto le `@menzioni` già scritte nel testo di
 post/pagine esistenti, salvate come testo semplice e non riscritte.
+
+**`GET /api/v1/users/{username}/blogs`**, **`.../posts`**, **`.../comments`**
+— pubblici, `404` se l'utente non esiste. Tab del profilo pubblico (mockup
+3e): blog pubblici non sospesi di proprietà dell'utente (stesso schema di
+`GET /blogs/{slug}`, `owner_id` a `null`), post pubblicati su blog pubblici
+(stesso schema del feed; `limit` default 20 max 50, `offset`) e commenti
+approvati su post pubblici (`{id, content, created_at, post_title,
+permalink}`, stessa paginazione). **Regola di privacy (CLAUDE.md #8)**: sono
+elencati solo i contenuti firmati pubblicamente con lo username — un blog
+con `default_author_display_name` diverso dallo username, i post firmati con
+quell'alias e i commenti lasciati con un alias restano fuori, altrimenti
+questi endpoint collegherebbero l'alias all'identità reale.
 
 **`GET /api/v1/users/me/follow-stats`** — richiede sessione. Somma i
 follower dell'utente (`UserFollow`) con quelli di tutti i suoi blog
@@ -1276,9 +1578,103 @@ Consumati dalle sezioni
 — sotto il prefisso `/admin/*`, separato da `/dashboard/*` (sezioni
 personali), non un'app a parte — vedi ROADMAP.md.
 
+**`GET /api/v1/admin/overview`** — accetta anche `moderatore`. Panoramica
+di piattaforma (todo/UX_REDESIGN.md B1, mockup 5d): `users_total`,
+`users_new_7d`, `blogs_total`, `blogs_suspended`, `posts_published`, le code
+`queue_pending_comments`/`queue_posts_in_review`/`queue_hidden_posts`,
+`queue_open_reports`, `audit_today` (voci del registro dalla mezzanotte UTC), `deployment_mode` e
+`services`: lista `{name, status, detail?}` con `status` in `ok`/`down`/
+`unconfigured` per `postgres` (`SELECT 1`), `redis` (`PING`), `rabbitmq` e
+`storage` (connessione TCP con timeout 2 s; `storage` è sempre `ok` con
+`localstorage`) e `moderation` (`GET /health` del servizio, `unconfigured`
+se `NOCT_MODERATION_SERVICE_URL` è assente). Solo aggregati, nessun dato
+personale.
+
+**Nota obbligatoria (B5, mockup 5e)**: `PATCH /admin/users/{id}` (cambio
+ruolo o attivazione), `PATCH /admin/blogs/{id}` (sospensione) e
+`PATCH /admin/posts/{id}` (nascondere/mostrare) richiedono `note` (almeno 3
+caratteri, `400` altrimenti) quando cambiano davvero lo stato; la nota
+finisce in `payload.note` della voce di audit. Nessuna nota richiesta se
+la richiesta non cambia nulla.
+
+### Impostazioni di piattaforma (todo/UX_REDESIGN.md B6, mockup 5f)
+
+**`GET /api/v1/admin/config`** / **`PATCH /api/v1/admin/config`** — solo
+`super_admin` (`403` altrimenti). Riga unica `platform_config`, creata al
+primo accesso con i default (`NOCT_DEFAULT_LOCALE` per la lingua, 5 blog,
+registrazione aperta). Campi: `default_locale` (`it`|`en`),
+`registration_mode` (`open`|`invite`|`closed` — `invite`/`closed` fanno
+rispondere `403` a `POST /auth/register`, con messaggi diversi),
+`sso_providers` (sottoinsieme dei provider configurati via env; vuoto =
+tutti quelli configurati; un provider escluso risponde `403` su
+`/auth/sso/{provider}/login`), `mfa_required_for_admins` (se attivo, un
+Amministratore/Super Admin senza MFA riceve `403` su tutta l'area admin
+finché non la attiva), `reserved_blog_names` (in aggiunta alla blacklist di
+codice `reserved_builtin`, sola lettura), `moderation_threshold` (0–1,
+passata al servizio di moderazione a ogni upload), `max_blogs_per_user`
+(1–100), `anonymous_comments_allowed` (se `false`, `comments_mode=everyone`
+non è più impostabile), `audit_retention_days` (7–3650, default seminato da
+`NOCT_AUDIT_RETENTION_DAYS`: giorni di conservazione degli eventi in
+`audit_log` prima della cancellazione periodica —
+`app/workers/audit_maintenance.py::prune`, letto dalla riga `platform_config`
+a ogni giro, non più dall'env dopo la creazione della riga). La risposta
+include anche `infrastructure`: riepilogo di sola lettura dell'ambiente
+`NOCT_*` (mai segreti, non include più `audit_retention_days` — ora un campo
+modificabile a sé, non un valore d'ambiente), `footer_column1_markdown`/
+`footer_column2_markdown`/`footer_column3_markdown`/`footer_bottom_bar_markdown`
+(Markdown libero, max 5000 caratteri ciascuno, `""` azzera — footer mostrato
+su ogni pagina pubblica di piattaforma e di ogni blog, vedi `GET /api/v1/footer`
+sotto; le colonne 1/2 sono solo il default, sovrascrivibile per singolo blog
+in `PUT /blogs/{slug}/config` — mai la 3 né `bottom_bar`, sempre e solo di
+piattaforma). Ogni modifica va nel registro (`platform.config_updated`, con
+`changes: {campo: {from, to}}`) e, se cambia un campo `footer_*`, invalida la
+cache del frontend sul tag condiviso `platform-footer` (tutte le pagine
+pubbliche, non solo quelle di un blog).
+`GET /api/v1/config` (pubblico) espone `default_locale`, `registration_mode`
+e `sso_providers` effettivi.
+
+**`GET /api/v1/footer`** — pubblico, nessuna auth. Footer di piattaforma,
+Markdown grezzo non ancora renderizzato (il frontend lo fa al momento della
+lettura, stesso principio dei post):
+
+```json
+{"column1": "...", "column2": "...", "column3": "...", "bottom_bar": "..."}
+```
+
+Ogni chiave è `null` se non configurata (nessun default se non per
+`bottom_bar`, seminato alla creazione della riga `platform_config` con un
+link al repository — comunque modificabile/azzerabile in qualsiasi momento).
+
+### Richieste GDPR (B6, mockup 5f)
+
+**`GET /api/v1/admin/gdpr?status=`** — admin. Registro delle richieste
+`{id, username, type: export|deletion, status: open|approved|completed|
+rejected, deadline_at, note, created_by_username, approved_by_username,
+approved_at, completed_at, created_at}`, aperte prima e per scadenza (30
+giorni dalla ricezione, Art. 12). Le azioni self-service (`GET
+/users/me/export-data`, `DELETE /users/me`) lasciano una riga già
+`completed` con nota `self-service`.
+
+**`POST /api/v1/admin/gdpr`** — `{username, type, note}` (nota obbligatoria:
+chi/come ha chiesto). Inserisce una richiesta arrivata fuori banda.
+
+**`POST /api/v1/admin/gdpr/{id}/approve`** — seconda approvazione: per una
+`deletion` chi approva deve essere un admin **diverso** da chi l'ha inserita
+(`403` altrimenti). Un `export` non ne ha bisogno.
+
+**`POST /api/v1/admin/gdpr/{id}/execute`** — `export` (aperto o approvato):
+risponde con il JSON dei dati dell'utente (stesso formato di
+`/users/me/export-data`) e chiude la richiesta; `deletion`: solo se
+`approved`, anonimizza l'account come `DELETE /users/me` (`400` per un
+Super Admin). **`.../reject`** — `{note}` obbligatoria. Tutto nel registro
+(`gdpr.request_created|approved|rejected`, `gdpr.export_executed`,
+`gdpr.deletion_executed`).
+
 **`GET /api/v1/admin/users`** — lista tutti gli utenti della piattaforma
-(id, username, email, `platform_role`, `is_active`, `mfa_enabled`). Query
-param opzionale `q`: filtra per username o email (`ilike`, sottostringa).
+(id, username, email, `platform_role`, `is_active`, `mfa_enabled`,
+`blogs_count` — blog di proprietà — e `last_seen_at`, ultimo uso di una
+sessione di refresh, `null` se mai usata). Query param opzionale `q`: filtra
+per username o email (`ilike`, sottostringa).
 
 **`PATCH /api/v1/admin/users/{user_id}`** — `{platform_role?, is_active?}`.
 
@@ -1301,20 +1697,33 @@ primo utente in modalità `solo` e l'`UPDATE` manuale a DB in modalità
 `platform`.
 
 **`GET /api/v1/admin/blogs`** — lista tutti i blog della piattaforma (id,
-slug, title, `owner_username`, `visibility`, `is_suspended`, `created_at`).
-Query param opzionale `q`: filtra per slug, titolo o username del
-proprietario (`ilike`, sottostringa).
+slug, titolo, `owner_username`, `visibility`, `is_suspended`, `is_paused`,
+`deleted_at`, `posts_count`, `reports_open`). Query param opzionali: `q`
+(slug, titolo o proprietario), `visibility`, `state` (`active` |
+`suspended` | `paused` | `deleted` | `reported` — quest'ultimo: solo blog
+con segnalazioni aperte, ordinati per numero).
 
-**`PATCH /api/v1/admin/blogs/{blog_id}`** — `{is_suspended: bool}`. Un blog
-sospeso diventa irraggiungibile pubblicamente (`GET /api/v1/blogs/{slug}` →
-`404`, stesso trattamento di un blog `private` a cui non si ha accesso) e non
-scrivibile — **anche per il proprietario stesso**, indipendentemente da
-`visibility` (`app/domain/authorization.py::can_view_blog`/`can_write_posts`).
-Riattivabile con lo stesso endpoint (`is_suspended: false`). Nessun'altra
-conseguenza automatica (i post restano nel database, nessuna notifica al
-proprietario).
+**`PATCH /api/v1/admin/blogs/{blog_id}`** — `{is_suspended: bool, note}`. Un blog
+sospeso è irraggiungibile pubblicamente (il dettaglio resta leggibile con
+`is_suspended=true` per la pagina di avviso, vedi sezione Blog) e non
+scrivibile, proprietario incluso, finché non viene riattivato.
+Registrato nel registro di audit con la nota.
 
-**`GET /api/v1/admin/posts`** — lista tutti i post della piattaforma, dal più
+**`GET /api/v1/admin/blogs/{blog_id}/reports`** — pannello segnalazioni
+(mockup 5e): `{blog, owner_mfa_enabled, owner_email_domain, reports: [{id,
+target_type, target_id, post_slug, post_title, reason, note,
+reporter_username, created_at}]}` — solo le segnalazioni **aperte** sul
+blog e sui suoi post.
+
+**`POST /api/v1/admin/blogs/{blog_id}/action`** — `{action, note}` (nota
+obbligatoria). `action`: `suspend`, `restore`, `hide_reported_posts` (solo i
+post con segnalazioni aperte), `deactivate_owner` (disattiva l'account del
+proprietario e sospende il blog; `403` per un amministratore se non si è
+super admin), `dismiss` (archivia). Chiude tutte le segnalazioni aperte del
+blog (`actioned`, o `dismissed` per `dismiss`) e registra l'azione con la
+nota. Risponde con il blog aggiornato.
+
+**`GET /api/v1/admin/posts`** — lista tutti i post della piattaforma (con `reports_open`), dal più
 recente (id, title, slug, `blog_slug`, `blog_title`, `author_username`,
 `status`, `is_hidden`, `published_at`, `created_at`) — bozze/in
 revisione/pianificati inclusi, non solo i pubblicati. Query param opzionale
@@ -1327,7 +1736,7 @@ da `status`, anche per l'autore. Nessuna notifica all'autore e nessun campo
 per la motivazione; il cambio di stato viene però registrato nel registro di
 audit (`post.hidden`/`post.unhidden`, vedi sotto).
 
-**`GET /api/v1/admin/comments`** — richiede `platform_role` in
+**`GET /api/v1/admin/comments`** (accetta anche `reported=true`: solo i commenti segnalati dai blog, con `report_note`/`reported_at`, dal più recente segnalato) — richiede `platform_role` in
 `amministratore`/`super_admin`/**`moderatore`** (unico endpoint di questa
 sezione aperto anche al ruolo Moderatore, ROADMAP.md §1). Commenti di *tutti*
 i blog della piattaforma nello stato indicato dal parametro opzionale
@@ -1348,7 +1757,12 @@ amministrazione (`user.role_change` con `payload {from,to}`,
 `user.activated`/`user.deactivated`, `blog.suspended`/`blog.unsuspended`,
 `post.hidden`/`post.unhidden`, `comment.approved`/`comment.rejected`), API
 token (`api_token.created`/`api_token.revoked`), account (`user.
-account_deleted`, GDPR). Ogni riga porta:
+account_deleted`, GDPR), inviti e membership del blog
+(`blog.invitation_created`/`_accepted`/`_declined`/`_revoked`,
+`blog.member_role_changed` con `payload {from,to}`, `blog.member_removed`),
+pagine statiche (`page.created`/`page.updated`/`page.deleted`, sia di
+piattaforma sia di blog — `blog_id` presente solo per queste ultime). Ogni
+riga porta:
 
 - `actor_type`/`actor_id`/`actor_label` — chi: tipo di attore, il suo id (se
   applicabile) e uno snapshot leggibile `username <email>` al momento del
@@ -1401,7 +1815,10 @@ insieme), `tag` (filtra per tag normalizzato, es. `poesia` non `#Poesia` —
 vedi sezione "Tag" sopra), `category` (filtra per slug di categoria — vedi
 sezione "Categorie" sopra; essendo la categoria per-blog, blog diversi con
 una categoria omonima compaiono insieme, come già avviene per i tag),
-`limit` (default 20, massimo 50), `offset` (paginazione, default 0). Router
+`limit` (default 20, massimo 50), `offset` (paginazione, default 0),
+`following=true` (richiede sessione, `401` altrimenti — mockup 1c
+"Seguiti"): solo i post dei blog seguiti o scritti dagli utenti seguiti,
+con gli stessi vincoli di visibilità del resto del feed. Router
 separato da `/blogs/{slug}/posts` apposta: qui i post attraversano blog
 diversi, non sono scoped a uno slug/id specifico.
 

@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     # registrazione si chiude dopo il primo utente. "platform": multiutente,
     # comportamento CLAUDE.md di default. Vedi app/domain/auth.py.
     deployment_mode: Literal["solo", "platform"] = "platform"
+    # Lingua predefinita dell'interfaccia (todo/UX_REDESIGN.md B6): seme della
+    # riga `platform_config` alla prima installazione, poi modificabile dal
+    # Super Admin. Ogni utente può sovrascriverla nel profilo (users.ui_locale).
+    default_locale: Literal["it", "en"] = "it"
 
     # Bootstrap del primo Super Admin all'avvio del backend (CLAUDE.md #5),
     # per accedere all'area di amministrazione del dashboard senza
@@ -126,6 +130,10 @@ class Settings(BaseSettings):
     # ancora archiviati su storage (vedi audit_archive_enabled): la finestra
     # non archiviata fa da limite duro, retention_days è solo l'obiettivo.
     # Default 105 = ~15 settimane, così sono sempre presenti almeno 90 giorni.
+    # Solo il seme iniziale di `platform_config.audit_retention_days`
+    # (app/domain/platform_config.py): dopo la creazione della riga, il
+    # valore effettivo si cambia a runtime da un Super Admin
+    # (/admin/impostazioni), non da qui.
     audit_retention_days: int = 105
     # Scarico periodico degli eventi su storage (S3/localstorage) per settimane
     # ISO chiuse, in NDJSON gzippato, prima della cancellazione dal database.

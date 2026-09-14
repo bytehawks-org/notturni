@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel
@@ -8,14 +8,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user
+from app.domain.authorization import blog_publicly_listable_clause
+from app.api.v1.blogs._common import BlogOut, _to_blog_out
+from app.api.v1.posts import PostOut, _posts_out
 from app.core.database import get_session
 from app.core.storage import avatar_public_url, delete_avatar, upload_avatar
 from app.domain import audit
 from app.domain.gdpr import anonymize_and_deactivate_user, export_user_data
+from app.domain.gdpr_queue import log_self_service_request
+from app.models.gdpr_request import GdprRequestType
 from app.domain.i18n import validate_locale
+from app.domain.platform_config import SUPPORTED_LOCALES
 from app.domain.profile import validate_country_code, validate_fallback_languages
 from app.domain.usernames import validate_username
-from app.models.blog import Blog
+from app.models.blog import Blog, BlogVisibility
+from app.models.comment import Comment, CommentStatus
+from app.models.post import Post, PostStatus
 from app.models.follow import BlogFollow, UserFollow
 from app.models.social_link import SocialLink
 from app.models.user import PostAuthorNameStyle, User
@@ -46,6 +54,8 @@ class ProfileUpdateRequest(BaseModel):
     native_language: str | None = None
     # assente: lascia invariate; lista (anche vuota) la sostituisce
     fallback_languages: list[str] | None = None
+    # B6: lingua dell'interfaccia ("" = torna al default di piattaforma)
+    ui_locale: str | None = None
 
 
 class SocialLinkCreateRequest(BaseModel):
@@ -174,6 +184,10 @@ async def update_profile(
             if existing.scalar_one_or_none() is not None:
                 raise HTTPException(status.HTTP_409_CONFLICT, "Username già in uso.")
             current_user.username = new_username
+    if payload.ui_locale is not None:
+        if payload.ui_locale and payload.ui_locale not in SUPPORTED_LOCALES:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lingua dell'interfaccia non supportata.")
+        current_user.ui_locale = payload.ui_locale or None
     if payload.bio is not None:
         current_user.bio = payload.bio
     if payload.first_name is not None:
@@ -326,6 +340,100 @@ async def unfollow_user(
         await session.commit()
 
 
+class PublicCommentOut(BaseModel):
+    id: uuid.UUID
+    content: str
+    created_at: datetime
+    post_title: str
+    permalink: str
+
+
+def _signed_as_username(display_name: str, user: User) -> bool:
+    return display_name.strip().lower() == user.username.lower()
+
+
+@router.get("/{username}/blogs", response_model=list[BlogOut])
+async def list_user_public_blogs(username: str, session: AsyncSession = Depends(get_session)) -> list[BlogOut]:
+    """Blog pubblici di un utente per la tab "Blog" del profilo (mockup 3e).
+    CLAUDE.md #8: un blog che si presenta con un alias diverso dallo username
+    non viene elencato — altrimenti questo endpoint collegherebbe l'alias
+    all'identità reale, cosa che il resto dell'API evita di proposito."""
+    user = await _get_user_or_404(session, username)
+    result = await session.execute(
+        select(Blog)
+        .where(Blog.owner_id == user.id, blog_publicly_listable_clause())
+        .order_by(Blog.created_at)
+    )
+    return [
+        _to_blog_out(blog, None)
+        for blog in result.scalars().all()
+        if not blog.default_author_display_name or _signed_as_username(blog.default_author_display_name, user)
+    ]
+
+
+@router.get("/{username}/posts", response_model=list[PostOut])
+async def list_user_public_posts(
+    username: str, limit: int = 20, offset: int = 0, session: AsyncSession = Depends(get_session)
+) -> list[PostOut]:
+    """Post pubblicati di un utente su blog pubblici (tab "Post" del profilo).
+    Stessa regola di privacy di `/blogs`: solo i post firmati pubblicamente
+    con lo username, mai quelli firmati con un alias."""
+    user = await _get_user_or_404(session, username)
+    limit = max(1, min(limit, 50))
+    result = await session.execute(
+        select(Post, Blog)
+        .join(Blog, Post.blog_id == Blog.id)
+        .where(
+            Post.author_id == user.id,
+            Post.status == PostStatus.PUBLISHED,
+            Post.published_at <= datetime.now(timezone.utc),
+            Post.is_hidden.is_(False),
+            blog_publicly_listable_clause(),
+        )
+        .order_by(Post.published_at.desc())
+        .limit(limit)
+        .offset(max(offset, 0))
+    )
+    pairs = [(post, blog) for post, blog in result.all() if _signed_as_username(post.author_display_name, user)]
+    return await _posts_out(session, pairs)
+
+
+@router.get("/{username}/comments", response_model=list[PublicCommentOut])
+async def list_user_public_comments(
+    username: str, limit: int = 20, offset: int = 0, session: AsyncSession = Depends(get_session)
+) -> list[PublicCommentOut]:
+    """Commenti approvati di un utente su post pubblici (tab "Commenti").
+    Stessa regola di privacy: solo quelli firmati con lo username."""
+    user = await _get_user_or_404(session, username)
+    limit = max(1, min(limit, 50))
+    result = await session.execute(
+        select(Comment, Post.title, Post.slug, Blog.slug)
+        .join(Post, Post.id == Comment.post_id)
+        .join(Blog, Blog.id == Post.blog_id)
+        .where(
+            Comment.author_id == user.id,
+            Comment.status == CommentStatus.APPROVED,
+            Post.status == PostStatus.PUBLISHED,
+            Post.is_hidden.is_(False),
+            blog_publicly_listable_clause(),
+        )
+        .order_by(Comment.created_at.desc())
+        .limit(limit)
+        .offset(max(offset, 0))
+    )
+    return [
+        PublicCommentOut(
+            id=comment.id,
+            content=comment.content,
+            created_at=comment.created_at,
+            post_title=post_title,
+            permalink=f"/{blog_slug}/{post_slug}",
+        )
+        for comment, post_title, post_slug, blog_slug in result.all()
+        if _signed_as_username(comment.author_display_name, user)
+    ]
+
+
 @router.get("/{username}/followers", response_model=list[FollowerOut])
 async def list_followers(username: str, session: AsyncSession = Depends(get_session)) -> list[User]:
     target = await _get_user_or_404(session, username)
@@ -400,7 +508,9 @@ async def export_my_data(
     dati collegati all'account in un unico JSON scaricabile — profilo, blog di
     proprietà, post e commenti scritti (ovunque), frammenti salvati, follow,
     token API (mai i segreti) ed eventi di audit di cui è l'attore."""
-    return await export_user_data(session, current_user)
+    data = await export_user_data(session, current_user)
+    await log_self_service_request(session, user=current_user, type_=GdprRequestType.EXPORT)
+    return data
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
@@ -424,5 +534,6 @@ async def delete_my_account(
         target_id=current_user.id,
         request=request,
     )
+    await log_self_service_request(session, user=current_user, type_=GdprRequestType.DELETION, commit=False)
     await anonymize_and_deactivate_user(session, current_user)
     await session.commit()

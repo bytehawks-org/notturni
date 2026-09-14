@@ -91,7 +91,9 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   editing, permalink `/{blog}/pagina/{slug}`.
 - **Aspetto personalizzabile per blog:** palette/tipografia/layout in JSON
   libero (`blog_configs`), con i vincoli del blueprint (max 5 colori, max 3
-  font); nome pubblico predefinito per gli autori/co-autori del blog.
+  font); nome pubblico predefinito per gli autori/co-autori del blog;
+  immagine di copertina (banner della home pubblica) e favicon dedicata,
+  entrambe facoltative.
 - **Profilo utente:** bio estesa (nome, cognome, paese, lingua madre e lingue
   di fallback), username modificabile in qualsiasi momento (citato ovunque
   per id, non per stringa: il cambio si riflette subito su post, commenti e
@@ -106,6 +108,11 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   di gestione del proprietario. Chi possiede un blog vede, solo nel proprio
   profilo, il totale dei follower sommato tra username e alias, oltre al
   conteggio separato per ciascuna entità.
+- **Footer di piattaforma:** 3 colonne + barra inferiore in Markdown libero
+  (immagini/link inclusi), gestite da un Super Admin, mostrate su ogni pagina
+  pubblica — di piattaforma e di ogni blog. Le colonne 1/2 sono un default
+  sovrascrivibile per singolo blog dal suo proprietario; colonna 3 e barra
+  inferiore restano sempre e solo di piattaforma.
 - **Amministrazione:** sezioni sotto `/admin`, visibili solo ad
   Amministratore/Super Admin, con un campo di ricerca in ogni sezione —
   Utenti (ruolo, attivazione; l'assegnazione dei ruoli di amministrazione è
@@ -119,7 +126,26 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   utilizzo diretto da parte degli utenti.
 - **Frontend:** interfaccia autore (dashboard, editor, profilo), tema
   chiaro/scuro/automatico (alba-tramonto in base alla posizione, calcolata
-  solo lato client).
+  solo lato client), interfaccia in italiano e inglese (`next-intl`,
+  selettore nell'header e nel profilo — la lingua dei contenuti è a parte),
+  palette, tipografia e layout personalizzati del blog applicati alle sue
+  pagine pubbliche.
+- **Pubblicazioni:** serie di post come capitoli sotto `/{blog}/pub/{nome}`,
+  con indice automatico, ordine esplicito e navigazione tra capitoli.
+- **RSS/Atom:** feed cronologico di piattaforma (`/feed.xml`, `/atom.xml`) e
+  per ogni blog (`/{blog}/feed.xml`, `/{blog}/atom.xml`), con autodiscovery.
+- **SEO:** canonical, Open Graph/Twitter card e dati strutturati JSON-LD
+  (`BlogPosting`) su tutte le pagine pubbliche (post, home di piattaforma e
+  di blog, bibliografia/media/link, pagine statiche, profilo utente),
+  `sitemap.xml`/`robots.txt` generati dinamicamente e coerenti con l'opt-in
+  crawler per blog/post.
+- **Gestione del blog:** panoramica con letture aggregate (senza cookie),
+  libreria media e libreria note (tipo, DOI, duplicati, BibTeX), coda
+  commenti con bloccati e segnalazioni, pausa/trasferimento/export ZIP/
+  cancellazione con 30 giorni di tolleranza.
+- **Amministrazione estesa:** segnalazioni dai lettori con pannello e nota di
+  audit obbligatoria, impostazioni di piattaforma persistite, coda richieste
+  GDPR con seconda approvazione, lingua dell'interfaccia (it/en).
 - **Self-hosting:** hostname/FQDN e modalità di installazione configurabili
   (`NOCT_INSTANCE_FQDN`, `NOCT_DEPLOYMENT_MODE=solo|platform`) — "solo" per un
   blog/sito personale a singolo proprietario (il primo utente registrato
@@ -142,10 +168,8 @@ In sintesi, ad alto livello (l'elenco completo, specifica per specifica, è in
 - **Routing per sottodominio** (`https://nomeutente.notturni.eu`) e dominio
   custom associato al blog — oggi ogni post è comunque raggiungibile senza
   sottodominio, via permalink su `notturni.eu`.
-- **"Pubblicazioni"**: raggruppare una serie di post in ordine cronologico,
-  come i capitoli di un libro o di un saggio — non ancora iniziato.
-- **Funzionalità GDPR dedicate** (export/cancellazione dati account, registro
-  consensi) oltre al rafforzamento via MFA già presente.
+- **Registro dei consensi** GDPR (export, cancellazione con coda e seconda
+  approvazione, cancellazione blog con tolleranza sono già presenti).
 - **Lock distribuiti** su Redis (il rate limiting invece è già in uso, su
   login e anteprima link) e **clusterizzazione** dei componenti in produzione
   (oggi Kubernetes a nodo singolo).

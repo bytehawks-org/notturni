@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
 import { Alert } from "@/components/ui/Alert";
@@ -13,6 +14,8 @@ import { errorMessage } from "./shared";
 
 export function MyMembershipCard({ blogSlug }: { blogSlug: string }) {
   const { authFetch } = useAuth();
+  const t = useTranslations("MyMembershipCard");
+  const tc = useTranslations("Common");
   const [alias, setAlias] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,29 +40,26 @@ export function MyMembershipCard({ blogSlug }: { blogSlug: string }) {
       setAlias(updated.author_display_name ?? "");
       setSaved(true);
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, tc("unexpectedError")));
     }
   }
 
   return (
     <Card>
-      <CardTitle>Il mio nome su questo blog</CardTitle>
+      <CardTitle>{t("title")}</CardTitle>
       <FieldGroup>
-        <Label htmlFor="my-alias">Alias autore (todo/BLOG.md #4)</Label>
+        <Label htmlFor="my-alias">{t("label")}</Label>
         <Input
           id="my-alias"
           value={alias}
           maxLength={255}
-          placeholder="Lasciare vuoto per usare il nome predefinito del blog o il tuo alias di profilo"
+          placeholder={t("placeholder")}
           onChange={(e) => {
             setAlias(e.target.value);
             setSaved(false);
           }}
         />
-        <p className="mt-1 text-xs text-muted">
-          Con cui firmi i post scritti qui. Ha la precedenza sul nome predefinito del blog e
-          sull&apos;alias del tuo profilo.
-        </p>
+        <p className="mt-1 text-xs text-muted">{t("hint")}</p>
       </FieldGroup>
       {error && (
         <div className="mb-3">
@@ -68,10 +68,10 @@ export function MyMembershipCard({ blogSlug }: { blogSlug: string }) {
       )}
       {saved && (
         <div className="mb-3">
-          <Alert kind="success">Salvato.</Alert>
+          <Alert kind="success">{t("saved")}</Alert>
         </div>
       )}
-      <Button onClick={handleSave}>Salva</Button>
+      <Button onClick={handleSave}>{tc("save")}</Button>
     </Card>
   );
 }

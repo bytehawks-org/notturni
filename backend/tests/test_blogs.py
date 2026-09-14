@@ -338,7 +338,7 @@ async def test_media_upload_flagged_by_moderation(
     modello ML nei test, vedi app/domain/moderation.py) — verifica solo che
     l'esito venga propagato correttamente nella risposta."""
 
-    async def _fake_classify(content: bytes, filename: str, content_type: str) -> bool:
+    async def _fake_classify(content: bytes, filename: str, content_type: str, **_kwargs) -> bool:
         return True
 
     monkeypatch.setattr("app.api.v1.blogs.media.classify_image", _fake_classify)

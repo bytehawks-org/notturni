@@ -61,6 +61,13 @@ class BlogUpdateRequest(BaseModel):
     # valore lo imposta; assente lascia invariato — stesso schema di
     # Post.cover_image_url in PATCH /posts/{id}.
     default_author_display_name: str | None = None
+    # B3 (mockup 5c): pausa volontaria e lingue secondarie (codici ISO 639-1,
+    # la lingua principale viene scartata se ripetuta).
+    is_paused: bool | None = None
+    extra_locales: list[str] | None = None
+    # B4: chiusura automatica dei commenti N giorni dopo la pubblicazione
+    # del post (0 o null = mai).
+    comments_auto_close_days: int | None = None
 
 
 class BlogOut(BaseModel):
@@ -77,7 +84,23 @@ class BlogOut(BaseModel):
     search_indexing_enabled: bool
     ai_crawling_enabled: bool
     default_locale: str
+    # B3: lingue secondarie (informative), pausa volontaria, sospensione da
+    # admin e cancellazione con tolleranza (`deleted_at`, ripristinabile).
+    extra_locales: list[str]
+    comments_auto_close_days: int | None
+    is_paused: bool
+    is_suspended: bool
+    deleted_at: datetime | None
     default_author_display_name: str | None
+    # Cover del blog (facoltativa, banner della home pubblica) e favicon
+    # (facoltativa, icona di identità): vedi app/api/v1/blogs/branding.py.
+    # `favicon_url` è calcolato da `favicon_object_key` in `_to_blog_out`,
+    # mai un campo diretto del modello (stesso principio di `avatar_url` sul
+    # profilo utente).
+    cover_image_url: str | None = None
+    cover_image_is_sensitive: bool = False
+    cover_image_categories: list[str] = []
+    favicon_url: str | None = None
     # CLAUDE.md #8: presente solo per il proprietario stesso (usato lato
     # frontend per calcolare `isOwner`) — chiunque altro lo riceve a `null`,
     # perché è l'unico campo di Blog che punterebbe direttamente all'id

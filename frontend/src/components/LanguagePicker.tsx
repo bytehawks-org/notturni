@@ -1,5 +1,7 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
+
 import { COMMON_LANGUAGES, languageName } from "@/lib/languages";
 import { MAX_FALLBACK_LANGUAGES } from "@/lib/types";
 
@@ -19,6 +21,9 @@ export function LanguagePicker({
   fallbackLanguages,
   onFallbackLanguagesChange,
 }: LanguagePickerProps) {
+  const t = useTranslations("Profile");
+  const uiLocale = useLocale();
+
   function toggleFallback(code: string) {
     if (fallbackLanguages.includes(code)) {
       onFallbackLanguagesChange(fallbackLanguages.filter((c) => c !== code));
@@ -32,16 +37,16 @@ export function LanguagePicker({
   return (
     <div className="space-y-4">
       <div>
-        <p className="mb-1.5 text-sm text-muted">Lingua madre</p>
+        <p className="mb-1.5 text-sm text-muted">{t("nativeLanguageLabel")}</p>
         <select
           value={nativeLanguage ?? ""}
           onChange={(e) => onNativeLanguageChange(e.target.value || null)}
           className="rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
         >
-          <option value="">Non specificata</option>
+          <option value="">{t("nativeLanguageNone")}</option>
           {COMMON_LANGUAGES.map((code) => (
             <option key={code} value={code}>
-              {languageName(code)}
+              {languageName(code, uiLocale)}
             </option>
           ))}
         </select>
@@ -49,10 +54,8 @@ export function LanguagePicker({
 
       <div>
         <p className="mb-1.5 text-sm text-muted">
-          Lingue di fallback{" "}
-          <span className="text-xs">
-            (anche verso cui tradurre i tuoi contenuti — massimo {MAX_FALLBACK_LANGUAGES})
-          </span>
+          {t("fallbackLanguagesLabel")}{" "}
+          <span className="text-xs">{t("fallbackLanguagesHint", { max: MAX_FALLBACK_LANGUAGES })}</span>
         </p>
         <div className="flex flex-wrap gap-2">
           {COMMON_LANGUAGES.filter((code) => code !== nativeLanguage).map((code) => {
@@ -70,7 +73,7 @@ export function LanguagePicker({
                     : "bg-foreground/5 text-foreground/70 hover:bg-foreground/10"
                 }`}
               >
-                {languageName(code)}
+                {languageName(code, uiLocale)}
                 {active && " ✓"}
               </button>
             );

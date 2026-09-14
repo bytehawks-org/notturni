@@ -10,17 +10,21 @@ correttamente)."""
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_optional_current_user
+from app.domain.authorization import blog_publicly_listable_clause
 from app.api.v1.posts import PostOut, _posts_out
 from app.core.database import get_session
 from app.models.blog import Blog, BlogVisibility
+from app.models.follow import BlogFollow, UserFollow
 from app.models.category import Category
 from app.models.post import Post, PostStatus
 from app.models.tag import Tag, post_tags
+from app.models.user import User
 
 router = APIRouter()
 
@@ -35,8 +39,10 @@ async def list_feed(
     locale: str | None = None,
     tag: str | None = None,
     category: str | None = None,
+    following: bool = False,
     limit: int = DEFAULT_FEED_LIMIT,
     offset: int = 0,
+    current_user: User | None = Depends(get_optional_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[PostOut]:
     """Pubblico, nessuna autenticazione: solo post effettivamente pubblicati
@@ -44,7 +50,12 @@ async def list_feed(
     filtra per lingua; `tag` filtra per tag (nome normalizzato, es. "poesia"
     non "#Poesia"); `category` filtra per slug di categoria (la categoria è
     per-blog, quindi blog diversi con una categoria omonima compaiono
-    insieme, come già avviene per i tag); omessi, nessun filtro."""
+    insieme, come già avviene per i tag); omessi, nessun filtro.
+    `following=true` (richiede autenticazione, mockup 1c "Seguiti"): solo i
+    post dei blog seguiti o scritti dagli utenti seguiti — stessi vincoli
+    di visibilità pubblica di tutto il resto del feed."""
+    if following and current_user is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Accedi per vedere i post dei blog che segui.")
     limit = min(max(limit, 1), MAX_FEED_LIMIT)
     offset = max(offset, 0)
 
@@ -55,8 +66,9 @@ async def list_feed(
             Post.status == PostStatus.PUBLISHED,
             Post.published_at <= datetime.now(timezone.utc),
             Post.is_hidden.is_(False),
-            # todo/BLOG.md #2: la raccolta della homepage mostra solo blog pubblici.
-            Blog.visibility == BlogVisibility.PUBLIC,
+            # todo/BLOG.md #2: la raccolta della homepage mostra solo blog pubblici
+            # (e non sospesi/in pausa/in cancellazione, B3).
+            blog_publicly_listable_clause(),
         )
         .order_by(Post.published_at.desc())
         .limit(limit)
@@ -70,6 +82,10 @@ async def list_feed(
         ).where(Tag.name == tag)
     if category is not None:
         stmt = stmt.join(Category, Category.id == Post.category_id).where(Category.slug == category)
+    if following and current_user is not None:
+        followed_blogs = select(BlogFollow.blog_id).where(BlogFollow.follower_id == current_user.id)
+        followed_users = select(UserFollow.followed_user_id).where(UserFollow.follower_id == current_user.id)
+        stmt = stmt.where(or_(Post.blog_id.in_(followed_blogs), Post.author_id.in_(followed_users)))
 
     result = await session.execute(stmt)
     return await _posts_out(session, [(post, blog) for post, blog in result.all()])
@@ -105,7 +121,7 @@ async def list_trending_tags(
             Post.published_at >= since,
             Post.published_at <= datetime.now(timezone.utc),
             Post.is_hidden.is_(False),
-            Blog.visibility == BlogVisibility.PUBLIC,
+            blog_publicly_listable_clause(),
         )
         .group_by(Tag.name)
         .order_by(post_count.desc())

@@ -4,6 +4,7 @@ import DOMPurify from "isomorphic-dompurify";
 import { JSDOM } from "jsdom";
 import MarkdownIt from "markdown-it";
 
+import { REVALIDATE_SECONDS } from "./revalidate";
 import type { PostNote } from "./types";
 
 // Stessa risoluzione di server-api.ts::BACKEND_INTERNAL_URL — endpoint
@@ -76,8 +77,13 @@ async function resolveLinkCards(document: Document): Promise<void> {
 
       let preview: LinkPreviewData | null = null;
       try {
+        // Il backend ha una propria cache (Redis + tabella dedicata,
+        // condivisa/deduplicata per URL — app/domain/link_preview.py): non
+        // serve più `no-store` qui, la stessa finestra a tempo delle altre
+        // fetch pubbliche basta, e la pagina del post con una card di link
+        // può tornare cacheabile invece di restare sempre dinamica.
         const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/link-preview?url=${encodeURIComponent(href)}`, {
-          cache: "no-store",
+          next: { revalidate: REVALIDATE_SECONDS },
           signal: AbortSignal.timeout(LINK_PREVIEW_TIMEOUT_MS),
         });
         if (res.ok) preview = (await res.json()) as LinkPreviewData;
@@ -186,6 +192,15 @@ export function renderNoteInline(markdown: string): string {
   return DOMPurify.sanitize(renderer.renderInline(markdown.trim()));
 }
 
+/** Rende un blocco di Markdown libero (immagini, link, paragrafi) senza la
+ * pipeline completa di `renderMarkdown`: niente parse JSDOM aggiuntivo, niente
+ * card di anteprima dei link (fetch di rete verso siti esterni) né avvolgimento
+ * delle immagini sensibili — non ha senso per un footer mostrato su ogni
+ * pagina della piattaforma e di ogni blog. Solo render + sanificazione. */
+export function renderSimpleMarkdown(markdown: string): string {
+  return DOMPurify.sanitize(renderer.render(markdown.trim()));
+}
+
 function plainText(html: string): string {
   return DOMPurify.sanitize(html, { ALLOWED_TAGS: [] }).replace(/\s+/g, " ").trim();
 }
@@ -200,7 +215,7 @@ const BARE_NOTE_REF_RE = /\[\^(\d{1,3})\]/g;
  * piè di pagina. La sorgente è l'elenco strutturato `notes`, non il corpo.
  *
  * Muta `document` in place (vedi `wrapSensitiveImages`). */
-function renderFootnotes(document: Document, notes: PostNote[]): void {
+function renderFootnotes(document: Document, notes: PostNote[], labels: FootnoteLabels): void {
   if (notes.length === 0) return;
   const view = document.defaultView;
   if (!view) return;
@@ -267,16 +282,57 @@ function renderFootnotes(document: Document, notes: PostNote[]): void {
   section.className = "footnotes";
   const heading = document.createElement("h2");
   heading.className = "footnotes-title";
-  heading.textContent = "Note";
+  heading.textContent = labels.title;
   const ol = document.createElement("ol");
   for (const note of [...notes].sort((a, b) => a.idx - b.idx)) {
     const li = document.createElement("li");
     li.id = `fn-${note.idx}`;
-    li.innerHTML = `${renderNoteInline(note.content)} <a class="footnote-backref" href="#fnref-${note.idx}" aria-label="Torna al testo">↩</a>`;
+    li.innerHTML = `${renderNoteInline(note.content)} <a class="footnote-backref" href="#fnref-${note.idx}" aria-label="${labels.backToText}">↩</a>`;
     ol.append(li);
   }
   section.append(heading, ol);
   document.body.append(section);
+}
+
+export interface FootnoteLabels {
+  title: string;
+  backToText: string;
+}
+
+const DEFAULT_FOOTNOTE_LABELS: FootnoteLabels = { title: "Note", backToText: "Torna al testo" };
+
+export interface PostHeading {
+  id: string;
+  text: string;
+  level: 2 | 3;
+}
+
+const slugifyHeading = (text: string): string =>
+  text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60) || "sezione";
+
+/** Mockup 1a ("In this post"): assegna un id stabile a h2/h3 e ne restituisce
+ * l'elenco per l'indice laterale. Muta `document` in place. */
+function anchorHeadings(document: Document): PostHeading[] {
+  const seen = new Map<string, number>();
+  const headings: PostHeading[] = [];
+  document.querySelectorAll("h2, h3").forEach((el) => {
+    if (el.closest(".footnotes")) return;
+    const text = (el.textContent ?? "").replace(/\s+/g, " ").trim();
+    if (!text) return;
+    const base = slugifyHeading(text);
+    const n = (seen.get(base) ?? 0) + 1;
+    seen.set(base, n);
+    const id = n === 1 ? base : `${base}-${n}`;
+    el.id = id;
+    headings.push({ id, text, level: el.tagName === "H2" ? 2 : 3 });
+  });
+  return headings;
 }
 
 export interface RenderOptions {
@@ -286,9 +342,26 @@ export interface RenderOptions {
   /** Note a piè di pagina del post (todo/EDITOR.md). Se presenti, i marcatori
    * nel testo diventano riferimenti in apice e viene accodato l'elenco. */
   notes?: PostNote[];
+  /** Etichette dell'elenco note nella lingua dell'interfaccia (next-intl). */
+  footnoteLabels?: FootnoteLabels;
+}
+
+export interface RenderedPost {
+  html: string;
+  headings: PostHeading[];
+}
+
+/** Come `renderMarkdown`, ma restituisce anche l'indice dei titoli (con id
+ * ancorabili) per la colonna "In questo post" della pagina pubblica. */
+export async function renderPost(markdown: string, options: RenderOptions = {}): Promise<RenderedPost> {
+  return renderPipeline(markdown, options, true);
 }
 
 export async function renderMarkdown(markdown: string, options: RenderOptions = {}): Promise<string> {
+  return (await renderPipeline(markdown, options, false)).html;
+}
+
+async function renderPipeline(markdown: string, options: RenderOptions, withHeadings: boolean): Promise<RenderedPost> {
   const rawHtml = renderer.render(markdown);
   const cleanHtml = DOMPurify.sanitize(rawHtml);
 
@@ -301,9 +374,12 @@ export async function renderMarkdown(markdown: string, options: RenderOptions = 
   wrapSensitiveImages(document);
   await resolveLinkCards(document);
   if (options.mentions !== false) linkifyMentions(document);
-  if (options.notes && options.notes.length > 0) renderFootnotes(document, options.notes);
+  const headings = withHeadings ? anchorHeadings(document) : [];
+  if (options.notes && options.notes.length > 0) {
+    renderFootnotes(document, options.notes, options.footnoteLabels ?? DEFAULT_FOOTNOTE_LABELS);
+  }
 
-  return document.body.innerHTML;
+  return { html: document.body.innerHTML, headings };
 }
 
 /** Estratto in solo testo per anteprime (card del feed, meta description):

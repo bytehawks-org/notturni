@@ -29,4 +29,7 @@ export const revalidateTags = {
   platformPage: (slug: string): string => `platform-page:${slug}`,
   /** Una singola pagina statica di un blog (`/{blog}/pagina/{slug}`). */
   blogPage: (blogSlug: string, pageSlug: string): string => `blog-page:${blogSlug}:${pageSlug}`,
+  /** Footer di piattaforma (colonne 1-3 + barra inferiore): un solo tag
+   * condiviso, non per-blog — mostrato su ogni pagina pubblica. */
+  platformFooter: (): string => "platform-footer",
 } as const;

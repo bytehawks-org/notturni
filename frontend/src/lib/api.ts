@@ -2,6 +2,7 @@ import type { SensitivityCategory } from "./content-media";
 import type {
   AdminBlog,
   AdminComment,
+  AdminOverview,
   AdminPost,
   AdminUser,
   ApiToken,
@@ -9,27 +10,39 @@ import type {
   AuditChannel,
   AuditLogEntry,
   BibliographyEntry,
+  BlockedAuthor,
   Blog,
+  BlogAdminAction,
   BlogComment,
-  CommentsMode,
   BlogConfig,
   BlogInvitation,
   BlogMember,
+  BlogNote,
+  BlogOverview,
+  BlogReports,
   BlogRole,
   BlogVisibility,
   Category,
   Comment,
   CommentStatus,
+  CommentsMode,
   CurrentUser,
   FollowStats,
   FragmentCollectionEntry,
+  GdprRequest,
+  GdprRequestStatus,
+  GdprRequestType,
   InstanceConfig,
   LinkBibliographyEntry,
   LoginResponse,
   MediaBibliographyEntry,
+  MediaFile,
+  MediaLibrary,
   MembershipBlog,
+  NoteKind,
   Page,
   PageTranslationSummary,
+  PlatformConfig,
   PlatformRole,
   Post,
   PostAuthorNameStyle,
@@ -37,11 +50,15 @@ import type {
   PostNote,
   PostTranslationSummary,
   Profile,
+  PublicComment,
+  Publication,
+  PublicationDetail,
+  ReportReason,
   SessionResponse,
   SocialLink,
 } from "./types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export class ApiClientError extends Error {
   status: number;
@@ -176,6 +193,9 @@ export const api = {
       token: string,
       slug: string,
       payload: {
+        is_paused?: boolean;
+        extra_locales?: string[];
+        comments_auto_close_days?: number | null;
         title?: string;
         /** "" azzera; assente non tocca. */
         subtitle?: string;
@@ -214,6 +234,15 @@ export const api = {
     unfollow: (token: string, slug: string) =>
       request<void>(`/api/v1/blogs/${slug}/follow`, { method: "DELETE", token }),
     followers: (slug: string) => request<{ username: string }[]>(`/api/v1/blogs/${slug}/followers`),
+    overview: (token: string, slug: string) => request<BlogOverview>(`/api/v1/blogs/${slug}/overview`, { token }),
+    /** B3 (danger zone): trasferimento a un coautore, cancellazione con tolleranza, ripristino. */
+    transfer: (token: string, slug: string, username: string) =>
+      request<Blog>(`/api/v1/blogs/${slug}/transfer`, { method: "POST", token, body: { username } }),
+    softDelete: (token: string, slug: string, confirmSlug: string) =>
+      request<Blog>(`/api/v1/blogs/${slug}`, { method: "DELETE", token, body: { confirm_slug: confirmSlug } }),
+    restore: (token: string, slug: string) => request<Blog>(`/api/v1/blogs/${slug}/restore`, { method: "POST", token }),
+    /** URL dell'export ZIP (solo proprietario): scaricato con fetch + blob, vedi SettingsTab. */
+    exportUrl: (slug: string) => `${API_URL}/api/v1/blogs/${slug}/export`,
     /** Immagine da incorporare nel contenuto o da usare come cover di un post.
      * `is_sensitive`: risultato della moderazione automatica (nudità/contenuti
      * sensibili) fatta lato backend al momento dell'upload — vedi API.md. */
@@ -226,6 +255,57 @@ export const api = {
         formData,
       });
     },
+    /** Immagine di copertina del blog (banner della home pubblica, facoltativa):
+     * stessa moderazione automatica di uploadMedia. */
+    uploadCoverImage: (token: string, slug: string, file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return request<Blog>(`/api/v1/blogs/${slug}/cover-image`, { method: "POST", token, formData });
+    },
+    /** Avviso manuale sui contenuti della cover già caricata, senza ricaricarla. */
+    updateCoverImageCategories: (token: string, slug: string, categories: string[]) =>
+      request<Blog>(`/api/v1/blogs/${slug}/cover-image`, { method: "PATCH", token, body: { categories } }),
+    deleteCoverImage: (token: string, slug: string) =>
+      request<Blog>(`/api/v1/blogs/${slug}/cover-image`, { method: "DELETE", token }),
+    /** Favicon dedicata del blog (facoltativa): nessuna moderazione, icona di identità. */
+    uploadFavicon: (token: string, slug: string, file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return request<Blog>(`/api/v1/blogs/${slug}/favicon`, { method: "POST", token, formData });
+    },
+    deleteFavicon: (token: string, slug: string) =>
+      request<Blog>(`/api/v1/blogs/${slug}/favicon`, { method: "DELETE", token }),
+    /** B9: pubblicazioni. */
+    listPublications: (slug: string, token?: string | null) => request<Publication[]>(`/api/v1/blogs/${slug}/publications`, { token }),
+    getPublication: (slug: string, ref: string, token?: string | null) =>
+      request<PublicationDetail>(`/api/v1/blogs/${slug}/publications/${ref}`, { token }),
+    createPublication: (token: string, slug: string, payload: { name: string; title: string; description?: string | null }) =>
+      request<Publication>(`/api/v1/blogs/${slug}/publications`, { method: "POST", token, body: payload }),
+    updatePublication: (token: string, slug: string, ref: string, payload: { name?: string; title?: string; description?: string | null }) =>
+      request<Publication>(`/api/v1/blogs/${slug}/publications/${ref}`, { method: "PATCH", token, body: payload }),
+    deletePublication: (token: string, slug: string, ref: string) =>
+      request<void>(`/api/v1/blogs/${slug}/publications/${ref}`, { method: "DELETE", token }),
+    orderPublication: (token: string, slug: string, ref: string, postIds: string[]) =>
+      request<PublicationDetail>(`/api/v1/blogs/${slug}/publications/${ref}/order`, { method: "PUT", token, body: { post_ids: postIds } }),
+    /** B8: libreria note (proprietario e collaboratori). */
+    listNotes: (token: string, slug: string, q?: string) => request<BlogNote[]>(withQuery(`/api/v1/blogs/${slug}/notes`, { q }), { token }),
+    createNote: (token: string, slug: string, payload: { content: string; kind: NoteKind; url?: string | null }) =>
+      request<BlogNote>(`/api/v1/blogs/${slug}/notes`, { method: "POST", token, body: payload }),
+    updateNote: (token: string, slug: string, noteId: string, payload: { content?: string; kind?: NoteKind; url?: string | null }) =>
+      request<BlogNote>(`/api/v1/blogs/${slug}/notes/${noteId}`, { method: "PATCH", token, body: payload }),
+    deleteNote: (token: string, slug: string, noteId: string) => request<void>(`/api/v1/blogs/${slug}/notes/${noteId}`, { method: "DELETE", token }),
+    mergeNote: (token: string, slug: string, noteId: string, intoId: string) =>
+      request<BlogNote>(`/api/v1/blogs/${slug}/notes/${noteId}/merge`, { method: "POST", token, body: { into_id: intoId } }),
+    importNotes: (token: string, slug: string, bibtex: string) =>
+      request<BlogNote[]>(`/api/v1/blogs/${slug}/notes/import`, { method: "POST", token, body: { bibtex } }),
+    notesExportUrl: (slug: string) => `${API_URL}/api/v1/blogs/${slug}/notes/export.bib`,
+    /** B7: libreria media (proprietario e collaboratori). */
+    mediaLibrary: (token: string, slug: string) => request<MediaLibrary>(`/api/v1/blogs/${slug}/media`, { token }),
+    syncMediaLibrary: (token: string, slug: string) => request<MediaLibrary>(`/api/v1/blogs/${slug}/media/sync`, { method: "POST", token }),
+    updateMedia: (token: string, slug: string, mediaId: string, payload: { alt_text?: string; caption?: string; categories?: SensitivityCategory[] }) =>
+      request<MediaFile>(`/api/v1/blogs/${slug}/media/${mediaId}`, { method: "PATCH", token, body: payload }),
+    deleteMedia: (token: string, slug: string, mediaId: string) =>
+      request<void>(`/api/v1/blogs/${slug}/media/${mediaId}`, { method: "DELETE", token }),
     listCategories: (slug: string) => request<Category[]>(`/api/v1/blogs/${slug}/categories`),
     createCategory: (token: string, slug: string, payload: { name: string; slug: string }) =>
       request<Category>(`/api/v1/blogs/${slug}/categories`, { method: "POST", token, body: payload }),
@@ -346,6 +426,7 @@ export const api = {
         cover_image_categories?: SensitivityCategory[];
         tags?: string[];
         category_id?: string | null;
+        publication_id?: string | null;
         notes?: PostNote[];
       }
     ) => request<Post>(`/api/v1/blogs/${blogSlug}/posts`, { method: "POST", token, body: payload }),
@@ -364,6 +445,8 @@ export const api = {
         tags?: string[];
         /** assente: non tocca la categoria; null: la rimuove; id: la imposta. */
         category_id?: string | null;
+        /** B9: stesso schema di category_id per la pubblicazione. */
+        publication_id?: string | null;
         /** assente: non tocca le note; lista (anche []): le sostituisce. */
         notes?: PostNote[];
         /** assente: non tocca; null: torna a ereditare da Blog.comments_mode;
@@ -375,8 +458,19 @@ export const api = {
         ai_crawling_enabled?: boolean | null;
       }
     ) => request<Post>(`/api/v1/posts/${postId}`, { method: "PATCH", token, body: payload }),
-    publish: (token: string, postId: string) =>
-      request<Post>(`/api/v1/posts/${postId}/publish`, { method: "POST", token }),
+    /** Pubblica subito, o pianifica se `publishedAt` (ISO) è nel futuro. */
+    publish: (token: string, postId: string, publishedAt?: string) =>
+      request<Post>(`/api/v1/posts/${postId}/publish`, {
+        method: "POST",
+        token,
+        body: publishedAt ? { published_at: publishedAt } : undefined,
+      }),
+    /** Conteggio lettura aggregato (B2): pubblico, nessun dato del lettore. */
+    recordRead: (postId: string) => request<void>(`/api/v1/posts/${postId}/read`, { method: "POST" }),
+    submitForReview: (token: string, postId: string) =>
+      request<Post>(`/api/v1/posts/${postId}/submit-for-review`, { method: "POST", token }),
+    returnToDraft: (token: string, postId: string) =>
+      request<Post>(`/api/v1/posts/${postId}/return-to-draft`, { method: "POST", token }),
     translations: (postId: string) =>
       request<PostTranslationSummary[]>(`/api/v1/posts/${postId}/translations`),
     addTranslation: (
@@ -402,8 +496,9 @@ export const api = {
       request<Comment[]>(`/api/v1/posts/${postId}/comments/pending`, { token }),
     /** Moderazione trasversale: commenti di tutti i post del blog in una sola
      * richiesta (default `pending`), invece di una fetch per post. */
-    listForBlog: (token: string, blogSlug: string, status: CommentStatus = "pending") =>
-      request<BlogComment[]>(`/api/v1/blogs/${blogSlug}/comments?status=${status}`, { token }),
+    /** B4: `reported` mostra i segnalati alla piattaforma (qualunque stato). */
+    listForBlog: (token: string, blogSlug: string, status: CommentStatus = "pending", reported = false) =>
+      request<BlogComment[]>(`/api/v1/blogs/${blogSlug}/comments?status=${status}${reported ? "&reported=true" : ""}`, { token }),
     create: (
       token: string | null,
       postId: string,
@@ -419,6 +514,13 @@ export const api = {
     ) => request<Comment>(`/api/v1/posts/${postId}/comments`, { method: "POST", token, body: payload }),
     approve: (token: string, commentId: string) =>
       request<Comment>(`/api/v1/comments/${commentId}/approve`, { method: "POST", token }),
+    report: (token: string, commentId: string, note: string) =>
+      request<Comment>(`/api/v1/comments/${commentId}/report`, { method: "POST", token, body: { note } }),
+    blockAuthor: (token: string, commentId: string, note?: string) =>
+      request<BlockedAuthor>(`/api/v1/comments/${commentId}/block-author`, { method: "POST", token, body: { note } }),
+    listBlocked: (token: string, blogSlug: string) => request<BlockedAuthor[]>(`/api/v1/blogs/${blogSlug}/blocked`, { token }),
+    unblock: (token: string, blogSlug: string, blockId: string) =>
+      request<void>(`/api/v1/blogs/${blogSlug}/blocked/${blockId}`, { method: "DELETE", token }),
     reject: (token: string, commentId: string) =>
       request<Comment>(`/api/v1/comments/${commentId}/reject`, { method: "POST", token }),
   },
@@ -426,6 +528,14 @@ export const api = {
   /** CLAUDE.md #1: anteprima di un link (titolo/descrizione/immagine Open
    * Graph), usata sia dall'editor sia dal rendering pubblico del post per i
    * link salvati come card. Pubblico, nessun token. */
+  reports: {
+    /** B5: segnalazione di un blog/post ai moderatori (sessione richiesta). */
+    reportBlog: (token: string, slug: string, reason: ReportReason, note?: string) =>
+      request<{ id: string }>(`/api/v1/blogs/${slug}/report`, { method: "POST", token, body: { reason, note } }),
+    reportPost: (token: string, postId: string, reason: ReportReason, note?: string) =>
+      request<{ id: string }>(`/api/v1/posts/${postId}/report`, { method: "POST", token, body: { reason, note } }),
+  },
+
   linkPreview: {
     get: (url: string) =>
       request<{ url: string; title: string | null; description: string | null; image: string | null }>(
@@ -438,6 +548,7 @@ export const api = {
     updateMe: (
       token: string,
       payload: {
+        ui_locale?: string;
         /** Citabile ovunque come @username; unico, minuscolo (vedi
          * backend/app/domain/usernames.py). Assente non tocca. */
         username?: string;
@@ -472,6 +583,9 @@ export const api = {
       request<void>(`/api/v1/users/${username}/follow`, { method: "POST", token }),
     unfollow: (token: string, username: string) =>
       request<void>(`/api/v1/users/${username}/follow`, { method: "DELETE", token }),
+    publicBlogs: (username: string) => request<Blog[]>(`/api/v1/users/${username}/blogs`),
+    publicPosts: (username: string) => request<Post[]>(`/api/v1/users/${username}/posts`),
+    publicComments: (username: string) => request<PublicComment[]>(`/api/v1/users/${username}/comments`),
     followers: (username: string) =>
       request<{ username: string }[]>(`/api/v1/users/${username}/followers`),
     following: (username: string) =>
@@ -542,21 +656,45 @@ export const api = {
     ) => request<Page>(`/api/v1/pages/${pageId}`, { method: "PATCH", token, body: payload }),
   },
 
+  feed: {
+    /** Post dei blog/utenti seguiti (mockup 1c "Seguiti"): richiede sessione. */
+    following: (token: string, limit = 20) =>
+      request<Post[]>(`/api/v1/feed/posts?following=true&limit=${limit}`, { token }),
+  },
+
   admin: {
+    overview: (token: string) => request<AdminOverview>("/api/v1/admin/overview", { token }),
+    /** B6: impostazioni di piattaforma (solo super admin) e coda GDPR. */
+    getConfig: (token: string) => request<PlatformConfig>("/api/v1/admin/config", { token }),
+    updateConfig: (token: string, payload: Partial<Omit<PlatformConfig, "sso_configured" | "reserved_builtin" | "updated_at" | "infrastructure">>) =>
+      request<PlatformConfig>("/api/v1/admin/config", { method: "PATCH", token, body: payload }),
+    listGdpr: (token: string, status?: GdprRequestStatus) => request<GdprRequest[]>(withQuery("/api/v1/admin/gdpr", { status }), { token }),
+    createGdpr: (token: string, payload: { username: string; type: GdprRequestType; note: string }) =>
+      request<GdprRequest>("/api/v1/admin/gdpr", { method: "POST", token, body: payload }),
+    approveGdpr: (token: string, id: string) => request<GdprRequest>(`/api/v1/admin/gdpr/${id}/approve`, { method: "POST", token }),
+    rejectGdpr: (token: string, id: string, note: string) =>
+      request<GdprRequest>(`/api/v1/admin/gdpr/${id}/reject`, { method: "POST", token, body: { note } }),
+    executeGdpr: (token: string, id: string) => request<Record<string, unknown>>(`/api/v1/admin/gdpr/${id}/execute`, { method: "POST", token }),
     listUsers: (token: string, q?: string) =>
       request<AdminUser[]>(withQuery("/api/v1/admin/users", { q }), { token }),
     updateUser: (
       token: string,
       userId: string,
-      payload: Partial<{ platform_role: PlatformRole; is_active: boolean }>
+      payload: Partial<{ platform_role: PlatformRole; is_active: boolean; note: string }>
     ) => request<AdminUser>(`/api/v1/admin/users/${userId}`, { method: "PATCH", token, body: payload }),
     listBlogs: (token: string, q?: string) =>
       request<AdminBlog[]>(withQuery("/api/v1/admin/blogs", { q }), { token }),
-    updateBlog: (token: string, blogId: string, payload: { is_suspended: boolean }) =>
+    /** B5: `state` filtra per stato, `reported` = solo con segnalazioni aperte. */
+    listBlogsFiltered: (token: string, filters: Partial<{ q: string; visibility: string; state: string }> = {}) =>
+      request<AdminBlog[]>(withQuery("/api/v1/admin/blogs", filters), { token }),
+    blogReports: (token: string, blogId: string) => request<BlogReports>(`/api/v1/admin/blogs/${blogId}/reports`, { token }),
+    blogAction: (token: string, blogId: string, action: BlogAdminAction, note: string) =>
+      request<AdminBlog>(`/api/v1/admin/blogs/${blogId}/action`, { method: "POST", token, body: { action, note } }),
+    updateBlog: (token: string, blogId: string, payload: { is_suspended: boolean; note?: string }) =>
       request<AdminBlog>(`/api/v1/admin/blogs/${blogId}`, { method: "PATCH", token, body: payload }),
     listPosts: (token: string, q?: string) =>
       request<AdminPost[]>(withQuery("/api/v1/admin/posts", { q }), { token }),
-    updatePost: (token: string, postId: string, payload: { is_hidden: boolean }) =>
+    updatePost: (token: string, postId: string, payload: { is_hidden: boolean; note?: string }) =>
       request<AdminPost>(`/api/v1/admin/posts/${postId}`, { method: "PATCH", token, body: payload }),
     listAuditLog: (
       token: string,
@@ -572,8 +710,11 @@ export const api = {
         offset: string;
       }> = {}
     ) => request<AuditLogEntry[]>(withQuery("/api/v1/admin/audit-log", filters), { token }),
-    listComments: (token: string, filters: Partial<{ status: CommentStatus; q: string }> = {}) =>
-      request<AdminComment[]>(withQuery("/api/v1/admin/comments", filters), { token }),
+    listComments: (token: string, filters: Partial<{ status: CommentStatus; q: string; reported: boolean }> = {}) =>
+      request<AdminComment[]>(
+        withQuery("/api/v1/admin/comments", { status: filters.status, q: filters.q, reported: filters.reported ? "true" : undefined }),
+        { token }
+      ),
   },
 
   tokens: {
