@@ -259,12 +259,28 @@ export interface Category {
 
 /** Nota a piè di pagina di un post: testo Markdown inline + numero (1-based).
  * Nel corpo del post il riferimento è il marcatore `[idx](#nota-idx)`. */
-export interface PostNote {
+/** Campi bibliografici opzionali di una nota (modal "Nota" nell'editor,
+ * dietro il toggle "Aggiungi dettagli bibliografici") — mai obbligatori, a
+ * differenza di `content`. */
+export interface StructuredNoteFields {
+  title: string | null;
+  author: string | null;
+  isbn: string | null;
+  doi: string | null;
+  page: string | null;
+}
+
+export interface PostNote extends StructuredNoteFields {
   idx: number;
   content: string;
 }
 
 export const MAX_NOTE_LENGTH = 2000;
+export const MAX_NOTE_TITLE_LENGTH = 300;
+export const MAX_NOTE_AUTHOR_LENGTH = 300;
+export const MAX_NOTE_ISBN_LENGTH = 32;
+export const MAX_NOTE_DOI_LENGTH = 255;
+export const MAX_NOTE_PAGE_LENGTH = 32;
 
 export interface BibliographyCitation {
   post_title: string;
@@ -274,7 +290,7 @@ export interface BibliographyCitation {
   idx: number;
 }
 
-export interface BibliographyEntry {
+export interface BibliographyEntry extends StructuredNoteFields {
   content: string;
   /** B8: tipo e URL dalla libreria note (null per voci legacy). */
   kind: NoteKind | null;

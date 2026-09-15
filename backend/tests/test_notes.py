@@ -2,8 +2,11 @@ from collections.abc import Callable
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.notes import NoteInput, normalize_notes
+from app.models.blog_note import BlogNote
 from tests.conftest import AuthedUser
 
 
@@ -17,6 +20,20 @@ def test_normalize_notes_orders_trims_and_rejects_duplicates() -> None:
         normalize_notes([NoteInput(0, "a")])
     with pytest.raises(ValueError):
         normalize_notes([NoteInput(1, "   ")])
+
+
+def test_normalize_notes_optional_fields_trimmed_and_blanked() -> None:
+    out = normalize_notes(
+        [NoteInput(1, "testo", title="  Il Titolo  ", author=" ", isbn="978-1", doi=None, page="42")]
+    )
+    assert out == [
+        NoteInput(idx=1, content="testo", title="Il Titolo", author=None, isbn="978-1", doi=None, page="42")
+    ]
+
+    with pytest.raises(ValueError):
+        normalize_notes([NoteInput(1, "testo", title="x" * 301)])
+    with pytest.raises(ValueError):
+        normalize_notes([NoteInput(1, "testo", isbn="1" * 33)])
 
 
 async def _blog(client: AsyncClient, owner: AuthedUser, slug: str) -> None:
@@ -42,9 +59,10 @@ async def test_post_notes_crud_roundtrip(client: AsyncClient, make_user: Callabl
         headers=owner.headers,
     )
     assert created.status_code == 201, created.text
+    empty_fields = {"title": None, "author": None, "isbn": None, "doi": None, "page": None}
     assert created.json()["notes"] == [
-        {"idx": 1, "content": "La *prima* nota."},
-        {"idx": 2, "content": "La seconda nota."},
+        {"idx": 1, "content": "La *prima* nota.", **empty_fields},
+        {"idx": 2, "content": "La seconda nota.", **empty_fields},
     ]
     post_id = created.json()["id"]
 
@@ -60,7 +78,7 @@ async def test_post_notes_crud_roundtrip(client: AsyncClient, make_user: Callabl
         json={"notes": [{"idx": 1, "content": "Nota rivista."}]},
         headers=owner.headers,
     )
-    assert replaced.json()["notes"] == [{"idx": 1, "content": "Nota rivista."}]
+    assert replaced.json()["notes"] == [{"idx": 1, "content": "Nota rivista.", **empty_fields}]
 
     # update: [] azzera
     cleared = await client.patch(
@@ -77,6 +95,111 @@ async def test_post_notes_crud_roundtrip(client: AsyncClient, make_user: Callabl
     assert bad.status_code == 400
 
 
+async def test_post_note_structured_fields_roundtrip_and_library_propagation(
+    client: AsyncClient, make_user: Callable
+) -> None:
+    owner: AuthedUser = await make_user("note-struct-owner")
+    await _blog(client, owner, "blog-note-struct")
+
+    created = await client.post(
+        "/api/v1/blogs/blog-note-struct/posts",
+        json={
+            "slug": "p",
+            "title": "t",
+            "content": "c",
+            "notes": [
+                {
+                    "idx": 1,
+                    "content": "Una citazione strutturata.",
+                    "title": "  Il Titolo del Testo  ",
+                    "author": "Autrice Autrice",
+                    "isbn": "978-3-16-148410-0",
+                    "doi": "10.1000/xyz123",
+                    "page": "42",
+                }
+            ],
+        },
+        headers=owner.headers,
+    )
+    assert created.status_code == 201, created.text
+    note_out = created.json()["notes"][0]
+    assert note_out["title"] == "Il Titolo del Testo"
+    assert note_out["author"] == "Autrice Autrice"
+    assert note_out["isbn"] == "978-3-16-148410-0"
+    assert note_out["doi"] == "10.1000/xyz123"
+    assert note_out["page"] == "42"
+
+    await client.post(f"/api/v1/posts/{created.json()['id']}/publish", headers=owner.headers)
+
+    biblio = await client.get("/api/v1/blogs/blog-note-struct/bibliography")
+    assert biblio.status_code == 200
+    entry = biblio.json()[0]
+    assert entry["title"] == "Il Titolo del Testo"
+    assert entry["author"] == "Autrice Autrice"
+    assert entry["isbn"] == "978-3-16-148410-0"
+    assert entry["doi"] == "10.1000/xyz123"
+    assert entry["page"] == "42"
+
+    # B8: propagato anche alla libreria note del blog
+    library = await client.get(
+        "/api/v1/blogs/blog-note-struct/notes?q=citazione", headers=owner.headers
+    )
+    assert library.status_code == 200
+    lib_note = next(n for n in library.json() if "citazione" in n["content"].casefold())
+    assert lib_note["used_in"][0]["idx"] == 1
+
+
+async def test_post_note_structured_fields_never_overwrite_existing_library_note(
+    client: AsyncClient, make_user: Callable, db_session: AsyncSession
+) -> None:
+    """Una modifica manuale in libreria non deve essere sovrascritta da un
+    nuovo post che cita lo stesso testo — i campi opzionali si propagano solo
+    alla creazione di una nuova BlogNote, mai su una già esistente. I campi
+    opzionali di BlogNote non sono esposti dalla API della libreria in questo
+    blocco (fuori scope, solo lettura diretta da DB qui)."""
+    owner: AuthedUser = await make_user("note-struct-owner2")
+    await _blog(client, owner, "blog-note-struct2")
+
+    first = await client.post(
+        "/api/v1/blogs/blog-note-struct2/posts",
+        json={
+            "slug": "p1",
+            "title": "t1",
+            "content": "c",
+            "notes": [{"idx": 1, "content": "Testo condiviso", "author": "Autore Originale"}],
+        },
+        headers=owner.headers,
+    )
+    assert first.status_code == 201, first.text
+
+    second = await client.post(
+        "/api/v1/blogs/blog-note-struct2/posts",
+        json={
+            "slug": "p2",
+            "title": "t2",
+            "content": "c",
+            "notes": [{"idx": 1, "content": "Testo condiviso", "author": "Autore Diverso"}],
+        },
+        headers=owner.headers,
+    )
+    assert second.status_code == 201, second.text
+
+    library = await client.get(
+        "/api/v1/blogs/blog-note-struct2/notes?q=condiviso", headers=owner.headers
+    )
+    lib_note = next(n for n in library.json() if "condiviso" in n["content"].casefold())
+    assert lib_note["used_in"] and len(lib_note["used_in"]) == 2
+
+    blog_note = (
+        await db_session.execute(select(BlogNote).where(BlogNote.id == lib_note["id"]))
+    ).scalar_one()
+    assert blog_note.author == "Autore Originale"
+
+    # la nota di post p2 mantiene comunque il proprio autore
+    p2 = await client.get(f"/api/v1/posts/{second.json()['id']}", headers=owner.headers)
+    assert p2.json()["notes"][0]["author"] == "Autore Diverso"
+
+
 async def test_translation_has_its_own_notes(client: AsyncClient, make_user: Callable) -> None:
     owner: AuthedUser = await make_user("note-tr-owner")
     await _blog(client, owner, "blog-note-tr")
@@ -91,10 +214,11 @@ async def test_translation_has_its_own_notes(client: AsyncClient, make_user: Cal
               "notes": [{"idx": 1, "content": "EN"}]},
         headers=owner.headers,
     )
-    assert tr.json()["notes"] == [{"idx": 1, "content": "EN"}]
+    empty_fields = {"title": None, "author": None, "isbn": None, "doi": None, "page": None}
+    assert tr.json()["notes"] == [{"idx": 1, "content": "EN", **empty_fields}]
     # l'originale resta con la sua
     again = await client.get(f"/api/v1/posts/{original.json()['id']}", headers=owner.headers)
-    assert again.json()["notes"] == [{"idx": 1, "content": "IT"}]
+    assert again.json()["notes"] == [{"idx": 1, "content": "IT", **empty_fields}]
 
 
 async def test_blog_bibliography_aggregates_and_dedupes(

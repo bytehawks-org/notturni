@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { ReactNode } from "react";
 
 import { BlogPageShell } from "@/components/blog/BlogPageShell";
 import { BlogStateNotice, blogIsOffline } from "@/components/blog/BlogStateNotice";
@@ -116,6 +117,31 @@ export default async function BlogBibliographyPage({
                     className="notturni-prose text-[15px] leading-[1.45] md:text-[17px]"
                     dangerouslySetInnerHTML={{ __html: renderNoteInline(entry.content) }}
                   />
+                  {(entry.author || entry.title || entry.page || entry.isbn || entry.doi) && (
+                    <p className="text-[13px] text-muted">
+                      {(
+                        [
+                          entry.author,
+                          entry.title ? <em key="title">{entry.title}</em> : null,
+                          entry.page ? tb("page", { page: entry.page }) : null,
+                          entry.isbn ? tb("isbn", { isbn: entry.isbn }) : null,
+                          entry.doi ? (
+                            <a
+                              key="doi"
+                              href={`https://doi.org/${entry.doi}`}
+                              target="_blank"
+                              rel="noopener noreferrer nofollow"
+                              className="text-primary no-underline hover:underline"
+                            >
+                              doi.org/{entry.doi}
+                            </a>
+                          ) : null,
+                        ] as (ReactNode | null)[]
+                      )
+                        .filter((part): part is ReactNode => part !== null && part !== "")
+                        .reduce<ReactNode[]>((acc, part, i) => (i > 0 ? [...acc, " · ", part] : [part]), [])}
+                    </p>
+                  )}
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted">
                     {entry.kind && (
                       <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-[.06em]">{tb(`kind.${entry.kind}`)}</span>

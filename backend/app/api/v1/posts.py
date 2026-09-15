@@ -52,15 +52,38 @@ logger = logging.getLogger(__name__)
 class NoteIn(BaseModel):
     idx: int
     content: str
+    # Campi facoltativi per bibliografie strutturate (modal "Nota"
+    # nell'editor) — nessuno di questi è mai obbligatorio.
+    title: str | None = None
+    author: str | None = None
+    isbn: str | None = None
+    doi: str | None = None
+    page: str | None = None
 
 
 class NoteOut(BaseModel):
     idx: int
     content: str
+    title: str | None = None
+    author: str | None = None
+    isbn: str | None = None
+    doi: str | None = None
+    page: str | None = None
 
 
 def _to_note_inputs(notes: list[NoteIn] | None) -> list[NoteInput]:
-    return [NoteInput(idx=n.idx, content=n.content) for n in (notes or [])]
+    return [
+        NoteInput(
+            idx=n.idx,
+            content=n.content,
+            title=n.title,
+            author=n.author,
+            isbn=n.isbn,
+            doi=n.doi,
+            page=n.page,
+        )
+        for n in (notes or [])
+    ]
 
 
 class PostCreateRequest(BaseModel):
@@ -341,12 +364,23 @@ async def _posts_out(
 
     notes_by_post: dict[uuid.UUID, list[NoteOut]] = {pid: [] for pid in post_ids}
     note_rows = await session.execute(
-        select(post_notes.c.post_id, post_notes.c.idx, post_notes.c.content)
+        select(
+            post_notes.c.post_id,
+            post_notes.c.idx,
+            post_notes.c.content,
+            post_notes.c.title,
+            post_notes.c.author,
+            post_notes.c.isbn,
+            post_notes.c.doi,
+            post_notes.c.page,
+        )
         .where(post_notes.c.post_id.in_(post_ids))
         .order_by(post_notes.c.post_id, post_notes.c.idx)
     )
-    for pid, idx, content in note_rows.all():
-        notes_by_post[pid].append(NoteOut(idx=idx, content=content))
+    for pid, idx, content, title, author, isbn, doi, page in note_rows.all():
+        notes_by_post[pid].append(
+            NoteOut(idx=idx, content=content, title=title, author=author, isbn=isbn, doi=doi, page=page)
+        )
 
     authors: dict[uuid.UUID, User] = {}
     if author_ids:
@@ -467,10 +501,23 @@ async def _sync_post_notes(session: AsyncSession, post: Post, notes: list[NoteIn
     if notes:
         # B8: ogni nota del post viene agganciata (o crea) la nota del blog con
         # lo stesso testo normalizzato — è ciò che alimenta la libreria note
-        note_ids = await link_blog_notes(session, blog_id=post.blog_id, contents=[n.content for n in notes], created_by_id=post.author_id)
+        note_ids = await link_blog_notes(session, blog_id=post.blog_id, notes=notes, created_by_id=post.author_id)
         await session.execute(
             insert(post_notes),
-            [{"post_id": post.id, "idx": n.idx, "content": n.content, "note_id": note_ids.get(n.content)} for n in notes],
+            [
+                {
+                    "post_id": post.id,
+                    "idx": n.idx,
+                    "content": n.content,
+                    "note_id": note_ids.get(n.content),
+                    "title": n.title,
+                    "author": n.author,
+                    "isbn": n.isbn,
+                    "doi": n.doi,
+                    "page": n.page,
+                }
+                for n in notes
+            ],
         )
 
 

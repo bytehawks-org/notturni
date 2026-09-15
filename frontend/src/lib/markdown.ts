@@ -210,6 +210,48 @@ function plainText(html: string): string {
 // `[^n]` di chi scrive via API.
 const BARE_NOTE_REF_RE = /\[\^(\d{1,3})\]/g;
 
+/** Riga di citazione coi campi bibliografici opzionali di una nota (modal
+ * "Nota" nell'editor), sotto il testo libero — `null` se la nota non ne ha
+ * nessuno. Costruita con nodi DOM (mai concatenazione di HTML grezzo): a
+ * differenza di `note.content`, questi campi non passano da
+ * `renderNoteInline`/DOMPurify, sono testo semplice inserito come
+ * `textContent`. */
+function buildNoteCitationElement(
+  document: Document,
+  note: { author?: string | null; title?: string | null; page?: string | null; isbn?: string | null; doi?: string | null }
+): HTMLElement | null {
+  if (!note.author && !note.title && !note.page && !note.isbn && !note.doi) return null;
+
+  const p = document.createElement("p");
+  p.className = "footnote-citation";
+  const parts: (string | HTMLElement)[] = [];
+  if (note.author) parts.push(note.author);
+  if (note.title) {
+    const em = document.createElement("em");
+    em.textContent = note.title;
+    parts.push(em);
+  }
+  if (note.page) parts.push(`p. ${note.page}`);
+  if (note.isbn) parts.push(`ISBN ${note.isbn}`);
+
+  parts.forEach((part, i) => {
+    if (i > 0) p.append(" · ");
+    p.append(part);
+  });
+
+  if (note.doi) {
+    if (parts.length > 0) p.append(" · ");
+    const a = document.createElement("a");
+    a.setAttribute("href", `https://doi.org/${note.doi}`);
+    a.setAttribute("target", "_blank");
+    a.setAttribute("rel", "noopener noreferrer nofollow");
+    a.textContent = `doi.org/${note.doi}`;
+    p.append(a);
+  }
+
+  return p;
+}
+
 /** todo/EDITOR.md: trasforma i marcatori di nota nel testo in riferimenti in
  * apice (con il testo della nota come tooltip) e accoda l'elenco numerato a
  * piè di pagina. La sorgente è l'elenco strutturato `notes`, non il corpo.
@@ -288,6 +330,8 @@ function renderFootnotes(document: Document, notes: PostNote[], labels: Footnote
     const li = document.createElement("li");
     li.id = `fn-${note.idx}`;
     li.innerHTML = `${renderNoteInline(note.content)} <a class="footnote-backref" href="#fnref-${note.idx}" aria-label="${labels.backToText}">↩</a>`;
+    const citation = buildNoteCitationElement(document, note);
+    if (citation) li.append(citation);
     ol.append(li);
   }
   section.append(heading, ol);

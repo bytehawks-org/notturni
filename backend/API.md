@@ -704,6 +704,19 @@ riporta ordinate per `idx`. La resa (elenco numerato a piè di pagina +
 tooltip sul marcatore) è del frontend; l'aggregato del blog è
 `GET /blogs/{slug}/bibliography` (vedi sezione Blog).
 
+Ogni nota accetta anche 5 campi facoltativi per bibliografie strutturate —
+`title`, `author`, `isbn` (max 32), `doi` (max 255), `page` (max 32), tutti
+`string | null`, assenti/vuoti equivalgono a `null` — nell'editor dietro un
+toggle "Aggiungi dettagli bibliografici" nel modal "Nota" (stesso stile
+dell'avviso sui contenuti sensibili delle immagini). `title`/`author` max
+300 caratteri. Nessuno di questi è mai obbligatorio, solo `content` lo è.
+Propagati anche alla nota di libreria del blog che questa nota aggancia (B8,
+sotto), **solo alla creazione**: se la libreria ha già una nota con lo
+stesso testo normalizzato, i suoi campi non vengono mai sovrascritti da qui
+(si preserva un'eventuale modifica fatta dalla libreria stessa — non ancora
+esposta da quella API in questo blocco). `GET /blogs/{slug}/bibliography`
+riporta questi stessi 5 campi per ogni voce aggregata.
+
 Stati: `draft` → (opzionale) `pending_review` → `published`. `published_at`
 serve anche per la pianificazione: un post con `status=published` e
 `published_at` nel futuro non è ancora pubblicamente visibile — vedi

@@ -192,6 +192,17 @@ body {
   text-decoration: none;
   margin-left: 0.35rem;
 }
+/* Campi bibliografici opzionali (autore/titolo/pagina/ISBN/DOI, modal "Nota"
+   nell'editor) — su una riga propria sotto il testo libero, non inline come
+   la regola generale ".footnotes li p" sopra. */
+.notturni-prose .footnotes li p.footnote-citation {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.85em;
+}
+.notturni-prose .footnote-citation a {
+  color: inherit;
+}
 .notturni-prose blockquote {
   margin: 1em 0;
   padding-left: 1em;

@@ -49,10 +49,15 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   immagine) sotto il testo del link.
 - **Note, media e link: bibliografia automatica del blog.** Ogni post ha un
   elenco di note a piè di pagina, mostrate numerate in fondo alla pagina
-  pubblica del post con il testo come tooltip sul riferimento. Una pagina
-  `/{blog}/bibliografia` raccoglie tutte le note dei post pubblicati,
-  deduplicate, con i post che le citano; allo stesso modo `/{blog}/media` e
-  `/{blog}/link` raccolgono le immagini e i link citati nel corpo dei post,
+  pubblica del post con il testo come tooltip sul riferimento. L'editor
+  inserisce una nota da un modal (stesso stile dell'avviso sui contenuti
+  sensibili delle immagini): solo il testo libero è obbligatorio, dietro un
+  toggle si possono aggiungere titolo, autore, ISBN, DOI e pagina per
+  bibliografie strutturate, mostrati poi in fondo al post e in bibliografia.
+  Una pagina `/{blog}/bibliografia` raccoglie tutte le note dei post
+  pubblicati, deduplicate, con i post che le citano; allo stesso modo
+  `/{blog}/media` e `/{blog}/link` raccolgono le immagini e i link citati nel
+  corpo dei post,
   con la data di pubblicazione di ciascuna citazione.
 - **Frammenti:** il lettore può selezionare con il mouse una porzione di
   testo di un post pubblicato (max 15%) e salvarla in una raccolta personale

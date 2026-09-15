@@ -15,16 +15,43 @@ MAX_NOTES_PER_POST = 100
 MAX_NOTE_LENGTH = 2000
 MAX_NOTE_IDX = 999
 
+# Limiti dei campi facoltativi per bibliografie strutturate (modal "Nota"
+# nell'editor, dietro il toggle "Aggiungi dettagli bibliografici") — nessuno
+# di questi è mai obbligatorio, solo `content` lo è.
+MAX_NOTE_TITLE_LENGTH = 300
+MAX_NOTE_AUTHOR_LENGTH = 300
+MAX_NOTE_ISBN_LENGTH = 32
+MAX_NOTE_DOI_LENGTH = 255
+MAX_NOTE_PAGE_LENGTH = 32
+
 
 class NoteInput(NamedTuple):
     idx: int
     content: str
+    title: str | None = None
+    author: str | None = None
+    isbn: str | None = None
+    doi: str | None = None
+    page: str | None = None
+
+
+def _clean_optional(value: str | None, *, max_length: int, label: str) -> str | None:
+    if value is None:
+        return None
+    text = " ".join(value.split())
+    if not text:
+        return None
+    if len(text) > max_length:
+        raise ValueError(f"Il campo '{label}' della nota può avere al massimo {max_length} caratteri.")
+    return text
 
 
 def normalize_notes(notes: list[NoteInput]) -> list[NoteInput]:
     """Valida e normalizza l'elenco di note. Solleva ValueError se non valido.
     Ritorna le note ordinate per `idx`, senza duplicati di `idx`, con il
-    contenuto ripulito degli spazi ai bordi."""
+    contenuto (e gli eventuali campi bibliografici opzionali) ripuliti degli
+    spazi ai bordi — una stringa vuota/solo spazi in un campo opzionale
+    equivale ad assente (`None`)."""
     if len(notes) > MAX_NOTES_PER_POST:
         raise ValueError(f"Massimo {MAX_NOTES_PER_POST} note per post.")
 
@@ -43,7 +70,17 @@ def normalize_notes(notes: list[NoteInput]) -> list[NoteInput]:
         if len(text) > MAX_NOTE_LENGTH:
             raise ValueError(f"Una nota può avere al massimo {MAX_NOTE_LENGTH} caratteri.")
         seen.add(note.idx)
-        cleaned.append(NoteInput(idx=note.idx, content=text))
+        cleaned.append(
+            NoteInput(
+                idx=note.idx,
+                content=text,
+                title=_clean_optional(note.title, max_length=MAX_NOTE_TITLE_LENGTH, label="titolo"),
+                author=_clean_optional(note.author, max_length=MAX_NOTE_AUTHOR_LENGTH, label="autore"),
+                isbn=_clean_optional(note.isbn, max_length=MAX_NOTE_ISBN_LENGTH, label="ISBN"),
+                doi=_clean_optional(note.doi, max_length=MAX_NOTE_DOI_LENGTH, label="DOI"),
+                page=_clean_optional(note.page, max_length=MAX_NOTE_PAGE_LENGTH, label="pagina"),
+            )
+        )
 
     cleaned.sort(key=lambda n: n.idx)
     return cleaned
