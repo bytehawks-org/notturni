@@ -62,10 +62,9 @@ interface RichTextEditorProps {
   stickyToolbar?: boolean;
 }
 
-// Dimensione pulsanti/icone della toolbar: ~75% più grandi del precedente
-// h-9/w-9 con icone 16px (richiesta di leggibilità/usabilità), ridotti su
-// mobile dove la riga scorre in orizzontale invece di andare a capo (vedi
-// il contenitore della toolbar più sotto).
+// Pulsanti compatti per stare tutti su un'unica riga: la riga scorre in
+// orizzontale (overflow-x-auto sul contenitore) solo se lo spazio non basta,
+// invece di andare a capo su più righe come nella versione precedente.
 function ToolbarButton({
   active,
   disabled,
@@ -87,7 +86,7 @@ function ToolbarButton({
       disabled={disabled}
       onMouseDown={(e) => e.preventDefault()} // non rubare il focus all'editor
       onClick={onClick}
-      className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg transition disabled:opacity-30 disabled:cursor-not-allowed sm:h-16 sm:w-16 sm:text-2xl [&>svg]:h-5 [&>svg]:w-5 sm:[&>svg]:h-7 sm:[&>svg]:w-7 ${
+      className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm transition disabled:opacity-30 disabled:cursor-not-allowed [&>svg]:h-4 [&>svg]:w-4 ${
         active ? "bg-primary/10 text-primary" : "text-foreground/70 hover:bg-foreground/5 hover:text-foreground"
       }`}
     >
@@ -97,7 +96,7 @@ function ToolbarButton({
 }
 
 function ToolbarDivider() {
-  return <span className="mx-1.5 h-8 w-px shrink-0 bg-border sm:h-10" />;
+  return <span className="mx-1 h-6 w-px shrink-0 bg-border" />;
 }
 
 interface MentionCandidate {
@@ -522,7 +521,7 @@ export function RichTextEditor({
         {toolbarEnd && (
           <div className="mb-3 flex flex-wrap items-end gap-3">{toolbarEnd}</div>
         )}
-        <div className="flex flex-nowrap items-center gap-1 overflow-x-auto text-foreground/70 sm:flex-wrap sm:overflow-visible">
+        <div className="flex flex-nowrap items-center gap-0.5 overflow-x-auto text-foreground/70">
         <ToolbarButton
           title={t("heading1")}
           active={state.heading1}

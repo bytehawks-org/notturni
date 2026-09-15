@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { BlogPageShell } from "@/components/blog/BlogPageShell";
 import { BlogStateNotice, blogIsOffline } from "@/components/blog/BlogStateNotice";
 import { BlogHeaderActions } from "@/components/blog/PostHeaderActions";
+import { ExpandIcon } from "@/components/editor/icons";
 import { BlogHeader } from "@/components/shell/BlogHeader";
 import { FilterChip } from "@/components/ui/Pill";
 import { SENSITIVITY_CATEGORY_LABELS } from "@/lib/content-media";
@@ -42,11 +43,14 @@ function MediaFigure({ entry, locale, defaultLocale }: { entry: MediaBibliograph
           {/* eslint-disable-next-line @next/next/no-img-element -- URL storage esterno */}
           <img src={entry.url} alt={entry.alt_text} className="h-full w-full object-cover" />
           <span className="sensitive-image-overlay">{SENSITIVITY_CATEGORY_LABELS[entry.categories[0]]}</span>
+          <button type="button" className="lightbox-expand-btn" data-lightbox-src={entry.url} data-lightbox-alt={entry.alt_text} aria-label="Ingrandisci">
+            <ExpandIcon />
+          </button>
         </label>
       ) : (
         <span className="relative block aspect-square overflow-hidden rounded-[10px] border border-border bg-surface md:aspect-[4/3]">
           {/* eslint-disable-next-line @next/next/no-img-element -- URL storage esterno */}
-          <img src={entry.url} alt={entry.alt_text} className="h-full w-full object-cover" />
+          <img src={entry.url} alt={entry.alt_text} data-lightbox="1" className="h-full w-full object-cover" />
         </span>
       )}
       <figcaption className="flex flex-col gap-0.5 text-[13px] leading-snug">

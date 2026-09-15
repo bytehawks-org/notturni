@@ -7,6 +7,7 @@ import { BlogPageShell, blogLayout } from "@/components/blog/BlogPageShell";
 import { BlogStateNotice, blogIsOffline } from "@/components/blog/BlogStateNotice";
 import { BlogHeaderActions } from "@/components/blog/PostHeaderActions";
 import { FeedPostCard } from "@/components/FeedPostCard";
+import { SensitiveImage } from "@/components/blog/SensitiveImage";
 import { BlogHeader } from "@/components/shell/BlogHeader";
 import { FilterChip } from "@/components/ui/Pill";
 import { SITE_HOST } from "@/lib/site";
@@ -74,19 +75,15 @@ export default async function BlogHomePage({
     <BlogPageShell config={config}>
       <BlogHeader slug={blogSlug} name={blog.title} hasPublications={hasPublications} current="posts" actions={<BlogHeaderActions slug={blogSlug} />} />
       <main className="mx-auto w-full max-w-[1184px] flex-1 px-5 py-10 lg:px-12 lg:py-14">
-        {blog.cover_image_url && blog.cover_image_is_sensitive && (
-          // Stesso trucco CSS della cover del post: <label>+checkbox, mai un
-          // <div> (il click non arriverebbe al checkbox, vedi [postSlug]/page.tsx).
-          <label className="sensitive-image-wrapper mb-8 block aspect-[21/6] w-full overflow-hidden rounded-xl">
-            <input type="checkbox" className="sensitive-image-toggle" aria-label={t("revealCover")} />
-            {/* eslint-disable-next-line @next/next/no-img-element -- URL storage esterno */}
-            <img src={blog.cover_image_url} alt="" className="h-full w-full object-cover" />
-            <span className="sensitive-image-overlay">{t("sensitiveCover")}</span>
-          </label>
-        )}
-        {blog.cover_image_url && !blog.cover_image_is_sensitive && (
-          // eslint-disable-next-line @next/next/no-img-element -- URL storage esterno
-          <img src={blog.cover_image_url} alt="" className="mb-8 aspect-[21/6] w-full rounded-xl object-cover" />
+        {blog.cover_image_url && (
+          <SensitiveImage
+            src={blog.cover_image_url}
+            sensitive={blog.cover_image_is_sensitive}
+            className="mb-8 block aspect-[21/6] w-full overflow-hidden rounded-xl object-cover"
+            revealLabel={t("revealCover")}
+            sensitiveLabel={t("sensitiveCover")}
+            expandLabel={t("expandImage")}
+          />
         )}
         <header className="grid gap-6 md:grid-cols-[72px_minmax(0,1fr)] md:gap-7">
           <span

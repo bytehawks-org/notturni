@@ -34,6 +34,14 @@ const renderer = new MarkdownIt({ html: false, linkify: true, breaks: false });
  * in un blocco sfocato, cliccabile per rivelarla — un puro trucco CSS
  * (checkbox nascosto + selettore ~), niente JavaScript lato client.
  *
+ * Aggiunge anche il pulsante di ingrandimento (Rifinitura #1,
+ * components/Lightbox.tsx): compare solo dopo la rivelazione (stesso trucco
+ * CSS, `.sensitive-image-toggle:checked ~ .lightbox-expand-btn`), mai sullo
+ * stesso click che rivela l'immagine — la Lightbox stessa (client-side)
+ * intercetta il click su questo pulsante via delega globale, non serve
+ * altro JS qui. Le immagini *non* sensibili sono invece cliccabili subito,
+ * marcate `data-lightbox` in `renderPipeline`.
+ *
  * Muta `document` in place: fa parte della pipeline di `renderMarkdown`, che
  * fa un solo parse DOM per tutte le trasformazioni. */
 function wrapSensitiveImages(document: Document): void {
@@ -46,8 +54,17 @@ function wrapSensitiveImages(document: Document): void {
     const overlay = document.createElement("span");
     overlay.className = "sensitive-image-overlay";
     overlay.textContent = "Contenuto sensibile — clicca per vedere";
+    const src = img.getAttribute("src") ?? "";
+    const expandBtn = document.createElement("button");
+    expandBtn.type = "button";
+    expandBtn.className = "lightbox-expand-btn";
+    expandBtn.setAttribute("data-lightbox-src", src);
+    expandBtn.setAttribute("data-lightbox-alt", img.getAttribute("alt") ?? "");
+    expandBtn.setAttribute("aria-label", "Ingrandisci");
+    expandBtn.innerHTML =
+      '<svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3.5h3.5V7"/><path d="M14.5 3.5 10 8"/><path d="M7 14.5H3.5V11"/><path d="M3.5 14.5 8 10"/></svg>';
     img.replaceWith(wrapper);
-    wrapper.append(toggle, img, overlay);
+    wrapper.append(toggle, img, overlay, expandBtn);
   });
 }
 
@@ -416,6 +433,16 @@ async function renderPipeline(markdown: string, options: RenderOptions, withHead
   const { document } = dom.window;
 
   wrapSensitiveImages(document);
+  // Immagini di contenuto non segnalate come sensibili: cliccabili subito
+  // per la Lightbox (Rifinitura #1) — quelle sensibili restano escluse (sono
+  // comunque ancora <img> dentro il wrapper appena creato sopra, non
+  // rimosse dal documento): hanno il proprio pulsante dedicato, aggiunto da
+  // wrapSensitiveImages, mai la stessa immagine cliccabile direttamente
+  // (altrimenti il primo click aprirebbe subito la lightbox invece di
+  // limitarsi a rivelarla).
+  document.querySelectorAll("img").forEach((img) => {
+    if (!img.closest(".sensitive-image-wrapper")) img.setAttribute("data-lightbox", "1");
+  });
   await resolveLinkCards(document);
   if (options.mentions !== false) linkifyMentions(document);
   const headings = withHeadings ? anchorHeadings(document) : [];

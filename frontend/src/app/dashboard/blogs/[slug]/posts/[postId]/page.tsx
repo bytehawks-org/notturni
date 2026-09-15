@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { CategorySelect } from "@/components/editor/CategorySelect";
 import { CoverImageUpload } from "@/components/editor/CoverImageUpload";
 import { EditorRail } from "@/components/editor/EditorRail";
+import { PostCommentsModeControl, PostCrawlingControl } from "@/components/editor/PostMetaControls";
 import { PostStatusControl } from "@/components/editor/PostStatusControl";
 import { PublicationSelect } from "@/components/editor/PublicationSelect";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
@@ -19,7 +20,7 @@ import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import type { SensitivityCategory } from "@/lib/content-media";
 import { displayPostStatus } from "@/lib/post-status";
-import { COMMENTS_MODES, type CommentsMode, type Post, type PostNote, type PostTranslationSummary } from "@/lib/types";
+import { type CommentsMode, type Post, type PostNote, type PostTranslationSummary } from "@/lib/types";
 
 const FORM_ID = "edit-post-form";
 
@@ -30,65 +31,6 @@ function errorMessage(err: unknown, fallback: string): string {
 function RailLabel({ children }: { children: React.ReactNode }) {
   return (
     <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[.04em] text-muted">{children}</span>
-  );
-}
-
-/** Override di Blog.comments_mode per il solo post corrente; "" = eredita
- * dal blog (valore locale del <select>, tradotto in null verso l'API). */
-function PostCommentsModeSelect({
-  value,
-  onChange,
-}: {
-  value: CommentsMode | null;
-  onChange: (value: CommentsMode | null) => void;
-}) {
-  const t = useTranslations("PostEditorPage");
-  return (
-    <label className="flex flex-col">
-      <RailLabel>{t("comments")}</RailLabel>
-      <select
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value === "" ? null : (e.target.value as CommentsMode))}
-        className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
-      >
-        <option value="">{t("inheritBlog")}</option>
-        {COMMENTS_MODES.map((m) => (
-          <option key={m} value={m}>
-            {t(`commentsMode.${m}`)}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-/** Override di Blog.search_indexing_enabled/ai_crawling_enabled per il solo
- * post corrente; "" = eredita dal blog (valore locale del <select>, tradotto
- * in null verso l'API) — non può riaprire un crawler già escluso dal blog
- * (backend/app/domain/seo.py), solo restringerlo ulteriormente. */
-function PostCrawlingSelect({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: boolean | null;
-  onChange: (value: boolean | null) => void;
-}) {
-  const t = useTranslations("PostEditorPage");
-  return (
-    <label className="flex flex-col">
-      <RailLabel>{label}</RailLabel>
-      <select
-        value={value === null ? "" : value ? "true" : "false"}
-        onChange={(e) => onChange(e.target.value === "" ? null : e.target.value === "true")}
-        className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
-      >
-        <option value="">{t("inheritBlog")}</option>
-        <option value="true">{t("allow")}</option>
-        <option value="false">{t("block")}</option>
-      </select>
-    </label>
   );
 }
 
@@ -308,13 +250,13 @@ export default function PostEditorPage() {
                     <RailLabel>{t("tags")}</RailLabel>
                     <TagInput value={tags} onChange={setTags} />
                   </div>
-                  <PostCommentsModeSelect value={commentsMode} onChange={setCommentsMode} />
-                  <PostCrawlingSelect
+                  <PostCommentsModeControl value={commentsMode} onChange={setCommentsMode} />
+                  <PostCrawlingControl
                     label={t("searchEngines")}
                     value={searchIndexingEnabled}
                     onChange={setSearchIndexingEnabled}
                   />
-                  <PostCrawlingSelect label={t("aiCrawlers")} value={aiCrawlingEnabled} onChange={setAiCrawlingEnabled} />
+                  <PostCrawlingControl label={t("aiCrawlers")} value={aiCrawlingEnabled} onChange={setAiCrawlingEnabled} />
                 </>
               ),
             },
