@@ -235,9 +235,18 @@ const BARE_NOTE_REF_RE = /\[\^(\d{1,3})\]/g;
  * `textContent`. */
 function buildNoteCitationElement(
   document: Document,
-  note: { author?: string | null; title?: string | null; page?: string | null; isbn?: string | null; doi?: string | null }
+  note: {
+    author?: string | null;
+    title?: string | null;
+    source?: string | null;
+    issued?: string | null;
+    page?: string | null;
+    isbn?: string | null;
+    doi?: string | null;
+    url?: string | null;
+  }
 ): HTMLElement | null {
-  if (!note.author && !note.title && !note.page && !note.isbn && !note.doi) return null;
+  if (!note.author && !note.title && !note.source && !note.issued && !note.page && !note.isbn && !note.doi && !note.url) return null;
 
   const p = document.createElement("p");
   p.className = "footnote-citation";
@@ -248,6 +257,8 @@ function buildNoteCitationElement(
     em.textContent = note.title;
     parts.push(em);
   }
+  if (note.source) parts.push(note.source);
+  if (note.issued) parts.push(note.issued);
   if (note.page) parts.push(`p. ${note.page}`);
   if (note.isbn) parts.push(`ISBN ${note.isbn}`);
 
@@ -257,12 +268,24 @@ function buildNoteCitationElement(
   });
 
   if (note.doi) {
-    if (parts.length > 0) p.append(" · ");
+    if (parts.length > 0 || p.childNodes.length > 0) p.append(" · ");
     const a = document.createElement("a");
     a.setAttribute("href", `https://doi.org/${note.doi}`);
     a.setAttribute("target", "_blank");
     a.setAttribute("rel", "noopener noreferrer nofollow");
     a.textContent = `doi.org/${note.doi}`;
+    p.append(a);
+  }
+
+  // Un link generico (a differenza del DOI, non implica di per sé un dominio
+  // fisso) solo se diverso dalla pagina doi.org già mostrata sopra.
+  if (note.url && !(note.doi && note.url.includes(`doi.org/${note.doi}`))) {
+    if (parts.length > 0 || p.childNodes.length > 0) p.append(" · ");
+    const a = document.createElement("a");
+    a.setAttribute("href", note.url);
+    a.setAttribute("target", "_blank");
+    a.setAttribute("rel", "noopener noreferrer nofollow");
+    a.textContent = note.url.replace(/^https?:\/\//, "");
     p.append(a);
   }
 

@@ -11,6 +11,8 @@ strutturato, non sul parsing del corpo.
 
 from typing import NamedTuple
 
+from app.models.blog_note import NOTE_KINDS
+
 MAX_NOTES_PER_POST = 100
 MAX_NOTE_LENGTH = 2000
 MAX_NOTE_IDX = 999
@@ -23,6 +25,12 @@ MAX_NOTE_AUTHOR_LENGTH = 300
 MAX_NOTE_ISBN_LENGTH = 32
 MAX_NOTE_DOI_LENGTH = 255
 MAX_NOTE_PAGE_LENGTH = 32
+# Compatibilità BibTeX (app/domain/blog_notes.py): editore/rivista/sito,
+# anno/data, URL — `kind` non ha un limite di lunghezza, è validato contro
+# NOTE_KINDS sotto.
+MAX_NOTE_SOURCE_LENGTH = 300
+MAX_NOTE_ISSUED_LENGTH = 32
+MAX_NOTE_URL_LENGTH = 2000
 
 
 class NoteInput(NamedTuple):
@@ -33,6 +41,10 @@ class NoteInput(NamedTuple):
     isbn: str | None = None
     doi: str | None = None
     page: str | None = None
+    kind: str | None = None
+    source: str | None = None
+    issued: str | None = None
+    url: str | None = None
 
 
 def _clean_optional(value: str | None, *, max_length: int, label: str) -> str | None:
@@ -69,6 +81,9 @@ def normalize_notes(notes: list[NoteInput]) -> list[NoteInput]:
             raise ValueError("Il testo della nota non può essere vuoto.")
         if len(text) > MAX_NOTE_LENGTH:
             raise ValueError(f"Una nota può avere al massimo {MAX_NOTE_LENGTH} caratteri.")
+        kind = _clean_optional(note.kind, max_length=10, label="tipo")
+        if kind is not None and kind not in NOTE_KINDS:
+            raise ValueError(f"Tipo di nota non valido: usare uno tra {', '.join(NOTE_KINDS)}.")
         seen.add(note.idx)
         cleaned.append(
             NoteInput(
@@ -79,6 +94,10 @@ def normalize_notes(notes: list[NoteInput]) -> list[NoteInput]:
                 isbn=_clean_optional(note.isbn, max_length=MAX_NOTE_ISBN_LENGTH, label="ISBN"),
                 doi=_clean_optional(note.doi, max_length=MAX_NOTE_DOI_LENGTH, label="DOI"),
                 page=_clean_optional(note.page, max_length=MAX_NOTE_PAGE_LENGTH, label="pagina"),
+                kind=kind,
+                source=_clean_optional(note.source, max_length=MAX_NOTE_SOURCE_LENGTH, label="editore/rivista/sito"),
+                issued=_clean_optional(note.issued, max_length=MAX_NOTE_ISSUED_LENGTH, label="anno/data"),
+                url=_clean_optional(note.url, max_length=MAX_NOTE_URL_LENGTH, label="URL"),
             )
         )
 

@@ -59,7 +59,7 @@ async def test_post_notes_crud_roundtrip(client: AsyncClient, make_user: Callabl
         headers=owner.headers,
     )
     assert created.status_code == 201, created.text
-    empty_fields = {"title": None, "author": None, "isbn": None, "doi": None, "page": None}
+    empty_fields = {"title": None, "author": None, "isbn": None, "doi": None, "page": None, "kind": None, "source": None, "issued": None, "url": None}
     assert created.json()["notes"] == [
         {"idx": 1, "content": "La *prima* nota.", **empty_fields},
         {"idx": 2, "content": "La seconda nota.", **empty_fields},
@@ -149,14 +149,119 @@ async def test_post_note_structured_fields_roundtrip_and_library_propagation(
     assert lib_note["used_in"][0]["idx"] == 1
 
 
+async def test_post_note_bibtex_fields_roundtrip_and_export(
+    client: AsyncClient, make_user: Callable
+) -> None:
+    """kind/source/issued/url (compatibilità BibTeX): propagati dal post alla
+    bibliografia pubblica, alla libreria del blog e da lì all'export .bib."""
+    owner: AuthedUser = await make_user("note-bibtex-owner")
+    await _blog(client, owner, "blog-note-bibtex")
+
+    created = await client.post(
+        "/api/v1/blogs/blog-note-bibtex/posts",
+        json={
+            "slug": "p",
+            "title": "t",
+            "content": "c",
+            "notes": [
+                {
+                    "idx": 1,
+                    "content": "Un libro citato per intero.",
+                    "title": "Il Titolo del Libro",
+                    "author": "Autrice Autrice",
+                    "kind": "book",
+                    "source": "Editore Esempio",
+                    "issued": "2019",
+                    "url": "https://example.com/libro",
+                }
+            ],
+        },
+        headers=owner.headers,
+    )
+    assert created.status_code == 201, created.text
+    note_out = created.json()["notes"][0]
+    assert note_out["kind"] == "book"
+    assert note_out["source"] == "Editore Esempio"
+    assert note_out["issued"] == "2019"
+    assert note_out["url"] == "https://example.com/libro"
+
+    await client.post(f"/api/v1/posts/{created.json()['id']}/publish", headers=owner.headers)
+
+    biblio = await client.get("/api/v1/blogs/blog-note-bibtex/bibliography")
+    entry = biblio.json()[0]
+    assert entry["source"] == "Editore Esempio"
+    assert entry["issued"] == "2019"
+    assert entry["kind"] == "book"
+    assert entry["url"] == "https://example.com/libro"
+
+    library = await client.get(
+        "/api/v1/blogs/blog-note-bibtex/notes?q=libro", headers=owner.headers
+    )
+    lib_note = next(n for n in library.json() if "libro" in n["content"].casefold())
+    assert lib_note["source"] == "Editore Esempio"
+    assert lib_note["issued"] == "2019"
+
+    export = await client.get(
+        "/api/v1/blogs/blog-note-bibtex/notes/export.bib", headers=owner.headers
+    )
+    assert export.status_code == 200
+    bib = export.text
+    assert "@book{" in bib
+    assert "title = {Il Titolo del Libro}" in bib
+    assert "author = {Autrice Autrice}" in bib
+    assert "publisher = {Editore Esempio}" in bib
+    assert "year = {2019}" in bib
+    assert "url = {https://example.com/libro}" in bib
+
+    invalid_kind = await client.post(
+        "/api/v1/blogs/blog-note-bibtex/posts",
+        json={
+            "slug": "p2",
+            "title": "t2",
+            "content": "c",
+            "notes": [{"idx": 1, "content": "x", "kind": "not-a-kind"}],
+        },
+        headers=owner.headers,
+    )
+    assert invalid_kind.status_code == 400
+
+
+async def test_bibtex_import_parses_structured_fields(client: AsyncClient, make_user: Callable) -> None:
+    owner: AuthedUser = await make_user("note-bibtex-import-owner")
+    await _blog(client, owner, "blog-note-bibtex-import")
+
+    bibtex = (
+        "@article{ref1,\n"
+        "  title = {Un Articolo},\n"
+        "  author = {Autore Vario},\n"
+        "  journal = {Rivista Esempio},\n"
+        "  year = {2021},\n"
+        "  doi = {10.1000/abc}\n"
+        "}\n"
+    )
+    imported = await client.post(
+        "/api/v1/blogs/blog-note-bibtex-import/notes/import",
+        json={"bibtex": bibtex},
+        headers=owner.headers,
+    )
+    assert imported.status_code == 201, imported.text
+    note = imported.json()[0]
+    assert note["kind"] == "article"
+    assert note["title"] == "Un Articolo"
+    assert note["author"] == "Autore Vario"
+    assert note["source"] == "Rivista Esempio"
+    assert note["issued"] == "2021"
+    assert note["doi"] == "10.1000/abc"
+
+
 async def test_post_note_structured_fields_never_overwrite_existing_library_note(
     client: AsyncClient, make_user: Callable, db_session: AsyncSession
 ) -> None:
     """Una modifica manuale in libreria non deve essere sovrascritta da un
     nuovo post che cita lo stesso testo — i campi opzionali si propagano solo
-    alla creazione di una nuova BlogNote, mai su una già esistente. I campi
-    opzionali di BlogNote non sono esposti dalla API della libreria in questo
-    blocco (fuori scope, solo lettura diretta da DB qui)."""
+    alla creazione di una nuova BlogNote, mai su una già esistente (letta
+    direttamente da DB qui solo perché più diretto di un secondo giro di
+    `PATCH .../notes/{id}` per verificare lo stesso valore già noto)."""
     owner: AuthedUser = await make_user("note-struct-owner2")
     await _blog(client, owner, "blog-note-struct2")
 
@@ -214,7 +319,7 @@ async def test_translation_has_its_own_notes(client: AsyncClient, make_user: Cal
               "notes": [{"idx": 1, "content": "EN"}]},
         headers=owner.headers,
     )
-    empty_fields = {"title": None, "author": None, "isbn": None, "doi": None, "page": None}
+    empty_fields = {"title": None, "author": None, "isbn": None, "doi": None, "page": None, "kind": None, "source": None, "issued": None, "url": None}
     assert tr.json()["notes"] == [{"idx": 1, "content": "EN", **empty_fields}]
     # l'originale resta con la sua
     again = await client.get(f"/api/v1/posts/{original.json()['id']}", headers=owner.headers)

@@ -66,19 +66,41 @@ def _bibtex_escape(text: str) -> str:
     return text.replace("{", "\\{").replace("}", "\\}")
 
 
+# Campo BibTeX in cui va `source` (editore/rivista/sito) a seconda del tipo:
+# publisher per un libro, journal per un articolo, organization altrimenti
+# (web/nota — BibTeX classico non ha un campo "sito", organization è il più
+# vicino tra quelli riconosciuti dai gestori bibliografici più diffusi).
+_SOURCE_FIELD = {"book": "publisher", "article": "journal"}
+
+
 def to_bibtex(notes: Iterable[BlogNote]) -> str:
-    """Una voce per nota: `@book`/`@article`/`@misc` con `note` = testo
-    completo (le note non sono strutturate per campi: il testo resta la
-    fonte, i campi opzionali `url`/`year` aiutano i gestori bibliografici)."""
+    """Una voce per nota: `@book`/`@article`/`@misc` con i campi strutturati
+    (title/author/publisher-o-journal/year/isbn/doi/url) quando presenti, più
+    `note` col testo completo — che resta sempre la fonte di verità mostrata
+    nella bibliografia pubblica, i campi strutturati sono un aiuto in più per
+    i gestori bibliografici esterni. Un anno mancante viene comunque stimato
+    dal testo (compatibilità con le note create prima di questo campo)."""
     entries = []
     for i, n in enumerate(notes, 1):
         kind = {"book": "book", "article": "article"}.get(n.kind, "misc")
-        year = _YEAR_RE.search(n.content)
-        fields = [f"  note = {{{_bibtex_escape(n.content)}}}"]
+        year = n.issued or (_YEAR_RE.search(n.content).group(0) if _YEAR_RE.search(n.content) else None)
+        fields = []
+        if n.title:
+            fields.append(f"  title = {{{_bibtex_escape(n.title)}}}")
+        if n.author:
+            fields.append(f"  author = {{{_bibtex_escape(n.author)}}}")
+        if n.source:
+            source_field = _SOURCE_FIELD.get(n.kind, "organization")
+            fields.append(f"  {source_field} = {{{_bibtex_escape(n.source)}}}")
+        if year:
+            fields.append(f"  year = {{{year}}}")
+        if n.isbn:
+            fields.append(f"  isbn = {{{n.isbn}}}")
+        if n.doi:
+            fields.append(f"  doi = {{{n.doi}}}")
         if n.url:
             fields.append(f"  url = {{{n.url}}}")
-        if year:
-            fields.append(f"  year = {{{year.group(0)}}}")
+        fields.append(f"  note = {{{_bibtex_escape(n.content)}}}")
         entries.append(f"@{kind}{{notturni{i},\n" + ",\n".join(fields) + "\n}")
     return "\n\n".join(entries) + ("\n" if entries else "")
 
@@ -88,23 +110,37 @@ _FIELD_RE = re.compile(r"(\w+)\s*=\s*(\{(?:[^{}]|\{[^{}]*\})*\}|\"[^\"]*\")", re
 
 
 def parse_bibtex(text: str) -> list[dict]:
-    """Parser minimale: per ogni voce ricava tipo (book/article/altro → web se
-    c'è un URL, altrimenti note), testo (`note` se presente, altrimenti
-    "Autore. Titolo. Editore, anno.") e URL/DOI."""
+    """Parser minimale: per ogni voce ricava i campi strutturati (title/
+    author/source/issued/isbn/doi/url) più tipo e testo (`note` se presente,
+    altrimenti "Autore. Titolo. Editore, anno.", sintetizzato dagli stessi
+    campi strutturati)."""
     out = []
     for m in _ENTRY_RE.finditer(text):
         entry_type = m.group(1).lower()
         fields = {k.lower(): v.strip("{}\"").strip() for k, v in _FIELD_RE.findall(m.group(3))}
         url = fields.get("url") or (f"https://doi.org/{fields['doi']}" if fields.get("doi") else None)
+        source = fields.get("publisher") or fields.get("journal") or fields.get("organization")
         if fields.get("note"):
             content = fields["note"]
         else:
-            parts = [fields.get("author"), fields.get("title"), fields.get("journal") or fields.get("publisher"), fields.get("year")]
+            parts = [fields.get("author"), fields.get("title"), source, fields.get("year")]
             content = ". ".join(p for p in parts if p)
             if content:
                 content += "."
         if not content:
             continue
         kind = "book" if entry_type == "book" else "article" if entry_type in ("article", "inproceedings") else ("web" if url else "note")
-        out.append({"content": content[:2000], "kind": kind if kind in NOTE_KINDS else "note", "url": url})
+        out.append(
+            {
+                "content": content[:2000],
+                "kind": kind if kind in NOTE_KINDS else "note",
+                "url": url,
+                "title": fields.get("title"),
+                "author": fields.get("author"),
+                "source": source,
+                "issued": fields.get("year") or fields.get("date"),
+                "isbn": fields.get("isbn"),
+                "doi": fields.get("doi"),
+            }
+        )
     return out

@@ -59,6 +59,12 @@ class NoteIn(BaseModel):
     isbn: str | None = None
     doi: str | None = None
     page: str | None = None
+    # Compatibilità BibTeX (app/domain/blog_notes.py): tipo (kind: libro/
+    # articolo/web/nota), editore/rivista/sito, anno/data, URL.
+    kind: str | None = None
+    source: str | None = None
+    issued: str | None = None
+    url: str | None = None
 
 
 class NoteOut(BaseModel):
@@ -69,6 +75,10 @@ class NoteOut(BaseModel):
     isbn: str | None = None
     doi: str | None = None
     page: str | None = None
+    kind: str | None = None
+    source: str | None = None
+    issued: str | None = None
+    url: str | None = None
 
 
 def _to_note_inputs(notes: list[NoteIn] | None) -> list[NoteInput]:
@@ -81,6 +91,10 @@ def _to_note_inputs(notes: list[NoteIn] | None) -> list[NoteInput]:
             isbn=n.isbn,
             doi=n.doi,
             page=n.page,
+            kind=n.kind,
+            source=n.source,
+            issued=n.issued,
+            url=n.url,
         )
         for n in (notes or [])
     ]
@@ -373,13 +387,29 @@ async def _posts_out(
             post_notes.c.isbn,
             post_notes.c.doi,
             post_notes.c.page,
+            post_notes.c.kind,
+            post_notes.c.source,
+            post_notes.c.issued,
+            post_notes.c.url,
         )
         .where(post_notes.c.post_id.in_(post_ids))
         .order_by(post_notes.c.post_id, post_notes.c.idx)
     )
-    for pid, idx, content, title, author, isbn, doi, page in note_rows.all():
+    for pid, idx, content, title, author, isbn, doi, page, kind, source, issued, url in note_rows.all():
         notes_by_post[pid].append(
-            NoteOut(idx=idx, content=content, title=title, author=author, isbn=isbn, doi=doi, page=page)
+            NoteOut(
+                idx=idx,
+                content=content,
+                title=title,
+                author=author,
+                isbn=isbn,
+                doi=doi,
+                page=page,
+                kind=kind,
+                source=source,
+                issued=issued,
+                url=url,
+            )
         )
 
     authors: dict[uuid.UUID, User] = {}
@@ -515,6 +545,10 @@ async def _sync_post_notes(session: AsyncSession, post: Post, notes: list[NoteIn
                     "isbn": n.isbn,
                     "doi": n.doi,
                     "page": n.page,
+                    "kind": n.kind,
+                    "source": n.source,
+                    "issued": n.issued,
+                    "url": n.url,
                 }
                 for n in notes
             ],

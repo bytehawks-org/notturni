@@ -880,7 +880,11 @@
     "noteDoiLabel": "DOI",
     "notePageLabel": "Page",
     "editDetails": "Edit",
-    "noteHasDetails": "This note has bibliographic details"
+    "noteHasDetails": "This note has bibliographic details",
+    "noteKindLabel": "Type",
+    "noteSourceLabel": "Publisher / journal / site",
+    "noteIssuedLabel": "Year / date",
+    "noteUrlLabel": "URL"
   },
   "TranslationsBar": {
     "alsoIn": "Also in",

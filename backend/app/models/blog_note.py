@@ -34,3 +34,9 @@ class BlogNote(Base, UUIDPKMixin, TimestampMixin):
     isbn: Mapped[str | None] = mapped_column(String(32), nullable=True)
     doi: Mapped[str | None] = mapped_column(String(255), nullable=True)
     page: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Compatibilità BibTeX (vedi app/domain/blog_notes.py::to_bibtex):
+    # editore/rivista/sito (publisher/journal/container-title) e anno/data
+    # (year/date) — stessa origine (riportati solo alla creazione) e stesse
+    # regole di `title`/`author` sopra.
+    source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    issued: Mapped[str | None] = mapped_column(String(32), nullable=True)

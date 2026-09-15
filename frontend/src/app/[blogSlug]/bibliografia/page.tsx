@@ -117,12 +117,14 @@ export default async function BlogBibliographyPage({
                     className="notturni-prose text-[15px] leading-[1.45] md:text-[17px]"
                     dangerouslySetInnerHTML={{ __html: renderNoteInline(entry.content) }}
                   />
-                  {(entry.author || entry.title || entry.page || entry.isbn || entry.doi) && (
+                  {(entry.author || entry.title || entry.source || entry.issued || entry.page || entry.isbn || entry.doi) && (
                     <p className="text-[13px] text-muted">
                       {(
                         [
                           entry.author,
                           entry.title ? <em key="title">{entry.title}</em> : null,
+                          entry.source,
+                          entry.issued,
                           entry.page ? tb("page", { page: entry.page }) : null,
                           entry.isbn ? tb("isbn", { isbn: entry.isbn }) : null,
                           entry.doi ? (

@@ -34,12 +34,16 @@ async def link_blog_notes(
             continue
         note = existing.get(key)
         if note is None:
-            url = extract_url(content)
+            # Il tipo/URL indicati direttamente dall'autore nel modal "Nota"
+            # hanno sempre la precedenza sulle euristiche (guess_kind/
+            # extract_url), usate solo come fallback quando l'autore non ha
+            # aggiunto i dettagli bibliografici.
+            url = note_input.url or extract_url(content)
             note = BlogNote(
                 blog_id=blog_id,
                 content=content.strip(),
                 normalized=key,
-                kind=guess_kind(content, url),
+                kind=note_input.kind or guess_kind(content, url),
                 url=url,
                 created_by_id=created_by_id,
                 title=note_input.title,
@@ -47,6 +51,8 @@ async def link_blog_notes(
                 isbn=note_input.isbn,
                 doi=note_input.doi,
                 page=note_input.page,
+                source=note_input.source,
+                issued=note_input.issued,
             )
             session.add(note)
             await session.flush()

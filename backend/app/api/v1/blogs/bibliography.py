@@ -40,6 +40,10 @@ class BibliographyEntryOut(BaseModel):
     isbn: str | None = None
     doi: str | None = None
     page: str | None = None
+    # Compatibilità BibTeX (app/domain/blog_notes.py): editore/rivista/sito,
+    # anno/data — stessa fonte (post_notes, non BlogNote) delle altre righe qui sopra.
+    source: str | None = None
+    issued: str | None = None
     citations: list[BibliographyCitationOut]
 
 
@@ -65,6 +69,8 @@ async def get_blog_bibliography(
             post_notes.c.isbn,
             post_notes.c.doi,
             post_notes.c.page,
+            post_notes.c.source,
+            post_notes.c.issued,
             BlogNote.kind,
             BlogNote.url,
         )
@@ -80,7 +86,7 @@ async def get_blog_bibliography(
     )
 
     entries: dict[str, BibliographyEntryOut] = {}
-    for post, idx, content, title, author, isbn, doi, page, kind, url in rows.all():
+    for post, idx, content, title, author, isbn, doi, page, source, issued, kind, url in rows.all():
         key = " ".join(content.split()).casefold()
         entry = entries.get(key)
         if entry is None:
@@ -93,6 +99,8 @@ async def get_blog_bibliography(
                 isbn=isbn,
                 doi=doi,
                 page=page,
+                source=source,
+                issued=issued,
                 citations=[],
             )
             entries[key] = entry

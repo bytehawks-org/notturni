@@ -5,14 +5,19 @@ import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/Button";
 import { FieldGroup, Input, Label, TextArea } from "@/components/ui/Field";
+import { SegmentedControl } from "@/components/ui/Controls";
 import { Toggle } from "@/components/ui/Controls";
 import {
   MAX_NOTE_AUTHOR_LENGTH,
   MAX_NOTE_DOI_LENGTH,
   MAX_NOTE_ISBN_LENGTH,
+  MAX_NOTE_ISSUED_LENGTH,
   MAX_NOTE_LENGTH,
   MAX_NOTE_PAGE_LENGTH,
+  MAX_NOTE_SOURCE_LENGTH,
   MAX_NOTE_TITLE_LENGTH,
+  MAX_NOTE_URL_LENGTH,
+  type NoteKind,
   type StructuredNoteFields,
 } from "@/lib/types";
 
@@ -26,7 +31,19 @@ interface NoteModalProps {
   onClose: () => void;
 }
 
-const EMPTY_STRUCTURED: StructuredNoteFields = { title: null, author: null, isbn: null, doi: null, page: null };
+const NOTE_KINDS: NoteKind[] = ["note", "book", "article", "web"];
+
+const EMPTY_STRUCTURED: StructuredNoteFields = {
+  title: null,
+  author: null,
+  kind: null,
+  source: null,
+  issued: null,
+  isbn: null,
+  doi: null,
+  url: null,
+  page: null,
+};
 
 /** Modal "Nota", stesso stile visivo di `ContentWarningModal` (avviso sul
  * contenuto delle immagini) — overlay centrato, non un popover. Solo il
@@ -34,15 +51,28 @@ const EMPTY_STRUCTURED: StructuredNoteFields = { title: null, author: null, isbn
  * facoltativi e compaiono insieme dietro il toggle. */
 export function NoteModal({ initial, onSave, onClose }: NoteModalProps) {
   const t = useTranslations("RichTextEditor");
+  const tb = useTranslations("Bibliography");
   const [content, setContent] = useState(initial?.content ?? "");
   const hasInitialDetails = Boolean(
-    initial?.title || initial?.author || initial?.isbn || initial?.doi || initial?.page
+    initial?.title ||
+      initial?.author ||
+      initial?.kind ||
+      initial?.source ||
+      initial?.issued ||
+      initial?.isbn ||
+      initial?.doi ||
+      initial?.url ||
+      initial?.page
   );
   const [detailsOn, setDetailsOn] = useState(hasInitialDetails);
   const [title, setTitle] = useState(initial?.title ?? "");
   const [author, setAuthor] = useState(initial?.author ?? "");
+  const [kind, setKind] = useState<NoteKind | "">(initial?.kind ?? "");
+  const [source, setSource] = useState(initial?.source ?? "");
+  const [issued, setIssued] = useState(initial?.issued ?? "");
   const [isbn, setIsbn] = useState(initial?.isbn ?? "");
   const [doi, setDoi] = useState(initial?.doi ?? "");
+  const [url, setUrl] = useState(initial?.url ?? "");
   const [page, setPage] = useState(initial?.page ?? "");
 
   function handleSave() {
@@ -52,8 +82,12 @@ export function NoteModal({ initial, onSave, onClose }: NoteModalProps) {
       ? {
           title: title.trim() || null,
           author: author.trim() || null,
+          kind: kind || null,
+          source: source.trim() || null,
+          issued: issued.trim() || null,
           isbn: isbn.trim() || null,
           doi: doi.trim() || null,
+          url: url.trim() || null,
           page: page.trim() || null,
         }
       : EMPTY_STRUCTURED;
@@ -113,14 +147,34 @@ export function NoteModal({ initial, onSave, onClose }: NoteModalProps) {
                 onChange={(e) => setAuthor(e.target.value)}
               />
             </FieldGroup>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="note-kind">{t("noteKindLabel")}</Label>
+              <SegmentedControl<NoteKind | "">
+                value={kind}
+                options={[
+                  { value: "", label: tb("kind.note") },
+                  ...NOTE_KINDS.filter((k) => k !== "note").map((k) => ({ value: k, label: tb(`kind.${k}`) })),
+                ]}
+                onChange={setKind}
+              />
+            </div>
+            <FieldGroup className="mb-0">
+              <Label htmlFor="note-source">{t("noteSourceLabel")}</Label>
+              <Input
+                id="note-source"
+                maxLength={MAX_NOTE_SOURCE_LENGTH}
+                value={source}
+                onChange={(e) => setSource(e.target.value)}
+              />
+            </FieldGroup>
             <div className="grid grid-cols-2 gap-3">
               <FieldGroup className="mb-0">
-                <Label htmlFor="note-isbn">{t("noteIsbnLabel")}</Label>
+                <Label htmlFor="note-issued">{t("noteIssuedLabel")}</Label>
                 <Input
-                  id="note-isbn"
-                  maxLength={MAX_NOTE_ISBN_LENGTH}
-                  value={isbn}
-                  onChange={(e) => setIsbn(e.target.value)}
+                  id="note-issued"
+                  maxLength={MAX_NOTE_ISSUED_LENGTH}
+                  value={issued}
+                  onChange={(e) => setIssued(e.target.value)}
                 />
               </FieldGroup>
               <FieldGroup className="mb-0">
@@ -133,14 +187,36 @@ export function NoteModal({ initial, onSave, onClose }: NoteModalProps) {
                 />
               </FieldGroup>
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <FieldGroup className="mb-0">
+                <Label htmlFor="note-isbn">{t("noteIsbnLabel")}</Label>
+                <Input
+                  id="note-isbn"
+                  maxLength={MAX_NOTE_ISBN_LENGTH}
+                  value={isbn}
+                  onChange={(e) => setIsbn(e.target.value)}
+                />
+              </FieldGroup>
+              <FieldGroup className="mb-0">
+                <Label htmlFor="note-doi">{t("noteDoiLabel")}</Label>
+                <Input
+                  id="note-doi"
+                  maxLength={MAX_NOTE_DOI_LENGTH}
+                  placeholder="10.xxxx/xxxxx"
+                  value={doi}
+                  onChange={(e) => setDoi(e.target.value)}
+                />
+              </FieldGroup>
+            </div>
             <FieldGroup className="mb-0">
-              <Label htmlFor="note-doi">{t("noteDoiLabel")}</Label>
+              <Label htmlFor="note-url">{t("noteUrlLabel")}</Label>
               <Input
-                id="note-doi"
-                maxLength={MAX_NOTE_DOI_LENGTH}
-                placeholder="10.xxxx/xxxxx"
-                value={doi}
-                onChange={(e) => setDoi(e.target.value)}
+                id="note-url"
+                maxLength={MAX_NOTE_URL_LENGTH}
+                type="url"
+                placeholder="https://…"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
               />
             </FieldGroup>
           </div>

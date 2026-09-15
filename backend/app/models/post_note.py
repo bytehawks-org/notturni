@@ -30,4 +30,12 @@ post_notes = Table(
     Column("isbn", String(32), nullable=True),
     Column("doi", String(255), nullable=True),
     Column("page", String(32), nullable=True),
+    # Compatibilità BibTeX (vedi app/domain/blog_notes.py): `kind` è
+    # nullable qui (a differenza di blog_notes.kind, NOT NULL) — a livello
+    # di singolo post resta solo un suggerimento dell'autore, non un dato
+    # sempre presente; se assente `link_blog_notes` ricade su `guess_kind()`.
+    Column("kind", String(10), nullable=True),
+    Column("source", Text, nullable=True),
+    Column("issued", String(32), nullable=True),
+    Column("url", Text, nullable=True),
 )

@@ -669,7 +669,9 @@ export function RichTextEditor({
             {[...notes]
               .sort((a, b) => a.idx - b.idx)
               .map((note) => {
-                const hasDetails = Boolean(note.title || note.author || note.isbn || note.doi || note.page);
+                const hasDetails = Boolean(
+                  note.title || note.author || note.kind || note.source || note.issued || note.isbn || note.doi || note.url || note.page
+                );
                 return (
                   <li key={note.idx} className="flex items-start gap-2">
                     <span className="mt-2 w-5 shrink-0 text-right text-xs text-muted">{note.idx}.</span>
