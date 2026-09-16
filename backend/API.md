@@ -1368,9 +1368,52 @@ opzionali).
   "first_name": "...", "last_name": "...", "display_name": "...",
   "post_author_name_style": "username",
   "country": "IT", "native_language": "it", "fallback_languages": ["en", "fr"],
-  "avatar_url": "...", "social_links": [...], "created_at": "..."
+  "avatar_url": "...", "social_links": [...], "created_at": "...",
+  "verification_tier": "none", "custom_domain": null,
+  "atproto_did": "did:web:notturni.eu:users:<uuid>",
+  "activitypub_actor_id": "https://notturni.eu/ap/actors/<uuid>"
 }
 ```
+
+`verification_tier` (`none`|`bronze`|`silver`|`gold`|`blue`, CLAUDE.md §5):
+sigillo di verifica del profilo, stile Bluesky/Instagram/Twitter. Solo
+`bronze` è oggi assegnato da una logica reale (dominio custom verificato via
+DNS, vedi sotto) — `silver`/`gold`/`blue` sono riservati per future
+integrazioni, nessun endpoint li assegna. `custom_domain` è valorizzato solo
+se un dominio custom è stato verificato con successo (mai per uno stato
+`pending`/`failed`) — lo username di piattaforma resta comunque sempre
+citabile/risolvibile, il dominio è un'aggiunta, non una sostituzione a
+livello di routing/permalink. `atproto_did`/`activitypub_actor_id` sono
+identificativi **placeholder** per un'eventuale federazione futura (AT
+Protocol/Bluesky, poi ActivityPub/Mastodon, ROADMAP.md §5): calcolati al volo
+da `NOCT_INSTANCE_FQDN` + l'id UUID dell'utente (mai dallo username, per
+restare stabili anche se questo cambia), non persistiti, non federati
+realmente — nessun endpoint `/ap/...`/WebFinger servito, solo la stringa
+mostrata nel profilo (`app/domain/fediverse.py`).
+
+**`GET /api/v1/users/me`** — richiede sessione. Come sopra ma con i campi
+privati del proprietario, mai esposti sul profilo pubblico di nessuno:
+
+```json
+{
+  "...": "tutti i campi di GET /users/{username}",
+  "email": "...",
+  "username_changed_at": "2026-09-10T12:00:00Z",
+  "next_username_change_allowed_at": "2026-09-15T12:00:00Z",
+  "pending_email_change": {"new_email": "...", "stage": "awaiting_old_confirmation"},
+  "domain_pending_verification": "...",
+  "domain_verification_instructions": {"txt_record_name": "...", "txt_record_value": "..."}
+}
+```
+
+`username_changed_at`/`next_username_change_allowed_at` sono `null` se lo
+username non è mai stato cambiato. `pending_email_change.stage` è
+`awaiting_old_confirmation` (in attesa del codice sulla vecchia casella) o
+`awaiting_new_confirmation` (in attesa del codice sulla nuova) — vedi il
+flusso di cambio email sotto. `domain_pending_verification`/
+`domain_verification_instructions` sono valorizzati solo se esiste un
+dominio custom non ancora verificato (`pending`/`failed`), per poter
+riprendere il flusso senza dover richiamare `POST .../domain`.
 
 `display_name` è un alias pubblico globale (todo/BLOG.md #4): quando
 valorizzato, è l'intestazione del profilo pubblico al posto di username /
@@ -1388,7 +1431,8 @@ sezione Multilingua). `fallback_languages` sono pensate anche come le lingue
 verso cui l'utente potrà eventualmente tradurre i propri contenuti; massimo
 5.
 
-**`PATCH /api/v1/users/me`** (accetta anche `ui_locale`: `it`|`en`, `""` = torna al default di piattaforma — lingua dell'interfaccia, restituita da `GET /auth/me`) — richiede sessione. Aggiorna `username`, `bio`,
+**`PATCH /api/v1/users/me`** (accetta anche `ui_locale`: `it`|`en`, `""` = torna al default di piattaforma — lingua dell'interfaccia, restituita da `GET /auth/me`) — richiede sessione, ritorna lo stesso schema di
+`GET /api/v1/users/me`. Aggiorna `username`, `bio`,
 `first_name`, `last_name`, `display_name`, `post_author_name_style`,
 `country`, `native_language`, `fallback_languages` (tutti opzionali). Per
 `first_name`/`last_name`/`display_name`/`country`/`native_language`: stringa
@@ -1400,10 +1444,84 @@ valore lo sostituisce (`400` se il formato di `country`/`native_language` non
 vuota) la sostituisce (`400` se oltre 5 o un codice non valido). `username`:
 assente lo lascia invariato, altrimenti stesso formato/blacklist della
 registrazione (`app/domain/usernames.py`, `400` se non valido, `409` se già
-in uso); l'id resta la vera chiave con cui il resto del sistema referenzia
-l'utente, quindi il cambio è visibile subito ovunque (post, commenti,
-autocomplete `@menzioni`) — eccetto le `@menzioni` già scritte nel testo di
-post/pagine esistenti, salvate come testo semplice e non riscritte.
+in uso) **più un cooldown di 5 giorni** (`USERNAME_CHANGE_COOLDOWN_DAYS`,
+`app/domain/usernames.py`) tra due cambi consecutivi — `409` con un
+messaggio che riporta la data del prossimo cambio consentito se violato; il
+primo cambio in assoluto non è mai bloccato (`username_changed_at` parte
+`null`). L'id resta comunque la vera chiave con cui il resto del sistema
+referenzia l'utente, quindi un cambio consentito è visibile subito ovunque
+(post, commenti, autocomplete `@menzioni`) — eccetto le `@menzioni` già
+scritte nel testo di post/pagine esistenti, salvate come testo semplice e non
+riscritte. Evento di audit `user.username_changed`
+(`payload.old_username`/`new_username`).
+
+### Cambio email verificato (CLAUDE.md §5)
+
+Nessun `email` in `ProfileUpdateRequest`/`PATCH /users/me`: il cambio email
+passa da un flusso dedicato a **due passi**, a prova che chi lo richiede
+controlla sia la vecchia sia la nuova casella — stesso meccanismo OTP
+dell'MFA email (`app/domain/mfa.py`), accodato su RabbitMQ e inviato dal
+worker `worker-email-otp` esistente, tabella dedicata
+(`email_change_requests`) invece di riusare `mfa_email_codes` per non
+confondere i due tipi di codice per lo stesso utente. Solo sul prodotto
+online (richiede `NOCT_SMTP_HOST` configurato per l'invio reale, come per
+l'MFA email — senza, il codice resta solo loggato in sviluppo).
+
+**`POST /api/v1/users/me/email/request`** — richiede sessione.
+`{"new_email": "..."}` → `202`. Invia un codice a 6 cifre (TTL 10 minuti)
+alla casella **attuale** dell'utente. `400` se `new_email` coincide con
+quella attuale o è già in uso da un altro account. Una richiesta pending
+precedente non completata viene sostituita.
+
+**`POST /api/v1/users/me/email/verify-current`** — richiede sessione.
+`{"code": "..."}` → `202`. Verifica il codice inviato alla vecchia casella,
+poi ne invia uno nuovo alla **nuova** casella. `400` se codice errato/scaduto
+o nessuna richiesta pending.
+
+**`POST /api/v1/users/me/email/verify-new`** — richiede sessione.
+`{"code": "..."}` → `200`, stesso schema di `GET /users/me` con l'email già
+aggiornata. Verifica il codice inviato alla nuova casella e applica il
+cambio (ricontrollando l'unicità per evitare race condition). `400` se
+codice errato/scaduto o passo precedente non completato. Evento di audit
+`user.email_changed` (`payload.old_email`/`new_email`).
+
+### Dominio custom verificato via DNS (CLAUDE.md §5, stile Bluesky)
+
+Un dominio per utente (`custom_domains`, `user_id` unico), verificato
+dimostrando il possesso pubblicando un record TXT sul proprio DNS — nessuna
+dipendenza da HTTP/SSRF, solo lookup DNS (`dnspython`,
+`app/domain/custom_domains.py`). Una verifica riuscita assegna il sigillo
+`bronze` (mai degrada un tier superiore già assegnato da altra logica
+futura). Lo username di piattaforma resta **sempre** l'identificativo di
+riserva, citabile e risolvibile — il dominio è solo un'aggiunta mostrata sul
+profilo, non cablato nel routing/permalink (il sottodominio-per-blog resta
+`⚪` in ROADMAP.md §3).
+
+**`POST /api/v1/users/me/domain`** — richiede sessione. `{"domain":
+"iltuodominio.it"}` → `200`, crea/sostituisce il dominio in stato `pending`:
+
+```json
+{
+  "domain": "iltuodominio.it", "status": "pending",
+  "txt_record_name": "_notturni-challenge.iltuodominio.it",
+  "txt_record_value": "notturni-verify=<token>"
+}
+```
+
+`400` se il formato non è un hostname valido o è un (sotto)dominio della
+piattaforma stessa (`NOCT_INSTANCE_FQDN`); `409` se già rivendicato e
+verificato da un altro account.
+
+**`POST /api/v1/users/me/domain/verify`** — richiede sessione. Interroga il
+DNS per il record TXT atteso (timeout 5s, fail sulla singola verifica non
+sulla feature); se combacia, `200` con `status: "verified"` e assegna il
+sigillo bronzo; altrimenti `400` con `status: "failed"`, riprovabile.
+Rate-limitato (5 tentativi/10 minuti per utente, `app/domain/rate_limit.py`,
+stesso fail-open del resto). Evento di audit `user.domain_verified`.
+
+**`DELETE /api/v1/users/me/domain`** — richiede sessione, `204`, idempotente.
+Se il dominio era verificato e il tier era `bronze` (assegnato solo da
+questa verifica), riporta `verification_tier` a `none`.
 
 **`GET /api/v1/users/{username}/blogs`**, **`.../posts`**, **`.../comments`**
 — pubblici, `404` se l'utente non esiste. Tab del profilo pubblico (mockup

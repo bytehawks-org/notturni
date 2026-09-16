@@ -23,6 +23,10 @@ async def test_public_profile(client: AsyncClient, make_user: Callable) -> None:
         "avatar_url": None,
         "social_links": [],
         "created_at": body["created_at"],
+        "verification_tier": "none",
+        "custom_domain": None,
+        "atproto_did": body["atproto_did"],
+        "activitypub_actor_id": body["activitypub_actor_id"],
     }
 
     missing_res = await client.get("/api/v1/users/non-esiste")

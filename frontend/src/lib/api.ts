@@ -42,6 +42,8 @@ import type {
   NoteKind,
   Page,
   PageTranslationSummary,
+  DomainOut,
+  MeProfile,
   PlatformConfig,
   PlatformRole,
   Post,
@@ -545,6 +547,9 @@ export const api = {
 
   users: {
     profile: (username: string) => request<Profile>(`/api/v1/users/${username}`),
+    /** Profilo privato del proprietario (include l'email) — a differenza di
+     * `profile()`, mai leggibile su un altro utente. */
+    me: (token: string) => request<MeProfile>("/api/v1/users/me", { token }),
     updateMe: (
       token: string,
       payload: {
@@ -562,7 +567,7 @@ export const api = {
         native_language?: string;
         fallback_languages?: string[];
       }
-    ) => request<Profile>("/api/v1/users/me", { method: "PATCH", token, body: payload }),
+    ) => request<MeProfile>("/api/v1/users/me", { method: "PATCH", token, body: payload }),
     followStats: (token: string) => request<FollowStats>("/api/v1/users/me/follow-stats", { token }),
     uploadAvatar: (token: string, file: File) => {
       const formData = new FormData();
@@ -601,6 +606,35 @@ export const api = {
         token,
         body: { confirm_username: confirmUsername },
       }),
+    /** Cambio email, passo 1/3: invia un codice alla casella attuale. */
+    requestEmailChange: (token: string, newEmail: string) =>
+      request<{ detail: string }>("/api/v1/users/me/email/request", {
+        method: "POST",
+        token,
+        body: { new_email: newEmail },
+      }),
+    /** Passo 2/3: verifica il codice inviato alla vecchia casella. */
+    verifyCurrentEmail: (token: string, code: string) =>
+      request<{ detail: string }>("/api/v1/users/me/email/verify-current", {
+        method: "POST",
+        token,
+        body: { code },
+      }),
+    /** Passo 3/3: verifica il codice inviato alla nuova casella e applica il cambio. */
+    verifyNewEmail: (token: string, code: string) =>
+      request<MeProfile>("/api/v1/users/me/email/verify-new", {
+        method: "POST",
+        token,
+        body: { code },
+      }),
+    /** Registra/sostituisce il dominio custom (stato `pending`), ritorna le
+     * istruzioni per il record TXT da pubblicare sul DNS. */
+    setDomain: (token: string, domain: string) =>
+      request<DomainOut>("/api/v1/users/me/domain", { method: "POST", token, body: { domain } }),
+    verifyDomain: (token: string) =>
+      request<DomainOut>("/api/v1/users/me/domain/verify", { method: "POST", token }),
+    deleteDomain: (token: string) =>
+      request<void>("/api/v1/users/me/domain", { method: "DELETE", token }),
   },
 
   fragments: {

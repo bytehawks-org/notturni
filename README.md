@@ -95,13 +95,18 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   immagine di copertina (banner della home pubblica) e favicon dedicata,
   entrambe facoltative.
 - **Profilo utente:** bio estesa (nome, cognome, paese, lingua madre e lingue
-  di fallback), username modificabile in qualsiasi momento (citato ovunque
-  per id, non per stringa: il cambio si riflette subito su post, commenti e
-  autocomplete `@menzioni`), alias pubblico globale alternativo allo
-  username, scelta di cosa mostrare come nome autore sui propri post
-  (username, nome e cognome, o alias), avatar (upload su MinIO/S3), link
-  social fissi con icona monocromatica da un file di configurazione
-  facilmente editabile.
+  di fallback), username modificabile (al massimo un cambio ogni 5 giorni;
+  citato ovunque per id, non per stringa: un cambio consentito si riflette
+  subito su post, commenti e autocomplete `@menzioni`), cambio email con
+  doppia verifica (codice alla vecchia casella e poi alla nuova), alias
+  pubblico globale alternativo allo username, scelta di cosa mostrare come
+  nome autore sui propri post (username, nome e cognome, o alias), avatar
+  (upload su MinIO/S3), link social fissi con icona monocromatica da un file
+  di configurazione facilmente editabile. **Verifica del profilo:** dominio
+  personalizzato verificato tramite record DNS (stile Bluesky) assegna un
+  sigillo di verifica bronzo (argento/oro/blu riservati per il futuro); ID
+  fediverse (AT Protocol + ActivityPub) creati come placeholder e mostrati
+  nel profilo, in vista di una federazione non ancora attiva.
 - **Follow:** utenti che seguono altri utenti o blog — anche in forma
   anonima, seguendo un blog che si presenta con un alias diverso dal nome di
   chi lo gestisce, la cui identità reale non compare mai fuori dalle pagine
