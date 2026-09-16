@@ -129,6 +129,19 @@ export function CloseIcon() {
   );
 }
 
+/** Frecce diagonali contrapposte, per il pulsante di ingrandimento delle
+ * immagini segnalate come sensibili una volta rivelate (Lightbox). */
+export function ExpandIcon() {
+  return (
+    <Icon>
+      <path d="M11 3.5h3.5V7" />
+      <path d="M14.5 3.5 10 8" />
+      <path d="M7 14.5H3.5V11" />
+      <path d="M3.5 14.5 8 10" />
+    </Icon>
+  );
+}
+
 export function PencilIcon() {
   return (
     <Icon>

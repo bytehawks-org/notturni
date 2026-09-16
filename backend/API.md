@@ -704,6 +704,25 @@ riporta ordinate per `idx`. La resa (elenco numerato a piè di pagina +
 tooltip sul marcatore) è del frontend; l'aggregato del blog è
 `GET /blogs/{slug}/bibliography` (vedi sezione Blog).
 
+Ogni nota accetta anche 9 campi facoltativi per bibliografie strutturate
+compatibili BibTeX — `title`, `author`, `kind` (`"book" | "article" | "web" |
+"note"`, `400` se altro valore), `source` (max 300, editore/rivista/sito),
+`issued` (max 32, anno/data come stringa libera — non un tipo data: non
+tutte le fonti hanno un anno o una data ISO completa), `isbn` (max 32), `doi`
+(max 255), `url` (max 2000), `page` (max 32), tutti `string | null`,
+assenti/vuoti equivalgono a `null` — nell'editor dietro un toggle "Aggiungi
+dettagli bibliografici" nel modal "Nota" (stesso stile dell'avviso sui
+contenuti sensibili delle immagini). `title`/`author` max 300 caratteri.
+Nessuno di questi è mai obbligatorio, solo `content` lo è. Propagati anche
+alla nota di libreria del blog che questa nota aggancia (B8, sotto), **solo
+alla creazione**: se la libreria ha già una nota con lo stesso testo
+normalizzato, i suoi campi non vengono mai sovrascritti da qui (si preserva
+un'eventuale modifica fatta dalla libreria stessa); `kind`/`url` indicati
+direttamente qui hanno la precedenza sulle euristiche `guess_kind()`/
+`extract_url()` usate come fallback quando assenti. `GET
+/blogs/{slug}/bibliography` riporta questi stessi 9 campi per ogni voce
+aggregata.
+
 Stati: `draft` → (opzionale) `pending_review` → `published`. `published_at`
 serve anche per la pianificazione: un post con `status=published` e
 `published_at` nel futuro non è ancora pubblicamente visibile — vedi
@@ -973,21 +992,28 @@ in coda in ordine cronologico; `400` se un id non è della pubblicazione.
 Le note a piè di pagina dei post (`post_notes`) vengono agganciate, al
 salvataggio del post, a una **nota del blog** (`blog_notes`) con lo stesso
 testo normalizzato (minuscolo, senza punteggiatura/apostrofi): la nota è
-creata se manca, con `kind` stimato (`book` | `article` | `web` | `note`)
-e `url` estratto (DOI → `https://doi.org/…`). `GET /blogs/{slug}/bibliography`
-espone ora anche `kind` e `url` per ogni voce.
+creata se manca, con `kind`/`url` indicati direttamente sulla nota di post
+se presenti, altrimenti stimati (`guess_kind()`, `book` | `article` | `web` |
+`note`; `extract_url()`, DOI → `https://doi.org/…`). `GET
+/blogs/{slug}/bibliography` espone `kind`/`url` più gli stessi campi
+bibliografici di `post_notes` (vedi sopra) per ogni voce.
 
 **`GET /api/v1/blogs/{slug}/notes?q=`** — proprietario e collaboratori.
-`[{id, content, kind, url, created_at, updated_at, used_in: [{post_id,
-post_slug, post_title, idx}], possible_duplicates: [id, …]}]` dalla più
-recente; `possible_duplicates` = note dello stesso blog con gli stessi primi
-30 caratteri normalizzati.
+`[{id, content, kind, url, title, author, source, issued, isbn, doi, page,
+created_at, updated_at, used_in: [{post_id, post_slug, post_title, idx}],
+possible_duplicates: [id, …]}]` dalla più recente; `possible_duplicates` =
+note dello stesso blog con gli stessi primi 30 caratteri normalizzati.
+`title`/`author`/`source`/`issued`/`isbn`/`doi`/`page` sono scrivibili da
+questa API (vedi `POST`/`PATCH` sotto) ma non ancora dalla UI della libreria
+(`NotesTab.tsx`), che oggi edita solo `kind`/`url`/`content`.
 
-**`POST /api/v1/blogs/{slug}/notes`** — `{content, kind?, url?}` (accesso in
-scrittura; `400` se il tipo non è tra quelli previsti o l'URL non è http/https).
+**`POST /api/v1/blogs/{slug}/notes`** — `{content, kind?, url?, title?,
+author?, source?, issued?, isbn?, doi?, page?}` (accesso in scrittura; `400`
+se il tipo non è tra quelli previsti o l'URL non è http/https).
 
-**`PATCH /api/v1/blogs/{slug}/notes/{id}`** — `{content?, kind?, url?}`.
-Cambiare il testo lo aggiorna anche nei post che citano la nota.
+**`PATCH /api/v1/blogs/{slug}/notes/{id}`** — stessi campi di `POST`, tutti
+opzionali; assente = non tocca il campo, stringa vuota = lo svuota. Cambiare
+il testo lo aggiorna anche nei post che citano la nota.
 
 **`DELETE /api/v1/blogs/{slug}/notes/{id}`** — `204`; `409` se citata in
 un post.
@@ -997,13 +1023,17 @@ della nota passano alla destinazione (testo compreso), la sorgente viene
 eliminata. Risponde con la nota di destinazione.
 
 **`GET /api/v1/blogs/{slug}/notes/export.bib`** — BibTeX
-(`application/x-bibtex`): una voce `@book`/`@article`/`@misc` per nota con
-`note` = testo, più `url` e `year` quando ricavabili.
+(`application/x-bibtex`): una voce `@book`/`@article`/`@misc` per nota, con
+i campi strutturati quando presenti (`title`, `author`, `publisher`-o-
+`journal`-a-seconda-del-tipo per `source`, `year` per `issued` — stimato dal
+testo se assente, per compatibilità con le note create prima di questo
+campo —, `isbn`, `doi`, `url`) più sempre `note` col testo completo.
 
 **`POST /api/v1/blogs/{slug}/notes/import`** — `{bibtex}`: parser minimale
-(`author`/`title`/`journal`/`publisher`/`year`, oppure `note`; `url`/`doi`);
-le voci già presenti (testo normalizzato) vengono saltate. `201` con le
-note create; `400` se non riconosce nessuna voce.
+che rilegge gli stessi campi strutturati sopra (`author`/`title`/`journal`-
+o-`publisher`/`year`/`isbn`/`doi`, oppure `note` per il testo libero;
+`url`/`doi`); le voci già presenti (testo normalizzato) vengono saltate.
+`201` con le note create; `400` se non riconosce nessuna voce.
 
 ## Media e backup
 

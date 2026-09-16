@@ -192,6 +192,17 @@ body {
   text-decoration: none;
   margin-left: 0.35rem;
 }
+/* Campi bibliografici opzionali (autore/titolo/pagina/ISBN/DOI, modal "Nota"
+   nell'editor) — su una riga propria sotto il testo libero, non inline come
+   la regola generale ".footnotes li p" sopra. */
+.notturni-prose .footnotes li p.footnote-citation {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.85em;
+}
+.notturni-prose .footnote-citation a {
+  color: inherit;
+}
 .notturni-prose blockquote {
   margin: 1em 0;
   padding-left: 1em;
@@ -273,6 +284,40 @@ body {
 }
 .sensitive-image-toggle:checked ~ .sensitive-image-overlay {
   display: none;
+}
+
+/* Pulsante di ingrandimento (Lightbox, componenti/Lightbox.tsx): sulle
+   immagini sensibili compare solo dopo la rivelazione, non sullo stesso
+   click che la rivela — mai le due cose insieme (vedi Lightbox.tsx). Le
+   immagini non sensibili non hanno questo pulsante: l'intera immagine è
+   già cliccabile (attributo data-lightbox). */
+.lightbox-expand-btn {
+  position: absolute;
+  top: 0.6em;
+  right: 0.6em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.1em;
+  width: 2.1em;
+  border-radius: 9999px;
+  background: rgb(0 0 0 / 45%);
+  color: #fff;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, background 0.15s;
+  z-index: 1;
+}
+.lightbox-expand-btn:hover {
+  background: rgb(0 0 0 / 65%);
+}
+.sensitive-image-toggle:checked ~ .lightbox-expand-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+img[data-lightbox] {
+  cursor: zoom-in;
 }
 
 /* Anteprima di un link (stile Bluesky, CLAUDE.md #1) — vedi lib/markdown.ts

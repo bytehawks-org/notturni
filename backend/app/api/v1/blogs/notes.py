@@ -35,6 +35,15 @@ class BlogNoteOut(BaseModel):
     content: str
     kind: str
     url: str | None
+    # Compatibilità BibTeX (app/domain/blog_notes.py) — stessi campi
+    # facoltativi di post_notes, esposti qui per la libreria (NotesTab.tsx).
+    title: str | None
+    author: str | None
+    source: str | None
+    issued: str | None
+    isbn: str | None
+    doi: str | None
+    page: str | None
     created_at: datetime
     updated_at: datetime
     used_in: list[NoteUsageOut]
@@ -45,12 +54,28 @@ class BlogNoteCreate(BaseModel):
     content: str
     kind: str = "note"
     url: str | None = None
+    title: str | None = None
+    author: str | None = None
+    source: str | None = None
+    issued: str | None = None
+    isbn: str | None = None
+    doi: str | None = None
+    page: str | None = None
 
 
 class BlogNoteUpdate(BaseModel):
     content: str | None = None
     kind: str | None = None
     url: str | None = None
+    # assenti: non toccano il campo; stringa vuota: lo svuota (stesso schema
+    # semplificato di BlogNoteCreate, nessun tri-state qui — vedi PATCH sotto).
+    title: str | None = None
+    author: str | None = None
+    source: str | None = None
+    issued: str | None = None
+    isbn: str | None = None
+    doi: str | None = None
+    page: str | None = None
 
 
 class MergeRequest(BaseModel):
@@ -90,7 +115,21 @@ async def _notes_out(session: AsyncSession, notes: list[BlogNote], all_notes: li
     dups = find_duplicate_groups(all_notes if all_notes is not None else notes)
     return [
         BlogNoteOut(
-            id=n.id, content=n.content, kind=n.kind, url=n.url, created_at=n.created_at, updated_at=n.updated_at, used_in=usages.get(n.id, []), possible_duplicates=dups.get(n.id, [])
+            id=n.id,
+            content=n.content,
+            kind=n.kind,
+            url=n.url,
+            title=n.title,
+            author=n.author,
+            source=n.source,
+            issued=n.issued,
+            isbn=n.isbn,
+            doi=n.doi,
+            page=n.page,
+            created_at=n.created_at,
+            updated_at=n.updated_at,
+            used_in=usages.get(n.id, []),
+            possible_duplicates=dups.get(n.id, []),
         )
         for n in notes
     ]
@@ -134,7 +173,21 @@ async def create_blog_note(
     if not content:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Il testo della nota è obbligatorio.")
     _validate(payload.kind, payload.url)
-    note = BlogNote(blog_id=blog.id, content=content[:2000], normalized=normalize_note(content), kind=payload.kind, url=payload.url or None, created_by_id=current_user.id)
+    note = BlogNote(
+        blog_id=blog.id,
+        content=content[:2000],
+        normalized=normalize_note(content),
+        kind=payload.kind,
+        url=payload.url or None,
+        title=payload.title or None,
+        author=payload.author or None,
+        source=payload.source or None,
+        issued=payload.issued or None,
+        isbn=payload.isbn or None,
+        doi=payload.doi or None,
+        page=payload.page or None,
+        created_by_id=current_user.id,
+    )
     session.add(note)
     await session.commit()
     await session.refresh(note)
@@ -167,6 +220,20 @@ async def update_blog_note(
         note.kind = payload.kind
     if payload.url is not None:
         note.url = payload.url.strip() or None
+    if payload.title is not None:
+        note.title = payload.title.strip() or None
+    if payload.author is not None:
+        note.author = payload.author.strip() or None
+    if payload.source is not None:
+        note.source = payload.source.strip() or None
+    if payload.issued is not None:
+        note.issued = payload.issued.strip() or None
+    if payload.isbn is not None:
+        note.isbn = payload.isbn.strip() or None
+    if payload.doi is not None:
+        note.doi = payload.doi.strip() or None
+    if payload.page is not None:
+        note.page = payload.page.strip() or None
     if payload.content is not None:
         content = payload.content.strip()
         if not content:
@@ -254,7 +321,20 @@ async def import_blog_notes(
         if not key or key in existing:
             continue
         existing.add(key)
-        note = BlogNote(blog_id=blog.id, content=item["content"], normalized=key, kind=item["kind"], url=item["url"], created_by_id=current_user.id)
+        note = BlogNote(
+            blog_id=blog.id,
+            content=item["content"],
+            normalized=key,
+            kind=item["kind"],
+            url=item["url"],
+            title=item.get("title"),
+            author=item.get("author"),
+            source=item.get("source"),
+            issued=item.get("issued"),
+            isbn=item.get("isbn"),
+            doi=item.get("doi"),
+            created_by_id=current_user.id,
+        )
         session.add(note)
         created.append(note)
     await session.commit()

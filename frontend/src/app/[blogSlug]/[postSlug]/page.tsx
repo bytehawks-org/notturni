@@ -10,6 +10,7 @@ import { JsonLd } from "@/components/blog/JsonLd";
 import { PostActions } from "@/components/blog/PostActions";
 import { BlogHeaderActions } from "@/components/blog/PostHeaderActions";
 import { PostToc } from "@/components/blog/PostToc";
+import { SensitiveImage } from "@/components/blog/SensitiveImage";
 import { ChapterNav, ChapterProgress } from "@/components/publications/PublicationIndex";
 import { ReadBeacon } from "@/components/blog/ReadBeacon";
 import { ReportButton } from "@/components/blog/ReportDialog";
@@ -204,21 +205,15 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
               </div>
             </header>
 
-            {post.cover_image_url && post.cover_image_is_sensitive && (
-              // Deve essere un <label> (non un <div>): il trucco CSS che toglie
-              // la sfocatura al click si basa sull'associazione nativa
-              // label→checkbox, che un <div> non offre (il checkbox non
-              // riceverebbe mai il click, avendo pointer-events:none).
-              <label className="sensitive-image-wrapper mt-8 aspect-[16/9] w-full overflow-hidden rounded-xl">
-                <input type="checkbox" className="sensitive-image-toggle" aria-label={t("revealCover")} />
-                {/* eslint-disable-next-line @next/next/no-img-element -- URL storage esterno */}
-                <img src={post.cover_image_url} alt="" className="h-full w-full object-cover" />
-                <span className="sensitive-image-overlay">{t("sensitiveCover")}</span>
-              </label>
-            )}
-            {post.cover_image_url && !post.cover_image_is_sensitive && (
-              // eslint-disable-next-line @next/next/no-img-element -- URL storage esterno
-              <img src={post.cover_image_url} alt="" className="mt-8 aspect-[16/9] w-full rounded-xl object-cover" />
+            {post.cover_image_url && (
+              <SensitiveImage
+                src={post.cover_image_url}
+                sensitive={post.cover_image_is_sensitive}
+                className="mt-8 block aspect-[16/9] w-full overflow-hidden rounded-xl object-cover"
+                revealLabel={t("revealCover")}
+                sensitiveLabel={t("sensitiveCover")}
+                expandLabel={t("expandImage")}
+              />
             )}
 
             <div className="mt-6 xl:hidden">

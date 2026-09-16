@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 import Script from "next/script";
 
+import { LightboxProvider } from "@/components/Lightbox";
 import { ToastProvider } from "@/components/ui/Toast";
 import { AuthProvider } from "@/lib/auth-context";
 import { SITE_URL } from "@/lib/site";
@@ -76,7 +77,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <NextIntlClientProvider locale={locale} messages={messages}>
           <ThemeProvider>
             <AuthProvider>
-              <ToastProvider>{children}</ToastProvider>
+              <ToastProvider>
+                <LightboxProvider>{children}</LightboxProvider>
+              </ToastProvider>
             </AuthProvider>
           </ThemeProvider>
         </NextIntlClientProvider>

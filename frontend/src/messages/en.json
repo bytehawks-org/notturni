@@ -119,6 +119,8 @@
     "citedIn": "Cited in",
     "citations": "{count, plural, one {# citation} other {# citations}}",
     "firstCited": "first cited {date}",
+    "page": "p. {page}",
+    "isbn": "ISBN {isbn}",
     "kind": {
       "book": "Book",
       "article": "Article",
@@ -728,7 +730,8 @@
     "copyFailed": "Clipboard unavailable",
     "revealCover": "Reveal the cover image",
     "sensitiveCover": "Sensitive content — click to reveal",
-    "privacyNote": "Reading position and highlights stay on this device unless you sign in. No trackers, no third-party fonts on the public pages."
+    "privacyNote": "Reading position and highlights stay on this device unless you sign in. No trackers, no third-party fonts on the public pages.",
+    "expandImage": "Enlarge"
   },
   "BlogPage": {
     "follow": "Follow",
@@ -744,7 +747,8 @@
     "publications": "Publications",
     "publicationsLink": "See the publications →",
     "revealCover": "Reveal the cover image",
-    "sensitiveCover": "Sensitive content — click to reveal"
+    "sensitiveCover": "Sensitive content — click to reveal",
+    "expandImage": "Enlarge"
   },
   "CommentsSection": {
     "title": "Comments",
@@ -846,11 +850,18 @@
       "everyone": "Open to everyone (requires captcha)",
       "members": "Registered users only",
       "closed": "Closed"
-    }
+    },
+    "commentsShort": {
+      "inherit": "Same as blog",
+      "everyone": "Everyone",
+      "members": "Members",
+      "closed": "Closed"
+    },
+    "statusLabel": "Status",
+    "saveDraftHint": "Save",
+    "savingDraftHint": "Saving…"
   },
   "NewPostPage": {
-    "creating": "Creating…",
-    "createDraft": "Create draft",
     "titlePlaceholder": "Title",
     "slugPlaceholder": "post-slug",
     "postTab": "Post",
@@ -883,13 +894,27 @@
     "linkPrompt": "Link URL",
     "noteTooLong": "The note is longer than {max} characters.",
     "uploadFailed": "Image upload failed.",
-    "noteLabel": "Note {n}",
     "notePlaceholder": "Note text…",
     "done": "Done",
     "cancel": "Cancel",
     "footnotesTitle": "Footnotes",
     "remove": "Remove",
-    "footnoteHint": "The reference in the text is the clickable number inserted with the “Note” button."
+    "footnoteHint": "The reference in the text is the clickable number inserted with the “Note” button.",
+    "noteModalTitle": "Footnote",
+    "noteModalSubtitle": "Free text is the only required field.",
+    "noteContentLabel": "Text",
+    "noteDetailsToggle": "Add bibliographic details",
+    "noteTitleLabel": "Title",
+    "noteAuthorLabel": "Author",
+    "noteIsbnLabel": "ISBN",
+    "noteDoiLabel": "DOI",
+    "notePageLabel": "Page",
+    "editDetails": "Edit",
+    "noteHasDetails": "This note has bibliographic details",
+    "noteKindLabel": "Type",
+    "noteSourceLabel": "Publisher / journal / site",
+    "noteIssuedLabel": "Year / date",
+    "noteUrlLabel": "URL"
   },
   "TranslationsBar": {
     "alsoIn": "Also in",
@@ -1322,7 +1347,10 @@
       "system": "System"
     },
     "action": {
-      "auth": { "login": "Login", "login_failed": "Failed login" },
+      "auth": {
+        "login": "Login",
+        "login_failed": "Failed login"
+      },
       "user": {
         "role_change": "Role change",
         "activated": "User reactivated",
@@ -1339,10 +1367,23 @@
         "member_role_changed": "Collaborator role changed",
         "member_removed": "Collaborator removed"
       },
-      "post": { "hidden": "Post hidden", "unhidden": "Post shown" },
-      "comment": { "approved": "Comment approved", "rejected": "Comment rejected" },
-      "api_token": { "created": "API token created", "revoked": "API token revoked" },
-      "page": { "created": "Page created", "updated": "Page updated", "deleted": "Page deleted" }
+      "post": {
+        "hidden": "Post hidden",
+        "unhidden": "Post shown"
+      },
+      "comment": {
+        "approved": "Comment approved",
+        "rejected": "Comment rejected"
+      },
+      "api_token": {
+        "created": "API token created",
+        "revoked": "API token revoked"
+      },
+      "page": {
+        "created": "Page created",
+        "updated": "Page updated",
+        "deleted": "Page deleted"
+      }
     }
   },
   "MediaTab": {

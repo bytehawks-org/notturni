@@ -257,14 +257,42 @@ export interface Category {
   slug: string;
 }
 
+export type NoteKind = "book" | "article" | "web" | "note";
+
 /** Nota a piè di pagina di un post: testo Markdown inline + numero (1-based).
  * Nel corpo del post il riferimento è il marcatore `[idx](#nota-idx)`. */
-export interface PostNote {
+/** Campi bibliografici opzionali di una nota (modal "Nota" nell'editor,
+ * dietro il toggle "Aggiungi dettagli bibliografici") — mai obbligatori, a
+ * differenza di `content`. Compatibili BibTeX: `kind` → entrytype, `source`
+ * → publisher/journal/organization a seconda del tipo, `issued` → year/date
+ * (stringa libera, non un tipo data: non tutte le fonti hanno un anno o una
+ * data ISO completa). */
+export interface StructuredNoteFields {
+  title: string | null;
+  author: string | null;
+  kind: NoteKind | null;
+  source: string | null;
+  issued: string | null;
+  isbn: string | null;
+  doi: string | null;
+  url: string | null;
+  page: string | null;
+}
+
+export interface PostNote extends StructuredNoteFields {
   idx: number;
   content: string;
 }
 
 export const MAX_NOTE_LENGTH = 2000;
+export const MAX_NOTE_TITLE_LENGTH = 300;
+export const MAX_NOTE_AUTHOR_LENGTH = 300;
+export const MAX_NOTE_ISBN_LENGTH = 32;
+export const MAX_NOTE_DOI_LENGTH = 255;
+export const MAX_NOTE_PAGE_LENGTH = 32;
+export const MAX_NOTE_SOURCE_LENGTH = 300;
+export const MAX_NOTE_ISSUED_LENGTH = 32;
+export const MAX_NOTE_URL_LENGTH = 2000;
 
 export interface BibliographyCitation {
   post_title: string;
@@ -274,15 +302,10 @@ export interface BibliographyCitation {
   idx: number;
 }
 
-export interface BibliographyEntry {
+export interface BibliographyEntry extends StructuredNoteFields {
   content: string;
-  /** B8: tipo e URL dalla libreria note (null per voci legacy). */
-  kind: NoteKind | null;
-  url: string | null;
   citations: BibliographyCitation[];
 }
-
-export type NoteKind = "book" | "article" | "web" | "note";
 
 /** Pubblicazioni (B9, mockup 2d/3g). */
 export interface Publication {
@@ -325,6 +348,15 @@ export interface BlogNote {
   content: string;
   kind: NoteKind;
   url: string | null;
+  // Compatibilità BibTeX (vedi StructuredNoteFields) — stessi campi
+  // facoltativi delle note di post, non ancora editabili da NotesTab.tsx.
+  title: string | null;
+  author: string | null;
+  source: string | null;
+  issued: string | null;
+  isbn: string | null;
+  doi: string | null;
+  page: string | null;
   created_at: string;
   updated_at: string;
   used_in: NoteUsage[];

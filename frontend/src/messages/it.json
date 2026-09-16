@@ -119,6 +119,8 @@
     "citedIn": "Citata in",
     "citations": "{count, plural, one {# citazione} other {# citazioni}}",
     "firstCited": "prima citazione {date}",
+    "page": "p. {page}",
+    "isbn": "ISBN {isbn}",
     "kind": {
       "book": "Libro",
       "article": "Articolo",
@@ -728,7 +730,8 @@
     "copyFailed": "Appunti non disponibili",
     "revealCover": "Rivela l'immagine di copertina",
     "sensitiveCover": "Contenuto sensibile — clicca per vedere",
-    "privacyNote": "Posizione di lettura ed evidenziazioni restano su questo dispositivo finché non accedi. Nessun tracker, nessun font di terze parti nelle pagine pubbliche."
+    "privacyNote": "Posizione di lettura ed evidenziazioni restano su questo dispositivo finché non accedi. Nessun tracker, nessun font di terze parti nelle pagine pubbliche.",
+    "expandImage": "Ingrandisci"
   },
   "BlogPage": {
     "follow": "Segui",
@@ -744,7 +747,8 @@
     "publications": "Pubblicazioni",
     "publicationsLink": "Vedi le pubblicazioni →",
     "revealCover": "Rivela l'immagine di copertina",
-    "sensitiveCover": "Contenuto sensibile — clicca per vedere"
+    "sensitiveCover": "Contenuto sensibile — clicca per vedere",
+    "expandImage": "Ingrandisci"
   },
   "CommentsSection": {
     "title": "Commenti",
@@ -846,11 +850,18 @@
       "everyone": "Aperti a tutti (richiede captcha)",
       "members": "Solo utenti iscritti",
       "closed": "Chiusi"
-    }
+    },
+    "commentsShort": {
+      "inherit": "Come il blog",
+      "everyone": "Aperti",
+      "members": "Iscritti",
+      "closed": "Chiusi"
+    },
+    "statusLabel": "Stato",
+    "saveDraftHint": "Salva",
+    "savingDraftHint": "Salvataggio…"
   },
   "NewPostPage": {
-    "creating": "Creazione…",
-    "createDraft": "Crea bozza",
     "titlePlaceholder": "Titolo",
     "slugPlaceholder": "slug-del-post",
     "postTab": "Post",
@@ -883,13 +894,27 @@
     "linkPrompt": "URL del link",
     "noteTooLong": "La nota supera i {max} caratteri.",
     "uploadFailed": "Caricamento immagine non riuscito.",
-    "noteLabel": "Nota {n}",
     "notePlaceholder": "Testo della nota…",
     "done": "Fatto",
     "cancel": "Annulla",
     "footnotesTitle": "Note a piè di pagina",
     "remove": "Rimuovi",
-    "footnoteHint": "Il riferimento nel testo è il numero cliccabile inserito col pulsante «Nota»."
+    "footnoteHint": "Il riferimento nel testo è il numero cliccabile inserito col pulsante «Nota».",
+    "noteModalTitle": "Nota a piè di pagina",
+    "noteModalSubtitle": "Il testo libero è l'unico campo obbligatorio.",
+    "noteContentLabel": "Testo",
+    "noteDetailsToggle": "Aggiungi dettagli bibliografici",
+    "noteTitleLabel": "Titolo",
+    "noteAuthorLabel": "Autore",
+    "noteIsbnLabel": "ISBN",
+    "noteDoiLabel": "DOI",
+    "notePageLabel": "Pagina",
+    "editDetails": "Modifica",
+    "noteHasDetails": "Questa nota ha dettagli bibliografici",
+    "noteKindLabel": "Tipo",
+    "noteSourceLabel": "Editore / rivista / sito",
+    "noteIssuedLabel": "Anno / data",
+    "noteUrlLabel": "URL"
   },
   "TranslationsBar": {
     "alsoIn": "Anche in",
@@ -1322,7 +1347,10 @@
       "system": "Sistema"
     },
     "action": {
-      "auth": { "login": "Accesso", "login_failed": "Accesso fallito" },
+      "auth": {
+        "login": "Accesso",
+        "login_failed": "Accesso fallito"
+      },
       "user": {
         "role_change": "Cambio ruolo",
         "activated": "Utente riattivato",
@@ -1339,10 +1367,23 @@
         "member_role_changed": "Ruolo collaboratore cambiato",
         "member_removed": "Collaboratore rimosso"
       },
-      "post": { "hidden": "Post nascosto", "unhidden": "Post mostrato" },
-      "comment": { "approved": "Commento approvato", "rejected": "Commento rifiutato" },
-      "api_token": { "created": "API token creato", "revoked": "API token revocato" },
-      "page": { "created": "Pagina creata", "updated": "Pagina modificata", "deleted": "Pagina eliminata" }
+      "post": {
+        "hidden": "Post nascosto",
+        "unhidden": "Post mostrato"
+      },
+      "comment": {
+        "approved": "Commento approvato",
+        "rejected": "Commento rifiutato"
+      },
+      "api_token": {
+        "created": "API token creato",
+        "revoked": "API token revocato"
+      },
+      "page": {
+        "created": "Pagina creata",
+        "updated": "Pagina modificata",
+        "deleted": "Pagina eliminata"
+      }
     }
   },
   "MediaTab": {

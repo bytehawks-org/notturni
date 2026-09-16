@@ -34,6 +34,14 @@ const renderer = new MarkdownIt({ html: false, linkify: true, breaks: false });
  * in un blocco sfocato, cliccabile per rivelarla — un puro trucco CSS
  * (checkbox nascosto + selettore ~), niente JavaScript lato client.
  *
+ * Aggiunge anche il pulsante di ingrandimento (Rifinitura #1,
+ * components/Lightbox.tsx): compare solo dopo la rivelazione (stesso trucco
+ * CSS, `.sensitive-image-toggle:checked ~ .lightbox-expand-btn`), mai sullo
+ * stesso click che rivela l'immagine — la Lightbox stessa (client-side)
+ * intercetta il click su questo pulsante via delega globale, non serve
+ * altro JS qui. Le immagini *non* sensibili sono invece cliccabili subito,
+ * marcate `data-lightbox` in `renderPipeline`.
+ *
  * Muta `document` in place: fa parte della pipeline di `renderMarkdown`, che
  * fa un solo parse DOM per tutte le trasformazioni. */
 function wrapSensitiveImages(document: Document): void {
@@ -46,8 +54,17 @@ function wrapSensitiveImages(document: Document): void {
     const overlay = document.createElement("span");
     overlay.className = "sensitive-image-overlay";
     overlay.textContent = "Contenuto sensibile — clicca per vedere";
+    const src = img.getAttribute("src") ?? "";
+    const expandBtn = document.createElement("button");
+    expandBtn.type = "button";
+    expandBtn.className = "lightbox-expand-btn";
+    expandBtn.setAttribute("data-lightbox-src", src);
+    expandBtn.setAttribute("data-lightbox-alt", img.getAttribute("alt") ?? "");
+    expandBtn.setAttribute("aria-label", "Ingrandisci");
+    expandBtn.innerHTML =
+      '<svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3.5h3.5V7"/><path d="M14.5 3.5 10 8"/><path d="M7 14.5H3.5V11"/><path d="M3.5 14.5 8 10"/></svg>';
     img.replaceWith(wrapper);
-    wrapper.append(toggle, img, overlay);
+    wrapper.append(toggle, img, overlay, expandBtn);
   });
 }
 
@@ -210,6 +227,71 @@ function plainText(html: string): string {
 // `[^n]` di chi scrive via API.
 const BARE_NOTE_REF_RE = /\[\^(\d{1,3})\]/g;
 
+/** Riga di citazione coi campi bibliografici opzionali di una nota (modal
+ * "Nota" nell'editor), sotto il testo libero — `null` se la nota non ne ha
+ * nessuno. Costruita con nodi DOM (mai concatenazione di HTML grezzo): a
+ * differenza di `note.content`, questi campi non passano da
+ * `renderNoteInline`/DOMPurify, sono testo semplice inserito come
+ * `textContent`. */
+function buildNoteCitationElement(
+  document: Document,
+  note: {
+    author?: string | null;
+    title?: string | null;
+    source?: string | null;
+    issued?: string | null;
+    page?: string | null;
+    isbn?: string | null;
+    doi?: string | null;
+    url?: string | null;
+  }
+): HTMLElement | null {
+  if (!note.author && !note.title && !note.source && !note.issued && !note.page && !note.isbn && !note.doi && !note.url) return null;
+
+  const p = document.createElement("p");
+  p.className = "footnote-citation";
+  const parts: (string | HTMLElement)[] = [];
+  if (note.author) parts.push(note.author);
+  if (note.title) {
+    const em = document.createElement("em");
+    em.textContent = note.title;
+    parts.push(em);
+  }
+  if (note.source) parts.push(note.source);
+  if (note.issued) parts.push(note.issued);
+  if (note.page) parts.push(`p. ${note.page}`);
+  if (note.isbn) parts.push(`ISBN ${note.isbn}`);
+
+  parts.forEach((part, i) => {
+    if (i > 0) p.append(" · ");
+    p.append(part);
+  });
+
+  if (note.doi) {
+    if (parts.length > 0 || p.childNodes.length > 0) p.append(" · ");
+    const a = document.createElement("a");
+    a.setAttribute("href", `https://doi.org/${note.doi}`);
+    a.setAttribute("target", "_blank");
+    a.setAttribute("rel", "noopener noreferrer nofollow");
+    a.textContent = `doi.org/${note.doi}`;
+    p.append(a);
+  }
+
+  // Un link generico (a differenza del DOI, non implica di per sé un dominio
+  // fisso) solo se diverso dalla pagina doi.org già mostrata sopra.
+  if (note.url && !(note.doi && note.url.includes(`doi.org/${note.doi}`))) {
+    if (parts.length > 0 || p.childNodes.length > 0) p.append(" · ");
+    const a = document.createElement("a");
+    a.setAttribute("href", note.url);
+    a.setAttribute("target", "_blank");
+    a.setAttribute("rel", "noopener noreferrer nofollow");
+    a.textContent = note.url.replace(/^https?:\/\//, "");
+    p.append(a);
+  }
+
+  return p;
+}
+
 /** todo/EDITOR.md: trasforma i marcatori di nota nel testo in riferimenti in
  * apice (con il testo della nota come tooltip) e accoda l'elenco numerato a
  * piè di pagina. La sorgente è l'elenco strutturato `notes`, non il corpo.
@@ -288,6 +370,8 @@ function renderFootnotes(document: Document, notes: PostNote[], labels: Footnote
     const li = document.createElement("li");
     li.id = `fn-${note.idx}`;
     li.innerHTML = `${renderNoteInline(note.content)} <a class="footnote-backref" href="#fnref-${note.idx}" aria-label="${labels.backToText}">↩</a>`;
+    const citation = buildNoteCitationElement(document, note);
+    if (citation) li.append(citation);
     ol.append(li);
   }
   section.append(heading, ol);
@@ -372,6 +456,16 @@ async function renderPipeline(markdown: string, options: RenderOptions, withHead
   const { document } = dom.window;
 
   wrapSensitiveImages(document);
+  // Immagini di contenuto non segnalate come sensibili: cliccabili subito
+  // per la Lightbox (Rifinitura #1) — quelle sensibili restano escluse (sono
+  // comunque ancora <img> dentro il wrapper appena creato sopra, non
+  // rimosse dal documento): hanno il proprio pulsante dedicato, aggiunto da
+  // wrapSensitiveImages, mai la stessa immagine cliccabile direttamente
+  // (altrimenti il primo click aprirebbe subito la lightbox invece di
+  // limitarsi a rivelarla).
+  document.querySelectorAll("img").forEach((img) => {
+    if (!img.closest(".sensitive-image-wrapper")) img.setAttribute("data-lightbox", "1");
+  });
   await resolveLinkCards(document);
   if (options.mentions !== false) linkifyMentions(document);
   const headings = withHeadings ? anchorHeadings(document) : [];
