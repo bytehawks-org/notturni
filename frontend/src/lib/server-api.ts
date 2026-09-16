@@ -13,6 +13,7 @@ import type {
   PostTranslationSummary,
   Profile,
   PublicBlog,
+  PublicComment,
   Publication,
   PublicationDetail,
   TrendingTag,
@@ -261,11 +262,11 @@ export async function getPublicBlogConfig(slug: string): Promise<BlogConfig | nu
 }
 
 /** Profilo pubblico (mockup 3e, `GET /users/{username}`, nessuna autenticazione
- * richiesta lato backend): usato solo per i `<meta>` della pagina
- * `/u/{username}` (Client Component, ne rifà la propria fetch autenticata per
- * i dati interattivi — follow/tab). Nessun tag di invalidazione: il backend
- * non notifica ancora le modifiche al profilo, resta la sola finestra a
- * tempo (come senza `NOCT_REVALIDATE_SECRET` configurato altrove). */
+ * richiesta lato backend): renderizza sia i `<meta>` (layout.tsx) sia il
+ * contenuto della pagina `/u/{username}` stessa. Nessun tag di
+ * invalidazione: il backend non notifica ancora le modifiche al profilo,
+ * resta la sola finestra a tempo (come senza `NOCT_REVALIDATE_SECRET`
+ * configurato altrove). */
 export async function getPublicUserProfile(username: string): Promise<Profile | null> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/users/${username}`, {
     next: { revalidate: REVALIDATE_SECONDS },
@@ -273,6 +274,43 @@ export async function getPublicUserProfile(username: string): Promise<Profile | 
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero del profilo.`);
   return (await res.json()) as Profile;
+}
+
+/** Post/blog/commenti pubblici firmati con lo username, e follower — usati
+ * dalla tab del profilo pubblico `/u/{username}` (mockup 3e). Come
+ * `getPublicUserProfile`: nessuna autenticazione richiesta, nessun tag di
+ * invalidazione dedicato (solo finestra a tempo). */
+export async function getPublicUserPosts(username: string): Promise<Post[]> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/users/${username}/posts`, {
+    next: { revalidate: REVALIDATE_SECONDS },
+  });
+  if (!res.ok) return [];
+  return (await res.json()) as Post[];
+}
+
+export async function getPublicUserBlogs(username: string): Promise<Blog[]> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/users/${username}/blogs`, {
+    next: { revalidate: REVALIDATE_SECONDS },
+  });
+  if (!res.ok) return [];
+  return (await res.json()) as Blog[];
+}
+
+export async function getPublicUserComments(username: string): Promise<PublicComment[]> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/users/${username}/comments`, {
+    next: { revalidate: REVALIDATE_SECONDS },
+  });
+  if (!res.ok) return [];
+  return (await res.json()) as PublicComment[];
+}
+
+export async function getPublicUserFollowers(username: string): Promise<string[]> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/users/${username}/followers`, {
+    next: { revalidate: REVALIDATE_SECONDS },
+  });
+  if (!res.ok) return [];
+  const rows = (await res.json()) as { username: string }[];
+  return rows.map((r) => r.username);
 }
 
 export interface PlatformFooter {

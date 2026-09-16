@@ -17,7 +17,7 @@ import {
   type NewPostStatus,
 } from "@/components/editor/PostMetaControls";
 import { PublicationSelect } from "@/components/editor/PublicationSelect";
-import { RichTextEditor } from "@/components/editor/RichTextEditor";
+import { RichTextEditor } from "@/components/editor/RichTextEditorLazy";
 import { TagInput } from "@/components/editor/TagInput";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";

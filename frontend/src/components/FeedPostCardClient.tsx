@@ -1,6 +1,7 @@
 "use client";
 
 import { useLocale, useTranslations } from "next-intl";
+import Image from "next/image";
 import Link from "next/link";
 
 import { excerptClient } from "@/lib/excerpt-client";
@@ -53,12 +54,14 @@ export function FeedPostCardClient({ post, blogTitle, showBlog = true }: { post:
         </div>
       </div>
       {post.cover_image_url && (
-        <Link href={post.permalink} className="hidden md:block">
-          {/* eslint-disable-next-line @next/next/no-img-element -- URL storage esterno */}
-          <img
+        <Link href={post.permalink} className="relative hidden h-24 w-full overflow-hidden rounded-lg border border-border md:block">
+          <Image
             src={post.cover_image_url}
             alt=""
-            className={`h-24 w-full rounded-lg border border-border object-cover ${post.cover_image_is_sensitive ? "blur-md" : ""}`}
+            fill
+            sizes="128px"
+            unoptimized
+            className={`object-cover ${post.cover_image_is_sensitive ? "blur-md" : ""}`}
           />
         </Link>
       )}

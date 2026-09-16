@@ -125,6 +125,8 @@ async function resolveLinkCards(document: Document): Promise<void> {
         const img = document.createElement("img");
         img.setAttribute("src", preview.image);
         img.setAttribute("alt", "");
+        img.setAttribute("loading", "lazy");
+        img.setAttribute("decoding", "async");
         card.append(img);
       }
       const body = document.createElement("span");
@@ -465,6 +467,11 @@ async function renderPipeline(markdown: string, options: RenderOptions, withHead
   // limitarsi a rivelarla).
   document.querySelectorAll("img").forEach((img) => {
     if (!img.closest(".sensitive-image-wrapper")) img.setAttribute("data-lightbox", "1");
+    // HTML grezzo (dangerouslySetInnerHTML, non componenti React): niente
+    // next/image qui, ma il caricamento lazy nativo del browser resta
+    // comunque disponibile senza JS aggiuntivo.
+    img.setAttribute("loading", "lazy");
+    img.setAttribute("decoding", "async");
   });
   await resolveLinkCards(document);
   if (options.mentions !== false) linkifyMentions(document);

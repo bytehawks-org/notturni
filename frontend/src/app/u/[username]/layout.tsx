@@ -8,11 +8,10 @@ interface PageParams {
   username: string;
 }
 
-/** Solo per i metadata (mockup 3e): `/u/{username}/page.tsx` è un Client
- * Component (dati interattivi — follow, tab post/blog/commenti — richiedono
- * la sessione dell'utente, mai disponibile a un Server Component), quindi
- * non può esportare `generateMetadata`; un `layout.tsx` Server Component
- * nello stesso segmento può farlo al suo posto senza toccare la pagina. */
+/** Metadata del profilo pubblico (mockup 3e). La stessa chiamata a
+ * `getPublicUserProfile` viene rifatta anche in `page.tsx`: Next.js
+ * deduplica i `fetch` con lo stesso URL/opzioni entro la stessa richiesta,
+ * quindi non è una seconda round-trip verso il backend. */
 export async function generateMetadata({
   params,
 }: {
