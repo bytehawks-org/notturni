@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 import { ExpandIcon } from "@/components/editor/icons";
 
 /**
@@ -28,14 +30,16 @@ export function SensitiveImage({
   expandLabel?: string;
 }) {
   if (!sensitive) {
-    // eslint-disable-next-line @next/next/no-img-element -- URL storage esterno
-    return <img src={src} alt={alt} data-lightbox="1" className={className} />;
+    return (
+      <div className={`relative ${className}`}>
+        <Image src={src} alt={alt} data-lightbox="1" fill unoptimized sizes="100vw" className="object-cover" />
+      </div>
+    );
   }
   return (
     <label className={`sensitive-image-wrapper ${className}`}>
       <input type="checkbox" className="sensitive-image-toggle" aria-label={revealLabel} />
-      {/* eslint-disable-next-line @next/next/no-img-element -- URL storage esterno */}
-      <img src={src} alt={alt} className="h-full w-full object-cover" />
+      <Image src={src} alt={alt} fill unoptimized sizes="100vw" className="object-cover" />
       <span className="sensitive-image-overlay">{sensitiveLabel}</span>
       <button type="button" className="lightbox-expand-btn" data-lightbox-src={src} data-lightbox-alt={alt} aria-label={expandLabel}>
         <ExpandIcon />

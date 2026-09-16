@@ -1,4 +1,5 @@
 import { getLocale, getTranslations } from "next-intl/server";
+import Image from "next/image";
 import Link from "next/link";
 
 import { formatDate, readingMinutes } from "@/lib/format";
@@ -86,12 +87,14 @@ export async function FeedPostCard({
     return (
       <article className="flex flex-col gap-3 border-b border-border py-5 last:border-0">
         {post.cover_image_url && (
-          <Link href={post.permalink}>
-            {/* eslint-disable-next-line @next/next/no-img-element -- URL storage esterno */}
-            <img
+          <Link href={post.permalink} className="relative block aspect-[16/9] w-full overflow-hidden rounded-lg border border-border">
+            <Image
               src={post.cover_image_url}
               alt=""
-              className={`aspect-[16/9] w-full rounded-lg border border-border object-cover ${post.cover_image_is_sensitive ? "blur-md" : ""}`}
+              fill
+              sizes="(min-width: 768px) 640px, 100vw"
+              unoptimized
+              className={`object-cover ${post.cover_image_is_sensitive ? "blur-md" : ""}`}
             />
           </Link>
         )}
@@ -112,12 +115,14 @@ export async function FeedPostCard({
         {footer}
       </div>
       {post.cover_image_url && (
-        <Link href={post.permalink} className="hidden md:block">
-          {/* eslint-disable-next-line @next/next/no-img-element -- URL storage esterno */}
-          <img
+        <Link href={post.permalink} className="relative hidden h-24 w-full overflow-hidden rounded-lg border border-border md:block">
+          <Image
             src={post.cover_image_url}
             alt=""
-            className={`h-24 w-full rounded-lg border border-border object-cover ${post.cover_image_is_sensitive ? "blur-md" : ""}`}
+            fill
+            sizes="128px"
+            unoptimized
+            className={`object-cover ${post.cover_image_is_sensitive ? "blur-md" : ""}`}
           />
         </Link>
       )}

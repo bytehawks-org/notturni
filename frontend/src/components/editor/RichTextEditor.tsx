@@ -33,7 +33,7 @@ import { LinkPreviewCard } from "./LinkPreviewCard";
 import { NoteModal, type NoteModalValue } from "./NoteModal";
 import { sensitiveImageNodeView } from "./SensitiveImageNodeView";
 
-interface RichTextEditorProps {
+export interface RichTextEditorProps {
   /** Contenuto iniziale in Markdown (il backend salva/legge solo Markdown). */
   value: string;
   onChange: (markdown: string) => void;

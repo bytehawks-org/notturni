@@ -7,7 +7,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { FieldGroup, Input, Label } from "@/components/ui/Field";
-import { RichTextEditor } from "@/components/editor/RichTextEditor";
+import { RichTextEditor } from "@/components/editor/RichTextEditorLazy";
 import { TranslationsBar } from "@/components/editor/TranslationsBar";
 import { SearchInput } from "@/components/SearchInput";
 import { ApiClientError, api } from "@/lib/api";

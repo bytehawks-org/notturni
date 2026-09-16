@@ -13,7 +13,7 @@ import { EditorRail } from "@/components/editor/EditorRail";
 import { PostCommentsModeControl, PostCrawlingControl } from "@/components/editor/PostMetaControls";
 import { PostStatusControl } from "@/components/editor/PostStatusControl";
 import { PublicationSelect } from "@/components/editor/PublicationSelect";
-import { RichTextEditor } from "@/components/editor/RichTextEditor";
+import { RichTextEditor } from "@/components/editor/RichTextEditorLazy";
 import { TagInput } from "@/components/editor/TagInput";
 import { TranslationsBar } from "@/components/editor/TranslationsBar";
 import { ApiClientError, api } from "@/lib/api";

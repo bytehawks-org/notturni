@@ -109,6 +109,39 @@ async def _comment_out(session: AsyncSession, comment: Comment) -> CommentOut:
     )
 
 
+async def _comments_out_batch(session: AsyncSession, comments: list[Comment]) -> list[CommentOut]:
+    """Come `_comment_out`, ma per una lista: un solo `SELECT ... IN` per gli
+    autori registrati invece di uno per commento (N+1 — stesso principio di
+    `list_blog_comments`/`_posts_out`)."""
+    author_ids = {c.author_id for c in comments if c.author_id is not None}
+    authors: dict[uuid.UUID, User] = {}
+    if author_ids:
+        res = await session.execute(select(User).where(User.id.in_(author_ids)))
+        authors = {u.id: u for u in res.scalars()}
+
+    out: list[CommentOut] = []
+    for comment in comments:
+        display_name = comment.author_display_name
+        author = authors.get(comment.author_id) if comment.author_id is not None else None
+        if author is not None:
+            display_name = resolve_personal_display_name(author)
+        out.append(
+            CommentOut(
+                id=comment.id,
+                post_id=comment.post_id,
+                parent_id=comment.parent_id,
+                author_id=comment.author_id,
+                author_display_name=display_name,
+                status=comment.status,
+                content=comment.content,
+                created_at=comment.created_at,
+                reported_to_platform=comment.reported_to_platform,
+                report_note=comment.report_note,
+            )
+        )
+    return out
+
+
 @router.post("/posts/{post_id}/comments", response_model=CommentOut, status_code=status.HTTP_201_CREATED)
 async def create_comment(
     post_id: uuid.UUID,
@@ -181,7 +214,7 @@ async def list_approved_comments(post_id: uuid.UUID, session: AsyncSession = Dep
     result = await session.execute(
         select(Comment).where(Comment.post_id == post_id, Comment.status == CommentStatus.APPROVED)
     )
-    return [await _comment_out(session, c) for c in result.scalars().all()]
+    return await _comments_out_batch(session, list(result.scalars().all()))
 
 
 @router.get("/posts/{post_id}/comments/pending", response_model=list[CommentOut])
@@ -197,7 +230,7 @@ async def list_pending_comments(
     result = await session.execute(
         select(Comment).where(Comment.post_id == post_id, Comment.status == CommentStatus.PENDING)
     )
-    return [await _comment_out(session, c) for c in result.scalars().all()]
+    return await _comments_out_batch(session, list(result.scalars().all()))
 
 
 class BlogCommentOut(CommentOut):

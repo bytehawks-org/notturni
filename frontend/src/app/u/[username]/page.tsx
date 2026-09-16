@@ -1,25 +1,28 @@
-"use client";
-
-import { useLocale, useTranslations } from "next-intl";
+import { getLocale, getTranslations } from "next-intl/server";
 import Image from "next/image";
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { notFound } from "next/navigation";
 
-import { FeedPostCardClient } from "@/components/FeedPostCardClient";
+import { FeedPostCard } from "@/components/FeedPostCard";
 import { BlogDirectoryGridClient } from "@/components/home/BlogDirectoryClient";
+import { FollowUserButton } from "@/components/profile/FollowUserButton";
+import { ProfileTabs } from "@/components/profile/ProfileTabs";
 import { SiteHeader } from "@/components/SiteHeader";
-import { Alert } from "@/components/ui/Alert";
-import { Button } from "@/components/ui/Button";
-import { EmptyState, SkeletonRows } from "@/components/ui/States";
-import { ApiClientError, api } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
+import { EmptyState } from "@/components/ui/States";
 import { formatDate } from "@/lib/format";
 import { languageName } from "@/lib/languages";
+import {
+  getPublicUserBlogs,
+  getPublicUserComments,
+  getPublicUserFollowers,
+  getPublicUserPosts,
+  getPublicUserProfile,
+} from "@/lib/server-api";
 import { getSocialPlatform } from "@/lib/social-platforms";
-import type { Blog, Post, Profile, PublicComment } from "@/lib/types";
 
-type Tab = "posts" | "blogs" | "comments";
+interface PageParams {
+  username: string;
+}
 
 function countryName(code: string, locale: string): string {
   try {
@@ -32,207 +35,152 @@ function countryName(code: string, locale: string): string {
 /** Profilo pubblico (mockup 3e): intestazione con avatar, luogo e lingue,
  * bio, statistiche, link social e tab Post/Blog/Commenti
  * (`GET /users/{username}/posts|blogs|comments`, solo contenuti firmati con
- * lo username — CLAUDE.md #8). */
-export default function PublicProfilePage() {
-  const params = useParams<{ username: string }>();
-  const { user, authFetch } = useAuth();
-  const t = useTranslations("PublicProfile");
-  const tc = useTranslations("Common");
-  const locale = useLocale();
+ * lo username — CLAUDE.md #8). Server Component: tutto il contenuto è
+ * risolto lato server (SEO — prima era interamente client-side, invisibile
+ * ai crawler che non eseguono JS). Solo il follow/unfollow resta un client
+ * component isolato (`FollowUserButton`), richiede la sessione del
+ * visitatore, mai disponibile a un Server Component. */
+export default async function PublicProfilePage({ params }: { params: Promise<PageParams> }) {
+  const { username } = await params;
+  const [profile, posts, blogs, comments, followers, locale, t] = await Promise.all([
+    getPublicUserProfile(username),
+    getPublicUserPosts(username),
+    getPublicUserBlogs(username),
+    getPublicUserComments(username),
+    getPublicUserFollowers(username),
+    getLocale(),
+    getTranslations("PublicProfile"),
+  ]);
+  if (!profile) notFound();
 
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [followers, setFollowers] = useState<string[]>([]);
-  const [isFollowing, setIsFollowing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("posts");
-  const [posts, setPosts] = useState<Post[] | null>(null);
-  const [blogs, setBlogs] = useState<Blog[] | null>(null);
-  const [comments, setComments] = useState<PublicComment[] | null>(null);
-
-  useEffect(() => {
-    api.users.publicPosts(params.username).then(setPosts).catch(() => setPosts([]));
-    api.users.publicBlogs(params.username).then(setBlogs).catch(() => setBlogs([]));
-    api.users.publicComments(params.username).then(setComments).catch(() => setComments([]));
-  }, [params.username]);
-
-  const load = useCallback(() => {
-    api.users
-      .profile(params.username)
-      .then(setProfile)
-      .catch((err) => setError(err instanceof ApiClientError ? err.message : tc("unexpectedError")));
-    api.users
-      .followers(params.username)
-      .then((list) => {
-        const usernames = list.map((f) => f.username);
-        setFollowers(usernames);
-        if (user) setIsFollowing(usernames.includes(user.username));
-      })
-      .catch(() => undefined);
-  }, [params.username, user, tc]);
-
-  useEffect(load, [load]);
-
-  async function handleFollowToggle() {
-    try {
-      if (isFollowing) {
-        await authFetch((token) => api.users.unfollow(token, params.username));
-      } else {
-        await authFetch((token) => api.users.follow(token, params.username));
-      }
-      load();
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : tc("unexpectedError"));
-    }
-  }
-
-  const canFollow = user && user.username !== params.username;
   // todo/BLOG.md #4: l'alias pubblico ha la precedenza su nome/cognome e username.
   const displayHeading =
-    profile?.display_name ||
-    (profile?.first_name || profile?.last_name
-      ? [profile?.first_name, profile?.last_name].filter(Boolean).join(" ")
-      : profile?.username);
-  const languages = profile ? [profile.native_language, ...profile.fallback_languages].filter((l): l is string => !!l) : [];
+    profile.display_name ||
+    (profile.first_name || profile.last_name
+      ? [profile.first_name, profile.last_name].filter(Boolean).join(" ")
+      : profile.username);
+  const languages = [profile.native_language, ...profile.fallback_languages].filter((l): l is string => !!l);
 
   return (
     <>
       <SiteHeader />
       <main className="mx-auto w-full max-w-[860px] flex-1 px-5 py-10 lg:px-12 lg:py-14">
-        {error && <Alert kind="error">{error}</Alert>}
-        {!profile && !error && <SkeletonRows rows={3} />}
-        {profile && (
-          <div className="flex flex-col gap-8">
-            <header className="grid gap-5 md:grid-cols-[96px_minmax(0,1fr)_auto] md:items-start md:gap-7">
-              {profile.avatar_url ? (
-                <Image src={profile.avatar_url} alt={profile.username} width={96} height={96} className="h-24 w-24 rounded-full object-cover" unoptimized />
-              ) : (
-                <div className="flex h-24 w-24 items-center justify-center rounded-full bg-primary font-serif text-3xl text-background">
-                  {profile.username[0]?.toUpperCase()}
-                </div>
-              )}
-              <div className="flex min-w-0 flex-col gap-2">
-                <h1 className="font-serif text-[30px] font-medium leading-tight text-foreground">{displayHeading}</h1>
-                <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted">
-                  <span>@{profile.username}</span>
-                  {profile.country && <span>· {countryName(profile.country, locale)}</span>}
-                  {languages.length > 0 && (
-                    <span>
-                      · {t("writesIn")} {languages.map((code) => languageName(code, locale)).join(", ")}
-                    </span>
-                  )}
-                </p>
-                {profile.bio && <p className="max-w-[560px] text-[15px] leading-relaxed text-foreground">{profile.bio}</p>}
-                <div className="flex flex-wrap items-center gap-5 pt-1 text-sm">
-                  <span>
-                    <span className="font-semibold text-foreground">{followers.length}</span>{" "}
-                    <span className="text-muted">{t("followers", { count: followers.length })}</span>
-                  </span>
-                  <span className="text-muted">
-                    {t("memberSince", { date: formatDate(profile.created_at, locale, { month: "long", year: "numeric" }) })}
-                  </span>
-                </div>
+        <div className="flex flex-col gap-8">
+          <header className="grid gap-5 md:grid-cols-[96px_minmax(0,1fr)_auto] md:items-start md:gap-7">
+            {profile.avatar_url ? (
+              <Image src={profile.avatar_url} alt={profile.username} width={96} height={96} className="h-24 w-24 rounded-full object-cover" unoptimized />
+            ) : (
+              <div className="flex h-24 w-24 items-center justify-center rounded-full bg-primary font-serif text-3xl text-background">
+                {profile.username[0]?.toUpperCase()}
               </div>
-              {canFollow ? (
-                <Button variant={isFollowing ? "secondary" : "primary"} onClick={handleFollowToggle}>
-                  {isFollowing ? t("unfollow") : t("follow")}
-                </Button>
-              ) : !user ? (
-                <Link href="/login">
-                  <Button variant="secondary">{t("follow")}</Button>
-                </Link>
-              ) : null}
-            </header>
-
-            {profile.social_links.length > 0 && (
-              <section className="flex flex-col gap-2">
-                <span className="font-mono text-[11px] uppercase tracking-[.08em] text-muted">{t("links")}</span>
-                <ul className="flex flex-wrap gap-4">
-                  {profile.social_links.map((link) => {
-                    const platform = getSocialPlatform(link.label);
-                    return (
-                      <li key={link.id}>
-                        <a
-                          href={link.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title={platform.label}
-                          className="flex items-center gap-1.5 text-sm text-muted no-underline hover:text-primary"
-                        >
-                          <platform.Icon />
-                          {platform.label}
-                        </a>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
             )}
+            <div className="flex min-w-0 flex-col gap-2">
+              <h1 className="font-serif text-[30px] font-medium leading-tight text-foreground">{displayHeading}</h1>
+              <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted">
+                <span>@{profile.username}</span>
+                {profile.country && <span>· {countryName(profile.country, locale)}</span>}
+                {languages.length > 0 && (
+                  <span>
+                    · {t("writesIn")} {languages.map((code) => languageName(code, locale)).join(", ")}
+                  </span>
+                )}
+              </p>
+              {profile.bio && <p className="max-w-[560px] text-[15px] leading-relaxed text-foreground">{profile.bio}</p>}
+              <div className="flex flex-wrap items-center gap-5 pt-1 text-sm">
+                <span>
+                  <span className="font-semibold text-foreground">{followers.length}</span>{" "}
+                  <span className="text-muted">{t("followers", { count: followers.length })}</span>
+                </span>
+                <span className="text-muted">
+                  {t("memberSince", { date: formatDate(profile.created_at, locale, { month: "long", year: "numeric" }) })}
+                </span>
+              </div>
+            </div>
+            <FollowUserButton username={username} initialFollowers={followers} />
+          </header>
 
-            <section className="flex flex-col gap-4">
-              <div className="flex gap-1 border-b border-border">
-                {(["posts", "blogs", "comments"] as Tab[]).map((id) => {
-                  const count = id === "posts" ? posts?.length : id === "blogs" ? blogs?.length : comments?.length;
+          {profile.social_links.length > 0 && (
+            <section className="flex flex-col gap-2">
+              <span className="font-mono text-[11px] uppercase tracking-[.08em] text-muted">{t("links")}</span>
+              <ul className="flex flex-wrap gap-4">
+                {profile.social_links.map((link) => {
+                  const platform = getSocialPlatform(link.label);
                   return (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => setTab(id)}
-                      className={`border-b-2 px-3.5 py-2 text-sm transition ${
-                        tab === id ? "border-primary font-medium text-foreground" : "border-transparent text-muted hover:text-foreground"
-                      }`}
-                    >
-                      {t(`tab.${id}`)}
-                      {count !== undefined && <span className="ml-1 text-muted">· {count}</span>}
-                    </button>
+                    <li key={link.id}>
+                      <a
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={platform.label}
+                        className="flex items-center gap-1.5 text-sm text-muted no-underline hover:text-primary"
+                      >
+                        <platform.Icon />
+                        {platform.label}
+                      </a>
+                    </li>
                   );
                 })}
-              </div>
-              {tab === "posts" &&
-                (posts === null ? (
-                  <SkeletonRows rows={3} />
-                ) : posts.length === 0 ? (
-                  <EmptyState glyph="✎" title={t("noPostsTitle")} body={t("noPostsBody")} />
-                ) : (
-                  <div className="flex flex-col">
-                    {posts.map((post) => (
-                      <FeedPostCardClient key={post.id} post={post} />
-                    ))}
-                  </div>
-                ))}
-              {tab === "blogs" &&
-                (blogs === null ? (
-                  <SkeletonRows rows={2} />
-                ) : blogs.length === 0 ? (
-                  <EmptyState glyph="◫" title={t("noBlogsTitle")} body={t("noBlogsBody")} />
-                ) : (
-                  <BlogDirectoryGridClient blogs={blogs} />
-                ))}
-              {tab === "comments" &&
-                (comments === null ? (
-                  <SkeletonRows rows={3} />
-                ) : comments.length === 0 ? (
-                  <EmptyState glyph="❝" title={t("noCommentsTitle")} body={t("noCommentsBody")} />
-                ) : (
-                  <ul className="flex flex-col rounded-xl border border-border bg-surface">
-                    {comments.map((c) => (
-                      <li key={c.id} className="flex flex-col gap-1 border-b border-border px-4 py-3 last:border-0">
-                        <p className="text-[15px] leading-relaxed text-foreground">“{c.content}”</p>
-                        <span className="text-[13px] text-muted">
-                          {t("on")}{" "}
-                          <Link href={c.permalink} className="text-foreground no-underline hover:underline">
-                            {c.post_title}
-                          </Link>{" "}
-                          · {formatDate(c.created_at, locale, { day: "numeric", month: "short", year: "numeric" })}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                ))}
+              </ul>
             </section>
+          )}
 
-            <p className="text-[13px] leading-relaxed text-muted">{t("privacyNote")}</p>
-          </div>
-        )}
+          <ProfileTabs
+            tabs={[
+              {
+                id: "posts",
+                label: t("tab.posts"),
+                count: posts.length,
+                content:
+                  posts.length === 0 ? (
+                    <EmptyState glyph="✎" title={t("noPostsTitle")} body={t("noPostsBody")} />
+                  ) : (
+                    <div className="flex flex-col">
+                      {posts.map((post) => (
+                        <FeedPostCard key={post.id} post={post} />
+                      ))}
+                    </div>
+                  ),
+              },
+              {
+                id: "blogs",
+                label: t("tab.blogs"),
+                count: blogs.length,
+                content:
+                  blogs.length === 0 ? (
+                    <EmptyState glyph="◫" title={t("noBlogsTitle")} body={t("noBlogsBody")} />
+                  ) : (
+                    <BlogDirectoryGridClient blogs={blogs} />
+                  ),
+              },
+              {
+                id: "comments",
+                label: t("tab.comments"),
+                count: comments.length,
+                content:
+                  comments.length === 0 ? (
+                    <EmptyState glyph="❝" title={t("noCommentsTitle")} body={t("noCommentsBody")} />
+                  ) : (
+                    <ul className="flex flex-col rounded-xl border border-border bg-surface">
+                      {comments.map((c) => (
+                        <li key={c.id} className="flex flex-col gap-1 border-b border-border px-4 py-3 last:border-0">
+                          <p className="text-[15px] leading-relaxed text-foreground">“{c.content}”</p>
+                          <span className="text-[13px] text-muted">
+                            {t("on")}{" "}
+                            <Link href={c.permalink} className="text-foreground no-underline hover:underline">
+                              {c.post_title}
+                            </Link>{" "}
+                            · {formatDate(c.created_at, locale, { day: "numeric", month: "short", year: "numeric" })}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ),
+              },
+            ]}
+          />
+
+          <p className="text-[13px] leading-relaxed text-muted">{t("privacyNote")}</p>
+        </div>
       </main>
     </>
   );
