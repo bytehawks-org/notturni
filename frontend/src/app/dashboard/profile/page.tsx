@@ -10,13 +10,15 @@ import { UiLanguagePicker } from "@/components/shell/UiLanguagePicker";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { FieldGroup, Input, Label, TextArea } from "@/components/ui/Field";
+import { VerificationBadge } from "@/components/ui/VerificationBadge";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { SOCIAL_PLATFORMS, getSocialPlatform } from "@/lib/social-platforms";
 import {
+  type DomainOut,
   type FollowStats,
+  type MeProfile,
   type PostAuthorNameStyle,
-  type Profile,
 } from "@/lib/types";
 
 const AUTHOR_NAME_STYLES: PostAuthorNameStyle[] = ["username", "full_name", "display_name"];
@@ -30,8 +32,11 @@ export default function ProfilePage() {
     (err: unknown): string => (err instanceof ApiClientError ? err.message : tc("unexpectedError")),
     [tc]
   );
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profile, setProfile] = useState<MeProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // catturato una sola volta al mount: basta per decidere se mostrare il
+  // form disabilitato, non serve un valore che si aggiorni dal vivo.
+  const [nowMs] = useState(() => Date.now());
 
   const [username, setUsername] = useState("");
   const [bio, setBio] = useState("");
@@ -71,10 +76,21 @@ export default function ProfilePage() {
   const [emailCode, setEmailCode] = useState("");
   const [emailSetupSent, setEmailSetupSent] = useState(false);
 
-  const loadProfile = () => {
+  const [newEmail, setNewEmail] = useState("");
+  const [emailChangeCode, setEmailChangeCode] = useState("");
+  const [emailChangeError, setEmailChangeError] = useState<string | null>(null);
+  const [emailChangeMessage, setEmailChangeMessage] = useState<string | null>(null);
+  const [emailChangeSubmitting, setEmailChangeSubmitting] = useState(false);
+
+  const [domainInput, setDomainInput] = useState("");
+  const [domainInfo, setDomainInfo] = useState<DomainOut | null>(null);
+  const [domainError, setDomainError] = useState<string | null>(null);
+  const [domainMessage, setDomainMessage] = useState<string | null>(null);
+  const [domainSubmitting, setDomainSubmitting] = useState(false);
+
+  const loadProfile = useCallback(() => {
     if (!user) return;
-    api.users
-      .profile(user.username)
+    authFetch((token) => api.users.me(token))
       .then((p) => {
         setProfile(p);
         setUsername(p.username);
@@ -86,11 +102,22 @@ export default function ProfilePage() {
         setCountry(p.country ?? "");
         setNativeLanguage(p.native_language);
         setFallbackLanguages(p.fallback_languages);
+        if (p.pending_email_change) {
+          setNewEmail(p.pending_email_change.new_email);
+        }
+        if (p.domain_pending_verification && p.domain_verification_instructions) {
+          setDomainInfo({
+            domain: p.domain_pending_verification,
+            status: "pending",
+            txt_record_name: p.domain_verification_instructions.txt_record_name,
+            txt_record_value: p.domain_verification_instructions.txt_record_value,
+          });
+        }
       })
       .catch((err) => setError(errorMessage(err)));
-  };
+  }, [user, authFetch, errorMessage]);
 
-  useEffect(loadProfile, [user, errorMessage]);
+  useEffect(loadProfile, [loadProfile]);
 
   useEffect(() => {
     authFetch((token) => api.users.followStats(token))
@@ -170,6 +197,111 @@ export default function ProfilePage() {
       loadProfile();
     } catch (err) {
       setAvatarError(errorMessage(err));
+    }
+  }
+
+  async function handleRequestEmailChange(event: FormEvent) {
+    event.preventDefault();
+    setEmailChangeError(null);
+    setEmailChangeMessage(null);
+    setEmailChangeSubmitting(true);
+    try {
+      const res = await authFetch((token) => api.users.requestEmailChange(token, newEmail));
+      setEmailChangeMessage(res.detail);
+      loadProfile();
+    } catch (err) {
+      setEmailChangeError(errorMessage(err));
+    } finally {
+      setEmailChangeSubmitting(false);
+    }
+  }
+
+  async function handleVerifyCurrentEmail(event: FormEvent) {
+    event.preventDefault();
+    setEmailChangeError(null);
+    setEmailChangeSubmitting(true);
+    try {
+      const res = await authFetch((token) => api.users.verifyCurrentEmail(token, emailChangeCode));
+      setEmailChangeMessage(res.detail);
+      setEmailChangeCode("");
+      loadProfile();
+    } catch (err) {
+      setEmailChangeError(errorMessage(err));
+    } finally {
+      setEmailChangeSubmitting(false);
+    }
+  }
+
+  async function handleVerifyNewEmail(event: FormEvent) {
+    event.preventDefault();
+    setEmailChangeError(null);
+    setEmailChangeSubmitting(true);
+    try {
+      const updated = await authFetch((token) => api.users.verifyNewEmail(token, emailChangeCode));
+      setProfile(updated);
+      setEmailChangeMessage(t("emailChanged"));
+      setEmailChangeCode("");
+      setNewEmail("");
+    } catch (err) {
+      setEmailChangeError(errorMessage(err));
+    } finally {
+      setEmailChangeSubmitting(false);
+    }
+  }
+
+  function handleCancelEmailChange() {
+    setNewEmail("");
+    setEmailChangeCode("");
+    setEmailChangeError(null);
+    setEmailChangeMessage(null);
+    setProfile((prev) => (prev ? { ...prev, pending_email_change: null } : prev));
+  }
+
+  async function handleSaveDomain(event: FormEvent) {
+    event.preventDefault();
+    setDomainError(null);
+    setDomainMessage(null);
+    setDomainSubmitting(true);
+    try {
+      const res = await authFetch((token) => api.users.setDomain(token, domainInput));
+      setDomainInfo(res);
+      setDomainInput("");
+    } catch (err) {
+      setDomainError(errorMessage(err));
+    } finally {
+      setDomainSubmitting(false);
+    }
+  }
+
+  async function handleVerifyDomain() {
+    setDomainError(null);
+    setDomainMessage(null);
+    setDomainSubmitting(true);
+    try {
+      const res = await authFetch((token) => api.users.verifyDomain(token));
+      setDomainInfo(res);
+      if (res.status === "verified") {
+        setDomainMessage(t("domainVerified"));
+        loadProfile();
+      }
+    } catch (err) {
+      setDomainError(errorMessage(err));
+    } finally {
+      setDomainSubmitting(false);
+    }
+  }
+
+  async function handleRemoveDomain() {
+    setDomainError(null);
+    setDomainSubmitting(true);
+    try {
+      await authFetch((token) => api.users.deleteDomain(token));
+      setDomainInfo(null);
+      loadProfile();
+    } catch (err) {
+      setDomainError(errorMessage(err));
+    } finally {
+      setDomainSubmitting(false);
     }
   }
 
@@ -264,6 +396,14 @@ export default function ProfilePage() {
 
   if (!user) return null;
 
+  const usernameCooldownActive = Boolean(
+    profile?.next_username_change_allowed_at &&
+      new Date(profile.next_username_change_allowed_at).getTime() > nowMs
+  );
+  const usernameCooldownDateLabel = profile?.next_username_change_allowed_at
+    ? new Date(profile.next_username_change_allowed_at).toLocaleDateString()
+    : "";
+
   const authorNamePreview: Record<PostAuthorNameStyle, string> = {
     username: `@${username || user.username}`,
     full_name: [firstName, lastName].filter(Boolean).join(" ") || tc("notSet"),
@@ -292,6 +432,12 @@ export default function ProfilePage() {
           </a>
           <a href="#social" className="rounded-md px-2.5 py-1.5 hover:text-foreground">
             {t("nav.social")}
+          </a>
+          <a href="#email" className="rounded-md px-2.5 py-1.5 hover:text-foreground">
+            {t("nav.email")}
+          </a>
+          <a href="#verifica" className="rounded-md px-2.5 py-1.5 hover:text-foreground">
+            {t("nav.verification")}
           </a>
           <a href="#sicurezza" className="rounded-md px-2.5 py-1.5 hover:text-foreground">
             {t("nav.security")}
@@ -346,7 +492,14 @@ export default function ProfilePage() {
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <FieldGroup className="mb-0">
-                    <Label htmlFor="username" hint={t("usernameHint")}>
+                    <Label
+                      htmlFor="username"
+                      hint={
+                        usernameCooldownActive
+                          ? t("usernameCooldownHint", { date: usernameCooldownDateLabel })
+                          : t("usernameHint")
+                      }
+                    >
                       {t("style.username")}
                     </Label>
                     <Input
@@ -355,6 +508,7 @@ export default function ProfilePage() {
                       minLength={3}
                       maxLength={32}
                       value={username}
+                      disabled={usernameCooldownActive}
                       onChange={(e) => setUsername(e.target.value.toLowerCase())}
                     />
                   </FieldGroup>
@@ -530,6 +684,179 @@ export default function ProfilePage() {
               </form>
             )}
             {linkError && <Alert kind="error">{linkError}</Alert>}
+          </section>
+
+          <section id="email" className="flex scroll-mt-6 flex-col gap-4">
+            <h2 className="font-serif text-lg text-foreground">{t("nav.email")}</h2>
+            <p className="text-sm text-foreground">
+              {t("emailCurrent")}: <span className="font-medium">{profile?.email}</span>
+            </p>
+
+            {!profile?.pending_email_change && (
+              <form onSubmit={handleRequestEmailChange} className="flex flex-wrap items-end gap-3">
+                <div className="min-w-[240px] flex-1">
+                  <Label htmlFor="new-email">{t("emailNewLabel")}</Label>
+                  <Input
+                    id="new-email"
+                    type="email"
+                    required
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                  />
+                </div>
+                <Button type="submit" variant="secondary" disabled={emailChangeSubmitting}>
+                  {t("emailSendCode")}
+                </Button>
+              </form>
+            )}
+
+            {profile?.pending_email_change?.stage === "awaiting_old_confirmation" && (
+              <form onSubmit={handleVerifyCurrentEmail} className="flex flex-col gap-3">
+                <p className="text-[13px] text-muted">
+                  {t("emailStepOldHint", { email: profile.email })}
+                </p>
+                <div className="flex items-end gap-3">
+                  <Input
+                    inputMode="numeric"
+                    required
+                    placeholder="123456"
+                    value={emailChangeCode}
+                    onChange={(e) => setEmailChangeCode(e.target.value)}
+                  />
+                  <Button type="submit" disabled={emailChangeSubmitting}>
+                    {t("emailConfirm")}
+                  </Button>
+                  <Button type="button" variant="secondary" onClick={handleCancelEmailChange}>
+                    {t("emailCancel")}
+                  </Button>
+                </div>
+              </form>
+            )}
+
+            {profile?.pending_email_change?.stage === "awaiting_new_confirmation" && (
+              <form onSubmit={handleVerifyNewEmail} className="flex flex-col gap-3">
+                <p className="text-[13px] text-muted">
+                  {t("emailStepNewHint", { email: profile.pending_email_change.new_email })}
+                </p>
+                <div className="flex items-end gap-3">
+                  <Input
+                    inputMode="numeric"
+                    required
+                    placeholder="123456"
+                    value={emailChangeCode}
+                    onChange={(e) => setEmailChangeCode(e.target.value)}
+                  />
+                  <Button type="submit" disabled={emailChangeSubmitting}>
+                    {t("emailConfirm")}
+                  </Button>
+                  <Button type="button" variant="secondary" onClick={handleCancelEmailChange}>
+                    {t("emailCancel")}
+                  </Button>
+                </div>
+              </form>
+            )}
+
+            {emailChangeMessage && <Alert kind="success">{emailChangeMessage}</Alert>}
+            {emailChangeError && <Alert kind="error">{emailChangeError}</Alert>}
+          </section>
+
+          <section id="verifica" className="flex scroll-mt-6 flex-col gap-6">
+            <h2 className="font-serif text-lg text-foreground">{t("nav.verification")}</h2>
+
+            <div className="flex items-center gap-2">
+              <VerificationBadge tier={profile?.verification_tier ?? "none"} size={20} />
+              <span className="text-sm text-foreground">
+                {profile && profile.verification_tier !== "none"
+                  ? t("verificationBadgeActive")
+                  : t("verificationBadgeNone")}
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">{t("domainTitle")}</h3>
+                <p className="text-[13px] text-muted">{t("domainSub")}</p>
+              </div>
+
+              {profile?.custom_domain && (
+                <Alert kind="success">
+                  {profile.custom_domain} — {t("domainVerified")}
+                </Alert>
+              )}
+
+              {!profile?.custom_domain && domainInfo && (
+                <div className="flex flex-col gap-2 rounded-lg border border-border p-4">
+                  <p className="text-sm text-foreground">
+                    {domainInfo.domain} —{" "}
+                    {domainInfo.status === "failed" ? t("domainStatusFailed") : t("domainStatusPending")}
+                  </p>
+                  <p className="text-[13px] text-muted">{t("domainInstructions")}</p>
+                  <div className="rounded-md border border-border bg-foreground/5 p-3 font-mono text-xs">
+                    <p>{domainInfo.txt_record_name}</p>
+                    <p className="break-all">{domainInfo.txt_record_value}</p>
+                  </div>
+                  <div className="flex gap-3">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={domainSubmitting}
+                      onClick={handleVerifyDomain}
+                    >
+                      {t("domainVerify")}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {!domainInfo && !profile?.custom_domain && (
+                <form onSubmit={handleSaveDomain} className="flex flex-wrap items-end gap-3">
+                  <div className="min-w-[240px] flex-1">
+                    <Label htmlFor="custom-domain">{t("domainLabel")}</Label>
+                    <Input
+                      id="custom-domain"
+                      required
+                      placeholder={t("domainPlaceholder")}
+                      value={domainInput}
+                      onChange={(e) => setDomainInput(e.target.value)}
+                    />
+                  </div>
+                  <Button type="submit" variant="secondary" disabled={domainSubmitting}>
+                    {t("domainSave")}
+                  </Button>
+                </form>
+              )}
+
+              {(domainInfo || profile?.custom_domain) && (
+                <div>
+                  <Button type="button" variant="secondary" size="sm" onClick={handleRemoveDomain}>
+                    {t("domainRemove")}
+                  </Button>
+                </div>
+              )}
+
+              {domainMessage && <Alert kind="success">{domainMessage}</Alert>}
+              {domainError && <Alert kind="error">{domainError}</Alert>}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">{t("fediverseTitle")}</h3>
+                <p className="text-[13px] text-muted">{t("fediverseNote")}</p>
+              </div>
+              <div className="flex flex-col gap-1.5 text-sm">
+                <div>
+                  <span className="text-muted">{t("fediverseAtproto")}: </span>
+                  <span className="break-all font-mono text-xs text-foreground">{profile?.atproto_did}</span>
+                </div>
+                <div>
+                  <span className="text-muted">{t("fediverseActivitypub")}: </span>
+                  <span className="break-all font-mono text-xs text-foreground">
+                    {profile?.activitypub_actor_id}
+                  </span>
+                </div>
+              </div>
+            </div>
           </section>
 
           <section id="sicurezza" className="flex scroll-mt-6 flex-col gap-4">

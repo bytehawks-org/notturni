@@ -1,8 +1,8 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -14,19 +14,25 @@ from app.api.v1.posts import PostOut, _posts_out
 from app.core.database import get_session
 from app.core.storage import avatar_public_url, delete_avatar, upload_avatar
 from app.domain import audit
+from app.domain import custom_domains as custom_domains_domain
+from app.domain import email_change as email_change_domain
+from app.domain.fediverse import activitypub_actor_id_for, atproto_did_for
 from app.domain.gdpr import anonymize_and_deactivate_user, export_user_data
 from app.domain.gdpr_queue import log_self_service_request
 from app.models.gdpr_request import GdprRequestType
 from app.domain.i18n import validate_locale
 from app.domain.platform_config import SUPPORTED_LOCALES
 from app.domain.profile import validate_country_code, validate_fallback_languages
-from app.domain.usernames import validate_username
+from app.domain.rate_limit import enforce_rate_limit
+from app.domain.usernames import USERNAME_CHANGE_COOLDOWN_DAYS, validate_username
 from app.models.blog import Blog, BlogVisibility
 from app.models.comment import Comment, CommentStatus
+from app.models.custom_domain import CustomDomain, CustomDomainStatus
+from app.models.email_change_request import EmailChangeRequest
 from app.models.post import Post, PostStatus
 from app.models.follow import BlogFollow, UserFollow
 from app.models.social_link import SocialLink
-from app.models.user import PostAuthorNameStyle, User
+from app.models.user import PostAuthorNameStyle, User, VerificationTier
 
 router = APIRouter()
 
@@ -89,8 +95,53 @@ class ProfileOut(BaseModel):
     avatar_url: str | None
     social_links: list[SocialLinkOut]
     created_at: datetime
+    # Sigillo di verifica (CLAUDE.md #5): "none" se mai assegnato.
+    verification_tier: VerificationTier
+    # Dominio custom, solo se verificato con successo (mai pending/failed) —
+    # lo username di piattaforma resta comunque sempre citabile come fallback.
+    custom_domain: str | None
+    # ID fediverse placeholder (CLAUDE.md #5): calcolati, non federati.
+    atproto_did: str
+    activitypub_actor_id: str
 
     model_config = {"from_attributes": True}
+
+
+class PendingEmailChangeOut(BaseModel):
+    new_email: str
+    stage: str  # "awaiting_old_confirmation" | "awaiting_new_confirmation"
+
+
+class MeProfileOut(ProfileOut):
+    """Estende `ProfileOut` con i campi privati, mai esposti sul profilo
+    pubblico (`GET /{username}`): email, stato del cooldown username, cambio
+    email in corso, istruzioni del dominio custom non ancora verificato."""
+
+    email: str
+    username_changed_at: datetime | None
+    next_username_change_allowed_at: datetime | None
+    pending_email_change: PendingEmailChangeOut | None
+    domain_pending_verification: str | None
+    domain_verification_instructions: dict | None
+
+
+class DomainUpdateRequest(BaseModel):
+    domain: str
+
+
+class DomainOut(BaseModel):
+    domain: str
+    status: CustomDomainStatus
+    txt_record_name: str
+    txt_record_value: str
+
+
+class EmailChangeRequestIn(BaseModel):
+    new_email: EmailStr
+
+
+class EmailChangeCodeIn(BaseModel):
+    code: str
 
 
 class FollowerOut(BaseModel):
@@ -136,7 +187,9 @@ async def _get_user_or_404(session: AsyncSession, username: str) -> User:
 
 async def _get_user_with_profile_or_404(session: AsyncSession, username: str) -> User:
     result = await session.execute(
-        select(User).where(User.username == username).options(selectinload(User.social_links))
+        select(User)
+        .where(User.username == username)
+        .options(selectinload(User.social_links), selectinload(User.custom_domain))
     )
     user = result.scalar_one_or_none()
     if user is None:
@@ -145,6 +198,11 @@ async def _get_user_with_profile_or_404(session: AsyncSession, username: str) ->
 
 
 def _to_profile_out(user: User) -> ProfileOut:
+    verified_domain = (
+        user.custom_domain.domain
+        if user.custom_domain is not None and user.custom_domain.status == CustomDomainStatus.VERIFIED
+        else None
+    )
     return ProfileOut(
         username=user.username,
         bio=user.bio,
@@ -158,7 +216,63 @@ def _to_profile_out(user: User) -> ProfileOut:
         avatar_url=avatar_public_url(user.avatar_object_key) if user.avatar_object_key else None,
         social_links=[SocialLinkOut.model_validate(link) for link in user.social_links],
         created_at=user.created_at,
+        verification_tier=user.verification_tier,
+        custom_domain=verified_domain,
+        atproto_did=atproto_did_for(user),
+        activitypub_actor_id=activitypub_actor_id_for(user),
     )
+
+
+async def _to_me_profile_out(session: AsyncSession, user: User) -> MeProfileOut:
+    await session.refresh(user, attribute_names=["social_links", "custom_domain"])
+    base = _to_profile_out(user)
+
+    pending_result = await session.execute(
+        select(EmailChangeRequest)
+        .where(EmailChangeRequest.user_id == user.id, EmailChangeRequest.completed_at.is_(None))
+        .order_by(EmailChangeRequest.created_at.desc())
+    )
+    pending = pending_result.scalars().first()
+    pending_out = None
+    if pending is not None:
+        stage = (
+            "awaiting_new_confirmation" if pending.old_consumed_at is not None else "awaiting_old_confirmation"
+        )
+        pending_out = PendingEmailChangeOut(new_email=pending.new_email, stage=stage)
+
+    next_change = None
+    if user.username_changed_at is not None:
+        next_change = user.username_changed_at + timedelta(days=USERNAME_CHANGE_COOLDOWN_DAYS)
+
+    domain_pending = None
+    domain_instructions = None
+    if user.custom_domain is not None and user.custom_domain.status != CustomDomainStatus.VERIFIED:
+        domain_pending = user.custom_domain.domain
+        domain_instructions = {
+            "txt_record_name": custom_domains_domain.txt_record_name(user.custom_domain.domain),
+            "txt_record_value": custom_domains_domain.txt_record_value(user.custom_domain.verification_token),
+        }
+
+    return MeProfileOut(
+        **base.model_dump(),
+        email=user.email,
+        username_changed_at=user.username_changed_at,
+        next_username_change_allowed_at=next_change,
+        pending_email_change=pending_out,
+        domain_pending_verification=domain_pending,
+        domain_verification_instructions=domain_instructions,
+    )
+
+
+@router.get("/me", response_model=MeProfileOut)
+async def get_my_profile(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MeProfileOut:
+    """Profilo privato del proprietario (a differenza di `GET /{username}`,
+    pubblico): include l'email, che non deve mai comparire sul profilo
+    pubblico di nessun utente."""
+    return await _to_me_profile_out(session, current_user)
 
 
 @router.get("/{username}", response_model=ProfileOut)
@@ -167,15 +281,35 @@ async def get_profile(username: str, session: AsyncSession = Depends(get_session
     return _to_profile_out(user)
 
 
-@router.patch("/me", response_model=ProfileOut)
+@router.patch("/me", response_model=MeProfileOut)
 async def update_profile(
     payload: ProfileUpdateRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-) -> ProfileOut:
+) -> MeProfileOut:
     if payload.username is not None:
         new_username = payload.username.strip().lower()
         if new_username != current_user.username:
+            if current_user.username_changed_at is not None:
+                cooldown_ends = current_user.username_changed_at + timedelta(
+                    days=USERNAME_CHANGE_COOLDOWN_DAYS
+                )
+                now = datetime.now(timezone.utc)
+                if now < cooldown_ends:
+                    # data leggibile (non solo ISO): il frontend mostra già in
+                    # proattivo next_username_change_allowed_at (GET /users/me)
+                    # prima ancora di tentare il salvataggio, qui basta un
+                    # messaggio d'errore semplice, stesso stile del resto
+                    # dell'API (dettaglio sempre stringa).
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        (
+                            f"Puoi cambiare username al massimo una volta ogni "
+                            f"{USERNAME_CHANGE_COOLDOWN_DAYS} giorni. Prossimo cambio "
+                            f"consentito dal {cooldown_ends.strftime('%d/%m/%Y')}."
+                        ),
+                    )
             try:
                 validate_username(new_username)
             except ValueError as exc:
@@ -183,7 +317,18 @@ async def update_profile(
             existing = await session.execute(select(User).where(User.username == new_username))
             if existing.scalar_one_or_none() is not None:
                 raise HTTPException(status.HTTP_409_CONFLICT, "Username già in uso.")
+            old_username = current_user.username
             current_user.username = new_username
+            current_user.username_changed_at = datetime.now(timezone.utc)
+            await audit.record(
+                session,
+                action="user.username_changed",
+                actor=current_user,
+                target_type="user",
+                target_id=current_user.id,
+                request=request,
+                payload={"old_username": old_username, "new_username": new_username},
+            )
     if payload.ui_locale is not None:
         if payload.ui_locale and payload.ui_locale not in SUPPORTED_LOCALES:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lingua dell'interfaccia non supportata.")
@@ -223,8 +368,7 @@ async def update_profile(
         current_user.fallback_languages = normalized
 
     await session.commit()
-    await session.refresh(current_user, attribute_names=["social_links"])
-    return _to_profile_out(current_user)
+    return await _to_me_profile_out(session, current_user)
 
 
 @router.post("/me/avatar", response_model=AvatarOut)
@@ -299,6 +443,179 @@ async def delete_social_link(
     if link is None or link.user_id != current_user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Link non trovato.")
     await session.delete(link)
+    await session.commit()
+
+
+@router.post("/me/email/request", status_code=status.HTTP_202_ACCEPTED)
+async def request_email_change(
+    payload: EmailChangeRequestIn,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Passo 1/3 del cambio email: invia un codice alla casella *attuale*
+    (prova il possesso dell'account, non solo della sessione)."""
+    try:
+        await email_change_domain.request_email_change(session, current_user, payload.new_email)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    return {"detail": "Codice inviato all'indirizzo email attuale."}
+
+
+@router.post("/me/email/verify-current", status_code=status.HTTP_202_ACCEPTED)
+async def verify_current_email(
+    payload: EmailChangeCodeIn,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Passo 2/3: verifica il codice inviato alla vecchia casella, poi invia
+    il codice alla nuova."""
+    try:
+        await email_change_domain.confirm_old_email(session, current_user, payload.code)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    return {"detail": "Codice inviato al nuovo indirizzo email."}
+
+
+@router.post("/me/email/verify-new", response_model=MeProfileOut)
+async def verify_new_email(
+    payload: EmailChangeCodeIn,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MeProfileOut:
+    """Passo 3/3: verifica il codice inviato alla nuova casella e applica il
+    cambio."""
+    try:
+        old_email = await email_change_domain.confirm_new_email(session, current_user, payload.code)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    await audit.record(
+        session,
+        action="user.email_changed",
+        actor=current_user,
+        target_type="user",
+        target_id=current_user.id,
+        request=request,
+        payload={"old_email": old_email, "new_email": current_user.email},
+    )
+    await session.commit()
+    return await _to_me_profile_out(session, current_user)
+
+
+@router.post("/me/domain", response_model=DomainOut)
+async def set_my_domain(
+    payload: DomainUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> DomainOut:
+    """Registra (o sostituisce) il dominio custom in stato `pending`,
+    ritornando le istruzioni per il record TXT da pubblicare sul DNS."""
+    try:
+        normalized = custom_domains_domain.validate_domain(payload.domain)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    existing_owner = await session.execute(
+        select(CustomDomain).where(
+            CustomDomain.domain == normalized, CustomDomain.user_id != current_user.id
+        )
+    )
+    if existing_owner.scalar_one_or_none() is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Dominio già rivendicato da un altro account.")
+
+    await session.refresh(current_user, attribute_names=["custom_domain"])
+    token = custom_domains_domain.generate_verification_token()
+    if current_user.custom_domain is not None:
+        record = current_user.custom_domain
+        record.domain = normalized
+        record.verification_token = token
+        record.status = CustomDomainStatus.PENDING
+        record.verified_at = None
+    else:
+        record = CustomDomain(
+            user_id=current_user.id,
+            domain=normalized,
+            verification_token=token,
+            status=CustomDomainStatus.PENDING,
+        )
+        session.add(record)
+    await session.commit()
+    await session.refresh(record)
+
+    return DomainOut(
+        domain=record.domain,
+        status=record.status,
+        txt_record_name=custom_domains_domain.txt_record_name(record.domain),
+        txt_record_value=custom_domains_domain.txt_record_value(record.verification_token),
+    )
+
+
+@router.post("/me/domain/verify", response_model=DomainOut)
+async def verify_my_domain(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> DomainOut:
+    """Interroga il DNS e, se il record TXT combacia, verifica il dominio e
+    assegna il sigillo di verifica bronzo (mai degrada un tier superiore
+    assegnato in futuro da altra logica)."""
+    await enforce_rate_limit(
+        f"ratelimit:domain-verify:user:{current_user.id}",
+        limit=5,
+        window_seconds=600,
+        message="Troppi tentativi di verifica dominio, riprova più tardi.",
+    )
+    await session.refresh(current_user, attribute_names=["custom_domain"])
+    record = current_user.custom_domain
+    if record is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Nessun dominio impostato.")
+
+    verified = await custom_domains_domain.verify_domain_dns(record.domain, record.verification_token)
+    if not verified:
+        record.status = CustomDomainStatus.FAILED
+        await session.commit()
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Record TXT non trovato o non corrispondente. Riprova dopo aver aggiornato il DNS.",
+        )
+
+    record.status = CustomDomainStatus.VERIFIED
+    record.verified_at = datetime.now(timezone.utc)
+    if current_user.verification_tier == VerificationTier.NONE:
+        current_user.verification_tier = VerificationTier.BRONZE
+    await audit.record(
+        session,
+        action="user.domain_verified",
+        actor=current_user,
+        target_type="user",
+        target_id=current_user.id,
+        request=request,
+        payload={"domain": record.domain},
+    )
+    await session.commit()
+    await session.refresh(record)
+
+    return DomainOut(
+        domain=record.domain,
+        status=record.status,
+        txt_record_name=custom_domains_domain.txt_record_name(record.domain),
+        txt_record_value=custom_domains_domain.txt_record_value(record.verification_token),
+    )
+
+
+@router.delete("/me/domain", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_my_domain(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    await session.refresh(current_user, attribute_names=["custom_domain"])
+    record = current_user.custom_domain
+    if record is None:
+        return
+    was_verified = record.status == CustomDomainStatus.VERIFIED
+    await session.delete(record)
+    if was_verified and current_user.verification_tier == VerificationTier.BRONZE:
+        current_user.verification_tier = VerificationTier.NONE
     await session.commit()
 
 

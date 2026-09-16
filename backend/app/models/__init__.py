@@ -15,6 +15,8 @@ from app.models.blog_note import BlogNote
 from app.models.category import Category
 from app.models.comment import BlogBlockedAuthor, Comment, CommentsMode, CommentStatus
 from app.models.content_report import ContentReport, ReportReason, ReportStatus, ReportTargetType
+from app.models.custom_domain import CustomDomain, CustomDomainStatus
+from app.models.email_change_request import EmailChangeRequest
 from app.models.follow import BlogFollow, UserFollow
 from app.models.gdpr_request import GdprRequest, GdprRequestStatus, GdprRequestType
 from app.models.link_preview import LinkPreviewCache
@@ -32,7 +34,7 @@ from app.models.post_read import PostReadDaily
 from app.models.social_link import SocialLink
 from app.models.sso_identity import SsoIdentity, SsoProvider
 from app.models.tag import Tag
-from app.models.user import MfaMethod, PlatformRole, PostAuthorNameStyle, User
+from app.models.user import MfaMethod, PlatformRole, PostAuthorNameStyle, User, VerificationTier
 from app.models.user_session import UserSession
 
 __all__ = [
@@ -41,6 +43,10 @@ __all__ = [
     "PlatformRole",
     "MfaMethod",
     "PostAuthorNameStyle",
+    "VerificationTier",
+    "CustomDomain",
+    "CustomDomainStatus",
+    "EmailChangeRequest",
     "Blog",
     "BlogMembership",
     "BlogRole",

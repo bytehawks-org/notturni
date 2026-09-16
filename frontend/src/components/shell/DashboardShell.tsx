@@ -99,7 +99,7 @@ export function DashboardShell({
           </button>
         </div>
       </aside>
-      <main className="min-w-0 flex-1 px-5 pb-28 pt-6 lg:px-10 lg:py-9 lg:pb-9">{children}</main>
+      <main className="min-w-0 flex-1 px-5 pb-28 pt-6 lg:h-screen lg:overflow-y-auto lg:px-10 lg:py-9 lg:pb-9">{children}</main>
       {tabs.length > 0 && (
         <nav
           className="fixed inset-x-0 bottom-0 z-40 grid border-t border-border bg-surface px-2 pb-[max(env(safe-area-inset-bottom),1rem)] pt-2.5 text-[11px] lg:hidden"

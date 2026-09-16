@@ -510,6 +510,12 @@ export interface SocialLink {
   position: number;
 }
 
+/** Sigillo di verifica del profilo (stile Bluesky/Instagram/Twitter),
+ * CLAUDE.md #5: "none" se mai assegnato. Solo "bronze" ha oggi una logica
+ * reale che lo assegna (dominio custom verificato via DNS) — silver/gold/blue
+ * sono riservati per future integrazioni. */
+export type VerificationTier = "none" | "bronze" | "silver" | "gold" | "blue";
+
 export interface Profile {
   username: string;
   bio: string | null;
@@ -525,6 +531,45 @@ export interface Profile {
   avatar_url: string | null;
   social_links: SocialLink[];
   created_at: string;
+  verification_tier: VerificationTier;
+  /** Dominio custom, presente solo se verificato con successo. */
+  custom_domain: string | null;
+  /** ID fediverse placeholder (CLAUDE.md #5): calcolati, non federati. */
+  atproto_did: string;
+  activitypub_actor_id: string;
+}
+
+export type PendingEmailChangeStage = "awaiting_old_confirmation" | "awaiting_new_confirmation";
+
+export interface PendingEmailChange {
+  new_email: string;
+  stage: PendingEmailChangeStage;
+}
+
+export type CustomDomainStatus = "pending" | "verified" | "failed";
+
+export interface DomainVerificationInstructions {
+  txt_record_name: string;
+  txt_record_value: string;
+}
+
+export interface DomainOut {
+  domain: string;
+  status: CustomDomainStatus;
+  txt_record_name: string;
+  txt_record_value: string;
+}
+
+/** Profilo privato del proprietario (`GET /users/me`) — a differenza di
+ * `Profile` (pubblico, `GET /users/{username}`) include l'email e lo stato
+ * di cooldown/verifica in corso, mai esposti ad altri utenti. */
+export interface MeProfile extends Profile {
+  email: string;
+  username_changed_at: string | null;
+  next_username_change_allowed_at: string | null;
+  pending_email_change: PendingEmailChange | null;
+  domain_pending_verification: string | null;
+  domain_verification_instructions: DomainVerificationInstructions | null;
 }
 
 export interface AdminUser {
