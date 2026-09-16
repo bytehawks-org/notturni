@@ -491,8 +491,8 @@ richiede sessione e accesso in scrittura al blog. Suggerimenti per
 l'autocomplete delle `@menzioni` nell'editor: proprietario, collaboratori e
 follower del blog il cui username inizia con `q` o il cui nome pubblico lo
 contiene (`q` vuoto → primi risultati per username). `limit` 1–25 (default
-8). Ritorna `[{"username": "...", "display_name": str|null}]`. Se il blog ha
-`mentions_enabled=false`, ritorna sempre `[]`.
+8). Ritorna `[{"username": "...", "display_name": str|null, "avatar_url":
+str|null}]`. Se il blog ha `mentions_enabled=false`, ritorna sempre `[]`.
 
 **`GET /api/v1/blogs/{slug}/bibliography`** — token opzionale, segue la
 `visibility` del blog (`404` se non visibile). Bibliografia automatica
@@ -647,7 +647,7 @@ dopo un rifiuto/revoca riusa la stessa riga.
 Lato proprietario (tutti `403` se non sei il proprietario del blog):
 
 - **`GET /api/v1/blogs/{slug}/members`** — collaboratori del blog:
-  `[{user_id, username, role, author_display_name, created_at}]`.
+  `[{user_id, username, avatar_url, role, author_display_name, created_at}]`.
 - **`PATCH /api/v1/blogs/{slug}/members/{user_id}`** — `{"role": "co_autore"|"mediatore"}`
   (`400` per altri ruoli). `404` se non è un collaboratore.
 - **`DELETE /api/v1/blogs/{slug}/members/{user_id}`** — rimuove la membership
@@ -767,8 +767,14 @@ Il nome pubblico dell'autore **non** è indicato dal client (todo/USERS.md #2):
 2. `default_author_display_name` del blog.
    Se uno di questi due esiste è **imposto**, senza possibilità di override;
 3. altrimenti la preferenza del profilo `post_author_name_style` (vedi sezione
-   Utenti): `full_name` (nome e cognome), `display_name` (alias globale) o
-   `username` (default).
+   Utenti): `full_name` (nome e cognome), `display_name` (alias globale),
+   `verified_domain` (dominio personalizzato verificato) o `username`
+   (default).
+
+`PostOut.author_avatar_url` è invece sempre l'avatar dell'autore vero e
+proprio (`null` se non impostato) — indipendente dal nome mostrato sopra,
+che può essere un alias: non esiste un "avatar del blog" sostitutivo per un
+post.
 
 Il valore è salvato in `PostOut.author_display_name` alla scrittura del
 post, ma **ricalcolato di nuovo ad ogni lettura**: cambiare l'alias del blog
@@ -1192,11 +1198,13 @@ del blog. `closed`: `403` per chiunque, anche un utente registrato.
   ```
   `parent_id` opzionale (risposta a un commento di primo livello dello
   stesso post). `author_display_name` nella risposta segue la preferenza di
-  profilo `post_author_name_style` (username/nome e cognome/alias globale —
-  non l'alias di blog, che si applica solo ai post: un commento resta sempre
-  a nome della persona, non del blog) ed è **ricalcolato ad ogni lettura**,
-  non solo alla creazione: un cambio di username o di preferenza si
-  riflette subito anche sui commenti passati.
+  profilo `post_author_name_style` (username/nome e cognome/alias
+  globale/dominio verificato — non l'alias di blog, che si applica solo ai
+  post: un commento resta sempre a nome della persona, non del blog) ed è
+  **ricalcolato ad ogni lettura**, non solo alla creazione: un cambio di
+  username o di preferenza si riflette subito anche sui commenti passati.
+  `author_avatar_url` (sempre l'avatar vero dell'autore, non un alias) segue
+  la stessa logica: `null` per i commenti anonimi.
 - **senza sessione, `comments_mode="members"`:** `401`.
 - **senza sessione, `comments_mode="everyone"`:** richiede
   `author_display_name`/`author_email` (altrimenti `400`) e un
@@ -1421,6 +1429,14 @@ restare stabili anche se questo cambia), non persistiti, non federati
 realmente — nessun endpoint `/ap/...`/WebFinger servito, solo la stringa
 mostrata nel profilo (`app/domain/fediverse.py`).
 
+`{username}` in questo endpoint (e in tutti gli altri `GET
+/api/v1/users/{username}/...` sotto, incluso follow/unfollow) accetta anche
+un dominio custom verificato al posto dello username: se non trova
+corrispondenza esatta su `username`, ritenta su `custom_domains.domain`
+(solo stato `verified`) prima del 404 (`_find_user_by_username_or_domain` in
+`app/api/v1/users.py`). Lo username resta comunque sempre risolvibile: il
+dominio è un identificativo aggiuntivo, non esclusivo.
+
 **`GET /api/v1/users/me`** — richiede sessione. Come sopra ma con i campi
 privati del proprietario, mai esposti sul profilo pubblico di nessuno:
 
@@ -1450,8 +1466,11 @@ valorizzato, è l'intestazione del profilo pubblico al posto di username /
 nome e cognome.
 `post_author_name_style` (todo/USERS.md #2) è la preferenza dell'utente su
 cosa mostrare come nome autore sui propri post — `username` (default),
-`full_name` (nome e cognome) o `display_name` (alias globale) — applicata
-solo quando il blog non impone un nome pubblico (vedi sezione Post).
+`full_name` (nome e cognome), `display_name` (alias globale) o
+`verified_domain` (dominio personalizzato verificato, vedi sotto) —
+applicata solo quando il blog non impone un nome pubblico (vedi sezione
+Post). Come `display_name`, se il valore scelto non è disponibile (dominio
+non verificato) ricade sullo username.
 `first_name`/`last_name`/`country`/`native_language` sono liberi/opzionali.
 `country` è solo controllato nel formato (ISO 3166-1 alpha-2, es. `IT`, non
 verificato contro un elenco ufficiale dei paesi — vedi
@@ -1469,7 +1488,10 @@ verso cui l'utente potrà eventualmente tradurre i propri contenuti; massimo
 vuota `""` azzera il campo, assente lo lascia invariato, qualsiasi altro
 valore lo sostituisce (`400` se il formato di `country`/`native_language` non
 è valido). `post_author_name_style`: uno tra `username` | `full_name` |
-`display_name` (`422` altrimenti), assente lo lascia invariato. Per
+`display_name` | `verified_domain` (`422` altrimenti), assente lo lascia
+invariato — accettato anche senza un dominio verificato attivo (ricade sullo
+username finché non lo è, stesso comportamento di `display_name` non
+impostato). Per
 `fallback_languages`: assente lascia invariata la lista, una lista (anche
 vuota) la sostituisce (`400` se oltre 5 o un codice non valido). `username`:
 assente lo lascia invariato, altrimenti stesso formato/blacklist della
@@ -1522,10 +1544,15 @@ dimostrando il possesso pubblicando un record TXT sul proprio DNS — nessuna
 dipendenza da HTTP/SSRF, solo lookup DNS (`dnspython`,
 `app/domain/custom_domains.py`). Una verifica riuscita assegna il sigillo
 `bronze` (mai degrada un tier superiore già assegnato da altra logica
-futura). Lo username di piattaforma resta **sempre** l'identificativo di
-riserva, citabile e risolvibile — il dominio è solo un'aggiunta mostrata sul
-profilo, non cablato nel routing/permalink (il sottodominio-per-blog resta
-`⚪` in ROADMAP.md §3).
+futura) e copia il dominio su `users.verified_domain` (colonna denormalizzata,
+azzerata alla rimozione del dominio — vedi `app/models/user.py`). Lo username
+di piattaforma resta **sempre** l'identificativo di riserva, citabile e
+risolvibile: il dominio è un'aggiunta, non cablata nel routing/permalink (il
+sottodominio-per-blog resta `⚪` in ROADMAP.md §3), ma **risolvibile** al
+posto dello username in `GET /api/v1/users/{username}` e negli endpoint
+pubblici correlati (vedi sopra), e selezionabile come `post_author_name_style`
+per firmare post/commenti (`verified_domain`, con fallback allo username se
+il dominio non è verificato).
 
 **`POST /api/v1/users/me/domain`** — richiede sessione. `{"domain":
 "iltuodominio.it"}` → `200`, crea/sostituisce il dominio in stato `pending`:

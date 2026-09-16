@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import Image from "next/image";
 import Link from "next/link";
 
 import { SITE_HOST } from "@/lib/site";
@@ -16,13 +17,24 @@ export function BlogDirectoryGridClient({ blogs }: { blogs: Blog[] }) {
       {blogs.map((b) => (
         <article key={b.slug} className="flex min-w-0 flex-col gap-3 rounded-[14px] border border-border bg-surface p-[22px]">
           <div className="flex items-center gap-3">
-            <span
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-[10px] font-serif text-lg text-white"
-              style={{ background: hue(b.slug) }}
-              aria-hidden="true"
-            >
-              {b.title[0]}
-            </span>
+            {b.favicon_url ? (
+              <Image
+                src={b.favicon_url}
+                alt={b.title}
+                width={44}
+                height={44}
+                className="h-11 w-11 shrink-0 rounded-[10px] object-cover"
+                unoptimized
+              />
+            ) : (
+              <span
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-[10px] font-serif text-lg text-white"
+                style={{ background: hue(b.slug) }}
+                aria-hidden="true"
+              >
+                {b.title[0]}
+              </span>
+            )}
             <div className="flex min-w-0 flex-col leading-tight">
               <Link href={`/${b.slug}`} className="truncate font-serif text-[19px] text-foreground no-underline hover:text-primary">
                 {b.title}

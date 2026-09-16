@@ -1,4 +1,5 @@
 import { getTranslations } from "next-intl/server";
+import Image from "next/image";
 import Link from "next/link";
 
 import { SITE_HOST } from "@/lib/site";
@@ -7,6 +8,19 @@ import type { PublicBlog } from "@/lib/types";
 const hue = (s: string) => `oklch(0.55 0.06 ${[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % 360})`;
 
 function Avatar({ blog, size = 44 }: { blog: PublicBlog; size?: number }) {
+  if (blog.favicon_url) {
+    return (
+      <Image
+        src={blog.favicon_url}
+        alt={blog.title}
+        width={size}
+        height={size}
+        className="shrink-0 rounded-[10px] object-cover"
+        style={{ width: size, height: size }}
+        unoptimized
+      />
+    );
+  }
   return (
     <span
       className="grid shrink-0 place-items-center rounded-[10px] font-serif text-white"

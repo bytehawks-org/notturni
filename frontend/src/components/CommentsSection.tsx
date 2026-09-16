@@ -1,6 +1,7 @@
 "use client";
 
 import { useLocale, useTranslations } from "next-intl";
+import Image from "next/image";
 import Link from "next/link";
 import Script from "next/script";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -114,9 +115,20 @@ function CommentBody({ comment }: { comment: Comment }) {
   return (
     <>
       <div className="flex items-center gap-2 text-[13px]">
-        <span className="grid h-6 w-6 place-items-center rounded-full bg-primary/15 font-serif text-xs text-primary">
-          {comment.author_display_name[0]?.toUpperCase()}
-        </span>
+        {comment.author_avatar_url ? (
+          <Image
+            src={comment.author_avatar_url}
+            alt={comment.author_display_name}
+            width={24}
+            height={24}
+            className="h-6 w-6 rounded-full object-cover"
+            unoptimized
+          />
+        ) : (
+          <span className="grid h-6 w-6 place-items-center rounded-full bg-primary/15 font-serif text-xs text-primary">
+            {comment.author_display_name[0]?.toUpperCase()}
+          </span>
+        )}
         <span className="font-medium text-foreground">{comment.author_display_name}</span>
         <span className="text-muted">· {formatDate(comment.created_at, locale)}</span>
       </div>

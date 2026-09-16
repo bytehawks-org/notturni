@@ -29,9 +29,20 @@ export async function FeedPostCard({
   const [t, locale] = await Promise.all([getTranslations("Feed"), getLocale()]);
   const meta = (
     <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted">
-      <span className="grid h-5 w-5 place-items-center rounded-full bg-primary/60 font-serif text-[11px] text-background">
-        {post.author_display_name[0]?.toUpperCase()}
-      </span>
+      {post.author_avatar_url ? (
+        <Image
+          src={post.author_avatar_url}
+          alt={post.author_display_name}
+          width={20}
+          height={20}
+          className="h-5 w-5 rounded-full object-cover"
+          unoptimized
+        />
+      ) : (
+        <span className="grid h-5 w-5 place-items-center rounded-full bg-primary/60 font-serif text-[11px] text-background">
+          {post.author_display_name[0]?.toUpperCase()}
+        </span>
+      )}
       <span className="font-medium text-foreground">{post.author_display_name}</span>
       {showBlog && (
         <span>

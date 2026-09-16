@@ -11,6 +11,7 @@ from app.api.deps import get_current_user, get_optional_current_user
 from app.core.captcha import verify_turnstile
 from app.core.database import get_session
 from app.core.http import client_ip
+from app.core.storage import avatar_public_url
 from app.domain import audit
 from app.domain.authorization import can_moderate_comments
 from app.domain.comments_mode import effective_comments_mode
@@ -43,6 +44,8 @@ class CommentOut(BaseModel):
     parent_id: uuid.UUID | None
     author_id: uuid.UUID | None
     author_display_name: str
+    # Avatar dell'autore registrato, se impostato — null per commenti anonimi.
+    author_avatar_url: str | None
     status: CommentStatus
     content: str
     created_at: datetime
@@ -91,16 +94,19 @@ async def _comment_out(session: AsyncSession, comment: Comment) -> CommentOut:
     # anonimi restano invece il nome libero indicato da chi ha commentato,
     # senza un account a cui risalire.
     display_name = comment.author_display_name
+    avatar_url = None
     if comment.author_id is not None:
         author = await session.get(User, comment.author_id)
         if author is not None:
             display_name = resolve_personal_display_name(author)
+            avatar_url = avatar_public_url(author.avatar_object_key) if author.avatar_object_key else None
     return CommentOut(
         id=comment.id,
         post_id=comment.post_id,
         parent_id=comment.parent_id,
         author_id=comment.author_id,
         author_display_name=display_name,
+        author_avatar_url=avatar_url,
         status=comment.status,
         content=comment.content,
         created_at=comment.created_at,
@@ -122,9 +128,11 @@ async def _comments_out_batch(session: AsyncSession, comments: list[Comment]) ->
     out: list[CommentOut] = []
     for comment in comments:
         display_name = comment.author_display_name
+        avatar_url = None
         author = authors.get(comment.author_id) if comment.author_id is not None else None
         if author is not None:
             display_name = resolve_personal_display_name(author)
+            avatar_url = avatar_public_url(author.avatar_object_key) if author.avatar_object_key else None
         out.append(
             CommentOut(
                 id=comment.id,
@@ -132,6 +140,7 @@ async def _comments_out_batch(session: AsyncSession, comments: list[Comment]) ->
                 parent_id=comment.parent_id,
                 author_id=comment.author_id,
                 author_display_name=display_name,
+                author_avatar_url=avatar_url,
                 status=comment.status,
                 content=comment.content,
                 created_at=comment.created_at,
@@ -283,9 +292,11 @@ async def list_blog_comments(
     out: list[BlogCommentOut] = []
     for comment, post_title, post_slug in rows:
         display_name = comment.author_display_name
+        avatar_url = None
         author = authors.get(comment.author_id) if comment.author_id is not None else None
         if author is not None:
             display_name = resolve_personal_display_name(author)
+            avatar_url = avatar_public_url(author.avatar_object_key) if author.avatar_object_key else None
         out.append(
             BlogCommentOut(
                 id=comment.id,
@@ -293,6 +304,7 @@ async def list_blog_comments(
                 parent_id=comment.parent_id,
                 author_id=comment.author_id,
                 author_display_name=display_name,
+                author_avatar_url=avatar_url,
                 status=comment.status,
                 content=comment.content,
                 created_at=comment.created_at,

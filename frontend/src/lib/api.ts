@@ -225,7 +225,7 @@ export const api = {
       request<LinkBibliographyEntry[]>(`/api/v1/blogs/${slug}/links-bibliography`, { token }),
     /** Suggerimenti per l'autocomplete delle @menzioni nell'editor. */
     mentionableUsers: (token: string, slug: string, q: string) =>
-      request<{ username: string; display_name: string | null }[]>(
+      request<{ username: string; display_name: string | null; avatar_url: string | null }[]>(
         `/api/v1/blogs/${slug}/mentionable-users?q=${encodeURIComponent(q)}`,
         { token }
       ),

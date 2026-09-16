@@ -21,7 +21,7 @@ import {
   type PostAuthorNameStyle,
 } from "@/lib/types";
 
-const AUTHOR_NAME_STYLES: PostAuthorNameStyle[] = ["username", "full_name", "display_name"];
+const AUTHOR_NAME_STYLES: PostAuthorNameStyle[] = ["username", "full_name", "display_name", "verified_domain"];
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -408,6 +408,7 @@ export default function ProfilePage() {
     username: `@${username || user.username}`,
     full_name: [firstName, lastName].filter(Boolean).join(" ") || tc("notSet"),
     display_name: displayName || tc("notSet"),
+    verified_domain: profile?.custom_domain ? `@${profile.custom_domain}` : tc("notSet"),
   };
 
   return (
@@ -549,20 +550,29 @@ export default function ProfilePage() {
                 <span className="text-xs font-semibold uppercase tracking-[.04em] text-muted">
                   {t("signAs")}
                 </span>
-                <div className="grid gap-2.5 sm:grid-cols-3">
-                  {AUTHOR_NAME_STYLES.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => setAuthorNameStyle(s)}
-                      className={`flex flex-col gap-0.5 rounded-lg border px-3.5 py-3 text-left transition ${
-                        authorNameStyle === s ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
-                      }`}
-                    >
-                      <span className="text-sm font-semibold text-foreground">{t(`style.${s}`)}</span>
-                      <span className="truncate text-[13px] text-muted">{authorNamePreview[s]}</span>
-                    </button>
-                  ))}
+                <div className="grid gap-2.5 sm:grid-cols-4">
+                  {AUTHOR_NAME_STYLES.map((s) => {
+                    const unavailable = s === "verified_domain" && !profile?.custom_domain;
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        disabled={unavailable}
+                        onClick={() => setAuthorNameStyle(s)}
+                        title={unavailable ? t("style.verifiedDomainUnavailable") : undefined}
+                        className={`flex flex-col gap-0.5 rounded-lg border px-3.5 py-3 text-left transition ${
+                          unavailable
+                            ? "cursor-not-allowed border-border opacity-50"
+                            : authorNameStyle === s
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-primary/40"
+                        }`}
+                      >
+                        <span className="text-sm font-semibold text-foreground">{t(`style.${s}`)}</span>
+                        <span className="truncate text-[13px] text-muted">{authorNamePreview[s]}</span>
+                      </button>
+                    );
+                  })}
                 </div>
                 <span className="text-[13px] text-muted">{t("signAsNote")}</span>
               </div>

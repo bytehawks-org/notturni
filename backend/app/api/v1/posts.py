@@ -12,6 +12,7 @@ from app.api.deps import get_current_user, get_optional_current_user
 from app.core.broker import publish_post_backup
 from app.core.captcha import turnstile_configured
 from app.core.database import get_session
+from app.core.storage import avatar_public_url
 from app.core.revalidation import blog_tag, feed_tag, post_tag, revalidate_frontend
 from app.domain.authorization import (
     can_review_posts,
@@ -206,6 +207,10 @@ class PostOut(BaseModel):
     blog_id: uuid.UUID
     author_id: uuid.UUID
     author_display_name: str
+    # Avatar dell'autore, indipendente dal nome mostrato (che può essere un
+    # alias): null se non impostato, mai quello di un eventuale alias di
+    # membership/blog (non esiste un "avatar del blog" per un post).
+    author_avatar_url: str | None
     locale: str
     translation_group_id: uuid.UUID
     title: str
@@ -448,6 +453,11 @@ async def _posts_out(
             if author is not None
             else post.author_display_name
         )
+        author_avatar_url = (
+            avatar_public_url(author.avatar_object_key)
+            if author is not None and author.avatar_object_key
+            else None
+        )
         category = categories.get(post.category_id) if post.category_id else None
         out.append(
             PostOut(
@@ -455,6 +465,7 @@ async def _posts_out(
                 blog_id=post.blog_id,
                 author_id=post.author_id,
                 author_display_name=author_display_name,
+                author_avatar_url=author_avatar_url,
                 locale=post.locale,
                 translation_group_id=post.translation_group_id,
                 title=post.title,

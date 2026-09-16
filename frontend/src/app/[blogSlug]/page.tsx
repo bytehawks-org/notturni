@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -86,13 +87,24 @@ export default async function BlogHomePage({
           />
         )}
         <header className="grid gap-6 md:grid-cols-[72px_minmax(0,1fr)] md:gap-7">
-          <span
-            className="grid h-[72px] w-[72px] place-items-center rounded-2xl font-serif text-3xl text-white"
-            style={{ background: hue(blog.slug) }}
-            aria-hidden="true"
-          >
-            {blog.title[0]}
-          </span>
+          {blog.favicon_url ? (
+            <Image
+              src={blog.favicon_url}
+              alt={blog.title}
+              width={72}
+              height={72}
+              className="h-[72px] w-[72px] rounded-2xl object-cover"
+              unoptimized
+            />
+          ) : (
+            <span
+              className="grid h-[72px] w-[72px] place-items-center rounded-2xl font-serif text-3xl text-white"
+              style={{ background: hue(blog.slug) }}
+              aria-hidden="true"
+            >
+              {blog.title[0]}
+            </span>
+          )}
           <div className="flex flex-col gap-2">
             <h1 className="font-serif text-[34px] font-medium leading-[1.12] tracking-tight text-foreground md:text-[44px]">
               {blog.title}

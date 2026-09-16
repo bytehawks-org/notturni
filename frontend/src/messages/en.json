@@ -651,7 +651,9 @@
     "style": {
       "username": "Username",
       "full_name": "Full name",
-      "display_name": "Alias"
+      "display_name": "Alias",
+      "verified_domain": "Verified username",
+      "verifiedDomainUnavailable": "Only available with an active domain-verified username."
     },
     "bio": "Bio",
     "bioPlaceholder": "Tell something about yourself…",
@@ -702,8 +704,8 @@
     "emailCancel": "Cancel",
     "verificationBadgeNone": "No verification badge.",
     "verificationBadgeActive": "Your profile is verified.",
-    "domainTitle": "Custom domain",
-    "domainSub": "Link a domain you own in place of your username, verified via a DNS record (Bluesky-style). Your platform username still always works as a fallback identifier.",
+    "domainTitle": "Verified username",
+    "domainSub": "Link a domain you own, verified via a DNS record (Bluesky-style): once set, it becomes your default handle on the platform (@domain instead of @username) and can also be chosen to sign your posts. Your username still always works as a fallback identifier, visible and editable in the settings above.",
     "domainLabel": "Domain",
     "domainPlaceholder": "yourdomain.com",
     "domainSave": "Save domain",

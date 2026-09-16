@@ -651,7 +651,9 @@
     "style": {
       "username": "Username",
       "full_name": "Nome e cognome",
-      "display_name": "Alias"
+      "display_name": "Alias",
+      "verified_domain": "Nome utente verificato",
+      "verifiedDomainUnavailable": "Disponibile solo con un nome utente verificato tramite dominio attivo."
     },
     "bio": "Bio",
     "bioPlaceholder": "Racconta qualcosa di te…",
@@ -702,8 +704,8 @@
     "emailCancel": "Annulla",
     "verificationBadgeNone": "Nessun sigillo di verifica.",
     "verificationBadgeActive": "Il tuo profilo è verificato.",
-    "domainTitle": "Dominio personalizzato",
-    "domainSub": "Collega un dominio di tua proprietà al posto dello username, verificato tramite un record DNS (stile Bluesky). Lo username di piattaforma resta comunque sempre valido come identificativo di riserva.",
+    "domainTitle": "Nome utente verificato",
+    "domainSub": "Collega un dominio di tua proprietà, verificato tramite un record DNS (stile Bluesky): se impostato, diventa il tuo handle di default sulla piattaforma (@dominio al posto di @username) e può essere scelto anche per firmare i tuoi post. Lo username resta comunque sempre valido come identificativo di riserva, visibile e modificabile dalle impostazioni sopra.",
     "domainLabel": "Dominio",
     "domainPlaceholder": "iltuodominio.it",
     "domainSave": "Salva dominio",

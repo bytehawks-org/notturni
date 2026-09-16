@@ -17,12 +17,13 @@ export interface CurrentUser {
 
 /** todo/USERS.md #2: cosa mostrare come nome autore sui propri post quando il
  * blog non impone un alias. */
-export type PostAuthorNameStyle = "username" | "full_name" | "display_name";
+export type PostAuthorNameStyle = "username" | "full_name" | "display_name" | "verified_domain";
 
 export const POST_AUTHOR_NAME_STYLE_LABELS: Record<PostAuthorNameStyle, string> = {
   username: "Username",
   full_name: "Nome e cognome",
   display_name: "Alias del profilo",
+  verified_domain: "Nome utente verificato",
 };
 
 export const PLATFORM_ADMIN_ROLES: PlatformRole[] = ["super_admin", "amministratore"];
@@ -161,6 +162,7 @@ export interface MembershipBlog {
 export interface BlogMember {
   user_id: string;
   username: string;
+  avatar_url: string | null;
   role: BlogRole;
   author_display_name: string | null;
   created_at: string;
@@ -208,6 +210,8 @@ export interface Post {
   blog_id: string;
   author_id: string;
   author_display_name: string;
+  /** Avatar dell'autore, se impostato — null anche se il nome mostrato è un alias. */
+  author_avatar_url: string | null;
   locale: string;
   translation_group_id: string;
   title: string;
@@ -418,6 +422,8 @@ export interface Comment {
   parent_id: string | null;
   author_id: string | null;
   author_display_name: string;
+  /** Avatar dell'autore registrato, se impostato — null per commenti anonimi. */
+  author_avatar_url: string | null;
   status: CommentStatus;
   content: string;
   created_at: string;
