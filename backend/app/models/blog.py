@@ -3,11 +3,13 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    ARRAY,
     Boolean,
     CheckConstraint,
     DateTime,
     Enum,
     ForeignKey,
+    Integer,
     String,
     UniqueConstraint,
 )
@@ -97,6 +99,22 @@ class Blog(Base, UUIDPKMixin, TimestampMixin):
     # riattivato, indipendentemente da `visibility` — vedi app/domain/authorization.py.
     # Mai impostabile dal proprietario, solo da PATCH /api/v1/admin/blogs/{id}.
     is_suspended: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # todo/UX_REDESIGN.md B3 (mockup 5c "danger zone"): pausa volontaria del
+    # proprietario — i lettori vedono una pagina "in pausa", proprietario e
+    # collaboratori continuano ad accedere in dashboard; nulla è cancellato.
+    is_paused: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Cancellazione con tolleranza: impostato da DELETE /blogs/{slug}, il blog
+    # sparisce dalle pagine pubbliche e resta ripristinabile dal proprietario
+    # finché il worker di manutenzione non lo elimina davvero dopo
+    # BLOG_DELETE_GRACE_DAYS (app/domain/blog_lifecycle.py).
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Lingue secondarie del blog oltre a default_locale (mockup 5c "Languages"):
+    # informative (header pubblico, directory), i post restano liberi di usare
+    # qualunque lingua.
+    extra_locales: Mapped[list[str]] = mapped_column(ARRAY(String(2)), default=list, nullable=False)
+    # B4 (mockup 5b "Close comments after N days"): trascorsi N giorni dalla
+    # pubblicazione di un post, i suoi commenti risultano chiusi. None = mai.
+    comments_auto_close_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # i18n (CLAUDE.md #1/#2): lingua di default del blog; i singoli post
     # possono avere traduzioni in altre lingue, vedi app/models/post.py
     default_locale: Mapped[str] = mapped_column(String(2), default=DEFAULT_LOCALE, nullable=False)
@@ -106,6 +124,31 @@ class Blog(Base, UUIDPKMixin, TimestampMixin):
     # esplicitamente in creazione, non un vincolo: resta sempre modificabile
     # per singolo post/autore.
     default_author_display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # Immagine di copertina del blog (banner sulla home pubblica): stesso
+    # schema di Post.cover_image_url/_is_sensitive/_categories (moderazione
+    # automatica + avviso manuale, mai al posto l'uno dell'altro). Facoltativa.
+    cover_image_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    cover_image_is_sensitive: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    cover_image_categories: Mapped[list[str]] = mapped_column(ARRAY(String(20)), default=list, nullable=False)
+    # Favicon dedicata del blog (facoltativa): stesso schema di
+    # User.avatar_object_key — object key su storage, non moderata (icona
+    # dell'identità del blog, non contenuto). URL risolto a runtime in
+    # app/api/v1/blogs/branding.py, mai salvato qui.
+    favicon_object_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    @property
+    def favicon_url(self) -> str | None:
+        """URL pubblica risolta da `favicon_object_key` (mai salvata): una
+        `@property`, non una colonna, così ogni endpoint che serializza un
+        `Blog` in `BlogOut` (`response_model=...`, `model_validate`, ...) la
+        ottiene per attribute-access senza doverla ricalcolare a mano —
+        stesso bucket/URL pattern di `avatar_public_url`."""
+        if not self.favicon_object_key:
+            return None
+        from app.core.storage import blog_favicon_public_url
+
+        return blog_favicon_public_url(self.favicon_object_key)
 
     owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
 

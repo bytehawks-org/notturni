@@ -372,7 +372,7 @@ async def test_create_post_rejects_reserved_slug(client: AsyncClient, make_user:
     owner: AuthedUser = await make_user("owner-permalink-reserved")
     slug = await _create_blog(client, owner, "blog-permalink-reserved")
 
-    for reserved in ("bibliografia", "link", "media", "pagina"):
+    for reserved in ("bibliografia", "link", "media", "pagina", "pub", "feed.xml", "atom.xml"):
         res = await client.post(
             f"/api/v1/blogs/{slug}/posts",
             json={"slug": reserved, "title": "x", "content": "y"},

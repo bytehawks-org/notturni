@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { DashboardShell, type NavItem } from "@/components/shell/DashboardShell";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/Button";
 import { api } from "@/lib/api";
@@ -13,6 +15,8 @@ import { PLATFORM_ADMIN_ROLES, PLATFORM_MODERATION_ROLES } from "@/lib/types";
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, loading, logout } = useAuth();
+  const t = useTranslations("Nav");
+  const tc = useTranslations("Common");
   const [deploymentMode, setDeploymentMode] = useState<"solo" | "platform" | null>(null);
 
   useEffect(() => {
@@ -40,63 +44,62 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (loading || !user || (!isAdmin && !isModerator)) {
     return (
       <main className="flex flex-1 items-center justify-center">
-        <p className="text-sm text-muted">Caricamento…</p>
+        <p className="text-sm text-muted">{tc("loading")}</p>
       </main>
     );
   }
 
+  const items: NavItem[] = [
+    ...(isAdmin ? [{ href: "/admin/pagine", label: t("pages"), icon: "▤", mobile: true } as NavItem] : []),
+    ...(isAdmin && deploymentMode !== "solo"
+      ? [{ href: "/admin/utenti", label: t("users"), icon: "◯", mobile: true } as NavItem]
+      : []),
+    ...(isAdmin ? [{ href: "/admin/blog", label: t("allBlogs"), icon: "✎", mobile: true } as NavItem] : []),
+    ...(isAdmin ? [{ href: "/admin/moderazione", label: t("moderation"), icon: "◔", mobile: true } as NavItem] : []),
+    ...(isModerator
+      ? [{ href: "/admin/moderazione-commenti", label: t("commentModeration"), icon: "◔", mobile: true } as NavItem]
+      : []),
+    ...(isAdmin ? [{ href: "/admin/registro", label: t("register"), icon: "≡", mobile: true } as NavItem] : []),
+    ...(isAdmin ? [{ href: "/admin/gdpr", label: t("gdprRequests"), icon: "⚖", mobile: false } as NavItem] : []),
+    ...(user.platform_role === "super_admin"
+      ? [{ href: "/admin/impostazioni", label: t("platformSettings"), icon: "⚙", mobile: false } as NavItem]
+      : []),
+  ];
+
   return (
     <div className="flex flex-1 flex-col">
-      <header className="border-b border-border">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <nav className="flex items-center gap-6">
-            <Link href="/admin" className="font-serif text-lg text-foreground">
-              Amministrazione
-            </Link>
-            {isAdmin && (
-              <Link href="/admin/pagine" className="text-sm text-muted hover:text-foreground">
-                Pagine
-              </Link>
-            )}
-            {isAdmin && deploymentMode !== "solo" && (
-              <Link href="/admin/utenti" className="text-sm text-muted hover:text-foreground">
-                Utenti
-              </Link>
-            )}
-            {isAdmin && (
-              <Link href="/admin/blog" className="text-sm text-muted hover:text-foreground">
-                Tutti i blog
-              </Link>
-            )}
-            {isAdmin && (
-              <Link href="/admin/moderazione" className="text-sm text-muted hover:text-foreground">
-                Moderazione
-              </Link>
-            )}
-            {isModerator && (
-              <Link href="/admin/moderazione-commenti" className="text-sm text-muted hover:text-foreground">
-                Moderazione commenti
-              </Link>
-            )}
-            {isAdmin && (
-              <Link href="/admin/registro" className="text-sm text-muted hover:text-foreground">
-                Registro
-              </Link>
-            )}
-          </nav>
-          <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="text-sm text-muted hover:text-foreground">
-              ← La mia dashboard
-            </Link>
-            <ThemeToggle />
-            <span className="text-sm text-muted">{user.username}</span>
-            <Button variant="secondary" onClick={() => logout().then(() => router.push("/login"))}>
-              Esci
-            </Button>
-          </div>
+      <div className="flex items-center justify-between border-b border-border px-5 py-3 text-sm lg:hidden">
+        <Link href="/dashboard" className="text-muted hover:text-foreground">
+          {tc("myDashboard")}
+        </Link>
+        <div className="flex items-center gap-3">
+          <ThemeToggle />
+          <Button variant="secondary" size="sm" onClick={() => logout().then(() => router.push("/login"))}>
+            {tc("signOut")}
+          </Button>
         </div>
-      </header>
-      <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">{children}</main>
+      </div>
+      <DashboardShell
+        items={items}
+        eyebrow={t("administration")}
+        homeHref="/admin"
+        footer={
+          <div className="flex flex-col gap-3 px-3 text-sm">
+            <Link href="/dashboard" className="text-muted hover:text-foreground">
+              {tc("myDashboard")}
+            </Link>
+            <div className="flex items-center justify-between">
+              <span className="truncate text-muted">{user.username}</span>
+              <ThemeToggle />
+            </div>
+            <Button variant="secondary" size="sm" onClick={() => logout().then(() => router.push("/login"))}>
+            {tc("signOut")}
+          </Button>
+          </div>
+        }
+      >
+        {children}
+      </DashboardShell>
     </div>
   );
 }

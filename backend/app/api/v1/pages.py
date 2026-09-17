@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import PLATFORM_ADMIN_ROLES, get_optional_current_user, require_platform_admin
 from app.core.database import get_session
 from app.core.revalidation import platform_page_tag, platform_pages_tag, revalidate_frontend
+from app.domain import audit
 from app.domain.i18n import validate_locale
 from app.domain.pages import build_platform_page_permalink
 from app.models.page import Page
@@ -69,6 +70,7 @@ def _to_out(page: Page) -> PageOut:
 @router.post("", response_model=PageOut, status_code=status.HTTP_201_CREATED)
 async def create_page(
     payload: PageCreateRequest,
+    request: Request,
     current_user: User = Depends(require_platform_admin),
     session: AsyncSession = Depends(get_session),
 ) -> PageOut:
@@ -94,6 +96,16 @@ async def create_page(
         updated_by_id=current_user.id,
     )
     session.add(page)
+    await session.flush()
+    await audit.record(
+        session,
+        action="page.created",
+        actor=current_user,
+        target_type="page",
+        target_id=page.id,
+        request=request,
+        payload={"slug": page.slug, "locale": page.locale, "is_published": page.is_published},
+    )
     await session.commit()
     await session.refresh(page)
     await revalidate_frontend([platform_pages_tag(), platform_page_tag(page.slug)])
@@ -213,6 +225,7 @@ async def list_pages(
 async def update_page(
     page_id: uuid.UUID,
     payload: PageUpdateRequest,
+    request: Request,
     current_user: User = Depends(require_platform_admin),
     session: AsyncSession = Depends(get_session),
 ) -> PageOut:
@@ -230,6 +243,15 @@ async def update_page(
         page.is_published = payload.is_published
     page.updated_by_id = current_user.id
 
+    await audit.record(
+        session,
+        action="page.updated",
+        actor=current_user,
+        target_type="page",
+        target_id=page.id,
+        request=request,
+        payload={"slug": page.slug, "locale": page.locale, "is_published": page.is_published},
+    )
     await session.commit()
     await session.refresh(page)
     await revalidate_frontend([platform_pages_tag(), platform_page_tag(page.slug)])

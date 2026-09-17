@@ -1,106 +1,108 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { FilterChip } from "@/components/ui/Pill";
+import { Pill } from "@/components/ui/Pill";
+import { EmptyState, SkeletonRows } from "@/components/ui/States";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { formatDate } from "@/lib/format";
 import { type AdminComment, type CommentStatus } from "@/lib/types";
 
-function errorMessage(err: unknown): string {
-  return err instanceof ApiClientError ? err.message : "Errore imprevisto.";
-}
+type Filter = CommentStatus | "reported";
+const FILTERS: Filter[] = ["reported", "pending", "approved", "rejected"];
 
+/** Moderazione commenti di piattaforma (mockup 5d "escalations"): i commenti
+ * segnalati dai blog (con nota) più le code per stato di tutti i blog. */
 export default function DashboardCommentModerationPage() {
   const { authFetch } = useAuth();
-  const [status, setStatus] = useState<CommentStatus>("pending");
+  const t = useTranslations("AdminComments");
+  const tc = useTranslations("Common");
+  const locale = useLocale();
+  const [filter, setFilter] = useState<Filter>("reported");
   const [comments, setComments] = useState<AdminComment[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [rowError, setRowError] = useState<Record<string, string>>({});
 
   const load = useCallback(() => {
-    authFetch((token) => api.admin.listComments(token, { status }))
+    authFetch((token) => api.admin.listComments(token, filter === "reported" ? { reported: true } : { status: filter }))
       .then(setComments)
-      .catch((err) => setError(errorMessage(err)));
-  }, [authFetch, status]);
+      .catch((err) => setError(err instanceof ApiClientError ? err.message : tc("unexpectedError")));
+  }, [authFetch, filter, tc]);
 
   useEffect(load, [load]);
 
-  async function handleModerate(commentId: string, action: "approve" | "reject") {
-    setRowError((prev) => ({ ...prev, [commentId]: "" }));
+  async function moderate(commentId: string, action: "approve" | "reject") {
     try {
-      await authFetch((token) =>
-        action === "approve" ? api.comments.approve(token, commentId) : api.comments.reject(token, commentId)
-      );
-      setComments((prev) => prev?.filter((c) => c.id !== commentId) ?? null);
+      await authFetch((token) => (action === "approve" ? api.comments.approve(token, commentId) : api.comments.reject(token, commentId)));
+      load();
     } catch (err) {
-      setRowError((prev) => ({ ...prev, [commentId]: errorMessage(err) }));
+      setError(err instanceof ApiClientError ? err.message : tc("unexpectedError"));
     }
   }
 
   return (
-    <div>
-      <div className="mb-2 flex items-center justify-between">
-        <h1 className="font-serif text-2xl text-foreground">Moderazione commenti</h1>
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value as CommentStatus)}
-          aria-label="Filtra per stato"
-          className="max-w-xs rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
-        >
-          <option value="pending">In attesa</option>
-          <option value="approved">Approvati</option>
-          <option value="rejected">Rifiutati</option>
-        </select>
+    <div className="mx-auto flex max-w-6xl flex-col gap-5">
+      <div className="flex flex-col gap-1">
+        <h1 className="font-serif text-[28px] font-medium leading-tight text-foreground">{t("title")}</h1>
+        <p className="text-sm text-muted">{t("subtitle")}</p>
       </div>
-      <p className="mb-6 text-sm text-muted">
-        Commenti di tutti i blog della piattaforma, indipendentemente da chi ne è proprietario o
-        mediatore.
-      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {FILTERS.map((f) => (
+          <FilterChip key={f} active={filter === f} onClick={() => setFilter(f)}>
+            {t(`filter.${f}`)}
+          </FilterChip>
+        ))}
+      </div>
       {error && <Alert kind="error">{error}</Alert>}
-
-      <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-border text-muted">
-            <tr>
-              <th className="px-4 py-3">Blog</th>
-              <th className="px-4 py-3">Post</th>
-              <th className="px-4 py-3">Autore</th>
-              <th className="px-4 py-3">Contenuto</th>
-              {status === "pending" && <th className="px-4 py-3">Moderazione</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {comments?.map((c) => (
-              <tr key={c.id} className="border-b border-border align-top last:border-0">
-                <td className="px-4 py-3 whitespace-nowrap text-muted">{c.blog_slug}</td>
-                <td className="px-4 py-3 text-muted">{c.post_title}</td>
-                <td className="px-4 py-3 text-muted">{c.author_display_name}</td>
-                <td className="px-4 py-3 text-foreground">{c.content}</td>
-                {status === "pending" && (
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      <Button onClick={() => handleModerate(c.id, "approve")}>Approva</Button>
-                      <Button variant="danger" onClick={() => handleModerate(c.id, "reject")}>
-                        Rifiuta
-                      </Button>
-                    </div>
-                    {rowError[c.id] && <p className="mt-1 text-xs text-red-700">{rowError[c.id]}</p>}
-                  </td>
+      {comments === null && !error && <SkeletonRows rows={4} />}
+      {comments !== null && comments.length === 0 && <EmptyState glyph="✓" title={t("emptyTitle")} body={t("emptyBody")} />}
+      {comments && comments.length > 0 && (
+        <ul className="flex flex-col rounded-xl border border-border bg-surface">
+          {comments.map((c) => (
+            <li key={c.id} className="flex flex-col gap-2 border-b border-border px-4 py-4 last:border-0">
+              <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted">
+                <Link href={`/${c.blog_slug}`} className="font-mono text-foreground no-underline hover:underline">
+                  {c.blog_slug}
+                </Link>
+                <span>
+                  · {t("on")}{" "}
+                  <Link href={`/${c.blog_slug}/${c.post_slug}`} className="text-foreground no-underline hover:underline">
+                    {c.post_title}
+                  </Link>
+                </span>
+                <span>· {c.author_display_name}</span>
+                <span>· {formatDate(c.created_at, locale, { day: "numeric", month: "short" })}</span>
+                <Pill tone={c.status === "approved" ? "ok" : c.status === "rejected" ? "danger" : "neutral"}>{t(`status.${c.status}`)}</Pill>
+                {c.reported_to_platform && <Pill tone="warn">{t("reported")}</Pill>}
+              </div>
+              <p className="text-[15px] leading-relaxed text-foreground">{c.content}</p>
+              {c.report_note && (
+                <p className="rounded-lg bg-[var(--warn-bg)] px-3 py-2 text-[13px] text-foreground">
+                  <span className="font-semibold">{t("reportNote")}:</span> {c.report_note}
+                  {c.reported_at && <span className="text-muted"> · {formatDate(c.reported_at, locale, { day: "numeric", month: "short" })}</span>}
+                </p>
+              )}
+              <div className="flex gap-2">
+                {c.status !== "approved" && (
+                  <Button size="sm" onClick={() => moderate(c.id, "approve")}>
+                    {t("approve")}
+                  </Button>
                 )}
-              </tr>
-            ))}
-            {comments !== null && comments.length === 0 && (
-              <tr>
-                <td colSpan={status === "pending" ? 5 : 4} className="px-4 py-6 text-center text-muted">
-                  Nessun commento in questo stato.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                {c.status !== "rejected" && (
+                  <Button size="sm" variant="secondary" onClick={() => moderate(c.id, "reject")}>
+                    {t("hide")}
+                  </Button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import ImageExtension from "@tiptap/extension-image";
 import LinkExtension from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -11,6 +12,7 @@ import TableRow from "@tiptap/extension-table-row";
 import type { Editor } from "@tiptap/react";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Markdown, type MarkdownStorage } from "tiptap-markdown";
 
@@ -29,9 +31,10 @@ import {
   UndoIcon,
 } from "./icons";
 import { LinkPreviewCard } from "./LinkPreviewCard";
+import { NoteModal, type NoteModalValue } from "./NoteModal";
 import { sensitiveImageNodeView } from "./SensitiveImageNodeView";
 
-interface RichTextEditorProps {
+export interface RichTextEditorProps {
   /** Contenuto iniziale in Markdown (il backend salva/legge solo Markdown). */
   value: string;
   onChange: (markdown: string) => void;
@@ -60,10 +63,9 @@ interface RichTextEditorProps {
   stickyToolbar?: boolean;
 }
 
-// Dimensione pulsanti/icone della toolbar: ~75% più grandi del precedente
-// h-9/w-9 con icone 16px (richiesta di leggibilità/usabilità), ridotti su
-// mobile dove la riga scorre in orizzontale invece di andare a capo (vedi
-// il contenitore della toolbar più sotto).
+// Pulsanti compatti per stare tutti su un'unica riga: la riga scorre in
+// orizzontale (overflow-x-auto sul contenitore) solo se lo spazio non basta,
+// invece di andare a capo su più righe come nella versione precedente.
 function ToolbarButton({
   active,
   disabled,
@@ -85,7 +87,7 @@ function ToolbarButton({
       disabled={disabled}
       onMouseDown={(e) => e.preventDefault()} // non rubare il focus all'editor
       onClick={onClick}
-      className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg transition disabled:opacity-30 disabled:cursor-not-allowed sm:h-16 sm:w-16 sm:text-2xl [&>svg]:h-5 [&>svg]:w-5 sm:[&>svg]:h-7 sm:[&>svg]:w-7 ${
+      className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm transition disabled:opacity-30 disabled:cursor-not-allowed [&>svg]:h-4 [&>svg]:w-4 ${
         active ? "bg-primary/10 text-primary" : "text-foreground/70 hover:bg-foreground/5 hover:text-foreground"
       }`}
     >
@@ -95,12 +97,13 @@ function ToolbarButton({
 }
 
 function ToolbarDivider() {
-  return <span className="mx-1.5 h-8 w-px shrink-0 bg-border sm:h-10" />;
+  return <span className="mx-1 h-6 w-px shrink-0 bg-border" />;
 }
 
 interface MentionCandidate {
   username: string;
   display_name: string | null;
+  avatar_url: string | null;
 }
 
 // La `@` deve essere a inizio riga o preceduta da uno spazio; poi 0..32
@@ -227,7 +230,7 @@ function useMentionAutocomplete(
   return (
     <ul
       style={{ position: "fixed", left: anchor.left, top: anchor.top, zIndex: 50 }}
-      className="max-h-56 w-64 overflow-auto rounded-lg border border-border bg-background py-1 text-sm shadow-lg"
+      className="max-h-56 w-64 overflow-auto rounded-lg border border-border bg-surface py-1 text-sm shadow-soft"
     >
       {items.map((item, i) => (
         <li key={item.username}>
@@ -237,11 +240,28 @@ function useMentionAutocomplete(
               e.preventDefault();
               applyMention(item);
             }}
-            className={`flex w-full items-center gap-1.5 px-3 py-1.5 text-left ${
+            className={`flex w-full items-center gap-2 px-3 py-1.5 text-left ${
               i === index ? "bg-primary/10 text-foreground" : "text-foreground/80 hover:bg-foreground/5"
             }`}
           >
-            <span className="text-muted">@</span>
+            {item.avatar_url ? (
+              <Image
+                src={item.avatar_url}
+                alt={item.username}
+                width={24}
+                height={24}
+                className="h-6 w-6 shrink-0 rounded-full object-cover"
+                unoptimized
+              />
+            ) : (
+              <span
+                className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white"
+                style={{ background: mentionAvatarHue(item.username) }}
+                aria-hidden="true"
+              >
+                {item.username[0]?.toUpperCase()}
+              </span>
+            )}
             <span className="font-medium">{item.username}</span>
             {item.display_name && <span className="truncate text-muted">· {item.display_name}</span>}
           </button>
@@ -250,6 +270,9 @@ function useMentionAutocomplete(
     </ul>
   );
 }
+
+const mentionAvatarHue = (s: string) =>
+  `oklch(0.55 0.06 ${[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % 360})`;
 
 const DEFAULT_TOOLBAR_STATE = {
   bold: false,
@@ -279,8 +302,13 @@ export function RichTextEditor({
   toolbarEnd,
   stickyToolbar = true,
 }: RichTextEditorProps) {
+  const t = useTranslations("RichTextEditor");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  // "create": nuova nota inserita al cursore. "edit": modifica dei campi
+  // bibliografici di una nota già presente nell'elenco sotto l'editor
+  // (idx valorizzato, nessun nuovo marcatore da inserire nel testo).
+  const [noteModal, setNoteModal] = useState<{ mode: "create" | "edit"; idx?: number } | null>(null);
   // Snapshot preso una sola volta al primo render: il contenuto iniziale
   // dell'editor non deve rincorrere ogni cambio di `value` (sarebbe l'editor
   // stesso, tramite onUpdate, a farlo cambiare) — solo il caso "arrivato in
@@ -294,7 +322,7 @@ export function RichTextEditor({
       StarterKit.configure({ link: false }),
       LinkExtension.configure({ openOnClick: false, autolink: true }),
       ImageExtension.extend({ addNodeView: sensitiveImageNodeView }),
-      Placeholder.configure({ placeholder: placeholder ?? "Scrivi qualcosa..." }),
+      Placeholder.configure({ placeholder: placeholder ?? t("placeholder") }),
       // resizable:false — una larghezza di colonna persistita non è
       // rappresentabile in una tabella Markdown a pipe, che non la prevede.
       // Table.addExtensions() dovrebbe includere già Row/Cell/Header da sé,
@@ -392,7 +420,7 @@ export function RichTextEditor({
 
   function setLink() {
     const previousUrl = editor!.getAttributes("link").href as string | undefined;
-    const url = window.prompt("URL del link", previousUrl ?? "https://");
+    const url = window.prompt(t("linkPrompt"), previousUrl ?? "https://");
     if (url === null) return;
     if (url === "") {
       editor!.chain().focus().extendMarkRange("link").unsetLink().run();
@@ -401,21 +429,39 @@ export function RichTextEditor({
     editor!.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
   }
 
-  /** Inserisce al cursore il marcatore `[n](#nota-n)` (un vero nodo link, così
-   * sopravvive al round-trip del serializzatore Markdown) e aggiunge la nota
-   * all'elenco. */
-  function insertNote() {
+  /** Apre il modal "Nota" (mockup 1d), stesso stile di `ContentWarningModal`
+   * — al posto del window.prompt bloccante, stesso principio delle pillole
+   * ALT/sensibile sulle immagini (SensitiveImageNodeView). La posizione del
+   * cursore non serve calcolarla (il modal è un overlay centrato, non un
+   * popover ancorato): resta comunque quella corrente della selezione
+   * dell'editor, usata solo al salvataggio per inserire il marcatore. */
+  function openNoteModal() {
+    if (!onNotesChange || !editor) return;
+    setNoteModal({ mode: "create" });
+  }
+
+  function openEditNoteModal(idx: number) {
     if (!onNotesChange) return;
-    const text = window.prompt("Testo della nota");
-    if (text === null) return;
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    if (trimmed.length > MAX_NOTE_LENGTH) {
-      setUploadError(`La nota supera i ${MAX_NOTE_LENGTH} caratteri.`);
+    setNoteModal({ mode: "edit", idx });
+  }
+
+  /** In modalità "create" inserisce al cursore il marcatore `[n](#nota-n)`
+   * (un vero nodo link, così sopravvive al round-trip del serializzatore
+   * Markdown) e aggiunge la nota all'elenco; in modalità "edit" aggiorna la
+   * nota esistente senza toccare il corpo del post. */
+  function handleNoteModalSave(value: NoteModalValue) {
+    if (!onNotesChange || !noteModal || !editor) return;
+    if (value.content.length > MAX_NOTE_LENGTH) {
+      setUploadError(t("noteTooLong", { max: MAX_NOTE_LENGTH }));
+      return;
+    }
+    if (noteModal.mode === "edit" && noteModal.idx !== undefined) {
+      const idx = noteModal.idx;
+      onNotesChange(notes.map((n) => (n.idx === idx ? { ...n, ...value } : n)));
       return;
     }
     const nextIdx = notes.reduce((max, n) => Math.max(max, n.idx), 0) + 1;
-    editor!
+    editor
       .chain()
       .focus()
       .insertContent({
@@ -426,7 +472,7 @@ export function RichTextEditor({
       // il mark link resta "attivo": lo si stacca subito così il testo dopo non ci finisce dentro
       .unsetMark("link")
       .run();
-    onNotesChange([...notes, { idx: nextIdx, content: trimmed }]);
+    onNotesChange([...notes, { idx: nextIdx, ...value }]);
   }
 
   function updateNote(idx: number, content: string) {
@@ -473,7 +519,7 @@ export function RichTextEditor({
         ])
         .run();
     } catch (err) {
-      setUploadError(err instanceof ApiClientError ? err.message : "Caricamento immagine non riuscito.");
+      setUploadError(err instanceof ApiClientError ? err.message : t("uploadFailed"));
     }
   }
 
@@ -488,23 +534,23 @@ export function RichTextEditor({
         {toolbarEnd && (
           <div className="mb-3 flex flex-wrap items-end gap-3">{toolbarEnd}</div>
         )}
-        <div className="flex flex-nowrap items-center gap-1 overflow-x-auto text-foreground/70 sm:flex-wrap sm:overflow-visible">
+        <div className="flex flex-nowrap items-center gap-0.5 overflow-x-auto text-foreground/70">
         <ToolbarButton
-          title="Titolo 1"
+          title={t("heading1")}
           active={state.heading1}
           onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
         >
           <span className="font-bold">H1</span>
         </ToolbarButton>
         <ToolbarButton
-          title="Titolo 2"
+          title={t("heading2")}
           active={state.heading2}
           onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
         >
           <span className="font-bold">H2</span>
         </ToolbarButton>
         <ToolbarButton
-          title="Titolo 3"
+          title={t("heading3")}
           active={state.heading3}
           onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
         >
@@ -513,27 +559,27 @@ export function RichTextEditor({
 
         <ToolbarDivider />
 
-        <ToolbarButton title="Grassetto" active={state.bold} onClick={() => editor.chain().focus().toggleBold().run()}>
+        <ToolbarButton title={t("bold")} active={state.bold} onClick={() => editor.chain().focus().toggleBold().run()}>
           <span className="font-bold">B</span>
         </ToolbarButton>
-        <ToolbarButton title="Corsivo" active={state.italic} onClick={() => editor.chain().focus().toggleItalic().run()}>
+        <ToolbarButton title={t("italic")} active={state.italic} onClick={() => editor.chain().focus().toggleItalic().run()}>
           <span className="italic">I</span>
         </ToolbarButton>
         <ToolbarButton
-          title="Barrato"
+          title={t("strike")}
           active={state.strike}
           onClick={() => editor.chain().focus().toggleStrike().run()}
         >
           <span className="line-through">S</span>
         </ToolbarButton>
-        <ToolbarButton title="Codice" active={state.code} onClick={() => editor.chain().focus().toggleCode().run()}>
+        <ToolbarButton title={t("code")} active={state.code} onClick={() => editor.chain().focus().toggleCode().run()}>
           <span className="font-mono text-xs">{"</>"}</span>
         </ToolbarButton>
-        <ToolbarButton title="Link" active={state.link} onClick={setLink}>
+        <ToolbarButton title={t("link")} active={state.link} onClick={setLink}>
           <LinkIcon />
         </ToolbarButton>
         {onNotesChange && (
-          <ToolbarButton title="Nota a piè di pagina" onClick={insertNote}>
+          <ToolbarButton title={t("note")} onClick={openNoteModal}>
             <NoteIcon />
           </ToolbarButton>
         )}
@@ -541,33 +587,33 @@ export function RichTextEditor({
         <ToolbarDivider />
 
         <ToolbarButton
-          title="Citazione"
+          title={t("quote")}
           active={state.blockquote}
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
         >
           <QuoteIcon />
         </ToolbarButton>
         <ToolbarButton
-          title="Elenco puntato"
+          title={t("bulletList")}
           active={state.bulletList}
           onClick={() => editor.chain().focus().toggleBulletList().run()}
         >
           <BulletListIcon />
         </ToolbarButton>
         <ToolbarButton
-          title="Elenco numerato"
+          title={t("orderedList")}
           active={state.orderedList}
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
         >
           <OrderedListIcon />
         </ToolbarButton>
         {blogSlug && (
-          <ToolbarButton title="Immagine" onClick={() => fileInputRef.current?.click()}>
+          <ToolbarButton title={t("image")} onClick={() => fileInputRef.current?.click()}>
             <ImageIcon />
           </ToolbarButton>
         )}
         <ToolbarButton
-          title="Tabella"
+          title={t("table")}
           active={state.inTable}
           onClick={() =>
             editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
@@ -577,24 +623,24 @@ export function RichTextEditor({
         </ToolbarButton>
         {state.inTable && (
           <>
-            <ToolbarButton title="Aggiungi colonna" onClick={() => editor.chain().focus().addColumnAfter().run()}>
-              <span className="text-xs">+col</span>
+            <ToolbarButton title={t("addColumnTitle")} onClick={() => editor.chain().focus().addColumnAfter().run()}>
+              <span className="text-xs">{t("addColumn")}</span>
             </ToolbarButton>
-            <ToolbarButton title="Aggiungi riga" onClick={() => editor.chain().focus().addRowAfter().run()}>
-              <span className="text-xs">+riga</span>
+            <ToolbarButton title={t("addRowTitle")} onClick={() => editor.chain().focus().addRowAfter().run()}>
+              <span className="text-xs">{t("addRow")}</span>
             </ToolbarButton>
-            <ToolbarButton title="Elimina tabella" onClick={() => editor.chain().focus().deleteTable().run()}>
-              <span className="text-xs text-red-700">✕tab</span>
+            <ToolbarButton title={t("deleteTableTitle")} onClick={() => editor.chain().focus().deleteTable().run()}>
+              <span className="text-xs text-red-700">{t("deleteTable")}</span>
             </ToolbarButton>
           </>
         )}
 
         <ToolbarDivider />
 
-        <ToolbarButton title="Annulla" disabled={!state.canUndo} onClick={() => editor.chain().focus().undo().run()}>
+        <ToolbarButton title={t("undo")} disabled={!state.canUndo} onClick={() => editor.chain().focus().undo().run()}>
           <UndoIcon />
         </ToolbarButton>
-        <ToolbarButton title="Ripeti" disabled={!state.canRedo} onClick={() => editor.chain().focus().redo().run()}>
+        <ToolbarButton title={t("redo")} disabled={!state.canRedo} onClick={() => editor.chain().focus().redo().run()}>
           <RedoIcon />
         </ToolbarButton>
         </div>
@@ -619,35 +665,59 @@ export function RichTextEditor({
       <EditorContent editor={editor} />
       {mentionMenu}
 
+      {noteModal && onNotesChange && (
+        <NoteModal
+          initial={
+            noteModal.mode === "edit" ? notes.find((n) => n.idx === noteModal.idx) : undefined
+          }
+          onSave={handleNoteModalSave}
+          onClose={() => setNoteModal(null)}
+        />
+      )}
+
       {onNotesChange && notes.length > 0 && (
         <div className="mt-8 border-t border-border pt-4">
-          <p className="mb-2 text-xs uppercase tracking-wide text-muted">Note a piè di pagina</p>
+          <p className="mb-2 text-xs uppercase tracking-wide text-muted">{t("footnotesTitle")}</p>
           <ul className="space-y-2">
             {[...notes]
               .sort((a, b) => a.idx - b.idx)
-              .map((note) => (
-                <li key={note.idx} className="flex items-start gap-2">
-                  <span className="mt-2 w-5 shrink-0 text-right text-xs text-muted">{note.idx}.</span>
-                  <textarea
-                    value={note.content}
-                    maxLength={MAX_NOTE_LENGTH}
-                    rows={2}
-                    onChange={(e) => updateNote(note.idx, e.target.value)}
-                    className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeNote(note.idx)}
-                    className="mt-1 text-xs text-muted hover:text-foreground"
-                  >
-                    Rimuovi
-                  </button>
-                </li>
-              ))}
+              .map((note) => {
+                const hasDetails = Boolean(
+                  note.title || note.author || note.kind || note.source || note.issued || note.isbn || note.doi || note.url || note.page
+                );
+                return (
+                  <li key={note.idx} className="flex items-start gap-2">
+                    <span className="mt-2 w-5 shrink-0 text-right text-xs text-muted">{note.idx}.</span>
+                    <textarea
+                      value={note.content}
+                      maxLength={MAX_NOTE_LENGTH}
+                      rows={2}
+                      onChange={(e) => updateNote(note.idx, e.target.value)}
+                      className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+                    />
+                    <div className="mt-1 flex shrink-0 flex-col items-end gap-1 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => openEditNoteModal(note.idx)}
+                        className={hasDetails ? "font-medium text-primary" : "text-muted hover:text-foreground"}
+                        title={hasDetails ? t("noteHasDetails") : undefined}
+                      >
+                        {t("editDetails")}
+                        {hasDetails ? " ●" : ""}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeNote(note.idx)}
+                        className="text-muted hover:text-foreground"
+                      >
+                        {t("remove")}
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
           </ul>
-          <p className="mt-2 text-xs text-muted">
-            Il riferimento nel testo è il numero cliccabile inserito col pulsante «Nota».
-          </p>
+          <p className="mt-2 text-xs text-muted">{t("footnoteHint")}</p>
         </div>
       )}
     </div>

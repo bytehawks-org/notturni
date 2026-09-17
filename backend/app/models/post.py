@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    Integer,
     ARRAY,
     Boolean,
     DateTime,
@@ -45,6 +46,13 @@ class Post(Base, UUIDPKMixin, TimestampMixin):
     category_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("categories.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # B9 (todo/PUBLICATIONS.md): pubblicazione di appartenenza (al più una) e
+    # posizione esplicita del capitolo (null = ordine cronologico). Colonne
+    # semplici come category_id, stesso motivo.
+    publication_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("publications.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    chapter_order: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # nome pubblico dell'autore per questo post, può differire da User.username (CLAUDE.md #1)
     author_display_name: Mapped[str] = mapped_column(String(255))
     # Override per questo singolo post di Blog.comments_mode. None: eredita

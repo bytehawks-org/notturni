@@ -11,7 +11,7 @@ async def test_default_config_when_not_customized(client: AsyncClient, make_user
 
     res = await client.get("/api/v1/blogs/blog-cfg-1/config")
     assert res.status_code == 200
-    assert res.json()["typography"] == {"heading_font": "Lora", "body_font": "Inter"}
+    assert res.json()["typography"] == {"heading_font": "Lora", "body_font": "Source Sans 3"}
 
 
 async def test_update_config_owner_only(client: AsyncClient, make_user: Callable) -> None:
@@ -69,6 +69,27 @@ async def test_config_rejects_too_saturated_color(client: AsyncClient, make_user
         headers=owner.headers,
     )
     assert res.status_code == 400
+
+
+async def test_config_body_size_and_measure_do_not_count_as_fonts(
+    client: AsyncClient, make_user: Callable
+) -> None:
+    owner: AuthedUser = await make_user()
+    await client.post("/api/v1/blogs", json={"slug": "blog-cfg-7", "title": "x"}, headers=owner.headers)
+
+    res = await client.put(
+        "/api/v1/blogs/blog-cfg-7/config",
+        json={
+            "typography": {
+                "heading_font": "Playfair Display",
+                "body_font": "Karla",
+                "body_size": "19",
+                "measure": "narrow",
+            }
+        },
+        headers=owner.headers,
+    )
+    assert res.status_code == 200
 
 
 async def test_config_enforces_serif_heading_sans_serif_body(

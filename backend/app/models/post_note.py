@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKey, Integer, Table, Text
+from sqlalchemy import Column, ForeignKey, Integer, String, Table, Text
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.models.base import Base
@@ -19,4 +19,23 @@ post_notes = Table(
     Column("post_id", UUID(as_uuid=True), ForeignKey("posts.id", ondelete="CASCADE"), primary_key=True),
     Column("idx", Integer, primary_key=True),
     Column("content", Text, nullable=False),
+    # B8: nota del blog a cui questa nota di post è agganciata (stesso testo
+    # normalizzato), impostata alla sincronizzazione; null per righe legacy
+    Column("note_id", UUID(as_uuid=True), ForeignKey("blog_notes.id", ondelete="SET NULL"), nullable=True, index=True),
+    # Campi facoltativi per bibliografie strutturate (modal "Nota" nell'editor,
+    # dietro il toggle "Aggiungi dettagli bibliografici") — tutti nullable,
+    # nessuno di questi è mai obbligatorio: solo `content` lo è.
+    Column("title", Text, nullable=True),
+    Column("author", Text, nullable=True),
+    Column("isbn", String(32), nullable=True),
+    Column("doi", String(255), nullable=True),
+    Column("page", String(32), nullable=True),
+    # Compatibilità BibTeX (vedi app/domain/blog_notes.py): `kind` è
+    # nullable qui (a differenza di blog_notes.kind, NOT NULL) — a livello
+    # di singolo post resta solo un suggerimento dell'autore, non un dato
+    # sempre presente; se assente `link_blog_notes` ricade su `guess_kind()`.
+    Column("kind", String(10), nullable=True),
+    Column("source", Text, nullable=True),
+    Column("issued", String(32), nullable=True),
+    Column("url", Text, nullable=True),
 )

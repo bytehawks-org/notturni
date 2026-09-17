@@ -13,6 +13,7 @@ from app.api.v1.blogs._common import _get_blog_or_404, _require_blog_viewable
 from app.api.v1.blogs._router import router
 from app.core.database import get_session
 from app.domain.permalinks import build_permalink
+from app.models.blog_note import BlogNote
 from app.models.post import Post, PostStatus
 from app.models.post_link import post_links
 from app.models.post_media import post_media
@@ -30,6 +31,19 @@ class BibliographyCitationOut(BaseModel):
 
 class BibliographyEntryOut(BaseModel):
     content: str
+    # B8: tipo e URL dalla libreria note del blog (null per righe legacy non agganciate)
+    kind: str | None = None
+    url: str | None = None
+    # Campi bibliografici opzionali della nota (modal "Nota" nell'editor)
+    title: str | None = None
+    author: str | None = None
+    isbn: str | None = None
+    doi: str | None = None
+    page: str | None = None
+    # Compatibilità BibTeX (app/domain/blog_notes.py): editore/rivista/sito,
+    # anno/data — stessa fonte (post_notes, non BlogNote) delle altre righe qui sopra.
+    source: str | None = None
+    issued: str | None = None
     citations: list[BibliographyCitationOut]
 
 
@@ -46,8 +60,22 @@ async def get_blog_bibliography(
     await _require_blog_viewable(session, current_user, blog)
 
     rows = await session.execute(
-        select(Post, post_notes.c.idx, post_notes.c.content)
+        select(
+            Post,
+            post_notes.c.idx,
+            post_notes.c.content,
+            post_notes.c.title,
+            post_notes.c.author,
+            post_notes.c.isbn,
+            post_notes.c.doi,
+            post_notes.c.page,
+            post_notes.c.source,
+            post_notes.c.issued,
+            BlogNote.kind,
+            BlogNote.url,
+        )
         .join(post_notes, post_notes.c.post_id == Post.id)
+        .outerjoin(BlogNote, BlogNote.id == post_notes.c.note_id)
         .where(
             Post.blog_id == blog.id,
             Post.status == PostStatus.PUBLISHED,
@@ -58,11 +86,23 @@ async def get_blog_bibliography(
     )
 
     entries: dict[str, BibliographyEntryOut] = {}
-    for post, idx, content in rows.all():
+    for post, idx, content, title, author, isbn, doi, page, source, issued, kind, url in rows.all():
         key = " ".join(content.split()).casefold()
         entry = entries.get(key)
         if entry is None:
-            entry = BibliographyEntryOut(content=content, citations=[])
+            entry = BibliographyEntryOut(
+                content=content,
+                kind=kind,
+                url=url,
+                title=title,
+                author=author,
+                isbn=isbn,
+                doi=doi,
+                page=page,
+                source=source,
+                issued=issued,
+                citations=[],
+            )
             entries[key] = entry
         entry.citations.append(
             BibliographyCitationOut(

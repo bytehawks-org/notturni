@@ -6,7 +6,7 @@ import { useState, type FormEvent } from "react";
 
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { RichTextEditor } from "@/components/editor/RichTextEditor";
+import { RichTextEditor } from "@/components/editor/RichTextEditorLazy";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 

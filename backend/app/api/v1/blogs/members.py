@@ -4,7 +4,7 @@ scelta dell'alias di firma lato collaboratore (todo/BLOG.md #3, #4)."""
 import uuid
 from datetime import datetime
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +19,8 @@ from app.api.v1.blogs._common import (
 )
 from app.api.v1.blogs._router import router
 from app.core.database import get_session
+from app.core.storage import avatar_public_url
+from app.domain import audit
 from app.domain.authorization import get_membership
 from app.models.blog import BlogMembership, BlogRole
 from app.models.user import User
@@ -27,6 +29,7 @@ from app.models.user import User
 class MemberOut(BaseModel):
     user_id: uuid.UUID
     username: str
+    avatar_url: str | None
     role: BlogRole
     author_display_name: str | None
     created_at: datetime
@@ -61,6 +64,7 @@ async def list_blog_members(
         MemberOut(
             user_id=m.user_id,
             username=u.username,
+            avatar_url=avatar_public_url(u.avatar_object_key) if u.avatar_object_key else None,
             role=m.role,
             author_display_name=m.author_display_name,
             created_at=m.created_at,
@@ -74,6 +78,7 @@ async def update_blog_member(
     slug: str,
     user_id: uuid.UUID,
     payload: MemberRoleUpdateRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> MemberOut:
@@ -86,13 +91,25 @@ async def update_blog_member(
     membership = await get_membership(session, user_id=user_id, blog_id=blog.id)
     if membership is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Collaboratore non trovato.")
+    old_role = membership.role
     membership.role = payload.role
+    await audit.record(
+        session,
+        action="blog.member_role_changed",
+        actor=current_user,
+        target_type="user",
+        target_id=user_id,
+        blog_id=blog.id,
+        request=request,
+        payload={"from": old_role.value, "to": payload.role.value, "blog_slug": blog.slug},
+    )
     await session.commit()
     user = await session.get(User, user_id)
     assert user is not None
     return MemberOut(
         user_id=membership.user_id,
         username=user.username,
+        avatar_url=avatar_public_url(user.avatar_object_key) if user.avatar_object_key else None,
         role=membership.role,
         author_display_name=membership.author_display_name,
         created_at=membership.created_at,
@@ -103,13 +120,25 @@ async def update_blog_member(
 async def remove_blog_member(
     slug: str,
     user_id: uuid.UUID,
+    request: Request,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> None:
     blog = await _require_blog_owner(session, current_user, slug)
     membership = await get_membership(session, user_id=user_id, blog_id=blog.id)
     if membership is not None:
+        role = membership.role
         await session.delete(membership)
+        await audit.record(
+            session,
+            action="blog.member_removed",
+            actor=current_user,
+            target_type="user",
+            target_id=user_id,
+            blog_id=blog.id,
+            request=request,
+            payload={"role": role.value, "blog_slug": blog.slug},
+        )
         await session.commit()
 
 

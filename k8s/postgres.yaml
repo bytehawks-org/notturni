@@ -42,6 +42,12 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef: {name: notturni-secrets, key: NOCT_POSTGRES_PASSWORD}
+            # Sottodirectory dedicata invece della radice del mount: un volume
+            # Longhorn (ext4) arriva con un lost+found creato dal filesystem,
+            # e initdb si rifiuta di inizializzare una data directory non
+            # vuota — fallirebbe al primo avvio senza questo.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data

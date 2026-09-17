@@ -4,7 +4,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +19,7 @@ from app.api.v1.blogs._common import (
 )
 from app.api.v1.blogs._router import router
 from app.core.database import get_session
+from app.domain import audit
 from app.domain.authorization import get_membership
 from app.models.blog import BlogInvitation, BlogInvitationStatus, BlogMembership, BlogRole
 from app.models.user import User
@@ -67,6 +68,7 @@ async def _get_received_invitation_or_404(
 @router.post("/received-invitations/{invitation_id}/accept", response_model=InvitationOut)
 async def accept_invitation(
     invitation_id: uuid.UUID,
+    request: Request,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> InvitationOut:
@@ -82,6 +84,16 @@ async def accept_invitation(
         existing.role = inv.role
     inv.status = BlogInvitationStatus.ACCEPTED
     inv.responded_at = datetime.now(timezone.utc)
+    await audit.record(
+        session,
+        action="blog.invitation_accepted",
+        actor=current_user,
+        target_type="invitation",
+        target_id=inv.id,
+        blog_id=inv.blog_id,
+        request=request,
+        payload={"role": inv.role.value},
+    )
     await session.commit()
     await session.refresh(inv)
     return _invitation_out(inv)
@@ -90,12 +102,23 @@ async def accept_invitation(
 @router.post("/received-invitations/{invitation_id}/decline", response_model=InvitationOut)
 async def decline_invitation(
     invitation_id: uuid.UUID,
+    request: Request,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> InvitationOut:
     inv = await _get_received_invitation_or_404(session, invitation_id, current_user)
     inv.status = BlogInvitationStatus.DECLINED
     inv.responded_at = datetime.now(timezone.utc)
+    await audit.record(
+        session,
+        action="blog.invitation_declined",
+        actor=current_user,
+        target_type="invitation",
+        target_id=inv.id,
+        blog_id=inv.blog_id,
+        request=request,
+        payload={"role": inv.role.value},
+    )
     await session.commit()
     await session.refresh(inv)
     return _invitation_out(inv)
@@ -123,6 +146,7 @@ async def list_blog_invitations(
 async def create_blog_invitation(
     slug: str,
     payload: InvitationCreateRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> InvitationOut:
@@ -168,6 +192,19 @@ async def create_blog_invitation(
         inv.status = BlogInvitationStatus.PENDING
         inv.responded_at = None
 
+    # Se `inv` è appena stato creato, il suo `id` (default Python-side) resta
+    # None finché non c'è un flush — vedi la stessa correzione in tokens.py.
+    await session.flush()
+    await audit.record(
+        session,
+        action="blog.invitation_created",
+        actor=current_user,
+        target_type="invitation",
+        target_id=inv.id,
+        blog_id=blog.id,
+        request=request,
+        payload={"invited_username": invited_user.username, "role": payload.role.value, "blog_slug": blog.slug},
+    )
     await session.commit()
     result = await session.execute(
         select(BlogInvitation).where(BlogInvitation.id == inv.id).options(*_INVITATION_LOADS)
@@ -179,6 +216,7 @@ async def create_blog_invitation(
 async def revoke_blog_invitation(
     slug: str,
     invitation_id: uuid.UUID,
+    request: Request,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> None:
@@ -189,4 +227,14 @@ async def revoke_blog_invitation(
     if inv.status == BlogInvitationStatus.PENDING:
         inv.status = BlogInvitationStatus.REVOKED
         inv.responded_at = datetime.now(timezone.utc)
+        await audit.record(
+            session,
+            action="blog.invitation_revoked",
+            actor=current_user,
+            target_type="invitation",
+            target_id=inv.id,
+            blog_id=blog.id,
+            request=request,
+            payload={"invited_user_id": str(inv.invited_user_id), "role": inv.role.value, "blog_slug": blog.slug},
+        )
         await session.commit()

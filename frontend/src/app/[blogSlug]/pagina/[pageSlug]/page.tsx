@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { SiteHeader } from "@/components/SiteHeader";
+import { BlogHeader } from "@/components/shell/BlogHeader";
 import { excerpt, renderMarkdown } from "@/lib/markdown";
-import { getPublicPage } from "@/lib/server-api";
+import { getPublicBlog, getPublicPage } from "@/lib/server-api";
 
 interface PageParams {
   blogSlug: string;
@@ -24,11 +23,15 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { blogSlug, pageSlug } = await params;
   const { locale = "it" } = await searchParams;
-  const page = await getPublicPage(blogSlug, pageSlug, locale);
+  const [page, blog] = await Promise.all([getPublicPage(blogSlug, pageSlug, locale), getPublicBlog(blogSlug)]);
   if (!page) return {};
+  const description = excerpt(page.content);
   return {
     title: page.title,
-    description: excerpt(page.content),
+    description,
+    alternates: { canonical: `/${blogSlug}/pagina/${pageSlug}` },
+    robots: blog?.search_indexing_enabled === false ? { index: false, follow: false } : undefined,
+    openGraph: { title: page.title, description, type: "website", url: `/${blogSlug}/pagina/${pageSlug}` },
   };
 }
 
@@ -41,20 +44,19 @@ export default async function PublicBlogPagePage({
 }) {
   const { blogSlug, pageSlug } = await params;
   const { locale = "it" } = await searchParams;
-  const page = await getPublicPage(blogSlug, pageSlug, locale);
+  const [page, blog] = await Promise.all([
+    getPublicPage(blogSlug, pageSlug, locale),
+    getPublicBlog(blogSlug),
+  ]);
   if (!page) notFound();
 
   const html = await renderMarkdown(page.content, { mentions: page.mentions_enabled });
 
   return (
     <div className="flex flex-1 flex-col">
-      <SiteHeader />
+      <BlogHeader slug={blogSlug} name={blog?.title ?? blogSlug} current="posts" />
       <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-12">
-        <Link href={`/${blogSlug}`} className="text-sm text-muted hover:text-foreground">
-          ← {blogSlug}
-        </Link>
-
-        <h1 className="mt-6 font-serif text-5xl font-semibold leading-tight text-foreground">{page.title}</h1>
+        <h1 className="font-serif text-5xl font-semibold leading-tight text-foreground">{page.title}</h1>
 
         <div className="notturni-prose mt-10 text-lg leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />
       </main>

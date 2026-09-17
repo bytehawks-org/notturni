@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     # registrazione si chiude dopo il primo utente. "platform": multiutente,
     # comportamento CLAUDE.md di default. Vedi app/domain/auth.py.
     deployment_mode: Literal["solo", "platform"] = "platform"
+    # Lingua predefinita dell'interfaccia (todo/UX_REDESIGN.md B6): seme della
+    # riga `platform_config` alla prima installazione, poi modificabile dal
+    # Super Admin. Ogni utente può sovrascriverla nel profilo (users.ui_locale).
+    default_locale: Literal["it", "en"] = "it"
 
     # Bootstrap del primo Super Admin all'avvio del backend (CLAUDE.md #5),
     # per accedere all'area di amministrazione del dashboard senza
@@ -126,6 +130,10 @@ class Settings(BaseSettings):
     # ancora archiviati su storage (vedi audit_archive_enabled): la finestra
     # non archiviata fa da limite duro, retention_days è solo l'obiettivo.
     # Default 105 = ~15 settimane, così sono sempre presenti almeno 90 giorni.
+    # Solo il seme iniziale di `platform_config.audit_retention_days`
+    # (app/domain/platform_config.py): dopo la creazione della riga, il
+    # valore effettivo si cambia a runtime da un Super Admin
+    # (/admin/impostazioni), non da qui.
     audit_retention_days: int = 105
     # Scarico periodico degli eventi su storage (S3/localstorage) per settimane
     # ISO chiuse, in NDJSON gzippato, prima della cancellazione dal database.
@@ -151,6 +159,20 @@ class Settings(BaseSettings):
 
     # origini ammesse per le chiamate del frontend dal browser (CORS), separate da virgola
     cors_origins: str = "http://localhost:3000"
+
+    # Cookie di sessione (refresh token, ROADMAP.md "Sessione in
+    # localStorage"): httpOnly, mai leggibile da JS — a differenza
+    # dell'access token, tenuto in memoria dal frontend e mai persistito.
+    # Attributi configurabili per ambiente (app/api/v1/auth.py):
+    # secure=False serve solo per http locale/test senza TLS (Podman
+    # compose, K3s a inizio rollout prima di cert-manager) — va sempre True
+    # non appena l'istanza è raggiunta in https. domain: da valorizzare solo
+    # se frontend e backend condividono un dominio genitore e il cookie deve
+    # attraversare i sottodomini (es. ".notturni.eu"); None (default) lo
+    # limita all'host esatto del backend.
+    session_cookie_secure: bool = True
+    session_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+    session_cookie_domain: str | None = None
 
     # Invalidazione on-demand della cache dei Server Component del frontend
     # (Next.js) dopo una modifica a contenuti pubblici (post, config/impostazioni

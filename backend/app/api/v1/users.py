@@ -1,24 +1,37 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user
+from app.domain.authorization import blog_publicly_listable_clause
+from app.api.v1.blogs._common import BlogOut, _to_blog_out
+from app.api.v1.posts import PostOut, _posts_out
 from app.core.database import get_session
 from app.core.storage import avatar_public_url, delete_avatar, upload_avatar
 from app.domain import audit
+from app.domain import custom_domains as custom_domains_domain
+from app.domain import email_change as email_change_domain
+from app.domain.fediverse import activitypub_actor_id_for, atproto_did_for
 from app.domain.gdpr import anonymize_and_deactivate_user, export_user_data
+from app.domain.gdpr_queue import log_self_service_request
+from app.models.gdpr_request import GdprRequestType
 from app.domain.i18n import validate_locale
+from app.domain.platform_config import SUPPORTED_LOCALES
 from app.domain.profile import validate_country_code, validate_fallback_languages
-from app.domain.usernames import validate_username
-from app.models.blog import Blog
+from app.domain.rate_limit import enforce_rate_limit
+from app.domain.usernames import USERNAME_CHANGE_COOLDOWN_DAYS, validate_username
+from app.models.blog import Blog, BlogVisibility
+from app.models.comment import Comment, CommentStatus
+from app.models.custom_domain import CustomDomain, CustomDomainStatus
+from app.models.email_change_request import EmailChangeRequest
+from app.models.post import Post, PostStatus
 from app.models.follow import BlogFollow, UserFollow
 from app.models.social_link import SocialLink
-from app.models.user import PostAuthorNameStyle, User
+from app.models.user import PostAuthorNameStyle, User, VerificationTier
 
 router = APIRouter()
 
@@ -46,6 +59,8 @@ class ProfileUpdateRequest(BaseModel):
     native_language: str | None = None
     # assente: lascia invariate; lista (anche vuota) la sostituisce
     fallback_languages: list[str] | None = None
+    # B6: lingua dell'interfaccia ("" = torna al default di piattaforma)
+    ui_locale: str | None = None
 
 
 class SocialLinkCreateRequest(BaseModel):
@@ -79,8 +94,53 @@ class ProfileOut(BaseModel):
     avatar_url: str | None
     social_links: list[SocialLinkOut]
     created_at: datetime
+    # Sigillo di verifica (CLAUDE.md #5): "none" se mai assegnato.
+    verification_tier: VerificationTier
+    # Dominio custom, solo se verificato con successo (mai pending/failed) —
+    # lo username di piattaforma resta comunque sempre citabile come fallback.
+    custom_domain: str | None
+    # ID fediverse placeholder (CLAUDE.md #5): calcolati, non federati.
+    atproto_did: str
+    activitypub_actor_id: str
 
     model_config = {"from_attributes": True}
+
+
+class PendingEmailChangeOut(BaseModel):
+    new_email: str
+    stage: str  # "awaiting_old_confirmation" | "awaiting_new_confirmation"
+
+
+class MeProfileOut(ProfileOut):
+    """Estende `ProfileOut` con i campi privati, mai esposti sul profilo
+    pubblico (`GET /{username}`): email, stato del cooldown username, cambio
+    email in corso, istruzioni del dominio custom non ancora verificato."""
+
+    email: str
+    username_changed_at: datetime | None
+    next_username_change_allowed_at: datetime | None
+    pending_email_change: PendingEmailChangeOut | None
+    domain_pending_verification: str | None
+    domain_verification_instructions: dict | None
+
+
+class DomainUpdateRequest(BaseModel):
+    domain: str
+
+
+class DomainOut(BaseModel):
+    domain: str
+    status: CustomDomainStatus
+    txt_record_name: str
+    txt_record_value: str
+
+
+class EmailChangeRequestIn(BaseModel):
+    new_email: EmailStr
+
+
+class EmailChangeCodeIn(BaseModel):
+    code: str
 
 
 class FollowerOut(BaseModel):
@@ -116,21 +176,36 @@ class FollowStatsOut(BaseModel):
 MAX_SOCIAL_LINKS = 5
 
 
-async def _get_user_or_404(session: AsyncSession, username: str) -> User:
-    result = await session.execute(select(User).where(User.username == username))
+async def _find_user_by_username_or_domain(session: AsyncSession, identifier: str) -> User | None:
+    """Risolve un utente per username oppure, se non trovato, per dominio
+    personalizzato verificato (`User.verified_domain`, copia denormalizzata
+    di `CustomDomain.domain` mantenuta in sync solo per lo stato VERIFIED —
+    vedi `app/models/user.py`): lo username di piattaforma resta comunque
+    sempre citabile/risolvibile (CLAUDE.md #5, ROADMAP.md #1), il dominio è
+    un identificativo aggiuntivo e non esclusivo. `identifier` è confrontato
+    as-is come username e in lowercase come dominio (i domini sono sempre
+    normalizzati in minuscolo, vedi `app/domain/custom_domains.py::validate_domain`)."""
+    result = await session.execute(select(User).where(User.username == identifier))
     user = result.scalar_one_or_none()
+    if user is not None:
+        return user
+
+    result = await session.execute(select(User).where(User.verified_domain == identifier.lower()))
+    return result.scalar_one_or_none()
+
+
+async def _get_user_or_404(session: AsyncSession, username: str) -> User:
+    user = await _find_user_by_username_or_domain(session, username)
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Utente non trovato.")
     return user
 
 
 async def _get_user_with_profile_or_404(session: AsyncSession, username: str) -> User:
-    result = await session.execute(
-        select(User).where(User.username == username).options(selectinload(User.social_links))
-    )
-    user = result.scalar_one_or_none()
+    user = await _find_user_by_username_or_domain(session, username)
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Utente non trovato.")
+    await session.refresh(user, attribute_names=["social_links"])
     return user
 
 
@@ -148,7 +223,63 @@ def _to_profile_out(user: User) -> ProfileOut:
         avatar_url=avatar_public_url(user.avatar_object_key) if user.avatar_object_key else None,
         social_links=[SocialLinkOut.model_validate(link) for link in user.social_links],
         created_at=user.created_at,
+        verification_tier=user.verification_tier,
+        custom_domain=user.verified_domain,
+        atproto_did=atproto_did_for(user),
+        activitypub_actor_id=activitypub_actor_id_for(user),
     )
+
+
+async def _to_me_profile_out(session: AsyncSession, user: User) -> MeProfileOut:
+    await session.refresh(user, attribute_names=["social_links", "custom_domain"])
+    base = _to_profile_out(user)
+
+    pending_result = await session.execute(
+        select(EmailChangeRequest)
+        .where(EmailChangeRequest.user_id == user.id, EmailChangeRequest.completed_at.is_(None))
+        .order_by(EmailChangeRequest.created_at.desc())
+    )
+    pending = pending_result.scalars().first()
+    pending_out = None
+    if pending is not None:
+        stage = (
+            "awaiting_new_confirmation" if pending.old_consumed_at is not None else "awaiting_old_confirmation"
+        )
+        pending_out = PendingEmailChangeOut(new_email=pending.new_email, stage=stage)
+
+    next_change = None
+    if user.username_changed_at is not None:
+        next_change = user.username_changed_at + timedelta(days=USERNAME_CHANGE_COOLDOWN_DAYS)
+
+    domain_pending = None
+    domain_instructions = None
+    if user.custom_domain is not None and user.custom_domain.status != CustomDomainStatus.VERIFIED:
+        domain_pending = user.custom_domain.domain
+        domain_instructions = {
+            "txt_record_name": custom_domains_domain.txt_record_name(user.custom_domain.domain),
+            "txt_record_value": custom_domains_domain.txt_record_value(user.custom_domain.verification_token),
+        }
+
+    return MeProfileOut(
+        **base.model_dump(),
+        email=user.email,
+        username_changed_at=user.username_changed_at,
+        next_username_change_allowed_at=next_change,
+        pending_email_change=pending_out,
+        domain_pending_verification=domain_pending,
+        domain_verification_instructions=domain_instructions,
+    )
+
+
+@router.get("/me", response_model=MeProfileOut)
+async def get_my_profile(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MeProfileOut:
+    """Profilo privato del proprietario (a differenza di `GET /{username}`,
+    pubblico): include l'email, che non deve mai comparire sul profilo
+    pubblico di nessun utente."""
+    return await _to_me_profile_out(session, current_user)
 
 
 @router.get("/{username}", response_model=ProfileOut)
@@ -157,15 +288,35 @@ async def get_profile(username: str, session: AsyncSession = Depends(get_session
     return _to_profile_out(user)
 
 
-@router.patch("/me", response_model=ProfileOut)
+@router.patch("/me", response_model=MeProfileOut)
 async def update_profile(
     payload: ProfileUpdateRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-) -> ProfileOut:
+) -> MeProfileOut:
     if payload.username is not None:
         new_username = payload.username.strip().lower()
         if new_username != current_user.username:
+            if current_user.username_changed_at is not None:
+                cooldown_ends = current_user.username_changed_at + timedelta(
+                    days=USERNAME_CHANGE_COOLDOWN_DAYS
+                )
+                now = datetime.now(timezone.utc)
+                if now < cooldown_ends:
+                    # data leggibile (non solo ISO): il frontend mostra già in
+                    # proattivo next_username_change_allowed_at (GET /users/me)
+                    # prima ancora di tentare il salvataggio, qui basta un
+                    # messaggio d'errore semplice, stesso stile del resto
+                    # dell'API (dettaglio sempre stringa).
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        (
+                            f"Puoi cambiare username al massimo una volta ogni "
+                            f"{USERNAME_CHANGE_COOLDOWN_DAYS} giorni. Prossimo cambio "
+                            f"consentito dal {cooldown_ends.strftime('%d/%m/%Y')}."
+                        ),
+                    )
             try:
                 validate_username(new_username)
             except ValueError as exc:
@@ -173,7 +324,22 @@ async def update_profile(
             existing = await session.execute(select(User).where(User.username == new_username))
             if existing.scalar_one_or_none() is not None:
                 raise HTTPException(status.HTTP_409_CONFLICT, "Username già in uso.")
+            old_username = current_user.username
             current_user.username = new_username
+            current_user.username_changed_at = datetime.now(timezone.utc)
+            await audit.record(
+                session,
+                action="user.username_changed",
+                actor=current_user,
+                target_type="user",
+                target_id=current_user.id,
+                request=request,
+                payload={"old_username": old_username, "new_username": new_username},
+            )
+    if payload.ui_locale is not None:
+        if payload.ui_locale and payload.ui_locale not in SUPPORTED_LOCALES:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lingua dell'interfaccia non supportata.")
+        current_user.ui_locale = payload.ui_locale or None
     if payload.bio is not None:
         current_user.bio = payload.bio
     if payload.first_name is not None:
@@ -209,8 +375,7 @@ async def update_profile(
         current_user.fallback_languages = normalized
 
     await session.commit()
-    await session.refresh(current_user, attribute_names=["social_links"])
-    return _to_profile_out(current_user)
+    return await _to_me_profile_out(session, current_user)
 
 
 @router.post("/me/avatar", response_model=AvatarOut)
@@ -288,6 +453,182 @@ async def delete_social_link(
     await session.commit()
 
 
+@router.post("/me/email/request", status_code=status.HTTP_202_ACCEPTED)
+async def request_email_change(
+    payload: EmailChangeRequestIn,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Passo 1/3 del cambio email: invia un codice alla casella *attuale*
+    (prova il possesso dell'account, non solo della sessione)."""
+    try:
+        await email_change_domain.request_email_change(session, current_user, payload.new_email)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    return {"detail": "Codice inviato all'indirizzo email attuale."}
+
+
+@router.post("/me/email/verify-current", status_code=status.HTTP_202_ACCEPTED)
+async def verify_current_email(
+    payload: EmailChangeCodeIn,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Passo 2/3: verifica il codice inviato alla vecchia casella, poi invia
+    il codice alla nuova."""
+    try:
+        await email_change_domain.confirm_old_email(session, current_user, payload.code)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    return {"detail": "Codice inviato al nuovo indirizzo email."}
+
+
+@router.post("/me/email/verify-new", response_model=MeProfileOut)
+async def verify_new_email(
+    payload: EmailChangeCodeIn,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> MeProfileOut:
+    """Passo 3/3: verifica il codice inviato alla nuova casella e applica il
+    cambio."""
+    try:
+        old_email = await email_change_domain.confirm_new_email(session, current_user, payload.code)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    await audit.record(
+        session,
+        action="user.email_changed",
+        actor=current_user,
+        target_type="user",
+        target_id=current_user.id,
+        request=request,
+        payload={"old_email": old_email, "new_email": current_user.email},
+    )
+    await session.commit()
+    return await _to_me_profile_out(session, current_user)
+
+
+@router.post("/me/domain", response_model=DomainOut)
+async def set_my_domain(
+    payload: DomainUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> DomainOut:
+    """Registra (o sostituisce) il dominio custom in stato `pending`,
+    ritornando le istruzioni per il record TXT da pubblicare sul DNS."""
+    try:
+        normalized = custom_domains_domain.validate_domain(payload.domain)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    existing_owner = await session.execute(
+        select(CustomDomain).where(
+            CustomDomain.domain == normalized, CustomDomain.user_id != current_user.id
+        )
+    )
+    if existing_owner.scalar_one_or_none() is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Dominio già rivendicato da un altro account.")
+
+    await session.refresh(current_user, attribute_names=["custom_domain"])
+    token = custom_domains_domain.generate_verification_token()
+    if current_user.custom_domain is not None:
+        record = current_user.custom_domain
+        record.domain = normalized
+        record.verification_token = token
+        record.status = CustomDomainStatus.PENDING
+        record.verified_at = None
+    else:
+        record = CustomDomain(
+            user_id=current_user.id,
+            domain=normalized,
+            verification_token=token,
+            status=CustomDomainStatus.PENDING,
+        )
+        session.add(record)
+    await session.commit()
+    await session.refresh(record)
+
+    return DomainOut(
+        domain=record.domain,
+        status=record.status,
+        txt_record_name=custom_domains_domain.txt_record_name(record.domain),
+        txt_record_value=custom_domains_domain.txt_record_value(record.verification_token),
+    )
+
+
+@router.post("/me/domain/verify", response_model=DomainOut)
+async def verify_my_domain(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> DomainOut:
+    """Interroga il DNS e, se il record TXT combacia, verifica il dominio e
+    assegna il sigillo di verifica bronzo (mai degrada un tier superiore
+    assegnato in futuro da altra logica)."""
+    await enforce_rate_limit(
+        f"ratelimit:domain-verify:user:{current_user.id}",
+        limit=5,
+        window_seconds=600,
+        message="Troppi tentativi di verifica dominio, riprova più tardi.",
+    )
+    await session.refresh(current_user, attribute_names=["custom_domain"])
+    record = current_user.custom_domain
+    if record is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Nessun dominio impostato.")
+
+    verified = await custom_domains_domain.verify_domain_dns(record.domain, record.verification_token)
+    if not verified:
+        record.status = CustomDomainStatus.FAILED
+        await session.commit()
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Record TXT non trovato o non corrispondente. Riprova dopo aver aggiornato il DNS.",
+        )
+
+    record.status = CustomDomainStatus.VERIFIED
+    record.verified_at = datetime.now(timezone.utc)
+    if current_user.verification_tier == VerificationTier.NONE:
+        current_user.verification_tier = VerificationTier.BRONZE
+    current_user.verified_domain = record.domain
+    await audit.record(
+        session,
+        action="user.domain_verified",
+        actor=current_user,
+        target_type="user",
+        target_id=current_user.id,
+        request=request,
+        payload={"domain": record.domain},
+    )
+    await session.commit()
+    await session.refresh(record)
+
+    return DomainOut(
+        domain=record.domain,
+        status=record.status,
+        txt_record_name=custom_domains_domain.txt_record_name(record.domain),
+        txt_record_value=custom_domains_domain.txt_record_value(record.verification_token),
+    )
+
+
+@router.delete("/me/domain", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_my_domain(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    await session.refresh(current_user, attribute_names=["custom_domain"])
+    record = current_user.custom_domain
+    if record is None:
+        return
+    was_verified = record.status == CustomDomainStatus.VERIFIED
+    await session.delete(record)
+    if was_verified:
+        current_user.verified_domain = None
+        if current_user.verification_tier == VerificationTier.BRONZE:
+            current_user.verification_tier = VerificationTier.NONE
+    await session.commit()
+
+
 @router.post("/{username}/follow", status_code=status.HTTP_204_NO_CONTENT)
 async def follow_user(
     username: str,
@@ -324,6 +665,100 @@ async def unfollow_user(
     if follow is not None:
         await session.delete(follow)
         await session.commit()
+
+
+class PublicCommentOut(BaseModel):
+    id: uuid.UUID
+    content: str
+    created_at: datetime
+    post_title: str
+    permalink: str
+
+
+def _signed_as_username(display_name: str, user: User) -> bool:
+    return display_name.strip().lower() == user.username.lower()
+
+
+@router.get("/{username}/blogs", response_model=list[BlogOut])
+async def list_user_public_blogs(username: str, session: AsyncSession = Depends(get_session)) -> list[BlogOut]:
+    """Blog pubblici di un utente per la tab "Blog" del profilo (mockup 3e).
+    CLAUDE.md #8: un blog che si presenta con un alias diverso dallo username
+    non viene elencato — altrimenti questo endpoint collegherebbe l'alias
+    all'identità reale, cosa che il resto dell'API evita di proposito."""
+    user = await _get_user_or_404(session, username)
+    result = await session.execute(
+        select(Blog)
+        .where(Blog.owner_id == user.id, blog_publicly_listable_clause())
+        .order_by(Blog.created_at)
+    )
+    return [
+        _to_blog_out(blog, None)
+        for blog in result.scalars().all()
+        if not blog.default_author_display_name or _signed_as_username(blog.default_author_display_name, user)
+    ]
+
+
+@router.get("/{username}/posts", response_model=list[PostOut])
+async def list_user_public_posts(
+    username: str, limit: int = 20, offset: int = 0, session: AsyncSession = Depends(get_session)
+) -> list[PostOut]:
+    """Post pubblicati di un utente su blog pubblici (tab "Post" del profilo).
+    Stessa regola di privacy di `/blogs`: solo i post firmati pubblicamente
+    con lo username, mai quelli firmati con un alias."""
+    user = await _get_user_or_404(session, username)
+    limit = max(1, min(limit, 50))
+    result = await session.execute(
+        select(Post, Blog)
+        .join(Blog, Post.blog_id == Blog.id)
+        .where(
+            Post.author_id == user.id,
+            Post.status == PostStatus.PUBLISHED,
+            Post.published_at <= datetime.now(timezone.utc),
+            Post.is_hidden.is_(False),
+            blog_publicly_listable_clause(),
+        )
+        .order_by(Post.published_at.desc())
+        .limit(limit)
+        .offset(max(offset, 0))
+    )
+    pairs = [(post, blog) for post, blog in result.all() if _signed_as_username(post.author_display_name, user)]
+    return await _posts_out(session, pairs)
+
+
+@router.get("/{username}/comments", response_model=list[PublicCommentOut])
+async def list_user_public_comments(
+    username: str, limit: int = 20, offset: int = 0, session: AsyncSession = Depends(get_session)
+) -> list[PublicCommentOut]:
+    """Commenti approvati di un utente su post pubblici (tab "Commenti").
+    Stessa regola di privacy: solo quelli firmati con lo username."""
+    user = await _get_user_or_404(session, username)
+    limit = max(1, min(limit, 50))
+    result = await session.execute(
+        select(Comment, Post.title, Post.slug, Blog.slug)
+        .join(Post, Post.id == Comment.post_id)
+        .join(Blog, Blog.id == Post.blog_id)
+        .where(
+            Comment.author_id == user.id,
+            Comment.status == CommentStatus.APPROVED,
+            Post.status == PostStatus.PUBLISHED,
+            Post.is_hidden.is_(False),
+            blog_publicly_listable_clause(),
+        )
+        .order_by(Comment.created_at.desc())
+        .limit(limit)
+        .offset(max(offset, 0))
+    )
+    return [
+        PublicCommentOut(
+            id=comment.id,
+            content=comment.content,
+            created_at=comment.created_at,
+            post_title=post_title,
+            permalink=f"/{blog_slug}/{post_slug}",
+        )
+        for comment, post_title, post_slug, blog_slug in result.all()
+        if _signed_as_username(comment.author_display_name, user)
+    ]
 
 
 @router.get("/{username}/followers", response_model=list[FollowerOut])
@@ -400,7 +835,9 @@ async def export_my_data(
     dati collegati all'account in un unico JSON scaricabile — profilo, blog di
     proprietà, post e commenti scritti (ovunque), frammenti salvati, follow,
     token API (mai i segreti) ed eventi di audit di cui è l'attore."""
-    return await export_user_data(session, current_user)
+    data = await export_user_data(session, current_user)
+    await log_self_service_request(session, user=current_user, type_=GdprRequestType.EXPORT)
+    return data
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
@@ -424,5 +861,6 @@ async def delete_my_account(
         target_id=current_user.id,
         request=request,
     )
+    await log_self_service_request(session, user=current_user, type_=GdprRequestType.DELETION, commit=False)
     await anonymize_and_deactivate_user(session, current_user)
     await session.commit()

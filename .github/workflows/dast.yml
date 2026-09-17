@@ -5,7 +5,13 @@ name: DAST (OWASP ZAP)
 # sintassi specifica di Podman nel file, vedi CLAUDE.md #3 "Dockerfile e
 # manifest agnostici"). Più pesante di SAST/SBOM (build completa + avvio
 # stack + scansione): solo schedule settimanale + avvio manuale, mai su ogni
-# push/PR.
+# push/PR. Tre scansioni in sequenza sullo stesso stack già avviato (nessun
+# riavvio tra l'una e l'altra): baseline (passivo) e full scan (attivo, prova
+# exploit veri) sul frontend, API scan (attivo, dallo schema OpenAPI) sul
+# backend. Ogni report finisce sia come artifact scaricabile sia nel
+# riepilogo della run (tab "Summary" del workflow), leggibile senza scaricare
+# nulla. fail_action/allow_issue_writing restano a false: i risultati sono
+# solo informativi, non bloccano la pipeline né aprono issue automatiche.
 on:
   workflow_dispatch: {}
   schedule:
@@ -18,9 +24,12 @@ permissions:
 
 jobs:
   zap-scan:
-    name: ZAP baseline (frontend) + API scan (backend)
+    name: ZAP baseline + full scan (frontend) + API scan (backend)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # il full scan attivo (spider + tutte le regole attive) è sensibilmente
+    # più lento del solo baseline+API scan di prima: margine alzato di
+    # conseguenza.
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -63,6 +72,17 @@ jobs:
           allow_issue_writing: false
           artifact_name: zap-baseline-report
 
+      - name: Riepilogo baseline scan nella run
+        # Il report completo resta nell'artifact caricato dallo step sopra;
+        # questo lo affianca nel riepilogo della run (tab "Summary"), visibile
+        # senza scaricare nulla. report_md.md è il nome fisso con cui
+        # zaproxy/action-baseline scrive il report Markdown nella working
+        # directory — va letto subito dopo quello step, prima che il
+        # prossimo scan lo sovrascriva.
+        if: always()
+        run: |
+          { echo "## DAST — ZAP baseline scan (frontend)"; cat report_md.md 2>/dev/null || echo "_report non generato._"; } >> "$GITHUB_STEP_SUMMARY"
+
       - name: ZAP API scan (backend, da OpenAPI)
         uses: zaproxy/action-api-scan@v0.10.0
         with:
@@ -71,6 +91,30 @@ jobs:
           fail_action: false
           allow_issue_writing: false
           artifact_name: zap-api-report
+
+      - name: Riepilogo API scan nella run
+        if: always()
+        run: |
+          { echo "## DAST — ZAP API scan (backend)"; cat report_md.md 2>/dev/null || echo "_report non generato._"; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: ZAP full scan (scan attivo del frontend — spider + tutte le regole attive)
+        # A differenza del baseline (solo passivo), qui ZAP tenta attivamente
+        # exploit (SQLi, XSS, ecc.) contro il target — sicuro solo perché
+        # punta allo stack effimero avviato sopra in questo runner, mai a
+        # un'istanza reale: non puntare mai questo scan a notturni.eu.
+        # Più lento del baseline, per questo resta nello stesso job invece
+        # che duplicare l'avvio dello stack in un job a parte.
+        uses: zaproxy/action-full-scan@v0.10.0
+        with:
+          target: "http://localhost:3000"
+          fail_action: false
+          allow_issue_writing: false
+          artifact_name: zap-full-scan-report
+
+      - name: Riepilogo full scan nella run
+        if: always()
+        run: |
+          { echo "## DAST — ZAP full scan attivo (frontend)"; cat report_md.md 2>/dev/null || echo "_report non generato._"; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Log dei servizi (solo in caso di problemi)
         if: failure()

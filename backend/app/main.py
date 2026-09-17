@@ -16,6 +16,7 @@ from app.api.v1.health import router as health_router
 from app.api.v1.link_preview import router as link_preview_router
 from app.api.v1.pages import router as pages_router
 from app.api.v1.posts import router as posts_router
+from app.api.v1.reports import router as reports_router
 from app.api.v1.tokens import router as tokens_router
 from app.api.v1.users import router as users_router
 from app.core.config import settings
@@ -56,6 +57,7 @@ app.include_router(fragments_router, prefix="/api/v1", tags=["fragments"])
 app.include_router(pages_router, prefix="/api/v1/pages", tags=["pages"])
 app.include_router(users_router, prefix="/api/v1/users", tags=["users"])
 app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
+app.include_router(reports_router, prefix="/api/v1", tags=["reports"])
 app.include_router(link_preview_router, prefix="/api/v1/link-preview", tags=["link-preview"])
 
 # Backend di storage "localstorage" (alternativa a S3/MinIO, vedi

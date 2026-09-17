@@ -1,23 +1,14 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { RichTextEditor } from "@/components/editor/RichTextEditor";
+import { RichTextEditor } from "@/components/editor/RichTextEditorLazy";
+import { languageName } from "@/lib/languages";
 import type { PostNote } from "@/lib/types";
-
-const languageNames = new Intl.DisplayNames(["it"], { type: "language" });
-
-function localeName(locale: string): string {
-  try {
-    const name = languageNames.of(locale);
-    return name ? name.charAt(0).toUpperCase() + name.slice(1) : locale;
-  } catch {
-    return locale;
-  }
-}
 
 interface TranslationsBarProps {
   currentId: string;
@@ -66,7 +57,10 @@ export function TranslationsBar({
   withNotes = true,
   onAddTranslation,
 }: TranslationsBarProps) {
-  const otherTranslations = translations.filter((t) => t.id !== currentId);
+  const t = useTranslations("TranslationsBar");
+  const uiLocale = useLocale();
+  const localeName = (locale: string) => languageName(locale, uiLocale);
+  const otherTranslations = translations.filter((tr) => tr.id !== currentId);
   const alreadyUsed = new Set([currentLocale, ...otherTranslations.map((t) => t.locale)]);
   const availableSuggestions = suggestedLocales.filter((l) => !alreadyUsed.has(l));
   const [adding, setAdding] = useState(false);
@@ -77,6 +71,8 @@ export function TranslationsBar({
   const [trNotes, setTrNotes] = useState<PostNote[]>([]);
   const [trError, setTrError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const tc = useTranslations("Common");
 
   async function handleAdd(event: FormEvent) {
     event.preventDefault();
@@ -91,7 +87,7 @@ export function TranslationsBar({
         ...(withNotes ? { notes: trNotes } : {}),
       });
     } catch (err) {
-      setTrError(err instanceof Error ? err.message : "Errore imprevisto.");
+      setTrError(err instanceof Error ? err.message : tc("unexpectedError"));
     } finally {
       setSubmitting(false);
     }
@@ -100,13 +96,13 @@ export function TranslationsBar({
   return (
     <div className="mt-10 border-t border-border/60 pt-6">
       <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2 text-sm">
-        <span className="text-muted">Anche in</span>
+        <span className="text-muted">{t("alsoIn")}</span>
         <span className="text-foreground underline underline-offset-4">{localeName(currentLocale)}</span>
-        {otherTranslations.map((t) => (
-          <span key={t.id} className="flex items-center gap-1.5">
+        {otherTranslations.map((tr) => (
+          <span key={tr.id} className="flex items-center gap-1.5">
             <span className="text-border">·</span>
-            <Link href={hrefFor(t.id)} className="text-foreground/70 hover:text-primary">
-              {localeName(t.locale)} ✓
+            <Link href={hrefFor(tr.id)} className="text-foreground/70 hover:text-primary">
+              {localeName(tr.locale)} ✓
             </Link>
           </span>
         ))}
@@ -116,7 +112,7 @@ export function TranslationsBar({
             onClick={() => setAdding(true)}
             className="ml-1 text-primary hover:underline"
           >
-            + Aggiungi lingua
+            {t("addLanguage")}
           </button>
         )}
       </div>
@@ -132,14 +128,14 @@ export function TranslationsBar({
                 className="rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
               >
                 <option value="" disabled>
-                  Lingua…
+                  {t("languagePlaceholder")}
                 </option>
                 {availableSuggestions.map((code) => (
                   <option key={code} value={code}>
                     {localeName(code)}
                   </option>
                 ))}
-                <option value="__other__">Un&apos;altra lingua…</option>
+                <option value="__other__">{t("otherLanguage")}</option>
               </select>
             ) : null}
             {(availableSuggestions.length === 0 || trLocale === "__other__") && (
@@ -147,7 +143,7 @@ export function TranslationsBar({
                 required
                 maxLength={2}
                 minLength={2}
-                placeholder="Lingua (es. en)"
+                placeholder={t("languageInputPlaceholder")}
                 value={trLocale === "__other__" ? "" : trLocale}
                 onChange={(e) => setTrLocale(e.target.value.toLowerCase())}
                 className="w-32 border-0 border-b border-border bg-transparent py-1 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
@@ -155,7 +151,7 @@ export function TranslationsBar({
             )}
             <input
               required
-              placeholder="Slug"
+              placeholder={t("slugPlaceholder")}
               value={trSlug}
               onChange={(e) => setTrSlug(e.target.value)}
               className="w-48 border-0 border-b border-border bg-transparent py-1 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
@@ -163,7 +159,7 @@ export function TranslationsBar({
           </div>
           <input
             required
-            placeholder="Titolo"
+            placeholder={t("titlePlaceholder")}
             value={trTitle}
             onChange={(e) => setTrTitle(e.target.value)}
             className="mb-4 w-full border-0 bg-transparent font-serif text-2xl font-semibold text-foreground placeholder:text-muted focus:outline-none"
@@ -184,10 +180,10 @@ export function TranslationsBar({
           )}
           <div className="mt-4 flex gap-3">
             <Button type="submit" disabled={submitting}>
-              {submitting ? "Creazione…" : "Crea traduzione"}
+              {submitting ? t("creating") : t("createTranslation")}
             </Button>
             <Button type="button" variant="ghost" onClick={() => setAdding(false)}>
-              Annulla
+              {t("cancel")}
             </Button>
           </div>
         </form>

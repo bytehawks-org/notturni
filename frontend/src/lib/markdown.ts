@@ -4,6 +4,7 @@ import DOMPurify from "isomorphic-dompurify";
 import { JSDOM } from "jsdom";
 import MarkdownIt from "markdown-it";
 
+import { REVALIDATE_SECONDS } from "./revalidate";
 import type { PostNote } from "./types";
 
 // Stessa risoluzione di server-api.ts::BACKEND_INTERNAL_URL — endpoint
@@ -33,6 +34,14 @@ const renderer = new MarkdownIt({ html: false, linkify: true, breaks: false });
  * in un blocco sfocato, cliccabile per rivelarla — un puro trucco CSS
  * (checkbox nascosto + selettore ~), niente JavaScript lato client.
  *
+ * Aggiunge anche il pulsante di ingrandimento (Rifinitura #1,
+ * components/Lightbox.tsx): compare solo dopo la rivelazione (stesso trucco
+ * CSS, `.sensitive-image-toggle:checked ~ .lightbox-expand-btn`), mai sullo
+ * stesso click che rivela l'immagine — la Lightbox stessa (client-side)
+ * intercetta il click su questo pulsante via delega globale, non serve
+ * altro JS qui. Le immagini *non* sensibili sono invece cliccabili subito,
+ * marcate `data-lightbox` in `renderPipeline`.
+ *
  * Muta `document` in place: fa parte della pipeline di `renderMarkdown`, che
  * fa un solo parse DOM per tutte le trasformazioni. */
 function wrapSensitiveImages(document: Document): void {
@@ -45,8 +54,17 @@ function wrapSensitiveImages(document: Document): void {
     const overlay = document.createElement("span");
     overlay.className = "sensitive-image-overlay";
     overlay.textContent = "Contenuto sensibile — clicca per vedere";
+    const src = img.getAttribute("src") ?? "";
+    const expandBtn = document.createElement("button");
+    expandBtn.type = "button";
+    expandBtn.className = "lightbox-expand-btn";
+    expandBtn.setAttribute("data-lightbox-src", src);
+    expandBtn.setAttribute("data-lightbox-alt", img.getAttribute("alt") ?? "");
+    expandBtn.setAttribute("aria-label", "Ingrandisci");
+    expandBtn.innerHTML =
+      '<svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3.5h3.5V7"/><path d="M14.5 3.5 10 8"/><path d="M7 14.5H3.5V11"/><path d="M3.5 14.5 8 10"/></svg>';
     img.replaceWith(wrapper);
-    wrapper.append(toggle, img, overlay);
+    wrapper.append(toggle, img, overlay, expandBtn);
   });
 }
 
@@ -76,8 +94,13 @@ async function resolveLinkCards(document: Document): Promise<void> {
 
       let preview: LinkPreviewData | null = null;
       try {
+        // Il backend ha una propria cache (Redis + tabella dedicata,
+        // condivisa/deduplicata per URL — app/domain/link_preview.py): non
+        // serve più `no-store` qui, la stessa finestra a tempo delle altre
+        // fetch pubbliche basta, e la pagina del post con una card di link
+        // può tornare cacheabile invece di restare sempre dinamica.
         const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/link-preview?url=${encodeURIComponent(href)}`, {
-          cache: "no-store",
+          next: { revalidate: REVALIDATE_SECONDS },
           signal: AbortSignal.timeout(LINK_PREVIEW_TIMEOUT_MS),
         });
         if (res.ok) preview = (await res.json()) as LinkPreviewData;
@@ -102,6 +125,8 @@ async function resolveLinkCards(document: Document): Promise<void> {
         const img = document.createElement("img");
         img.setAttribute("src", preview.image);
         img.setAttribute("alt", "");
+        img.setAttribute("loading", "lazy");
+        img.setAttribute("decoding", "async");
         card.append(img);
       }
       const body = document.createElement("span");
@@ -186,6 +211,15 @@ export function renderNoteInline(markdown: string): string {
   return DOMPurify.sanitize(renderer.renderInline(markdown.trim()));
 }
 
+/** Rende un blocco di Markdown libero (immagini, link, paragrafi) senza la
+ * pipeline completa di `renderMarkdown`: niente parse JSDOM aggiuntivo, niente
+ * card di anteprima dei link (fetch di rete verso siti esterni) né avvolgimento
+ * delle immagini sensibili — non ha senso per un footer mostrato su ogni
+ * pagina della piattaforma e di ogni blog. Solo render + sanificazione. */
+export function renderSimpleMarkdown(markdown: string): string {
+  return DOMPurify.sanitize(renderer.render(markdown.trim()));
+}
+
 function plainText(html: string): string {
   return DOMPurify.sanitize(html, { ALLOWED_TAGS: [] }).replace(/\s+/g, " ").trim();
 }
@@ -195,12 +229,77 @@ function plainText(html: string): string {
 // `[^n]` di chi scrive via API.
 const BARE_NOTE_REF_RE = /\[\^(\d{1,3})\]/g;
 
+/** Riga di citazione coi campi bibliografici opzionali di una nota (modal
+ * "Nota" nell'editor), sotto il testo libero — `null` se la nota non ne ha
+ * nessuno. Costruita con nodi DOM (mai concatenazione di HTML grezzo): a
+ * differenza di `note.content`, questi campi non passano da
+ * `renderNoteInline`/DOMPurify, sono testo semplice inserito come
+ * `textContent`. */
+function buildNoteCitationElement(
+  document: Document,
+  note: {
+    author?: string | null;
+    title?: string | null;
+    source?: string | null;
+    issued?: string | null;
+    page?: string | null;
+    isbn?: string | null;
+    doi?: string | null;
+    url?: string | null;
+  }
+): HTMLElement | null {
+  if (!note.author && !note.title && !note.source && !note.issued && !note.page && !note.isbn && !note.doi && !note.url) return null;
+
+  const p = document.createElement("p");
+  p.className = "footnote-citation";
+  const parts: (string | HTMLElement)[] = [];
+  if (note.author) parts.push(note.author);
+  if (note.title) {
+    const em = document.createElement("em");
+    em.textContent = note.title;
+    parts.push(em);
+  }
+  if (note.source) parts.push(note.source);
+  if (note.issued) parts.push(note.issued);
+  if (note.page) parts.push(`p. ${note.page}`);
+  if (note.isbn) parts.push(`ISBN ${note.isbn}`);
+
+  parts.forEach((part, i) => {
+    if (i > 0) p.append(" · ");
+    p.append(part);
+  });
+
+  if (note.doi) {
+    if (parts.length > 0 || p.childNodes.length > 0) p.append(" · ");
+    const a = document.createElement("a");
+    a.setAttribute("href", `https://doi.org/${note.doi}`);
+    a.setAttribute("target", "_blank");
+    a.setAttribute("rel", "noopener noreferrer nofollow");
+    a.textContent = `doi.org/${note.doi}`;
+    p.append(a);
+  }
+
+  // Un link generico (a differenza del DOI, non implica di per sé un dominio
+  // fisso) solo se diverso dalla pagina doi.org già mostrata sopra.
+  if (note.url && !(note.doi && note.url.includes(`doi.org/${note.doi}`))) {
+    if (parts.length > 0 || p.childNodes.length > 0) p.append(" · ");
+    const a = document.createElement("a");
+    a.setAttribute("href", note.url);
+    a.setAttribute("target", "_blank");
+    a.setAttribute("rel", "noopener noreferrer nofollow");
+    a.textContent = note.url.replace(/^https?:\/\//, "");
+    p.append(a);
+  }
+
+  return p;
+}
+
 /** todo/EDITOR.md: trasforma i marcatori di nota nel testo in riferimenti in
  * apice (con il testo della nota come tooltip) e accoda l'elenco numerato a
  * piè di pagina. La sorgente è l'elenco strutturato `notes`, non il corpo.
  *
  * Muta `document` in place (vedi `wrapSensitiveImages`). */
-function renderFootnotes(document: Document, notes: PostNote[]): void {
+function renderFootnotes(document: Document, notes: PostNote[], labels: FootnoteLabels): void {
   if (notes.length === 0) return;
   const view = document.defaultView;
   if (!view) return;
@@ -267,16 +366,62 @@ function renderFootnotes(document: Document, notes: PostNote[]): void {
   section.className = "footnotes";
   const heading = document.createElement("h2");
   heading.className = "footnotes-title";
-  heading.textContent = "Note";
+  heading.textContent = labels.title;
   const ol = document.createElement("ol");
   for (const note of [...notes].sort((a, b) => a.idx - b.idx)) {
     const li = document.createElement("li");
     li.id = `fn-${note.idx}`;
-    li.innerHTML = `${renderNoteInline(note.content)} <a class="footnote-backref" href="#fnref-${note.idx}" aria-label="Torna al testo">↩</a>`;
+    li.innerHTML = `${renderNoteInline(note.content)} <a class="footnote-backref" href="#fnref-${note.idx}" aria-label="${labels.backToText}">↩</a>`;
+    const citation = buildNoteCitationElement(document, note);
+    if (citation) li.append(citation);
     ol.append(li);
   }
   section.append(heading, ol);
   document.body.append(section);
+}
+
+export interface FootnoteLabels {
+  title: string;
+  backToText: string;
+}
+
+const DEFAULT_FOOTNOTE_LABELS: FootnoteLabels = { title: "Note", backToText: "Torna al testo" };
+
+export interface PostHeading {
+  id: string;
+  text: string;
+  level: 1 | 2 | 3;
+}
+
+const slugifyHeading = (text: string): string =>
+  text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60) || "sezione";
+
+/** Mockup 1a ("In this post"): assegna un id stabile a h1/h2/h3 del *corpo*
+ * del post (distinti dal titolo del post, un elemento separato nell'header
+ * della pagina, non nel Markdown renderizzato qui) e ne restituisce l'elenco
+ * per l'indice laterale. Muta `document` in place. */
+function anchorHeadings(document: Document): PostHeading[] {
+  const seen = new Map<string, number>();
+  const headings: PostHeading[] = [];
+  const levelByTag: Record<string, 1 | 2 | 3> = { H1: 1, H2: 2, H3: 3 };
+  document.querySelectorAll("h1, h2, h3").forEach((el) => {
+    if (el.closest(".footnotes")) return;
+    const text = (el.textContent ?? "").replace(/\s+/g, " ").trim();
+    if (!text) return;
+    const base = slugifyHeading(text);
+    const n = (seen.get(base) ?? 0) + 1;
+    seen.set(base, n);
+    const id = n === 1 ? base : `${base}-${n}`;
+    el.id = id;
+    headings.push({ id, text, level: levelByTag[el.tagName] });
+  });
+  return headings;
 }
 
 export interface RenderOptions {
@@ -286,9 +431,26 @@ export interface RenderOptions {
   /** Note a piè di pagina del post (todo/EDITOR.md). Se presenti, i marcatori
    * nel testo diventano riferimenti in apice e viene accodato l'elenco. */
   notes?: PostNote[];
+  /** Etichette dell'elenco note nella lingua dell'interfaccia (next-intl). */
+  footnoteLabels?: FootnoteLabels;
+}
+
+export interface RenderedPost {
+  html: string;
+  headings: PostHeading[];
+}
+
+/** Come `renderMarkdown`, ma restituisce anche l'indice dei titoli (con id
+ * ancorabili) per la colonna "In questo post" della pagina pubblica. */
+export async function renderPost(markdown: string, options: RenderOptions = {}): Promise<RenderedPost> {
+  return renderPipeline(markdown, options, true);
 }
 
 export async function renderMarkdown(markdown: string, options: RenderOptions = {}): Promise<string> {
+  return (await renderPipeline(markdown, options, false)).html;
+}
+
+async function renderPipeline(markdown: string, options: RenderOptions, withHeadings: boolean): Promise<RenderedPost> {
   const rawHtml = renderer.render(markdown);
   const cleanHtml = DOMPurify.sanitize(rawHtml);
 
@@ -299,11 +461,29 @@ export async function renderMarkdown(markdown: string, options: RenderOptions = 
   const { document } = dom.window;
 
   wrapSensitiveImages(document);
+  // Immagini di contenuto non segnalate come sensibili: cliccabili subito
+  // per la Lightbox (Rifinitura #1) — quelle sensibili restano escluse (sono
+  // comunque ancora <img> dentro il wrapper appena creato sopra, non
+  // rimosse dal documento): hanno il proprio pulsante dedicato, aggiunto da
+  // wrapSensitiveImages, mai la stessa immagine cliccabile direttamente
+  // (altrimenti il primo click aprirebbe subito la lightbox invece di
+  // limitarsi a rivelarla).
+  document.querySelectorAll("img").forEach((img) => {
+    if (!img.closest(".sensitive-image-wrapper")) img.setAttribute("data-lightbox", "1");
+    // HTML grezzo (dangerouslySetInnerHTML, non componenti React): niente
+    // next/image qui, ma il caricamento lazy nativo del browser resta
+    // comunque disponibile senza JS aggiuntivo.
+    img.setAttribute("loading", "lazy");
+    img.setAttribute("decoding", "async");
+  });
   await resolveLinkCards(document);
   if (options.mentions !== false) linkifyMentions(document);
-  if (options.notes && options.notes.length > 0) renderFootnotes(document, options.notes);
+  const headings = withHeadings ? anchorHeadings(document) : [];
+  if (options.notes && options.notes.length > 0) {
+    renderFootnotes(document, options.notes, options.footnoteLabels ?? DEFAULT_FOOTNOTE_LABELS);
+  }
 
-  return document.body.innerHTML;
+  return { html: document.body.innerHTML, headings };
 }
 
 /** Estratto in solo testo per anteprime (card del feed, meta description):

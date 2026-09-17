@@ -11,16 +11,19 @@ export interface CurrentUser {
   display_name: string | null;
   mfa_enabled: boolean;
   platform_role: PlatformRole;
+  /** B6: lingua dell'interfaccia scelta (null = default di piattaforma). */
+  ui_locale: string | null;
 }
 
 /** todo/USERS.md #2: cosa mostrare come nome autore sui propri post quando il
  * blog non impone un alias. */
-export type PostAuthorNameStyle = "username" | "full_name" | "display_name";
+export type PostAuthorNameStyle = "username" | "full_name" | "display_name" | "verified_domain";
 
 export const POST_AUTHOR_NAME_STYLE_LABELS: Record<PostAuthorNameStyle, string> = {
   username: "Username",
   full_name: "Nome e cognome",
   display_name: "Alias del profilo",
+  verified_domain: "Nome utente verificato",
 };
 
 export const PLATFORM_ADMIN_ROLES: PlatformRole[] = ["super_admin", "amministratore"];
@@ -29,9 +32,11 @@ export const PLATFORM_ADMIN_ROLES: PlatformRole[] = ["super_admin", "amministrat
  * non vede invece le altre sezioni di amministrazione. */
 export const PLATFORM_MODERATION_ROLES: PlatformRole[] = ["super_admin", "amministratore", "moderatore"];
 
+/** Il refresh token non è più qui: viaggia solo in un cookie httpOnly
+ * impostato dal backend (vedi backend/app/api/v1/auth.py), mai leggibile da
+ * JS/localStorage — ROADMAP.md "Sessione in localStorage". */
 export interface SessionResponse {
   access_token: string;
-  refresh_token: string;
   token_type: string;
 }
 
@@ -60,9 +65,9 @@ export const BLOG_VISIBILITY_LABELS: Record<BlogVisibility, string> = {
 export type BlogRole = "autore" | "co_autore" | "revisore" | "mediatore";
 
 /** Ruoli assegnabili invitando un collaboratore (todo/BLOG.md #3). */
-export const INVITABLE_BLOG_ROLES: { value: Extract<BlogRole, "co_autore" | "mediatore">; label: string }[] = [
-  { value: "co_autore", label: "Co-autore" },
-  { value: "mediatore", label: "Mediatore" },
+export const INVITABLE_BLOG_ROLES: Extract<BlogRole, "co_autore" | "mediatore">[] = [
+  "co_autore",
+  "mediatore",
 ];
 
 export const MAX_BLOG_SUBTITLE = 64;
@@ -72,11 +77,7 @@ export const MAX_BLOG_DESCRIPTION = 256;
  * override per singolo post (vedi Post.comments_mode/effective_comments_mode). */
 export type CommentsMode = "everyone" | "members" | "closed";
 
-export const COMMENTS_MODE_LABELS: Record<CommentsMode, string> = {
-  everyone: "Aperti a tutti (richiede captcha)",
-  members: "Solo utenti iscritti",
-  closed: "Chiusi",
-};
+export const COMMENTS_MODES: CommentsMode[] = ["everyone", "members", "closed"];
 
 export interface Blog {
   id: string;
@@ -99,12 +100,56 @@ export interface Blog {
   search_indexing_enabled: boolean;
   ai_crawling_enabled: boolean;
   default_locale: string;
+  /** Lingue secondarie del blog (informative), oltre a default_locale. */
+  extra_locales: string[];
+  /** B4: chiusura automatica dei commenti N giorni dopo la pubblicazione (null = mai). */
+  comments_auto_close_days: number | null;
+  /** Pausa volontaria del proprietario: i lettori vedono una pagina "in pausa". */
+  is_paused: boolean;
+  /** Sospensione da parte di un admin di piattaforma. */
+  is_suspended: boolean;
+  /** Cancellazione con tolleranza: ripristinabile finché il purge (30 giorni) non passa. */
+  deleted_at: string | null;
   /** Nome pubblico predefinito per i testi scritti su questo blog — vedi Post.author_display_name. */
   default_author_display_name: string | null;
+  /** Banner della home pubblica (facoltativo): stessa moderazione automatica
+   * dei media di contenuto, avviso manuale indipendente dalle categorie. */
+  cover_image_url: string | null;
+  cover_image_is_sensitive: boolean;
+  cover_image_categories: SensitivityCategory[];
+  /** Favicon dedicata del blog (facoltativa): nessuna moderazione, icona di identità. */
+  favicon_url: string | null;
   /** `null` per chiunque non sia il proprietario stesso (CLAUDE.md #8): non
    * correla un blog che usa un alias con l'id dell'utente reale dietro. */
   owner_id: string | null;
   created_at: string;
+}
+
+/** Voce di `GET /blogs` (directory pubblica): blog più i conteggi delle card. */
+export interface PublicBlog extends Blog {
+  post_count: number;
+  follower_count: number;
+  last_published_at: string | null;
+}
+
+/** `GET /blogs/{slug}/overview` (todo/UX_REDESIGN.md B1): conteggi per la tab Panoramica. */
+export interface BlogOverview {
+  posts_total: number;
+  posts_published: number;
+  posts_scheduled: number;
+  posts_draft: number;
+  posts_in_review: number;
+  followers: number;
+  members: number;
+  pending_comments: number;
+  approved_comments: number;
+  media: number;
+  last_published_at: string | null;
+  /** Letture aggregate per giorno UTC, ultimi 30 giorni (giorni vuoti a 0). */
+  reads_30d: { day: string; reads: number }[];
+  reads_total_30d: number;
+  /** Byte su storage (media + backup); `null` se non calcolabile. */
+  storage_bytes: number | null;
 }
 
 export interface MembershipBlog {
@@ -117,6 +162,7 @@ export interface MembershipBlog {
 export interface BlogMember {
   user_id: string;
   username: string;
+  avatar_url: string | null;
   role: BlogRole;
   author_display_name: string | null;
   created_at: string;
@@ -138,8 +184,14 @@ export interface BlogInvitation {
 
 export interface BlogConfig {
   palette?: Record<string, string>;
+  /** Variante scura (stessi vincoli della palette), applicata in tema scuro sulle pagine pubbliche del blog. */
+  palette_dark?: Record<string, string>;
   typography?: Record<string, string>;
   layout?: string;
+  /** Override per questo blog delle sole colonne 1/2 del footer di
+   * piattaforma (Markdown libero) — mai la colonna 3 né la barra inferiore,
+   * sempre e solo di piattaforma. Assente/vuoto: eredita il default. */
+  footer?: { column1?: string | null; column2?: string | null };
   [key: string]: unknown;
 }
 
@@ -149,13 +201,17 @@ export interface BlogConfig {
 export const SERIF_FONTS = ["Lora", "Merriweather", "Playfair Display", "Source Serif 4", "Crimson Pro"];
 export const SANS_SERIF_FONTS = ["Inter", "Nunito Sans", "Work Sans", "Source Sans 3", "Karla"];
 
-export type PostStatus = "draft" | "published";
+/** Stati persistiti dal backend (app/models/post.py). "Pianificato" non è uno
+ * stato a sé: è `published` con `published_at` nel futuro — vedi lib/post-status.ts. */
+export type PostStatus = "draft" | "pending_review" | "published";
 
 export interface Post {
   id: string;
   blog_id: string;
   author_id: string;
   author_display_name: string;
+  /** Avatar dell'autore, se impostato — null anche se il nome mostrato è un alias. */
+  author_avatar_url: string | null;
   locale: string;
   translation_group_id: string;
   title: string;
@@ -182,6 +238,9 @@ export interface Post {
   tags: string[];
   /** Tassonomia del blog: al più una per post, a differenza dei tag. */
   category: Category | null;
+  /** B9: pubblicazione di appartenenza (al più una) e posizione esplicita del capitolo. */
+  publication: { id: string; name: string; title: string } | null;
+  chapter_order: number | null;
   /** Override di Blog.comments_mode per questo post: `null` eredita dal blog. */
   comments_mode: CommentsMode | null;
   /** Sempre valorizzato: comments_mode se impostato, altrimenti quello del blog. */
@@ -202,14 +261,42 @@ export interface Category {
   slug: string;
 }
 
+export type NoteKind = "book" | "article" | "web" | "note";
+
 /** Nota a piè di pagina di un post: testo Markdown inline + numero (1-based).
  * Nel corpo del post il riferimento è il marcatore `[idx](#nota-idx)`. */
-export interface PostNote {
+/** Campi bibliografici opzionali di una nota (modal "Nota" nell'editor,
+ * dietro il toggle "Aggiungi dettagli bibliografici") — mai obbligatori, a
+ * differenza di `content`. Compatibili BibTeX: `kind` → entrytype, `source`
+ * → publisher/journal/organization a seconda del tipo, `issued` → year/date
+ * (stringa libera, non un tipo data: non tutte le fonti hanno un anno o una
+ * data ISO completa). */
+export interface StructuredNoteFields {
+  title: string | null;
+  author: string | null;
+  kind: NoteKind | null;
+  source: string | null;
+  issued: string | null;
+  isbn: string | null;
+  doi: string | null;
+  url: string | null;
+  page: string | null;
+}
+
+export interface PostNote extends StructuredNoteFields {
   idx: number;
   content: string;
 }
 
 export const MAX_NOTE_LENGTH = 2000;
+export const MAX_NOTE_TITLE_LENGTH = 300;
+export const MAX_NOTE_AUTHOR_LENGTH = 300;
+export const MAX_NOTE_ISBN_LENGTH = 32;
+export const MAX_NOTE_DOI_LENGTH = 255;
+export const MAX_NOTE_PAGE_LENGTH = 32;
+export const MAX_NOTE_SOURCE_LENGTH = 300;
+export const MAX_NOTE_ISSUED_LENGTH = 32;
+export const MAX_NOTE_URL_LENGTH = 2000;
 
 export interface BibliographyCitation {
   post_title: string;
@@ -219,9 +306,65 @@ export interface BibliographyCitation {
   idx: number;
 }
 
-export interface BibliographyEntry {
+export interface BibliographyEntry extends StructuredNoteFields {
   content: string;
   citations: BibliographyCitation[];
+}
+
+/** Pubblicazioni (B9, mockup 2d/3g). */
+export interface Publication {
+  id: string;
+  name: string;
+  title: string;
+  description: string | null;
+  chapters_total: number;
+  chapters_published: number;
+  created_at: string;
+}
+
+export interface Chapter {
+  n: number;
+  post_id: string;
+  slug: string;
+  title: string;
+  locale: string;
+  status: PostStatus;
+  published_at: string | null;
+  permalink: string;
+  reading_minutes: number;
+  is_public: boolean;
+}
+
+export interface PublicationDetail extends Publication {
+  chapters: Chapter[];
+}
+
+/** Libreria note del blog (B8, mockup 3b). */
+export interface NoteUsage {
+  post_id: string;
+  post_slug: string;
+  post_title: string;
+  idx: number;
+}
+
+export interface BlogNote {
+  id: string;
+  content: string;
+  kind: NoteKind;
+  url: string | null;
+  // Compatibilità BibTeX (vedi StructuredNoteFields) — stessi campi
+  // facoltativi delle note di post, non ancora editabili da NotesTab.tsx.
+  title: string | null;
+  author: string | null;
+  source: string | null;
+  issued: string | null;
+  isbn: string | null;
+  doi: string | null;
+  page: string | null;
+  created_at: string;
+  updated_at: string;
+  used_in: NoteUsage[];
+  possible_duplicates: string[];
 }
 
 /** CLAUDE.md #4: come BibliographyCitation, ma con la data di pubblicazione
@@ -279,9 +422,50 @@ export interface Comment {
   parent_id: string | null;
   author_id: string | null;
   author_display_name: string;
+  /** Avatar dell'autore registrato, se impostato — null per commenti anonimi. */
+  author_avatar_url: string | null;
   status: CommentStatus;
   content: string;
   created_at: string;
+  /** B4: segnalato ai moderatori di piattaforma dal proprietario/mediatore. */
+  reported_to_platform: boolean;
+  report_note: string | null;
+}
+
+/** B4: voce della lista dei bloccati di un blog. */
+export interface BlockedAuthor {
+  id: string;
+  label: string;
+  is_anonymous: boolean;
+  note: string | null;
+  created_at: string;
+}
+
+/** Libreria media del blog (B7, mockup 3c). */
+export interface MediaUsage {
+  post_id: string;
+  post_slug: string;
+  post_title: string;
+  permalink: string;
+}
+
+export interface MediaFile {
+  id: string;
+  url: string;
+  content_type: string;
+  size_bytes: number;
+  alt_text: string;
+  caption: string | null;
+  categories: SensitivityCategory[];
+  is_sensitive: boolean;
+  uploader_username: string | null;
+  created_at: string;
+  used_in: MediaUsage[];
+}
+
+export interface MediaLibrary {
+  items: MediaFile[];
+  total_bytes: number;
 }
 
 /** GET /blogs/{slug}/comments — moderazione trasversale nel dashboard:
@@ -332,6 +516,12 @@ export interface SocialLink {
   position: number;
 }
 
+/** Sigillo di verifica del profilo (stile Bluesky/Instagram/Twitter),
+ * CLAUDE.md #5: "none" se mai assegnato. Solo "bronze" ha oggi una logica
+ * reale che lo assegna (dominio custom verificato via DNS) — silver/gold/blue
+ * sono riservati per future integrazioni. */
+export type VerificationTier = "none" | "bronze" | "silver" | "gold" | "blue";
+
 export interface Profile {
   username: string;
   bio: string | null;
@@ -347,6 +537,45 @@ export interface Profile {
   avatar_url: string | null;
   social_links: SocialLink[];
   created_at: string;
+  verification_tier: VerificationTier;
+  /** Dominio custom, presente solo se verificato con successo. */
+  custom_domain: string | null;
+  /** ID fediverse placeholder (CLAUDE.md #5): calcolati, non federati. */
+  atproto_did: string;
+  activitypub_actor_id: string;
+}
+
+export type PendingEmailChangeStage = "awaiting_old_confirmation" | "awaiting_new_confirmation";
+
+export interface PendingEmailChange {
+  new_email: string;
+  stage: PendingEmailChangeStage;
+}
+
+export type CustomDomainStatus = "pending" | "verified" | "failed";
+
+export interface DomainVerificationInstructions {
+  txt_record_name: string;
+  txt_record_value: string;
+}
+
+export interface DomainOut {
+  domain: string;
+  status: CustomDomainStatus;
+  txt_record_name: string;
+  txt_record_value: string;
+}
+
+/** Profilo privato del proprietario (`GET /users/me`) — a differenza di
+ * `Profile` (pubblico, `GET /users/{username}`) include l'email e lo stato
+ * di cooldown/verifica in corso, mai esposti ad altri utenti. */
+export interface MeProfile extends Profile {
+  email: string;
+  username_changed_at: string | null;
+  next_username_change_allowed_at: string | null;
+  pending_email_change: PendingEmailChange | null;
+  domain_pending_verification: string | null;
+  domain_verification_instructions: DomainVerificationInstructions | null;
 }
 
 export interface AdminUser {
@@ -357,6 +586,41 @@ export interface AdminUser {
   is_active: boolean;
   mfa_enabled: boolean;
   created_at: string;
+  /** Blog di proprietà. */
+  blogs_count: number;
+  /** Ultimo uso di una sessione di refresh; `null` se mai usata. */
+  last_seen_at: string | null;
+}
+
+export interface ServiceStatus {
+  name: string;
+  status: "ok" | "down" | "unconfigured";
+  detail?: string | null;
+}
+
+/** `GET /admin/overview` (mockup 5d). */
+export interface AdminOverview {
+  users_total: number;
+  users_new_7d: number;
+  blogs_total: number;
+  blogs_suspended: number;
+  posts_published: number;
+  queue_pending_comments: number;
+  queue_posts_in_review: number;
+  queue_hidden_posts: number;
+  queue_open_reports: number;
+  audit_today: number;
+  services: ServiceStatus[];
+  deployment_mode: "solo" | "platform";
+}
+
+/** `GET /users/{username}/comments`: commenti approvati firmati con lo username. */
+export interface PublicComment {
+  id: string;
+  content: string;
+  created_at: string;
+  post_title: string;
+  permalink: string;
 }
 
 /** Elenco di piattaforma (dashboard/blog, riservato ad Amministratore/Super
@@ -369,7 +633,34 @@ export interface AdminBlog {
   owner_username: string;
   visibility: BlogVisibility;
   is_suspended: boolean;
+  is_paused: boolean;
+  deleted_at: string | null;
   created_at: string;
+  posts_count: number;
+  reports_open: number;
+}
+
+export type ReportReason = "spam" | "abuse" | "illegal" | "other";
+export type BlogAdminAction = "suspend" | "restore" | "hide_reported_posts" | "deactivate_owner" | "dismiss";
+
+/** Segnalazione di un lettore (B5), come vista dal pannello admin. */
+export interface ReportDetail {
+  id: string;
+  target_type: "blog" | "post";
+  target_id: string;
+  post_slug: string | null;
+  post_title: string | null;
+  reason: ReportReason;
+  note: string | null;
+  reporter_username: string;
+  created_at: string;
+}
+
+export interface BlogReports {
+  blog: AdminBlog;
+  owner_mfa_enabled: boolean;
+  owner_email_domain: string;
+  reports: ReportDetail[];
 }
 
 /** Elenco di piattaforma (admin/moderazione, riservato ad
@@ -388,6 +679,7 @@ export interface AdminPost {
   is_hidden: boolean;
   published_at: string | null;
   created_at: string;
+  reports_open: number;
 }
 
 export const ADMIN_POST_STATUS_LABELS: Record<AdminPost["status"], string> = {
@@ -404,6 +696,7 @@ export interface AdminComment extends BlogComment {
   blog_id: string;
   blog_slug: string;
   blog_title: string;
+  reported_at: string | null;
 }
 
 export type AuditActorType = "user" | "core_token" | "user_token" | "system" | "anonymous";
@@ -430,36 +723,39 @@ export interface AuditLogEntry {
   payload: Record<string, unknown>;
 }
 
-export const AUDIT_ACTION_LABELS: Record<string, string> = {
-  "auth.login": "Accesso",
-  "auth.login_failed": "Accesso fallito",
-  "user.role_change": "Cambio ruolo",
-  "user.activated": "Utente riattivato",
-  "user.deactivated": "Utente disattivato",
-  "blog.suspended": "Blog sospeso",
-  "blog.unsuspended": "Blog riattivato",
-  "post.hidden": "Post nascosto",
-  "post.unhidden": "Post mostrato",
-  "comment.approved": "Commento approvato",
-  "comment.rejected": "Commento rifiutato",
-  "api_token.created": "API token creato",
-  "api_token.revoked": "API token revocato",
-  "user.account_deleted": "Account eliminato (GDPR)",
-};
+/** Azioni note del registro di audit (`backend/app/domain/audit.py` e
+ * chiamanti): solo gli identificativi, l'etichetta è in
+ * `messages/{it,en}.json` → `AdminAuditLog.action.<entità>.<evento>`
+ * (navigazione a percorso annidato sullo stesso punto dell'id). Un'azione
+ * non elencata qui (o senza etichetta tradotta) resta mostrata per intero —
+ * vedi `admin/registro/page.tsx::actionLabel`. */
+export const AUDIT_ACTIONS: string[] = [
+  "auth.login",
+  "auth.login_failed",
+  "user.role_change",
+  "user.activated",
+  "user.deactivated",
+  "user.account_deleted",
+  "blog.suspended",
+  "blog.unsuspended",
+  "blog.invitation_created",
+  "blog.invitation_accepted",
+  "blog.invitation_declined",
+  "blog.invitation_revoked",
+  "blog.member_role_changed",
+  "blog.member_removed",
+  "post.hidden",
+  "post.unhidden",
+  "comment.approved",
+  "comment.rejected",
+  "api_token.created",
+  "api_token.revoked",
+  "page.created",
+  "page.updated",
+  "page.deleted",
+];
 
-export const AUDIT_ACTOR_TYPE_LABELS: Record<AuditActorType, string> = {
-  user: "Utente",
-  core_token: "Token core",
-  user_token: "Token utente",
-  system: "Sistema",
-  anonymous: "Anonimo",
-};
-
-export const AUDIT_CHANNEL_LABELS: Record<AuditChannel, string> = {
-  web: "Web",
-  api: "API",
-  system: "Sistema",
-};
+export const AUDIT_CHANNELS: AuditChannel[] = ["web", "api", "system"];
 
 /** `/api/v1/tokens` (dashboard/token). Non include mai il valore in chiaro né
  * l'hash: quello arriva solo nella risposta di creazione (`token`), una
@@ -491,6 +787,54 @@ export interface InstanceConfig {
    * se l'istanza non ha il captcha configurato — in quel caso i commenti
    * aperti a tutti non sono selezionabili (vedi CommentsMode). */
   turnstile_site_key: string | null;
+  /** B6: valori pubblici di platform_config. */
+  default_locale: string;
+  registration_mode: "open" | "invite" | "closed";
+  sso_providers: string[];
+}
+
+/** `GET/PATCH /admin/config` (B6, mockup 5f), solo super admin. */
+export interface PlatformConfig {
+  default_locale: string;
+  registration_mode: "open" | "invite" | "closed";
+  sso_providers: string[];
+  sso_configured: string[];
+  mfa_required_for_admins: boolean;
+  reserved_blog_names: string[];
+  reserved_builtin: string[];
+  moderation_threshold: number;
+  max_blogs_per_user: number;
+  anonymous_comments_allowed: boolean;
+  /** Giorni di conservazione degli eventi in audit_log prima della
+   * cancellazione periodica (app/workers/audit_maintenance.py::prune). */
+  audit_retention_days: number;
+  /** Footer mostrato su ogni pagina pubblica, di piattaforma e di ogni blog
+   * (Markdown libero, immagini/link inclusi). Colonne 1/2 sono il default,
+   * sovrascrivibile per singolo blog in BlogConfig.footer; colonna 3 e
+   * bottom bar sono sempre e solo di piattaforma. `null` = vuota. */
+  footer_column1_markdown: string | null;
+  footer_column2_markdown: string | null;
+  footer_column3_markdown: string | null;
+  footer_bottom_bar_markdown: string | null;
+  updated_at: string | null;
+  infrastructure: Record<string, string | boolean | null>;
+}
+
+export type GdprRequestType = "export" | "deletion";
+export type GdprRequestStatus = "open" | "approved" | "completed" | "rejected";
+
+export interface GdprRequest {
+  id: string;
+  username: string;
+  type: GdprRequestType;
+  status: GdprRequestStatus;
+  deadline_at: string;
+  note: string | null;
+  created_by_username: string | null;
+  approved_by_username: string | null;
+  approved_at: string | null;
+  completed_at: string | null;
+  created_at: string;
 }
 
 export interface ApiError {

@@ -1,7 +1,9 @@
 """Blog: creazione, elenco, dettaglio, modifica, follow."""
 
+from datetime import datetime, timezone
+
 from fastapi import Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_optional_current_user
@@ -19,6 +21,7 @@ from app.api.v1.blogs._router import router
 from app.core.captcha import turnstile_configured
 from app.core.database import get_session
 from app.core.revalidation import blog_tag, feed_tag, revalidate_frontend
+from app.domain.authorization import blog_publicly_listable_clause, is_blog_publicly_readable
 from app.domain.blog_rules import (
     assert_can_create_blog,
     validate_blog_description,
@@ -26,10 +29,21 @@ from app.domain.blog_rules import (
     validate_blog_subtitle,
 )
 from app.domain.i18n import validate_locale
-from app.models.blog import Blog, BlogMembership
+from app.domain.platform_config import get_platform_config
+from app.models.blog import Blog, BlogMembership, BlogVisibility
 from app.models.comment import CommentsMode
 from app.models.follow import BlogFollow
+from app.models.post import Post, PostStatus
 from app.models.user import User
+
+
+class PublicBlogOut(BlogOut):
+    """Voce della directory pubblica (todo/UX_REDESIGN.md B1): come BlogOut
+    più i conteggi mostrati nelle card (mockup 4a/4c)."""
+
+    post_count: int
+    follower_count: int
+    last_published_at: datetime | None
 
 
 @router.post("", response_model=BlogOut, status_code=status.HTTP_201_CREATED)
@@ -39,13 +53,14 @@ async def create_blog(
     session: AsyncSession = Depends(get_session),
 ) -> Blog:
     try:
-        validate_blog_slug(payload.slug)
+        platform = await get_platform_config(session)
+        validate_blog_slug(payload.slug, extra_reserved=platform.reserved_blog_names)
         validate_locale(payload.default_locale)
         if payload.subtitle:
             validate_blog_subtitle(payload.subtitle)
         if payload.description:
             validate_blog_description(payload.description)
-        await assert_can_create_blog(session, current_user.id)
+        await assert_can_create_blog(session, current_user.id, max_blogs=platform.max_blogs_per_user)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
@@ -103,6 +118,62 @@ async def list_blogs_i_belong_to(
     ]
 
 
+@router.get("", response_model=list[PublicBlogOut])
+async def list_public_blogs(
+    q: str | None = None,
+    locale: str | None = None,
+    sort: str = "active",
+    limit: int = 30,
+    offset: int = 0,
+    session: AsyncSession = Depends(get_session),
+) -> list[PublicBlogOut]:
+    """Directory pubblica dei blog (todo/UX_REDESIGN.md, mockup 4a/4c): solo
+    blog pubblici, non sospesi e indicizzabili — stesso criterio del
+    `robots.txt` generato (`Blog.search_indexing_enabled`), non quello di
+    visibilità nel feed dei post (che include qualunque blog pubblico).
+    `q` cerca in slug/titolo/sottotitolo, `locale` filtra per lingua
+    principale, `sort` è `active` (ultimo post pubblicato, poi creazione),
+    `new` (creazione) o `followers`. Con i conteggi di post pubblicati e
+    follower per le card."""
+    limit = max(1, min(limit, 100))
+    now = datetime.now(timezone.utc)
+    published = (Post.status == PostStatus.PUBLISHED) & (Post.published_at <= now) & Post.is_hidden.is_(False)
+    post_count = (
+        select(func.count()).select_from(Post).where(Post.blog_id == Blog.id, published).correlate(Blog).scalar_subquery()
+    )
+    last_published = (
+        select(func.max(Post.published_at)).where(Post.blog_id == Blog.id, published).correlate(Blog).scalar_subquery()
+    )
+    follower_count = (
+        select(func.count()).select_from(BlogFollow).where(BlogFollow.blog_id == Blog.id).correlate(Blog).scalar_subquery()
+    )
+    stmt = select(Blog, post_count, follower_count, last_published).where(
+        blog_publicly_listable_clause(),
+        Blog.search_indexing_enabled.is_(True),
+    )
+    if q:
+        needle = f"%{q.strip()}%"
+        stmt = stmt.where(or_(Blog.slug.ilike(needle), Blog.title.ilike(needle), Blog.subtitle.ilike(needle)))
+    if locale:
+        stmt = stmt.where(Blog.default_locale == locale)
+    if sort == "followers":
+        stmt = stmt.order_by(follower_count.desc(), Blog.created_at.desc())
+    elif sort == "new":
+        stmt = stmt.order_by(Blog.created_at.desc())
+    else:
+        stmt = stmt.order_by(last_published.desc().nulls_last(), Blog.created_at.desc())
+    result = await session.execute(stmt.limit(limit).offset(max(offset, 0)))
+    return [
+        PublicBlogOut(
+            **_to_blog_out(blog, None).model_dump(),
+            post_count=int(posts or 0),
+            follower_count=int(followers or 0),
+            last_published_at=last,
+        )
+        for blog, posts, followers, last in result.all()
+    ]
+
+
 @router.get("/{slug}", response_model=BlogOut)
 async def get_blog(
     slug: str,
@@ -110,6 +181,15 @@ async def get_blog(
     session: AsyncSession = Depends(get_session),
 ) -> BlogOut:
     blog = await _get_blog_or_404(session, slug)
+    if (
+        blog.deleted_at is None
+        and blog.visibility == BlogVisibility.PUBLIC
+        and not is_blog_publicly_readable(blog)
+    ):
+        # Blog pubblico in pausa o sospeso (B3/B5, mockup 3d): il dettaglio
+        # resta leggibile così la pagina può spiegare lo stato (`is_paused`/
+        # `is_suspended`); post e resto dei contenuti restano 404.
+        return _to_blog_out(blog, current_user)
     await _require_blog_viewable(session, current_user, blog)
     return _to_blog_out(blog, current_user)
 
@@ -142,6 +222,8 @@ async def update_blog(
     if payload.visibility is not None:
         blog.visibility = payload.visibility
     if payload.comments_mode is not None:
+        if payload.comments_mode == CommentsMode.EVERYONE and not (await get_platform_config(session)).anonymous_comments_allowed:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "I commenti anonimi sono disattivati su questa piattaforma.")
         if payload.comments_mode == CommentsMode.EVERYONE and not turnstile_configured():
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
@@ -159,6 +241,20 @@ async def update_blog(
         blog.ai_crawling_enabled = payload.ai_crawling_enabled
     if payload.default_author_display_name is not None:
         blog.default_author_display_name = payload.default_author_display_name or None
+    if payload.is_paused is not None:
+        blog.is_paused = payload.is_paused
+    if "comments_auto_close_days" in payload.model_fields_set:
+        days = payload.comments_auto_close_days
+        if days is not None and days < 0:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "comments_auto_close_days non può essere negativo.")
+        blog.comments_auto_close_days = days or None
+    if payload.extra_locales is not None:
+        try:
+            for code in payload.extra_locales:
+                validate_locale(code)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        blog.extra_locales = [c for c in dict.fromkeys(payload.extra_locales) if c != blog.default_locale]
 
     await session.commit()
     await session.refresh(blog)

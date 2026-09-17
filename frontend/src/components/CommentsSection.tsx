@@ -1,5 +1,7 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
+import Image from "next/image";
 import Link from "next/link";
 import Script from "next/script";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -9,15 +11,8 @@ import { Button } from "@/components/ui/Button";
 import { FieldGroup, Input, Label, TextArea } from "@/components/ui/Field";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { formatDate } from "@/lib/format";
 import type { Comment, CommentsMode } from "@/lib/types";
-
-function errorMessage(err: unknown): string {
-  return err instanceof ApiClientError ? err.message : "Errore imprevisto.";
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
-}
 
 interface CommentFormProps {
   postId: string;
@@ -30,6 +25,8 @@ interface CommentFormProps {
 
 function CommentForm({ postId, parentId, mode, turnstileSiteKey, onPosted, onCancel }: CommentFormProps) {
   const { user, accessToken } = useAuth();
+  const t = useTranslations("CommentsSection");
+  const tc = useTranslations("Common");
   const [content, setContent] = useState("");
   const [authorDisplayName, setAuthorDisplayName] = useState("");
   const [authorEmail, setAuthorEmail] = useState("");
@@ -58,7 +55,7 @@ function CommentForm({ postId, parentId, mode, turnstileSiteKey, onPosted, onCan
       setAuthorEmail("");
       onPosted(comment);
     } catch (err) {
-      setError(errorMessage(err));
+      setError(err instanceof ApiClientError ? err.message : tc("unexpectedError"));
     } finally {
       setSubmitting(false);
     }
@@ -69,7 +66,7 @@ function CommentForm({ postId, parentId, mode, turnstileSiteKey, onPosted, onCan
       {needsAnonymousFields && (
         <div className="flex flex-wrap gap-3">
           <div className="flex-1">
-            <Label htmlFor={`author-${parentId ?? "top"}`}>Nome</Label>
+            <Label htmlFor={`author-${parentId ?? "top"}`}>{t("name")}</Label>
             <Input
               id={`author-${parentId ?? "top"}`}
               required
@@ -78,7 +75,7 @@ function CommentForm({ postId, parentId, mode, turnstileSiteKey, onPosted, onCan
             />
           </div>
           <div className="flex-1">
-            <Label htmlFor={`email-${parentId ?? "top"}`}>Email (non pubblicata)</Label>
+            <Label htmlFor={`email-${parentId ?? "top"}`}>{t("emailNotPublished")}</Label>
             <Input
               id={`email-${parentId ?? "top"}`}
               type="email"
@@ -89,29 +86,54 @@ function CommentForm({ postId, parentId, mode, turnstileSiteKey, onPosted, onCan
           </div>
         </div>
       )}
-      <FieldGroup>
+      <FieldGroup className="mb-0">
         <TextArea
           required
-          placeholder={parentId ? "Scrivi una risposta…" : "Scrivi un commento…"}
+          placeholder={parentId ? t("replyPlaceholder") : t("placeholder")}
           value={content}
           onChange={(e) => setContent(e.target.value)}
         />
       </FieldGroup>
-      {needsAnonymousFields && turnstileSiteKey && (
-        <div className="cf-turnstile" data-sitekey={turnstileSiteKey} />
-      )}
+      {needsAnonymousFields && turnstileSiteKey && <div className="cf-turnstile" data-sitekey={turnstileSiteKey} />}
       {error && <Alert kind="error">{error}</Alert>}
       <div className="flex gap-2">
-        <Button type="submit" disabled={submitting}>
-          {submitting ? "Invio…" : "Invia"}
+        <Button type="submit" size="sm" disabled={submitting}>
+          {submitting ? t("sending") : t("send")}
         </Button>
         {onCancel && (
-          <Button type="button" variant="secondary" onClick={onCancel}>
-            Annulla
+          <Button type="button" variant="secondary" size="sm" onClick={onCancel}>
+            {tc("cancel")}
           </Button>
         )}
       </div>
     </form>
+  );
+}
+
+function CommentBody({ comment }: { comment: Comment }) {
+  const locale = useLocale();
+  return (
+    <>
+      <div className="flex items-center gap-2 text-[13px]">
+        {comment.author_avatar_url ? (
+          <Image
+            src={comment.author_avatar_url}
+            alt={comment.author_display_name}
+            width={24}
+            height={24}
+            className="h-6 w-6 rounded-full object-cover"
+            unoptimized
+          />
+        ) : (
+          <span className="grid h-6 w-6 place-items-center rounded-full bg-primary/15 font-serif text-xs text-primary">
+            {comment.author_display_name[0]?.toUpperCase()}
+          </span>
+        )}
+        <span className="font-medium text-foreground">{comment.author_display_name}</span>
+        <span className="text-muted">· {formatDate(comment.created_at, locale)}</span>
+      </div>
+      <p className="mt-2 whitespace-pre-wrap text-[15px] leading-relaxed text-foreground/90">{comment.content}</p>
+    </>
   );
 }
 
@@ -130,20 +152,16 @@ function CommentItem({
   turnstileSiteKey: string | null;
   onPosted: (comment: Comment) => void;
 }) {
+  const t = useTranslations("CommentsSection");
+  const tc = useTranslations("Common");
   const [replying, setReplying] = useState(false);
 
   return (
-    <div className="border-b border-border/60 py-5 last:border-0">
-      <p className="text-sm font-medium text-foreground">{comment.author_display_name}</p>
-      <p className="text-xs text-muted">{formatDate(comment.created_at)}</p>
-      <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">{comment.content}</p>
+    <div className="border-b border-border py-5 last:border-0">
+      <CommentBody comment={comment} />
       {mode !== "closed" && (
-        <button
-          type="button"
-          onClick={() => setReplying((v) => !v)}
-          className="mt-2 text-xs text-primary hover:underline"
-        >
-          {replying ? "Annulla" : "Rispondi"}
+        <button type="button" onClick={() => setReplying((v) => !v)} className="mt-2 text-[13px] text-primary hover:underline">
+          {replying ? tc("cancel") : t("reply")}
         </button>
       )}
       {replying && (
@@ -162,14 +180,10 @@ function CommentItem({
         </div>
       )}
       {replies.length > 0 && (
-        <div className="mt-4 ml-6 space-y-4 border-l border-border/60 pl-4">
+        <div className="mt-4 ml-4 space-y-4 border-l border-border pl-4">
           {replies.map((reply) => (
             <div key={reply.id}>
-              <p className="text-sm font-medium text-foreground">{reply.author_display_name}</p>
-              <p className="text-xs text-muted">{formatDate(reply.created_at)}</p>
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">
-                {reply.content}
-              </p>
+              <CommentBody comment={reply} />
             </div>
           ))}
         </div>
@@ -178,8 +192,12 @@ function CommentItem({
   );
 }
 
+/** Commenti del post (mockup 1a): titolo con conteggio, riga di policy,
+ * form/inviti ad accedere, elenco con risposte a un livello. */
 export function CommentsSection({ postId, mode }: { postId: string; mode: CommentsMode }) {
   const { user } = useAuth();
+  const t = useTranslations("CommentsSection");
+  const tc = useTranslations("Common");
   const [comments, setComments] = useState<Comment[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [turnstileSiteKey, setTurnstileSiteKey] = useState<string | null>(null);
@@ -188,8 +206,8 @@ export function CommentsSection({ postId, mode }: { postId: string; mode: Commen
     api.comments
       .listApproved(postId)
       .then(setComments)
-      .catch((err) => setError(errorMessage(err)));
-  }, [postId]);
+      .catch((err) => setError(err instanceof ApiClientError ? err.message : tc("unexpectedError")));
+  }, [postId, tc]);
 
   useEffect(() => {
     if (mode !== "everyone") return;
@@ -222,22 +240,28 @@ export function CommentsSection({ postId, mode }: { postId: string; mode: Commen
     }
   }
 
+  const policy = mode === "closed" ? t("policyClosed") : mode === "members" ? t("policyMembers") : t("policyEveryone");
+
   return (
-    <section className="mt-16 border-t border-border pt-10">
-      <h2 className="mb-6 font-serif text-2xl text-foreground">Commenti</h2>
+    <section className="mt-16 border-t border-border pt-8">
+      <div className="mb-5 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="font-serif text-2xl text-foreground">
+          {t("title")}
+          {comments !== null && <span className="text-muted"> · {comments.length}</span>}
+        </h2>
+        <span className="text-[13px] text-muted">{policy}</span>
+      </div>
       {mode === "everyone" && (
         <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="lazyOnload" async defer />
       )}
       {error && <Alert kind="error">{error}</Alert>}
 
-      {mode === "closed" && <p className="text-sm text-muted">I commenti sono chiusi per questo post.</p>}
-
       {mode === "members" && !user && (
-        <p className="text-sm text-muted">
-          <Link href="/login" className="text-primary hover:underline">
-            Accedi
+        <p className="rounded-xl border border-border bg-surface px-4 py-3 text-sm text-muted">
+          <Link href="/login" className="font-medium text-primary no-underline hover:underline">
+            {t("signIn")}
           </Link>{" "}
-          per lasciare un commento.
+          {t("toComment")}
         </p>
       )}
 
@@ -247,9 +271,7 @@ export function CommentsSection({ postId, mode }: { postId: string; mode: Commen
         </div>
       )}
 
-      {comments !== null && topLevel.length === 0 && (
-        <p className="text-sm text-muted">Nessun commento, per ora.</p>
-      )}
+      {comments !== null && topLevel.length === 0 && <p className="text-sm text-muted">{t("none")}</p>}
 
       <div>
         {topLevel.map((comment) => (

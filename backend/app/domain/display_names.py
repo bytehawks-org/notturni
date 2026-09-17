@@ -19,4 +19,6 @@ def resolve_personal_display_name(user: User) -> str:
         return full or user.username
     if user.post_author_name_style == PostAuthorNameStyle.DISPLAY_NAME:
         return user.display_name or user.username
+    if user.post_author_name_style == PostAuthorNameStyle.VERIFIED_DOMAIN:
+        return user.verified_domain or user.username
     return user.username

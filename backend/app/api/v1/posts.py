@@ -2,8 +2,9 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy import delete, insert, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,12 +12,14 @@ from app.api.deps import get_current_user, get_optional_current_user
 from app.core.broker import publish_post_backup
 from app.core.captcha import turnstile_configured
 from app.core.database import get_session
+from app.core.storage import avatar_public_url
 from app.core.revalidation import blog_tag, feed_tag, post_tag, revalidate_frontend
 from app.domain.authorization import (
     can_review_posts,
     can_view_blog,
     can_write_posts,
     get_membership,
+    is_blog_publicly_readable,
     is_publicly_visible,
     publicly_visible_clause,
 )
@@ -27,13 +30,19 @@ from app.domain.notes import NoteInput, normalize_notes
 from app.domain.permalinks import build_permalink, validate_post_slug_not_reserved
 from app.domain.seo import effective_ai_crawling, effective_search_indexing
 from app.domain.tags import resolve_tags
-from app.models.blog import Blog, BlogMembership
+from app.models.blog import Blog, BlogMembership, BlogVisibility
 from app.models.comment import CommentsMode
 from app.models.category import Category
+from app.models.publication import Publication
 from app.models.post import Post, PostStatus
+from app.models.post_read import PostReadDaily
+from app.domain.comments_mode import effective_comments_mode
+from app.domain.rate_limit import enforce_rate_limit
+from app.core.http import client_ip
 from app.models.post_link import post_links
 from app.models.post_media import post_media
 from app.models.post_note import post_notes
+from app.domain.blog_notes_sync import link_blog_notes
 from app.models.tag import Tag, post_tags
 from app.models.user import User
 
@@ -44,15 +53,52 @@ logger = logging.getLogger(__name__)
 class NoteIn(BaseModel):
     idx: int
     content: str
+    # Campi facoltativi per bibliografie strutturate (modal "Nota"
+    # nell'editor) — nessuno di questi è mai obbligatorio.
+    title: str | None = None
+    author: str | None = None
+    isbn: str | None = None
+    doi: str | None = None
+    page: str | None = None
+    # Compatibilità BibTeX (app/domain/blog_notes.py): tipo (kind: libro/
+    # articolo/web/nota), editore/rivista/sito, anno/data, URL.
+    kind: str | None = None
+    source: str | None = None
+    issued: str | None = None
+    url: str | None = None
 
 
 class NoteOut(BaseModel):
     idx: int
     content: str
+    title: str | None = None
+    author: str | None = None
+    isbn: str | None = None
+    doi: str | None = None
+    page: str | None = None
+    kind: str | None = None
+    source: str | None = None
+    issued: str | None = None
+    url: str | None = None
 
 
 def _to_note_inputs(notes: list[NoteIn] | None) -> list[NoteInput]:
-    return [NoteInput(idx=n.idx, content=n.content) for n in (notes or [])]
+    return [
+        NoteInput(
+            idx=n.idx,
+            content=n.content,
+            title=n.title,
+            author=n.author,
+            isbn=n.isbn,
+            doi=n.doi,
+            page=n.page,
+            kind=n.kind,
+            source=n.source,
+            issued=n.issued,
+            url=n.url,
+        )
+        for n in (notes or [])
+    ]
 
 
 class PostCreateRequest(BaseModel):
@@ -74,6 +120,8 @@ class PostCreateRequest(BaseModel):
     # Categoria (vedi app/domain/categories.py) — al più una, deve
     # appartenere allo stesso blog.
     category_id: uuid.UUID | None = None
+    # B9: pubblicazione di appartenenza (stesso schema tri-state di category_id)
+    publication_id: uuid.UUID | None = None
     # Note a piè di pagina (todo/EDITOR.md): elenco strutturato, non nel
     # corpo. Nel `content` il riferimento è il marcatore `[idx](#nota-idx)`.
     notes: list[NoteIn] | None = None
@@ -89,6 +137,8 @@ class PostTranslationRequest(BaseModel):
     cover_image_categories: list[str] = []
     tags: list[str] | None = None
     category_id: uuid.UUID | None = None
+    # B9: pubblicazione di appartenenza (stesso schema tri-state di category_id)
+    publication_id: uuid.UUID | None = None
     notes: list[NoteIn] | None = None
 
 
@@ -116,6 +166,8 @@ class PostUpdateRequest(BaseModel):
     # "campo assente" (non toccarla) — servirsi di model_fields_set in
     # update_post, non di un semplice "is not None".
     category_id: uuid.UUID | None = None
+    # B9: pubblicazione di appartenenza (stesso schema tri-state di category_id)
+    publication_id: uuid.UUID | None = None
     # assente: lascia invariate le note; lista (anche vuota `[]`): le sostituisce.
     notes: list[NoteIn] | None = None
     # Override di Blog.comments_mode per questo solo post; `null` esplicito
@@ -142,11 +194,23 @@ class CategorySummaryOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PublicationSummaryOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    title: str
+
+    model_config = {"from_attributes": True}
+
+
 class PostOut(BaseModel):
     id: uuid.UUID
     blog_id: uuid.UUID
     author_id: uuid.UUID
     author_display_name: str
+    # Avatar dell'autore, indipendente dal nome mostrato (che può essere un
+    # alias): null se non impostato, mai quello di un eventuale alias di
+    # membership/blog (non esiste un "avatar del blog" per un post).
+    author_avatar_url: str | None
     locale: str
     translation_group_id: uuid.UUID
     title: str
@@ -179,6 +243,9 @@ class PostOut(BaseModel):
     manual_tags: list[str]
     tags: list[str]
     category: CategorySummaryOut | None
+    # B9: pubblicazione di appartenenza e posizione esplicita del capitolo
+    publication: PublicationSummaryOut | None = None
+    chapter_order: int | None = None
     # None: eredita da Blog.comments_mode (vedi PATCH sopra per il tri-state
     # di scrittura). effective_comments_mode è invece sempre valorizzato: il
     # modo comodo per il frontend di sapere subito chi può commentare, senza
@@ -266,6 +333,14 @@ async def _resolve_author_display_name(session: AsyncSession, user: User, blog: 
     return _pick_author_display_name(membership, blog, user)
 
 
+async def _validate_publication(session: AsyncSession, blog: Blog, publication_id: uuid.UUID | None) -> None:
+    if publication_id is None:
+        return
+    publication = await session.get(Publication, publication_id)
+    if publication is None or publication.blog_id != blog.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Pubblicazione non valida per questo blog.")
+
+
 async def _validate_category(session: AsyncSession, blog: Blog, category_id: uuid.UUID | None) -> None:
     if category_id is None:
         return
@@ -298,17 +373,49 @@ async def _posts_out(
     post_ids = [post.id for post, _ in pairs]
     author_ids = {post.author_id for post, _ in pairs}
     category_ids = {post.category_id for post, _ in pairs if post.category_id}
+    publication_ids = {post.publication_id for post, _ in pairs if post.publication_id}
+    publications: dict[uuid.UUID, Publication] = {}
+    if publication_ids:
+        pub_rows = await session.execute(select(Publication).where(Publication.id.in_(publication_ids)))
+        publications = {p.id: p for p in pub_rows.scalars().all()}
     # coppie (autore, blog) per risolvere l'alias di membership del post giusto
     membership_keys = {(post.author_id, blog.id) for post, blog in pairs}
 
     notes_by_post: dict[uuid.UUID, list[NoteOut]] = {pid: [] for pid in post_ids}
     note_rows = await session.execute(
-        select(post_notes.c.post_id, post_notes.c.idx, post_notes.c.content)
+        select(
+            post_notes.c.post_id,
+            post_notes.c.idx,
+            post_notes.c.content,
+            post_notes.c.title,
+            post_notes.c.author,
+            post_notes.c.isbn,
+            post_notes.c.doi,
+            post_notes.c.page,
+            post_notes.c.kind,
+            post_notes.c.source,
+            post_notes.c.issued,
+            post_notes.c.url,
+        )
         .where(post_notes.c.post_id.in_(post_ids))
         .order_by(post_notes.c.post_id, post_notes.c.idx)
     )
-    for pid, idx, content in note_rows.all():
-        notes_by_post[pid].append(NoteOut(idx=idx, content=content))
+    for pid, idx, content, title, author, isbn, doi, page, kind, source, issued, url in note_rows.all():
+        notes_by_post[pid].append(
+            NoteOut(
+                idx=idx,
+                content=content,
+                title=title,
+                author=author,
+                isbn=isbn,
+                doi=doi,
+                page=page,
+                kind=kind,
+                source=source,
+                issued=issued,
+                url=url,
+            )
+        )
 
     authors: dict[uuid.UUID, User] = {}
     if author_ids:
@@ -346,6 +453,11 @@ async def _posts_out(
             if author is not None
             else post.author_display_name
         )
+        author_avatar_url = (
+            avatar_public_url(author.avatar_object_key)
+            if author is not None and author.avatar_object_key
+            else None
+        )
         category = categories.get(post.category_id) if post.category_id else None
         out.append(
             PostOut(
@@ -353,6 +465,7 @@ async def _posts_out(
                 blog_id=post.blog_id,
                 author_id=post.author_id,
                 author_display_name=author_display_name,
+                author_avatar_url=author_avatar_url,
                 locale=post.locale,
                 translation_group_id=post.translation_group_id,
                 title=post.title,
@@ -372,8 +485,10 @@ async def _posts_out(
                 manual_tags=post.manual_tags,
                 tags=effective_tags,
                 category=CategorySummaryOut.model_validate(category) if category else None,
+                publication=PublicationSummaryOut.model_validate(publications[post.publication_id]) if post.publication_id and post.publication_id in publications else None,
+                chapter_order=post.chapter_order,
                 comments_mode=post.comments_mode,
-                effective_comments_mode=post.comments_mode or blog.comments_mode,
+                effective_comments_mode=effective_comments_mode(post, blog),
                 search_indexing_enabled=post.search_indexing_enabled,
                 ai_crawling_enabled=post.ai_crawling_enabled,
                 effective_search_indexing_enabled=effective_search_indexing(post, blog),
@@ -425,9 +540,29 @@ async def _sync_post_notes(session: AsyncSession, post: Post, notes: list[NoteIn
         await session.flush()
     await session.execute(delete(post_notes).where(post_notes.c.post_id == post.id))
     if notes:
+        # B8: ogni nota del post viene agganciata (o crea) la nota del blog con
+        # lo stesso testo normalizzato — è ciò che alimenta la libreria note
+        note_ids = await link_blog_notes(session, blog_id=post.blog_id, notes=notes, created_by_id=post.author_id)
         await session.execute(
             insert(post_notes),
-            [{"post_id": post.id, "idx": n.idx, "content": n.content} for n in notes],
+            [
+                {
+                    "post_id": post.id,
+                    "idx": n.idx,
+                    "content": n.content,
+                    "note_id": note_ids.get(n.content),
+                    "title": n.title,
+                    "author": n.author,
+                    "isbn": n.isbn,
+                    "doi": n.doi,
+                    "page": n.page,
+                    "kind": n.kind,
+                    "source": n.source,
+                    "issued": n.issued,
+                    "url": n.url,
+                }
+                for n in notes
+            ],
         )
 
 
@@ -524,6 +659,7 @@ async def create_post(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
     await _validate_category(session, blog, payload.category_id)
+    await _validate_publication(session, blog, payload.publication_id)
 
     post = Post(
         blog_id=blog.id,
@@ -538,6 +674,7 @@ async def create_post(
         cover_image_categories=payload.cover_image_categories,
         manual_tags=manual_tags,
         category_id=payload.category_id,
+        publication_id=payload.publication_id,
     )
     session.add(post)
     await _sync_post_tags(session, post, effective_tags)
@@ -600,6 +737,10 @@ async def add_post_translation(
         payload.category_id if "category_id" in payload.model_fields_set else original.category_id
     )
     await _validate_category(session, blog, category_id)
+    publication_id = (
+        payload.publication_id if "publication_id" in payload.model_fields_set else original.publication_id
+    )
+    await _validate_publication(session, blog, publication_id)
 
     translation = Post(
         blog_id=blog.id,
@@ -615,6 +756,7 @@ async def add_post_translation(
         cover_image_categories=payload.cover_image_categories,
         manual_tags=manual_tags,
         category_id=category_id,
+        publication_id=publication_id,
     )
     session.add(translation)
     await _sync_post_tags(session, translation, effective_tags)
@@ -779,6 +921,11 @@ async def update_post(
     if "category_id" in payload.model_fields_set:
         await _validate_category(session, blog, payload.category_id)
         post.category_id = payload.category_id
+    if "publication_id" in payload.model_fields_set:
+        await _validate_publication(session, blog, payload.publication_id)
+        if payload.publication_id != post.publication_id:
+            post.chapter_order = None
+        post.publication_id = payload.publication_id
 
     if "comments_mode" in payload.model_fields_set:
         if payload.comments_mode == CommentsMode.EVERYONE and not turnstile_configured():
@@ -898,3 +1045,42 @@ async def publish_post(
     if is_publicly_visible(post):
         await _revalidate_post(post, blog)
     return await _post_out(session, post, blog)
+
+
+@router.post("/posts/{post_id}/read", status_code=status.HTTP_204_NO_CONTENT)
+async def record_post_read(
+    post_id: uuid.UUID,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    """Conteggio letture aggregato per giorno (todo/UX_REDESIGN.md B2,
+    mockup 5a): pubblico, nessuna sessione né cookie, nessun dato del lettore
+    persistito — solo `+1` su (post, giorno UTC) in `post_reads_daily`.
+    Inviato dal browser dopo qualche secondo sulla pagina del post. Per non
+    contare i reload ravvicinati, un limite per IP+post in Redis (volatile):
+    oltre il limite la richiesta è accettata ma non contata. Post non
+    visibili pubblicamente: 404, come la pagina stessa."""
+    post = await session.get(Post, post_id)
+    if post is None or not is_publicly_visible(post):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Post non trovato.")
+    blog = await session.get(Blog, post.blog_id)
+    if blog is None or not is_blog_publicly_readable(blog) or blog.visibility != BlogVisibility.PUBLIC:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Post non trovato.")
+
+    ip = client_ip(request) or "unknown"
+    try:
+        await enforce_rate_limit(
+            f"read:{ip}:{post_id}", limit=1, window_seconds=6 * 3600, message="Lettura già contata."
+        )
+    except HTTPException:
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    today = datetime.now(timezone.utc).date()
+    stmt = pg_insert(PostReadDaily).values(post_id=post_id, day=today, reads=1)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[PostReadDaily.post_id, PostReadDaily.day],
+        set_={"reads": PostReadDaily.reads + 1},
+    )
+    await session.execute(stmt)
+    await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

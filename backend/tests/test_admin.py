@@ -27,7 +27,7 @@ async def test_admin_cannot_self_deactivate(client: AsyncClient, make_admin: Cal
     self_id = next(u["id"] for u in users_res.json() if u["username"] == admin.username)
 
     res = await client.patch(
-        f"/api/v1/admin/users/{self_id}", json={"is_active": False}, headers=admin.headers
+        f"/api/v1/admin/users/{self_id}", json={"is_active": False, "note": "test"}, headers=admin.headers
     )
     assert res.status_code == 400
 
@@ -41,7 +41,7 @@ async def test_admin_deactivates_other_user(
     target_id = next(u["id"] for u in users_res.json() if u["username"] == target.username)
 
     res = await client.patch(
-        f"/api/v1/admin/users/{target_id}", json={"is_active": False}, headers=admin.headers
+        f"/api/v1/admin/users/{target_id}", json={"is_active": False, "note": "test"}, headers=admin.headers
     )
     assert res.status_code == 200
     assert res.json()["is_active"] is False
@@ -65,7 +65,7 @@ async def test_only_super_admin_grants_privileged_roles(
 
     res = await client.patch(
         f"/api/v1/admin/users/{target_id}",
-        json={"platform_role": "super_admin"},
+        json={"platform_role": "super_admin", "note": "test"},
         headers=plain_admin.headers,
     )
     assert res.status_code == 403
@@ -129,20 +129,22 @@ async def test_admin_suspends_blog_and_blocks_public_access(
     assert (await client.get("/api/v1/blogs/blog-sospeso")).status_code == 200
 
     res = await client.patch(
-        f"/api/v1/admin/blogs/{blog_id}", json={"is_suspended": True}, headers=admin.headers
+        f"/api/v1/admin/blogs/{blog_id}", json={"is_suspended": True, "note": "test"}, headers=admin.headers
     )
     assert res.status_code == 200
     assert res.json()["is_suspended"] is True
 
+    # B3/B5 (mockup 3d): il dettaglio di un blog pubblico sospeso resta
+    # leggibile con `is_suspended=true`, così la pagina pubblica può spiegare
+    # lo stato; i contenuti (post) restano 404 per tutti, proprietario incluso.
     res = await client.get("/api/v1/blogs/blog-sospeso")
-    assert res.status_code == 404
-
-    # irraggiungibile anche per il proprietario stesso, non solo per gli anonimi
-    res = await client.get("/api/v1/blogs/blog-sospeso", headers=owner.headers)
-    assert res.status_code == 404
+    assert res.status_code == 200
+    assert res.json()["is_suspended"] is True
+    assert (await client.get("/api/v1/blogs/blog-sospeso/posts")).status_code == 404
+    assert (await client.get("/api/v1/blogs/blog-sospeso/posts", headers=owner.headers)).status_code == 404
 
     res = await client.patch(
-        f"/api/v1/admin/blogs/{blog_id}", json={"is_suspended": False}, headers=admin.headers
+        f"/api/v1/admin/blogs/{blog_id}", json={"is_suspended": False, "note": "test"}, headers=admin.headers
     )
     assert res.status_code == 200
     assert res.json()["is_suspended"] is False
@@ -204,7 +206,7 @@ async def test_admin_hides_post_and_blocks_public_access(
     assert (await client.get(f"/api/v1/posts/{post_id}")).status_code == 200
 
     res = await client.patch(
-        f"/api/v1/admin/posts/{post_id}", json={"is_hidden": True}, headers=admin.headers
+        f"/api/v1/admin/posts/{post_id}", json={"is_hidden": True, "note": "test"}, headers=admin.headers
     )
     assert res.status_code == 200
     assert res.json()["is_hidden"] is True
@@ -213,7 +215,7 @@ async def test_admin_hides_post_and_blocks_public_access(
     assert res.status_code == 404
 
     res = await client.patch(
-        f"/api/v1/admin/posts/{post_id}", json={"is_hidden": False}, headers=admin.headers
+        f"/api/v1/admin/posts/{post_id}", json={"is_hidden": False, "note": "test"}, headers=admin.headers
     )
     assert res.status_code == 200
     assert res.json()["is_hidden"] is False

@@ -35,10 +35,30 @@ async def get_membership_role(
     return result.scalar_one_or_none()
 
 
+def is_blog_publicly_readable(blog: Blog) -> bool:
+    """Un blog leggibile da chi non ne fa parte: non sospeso da un admin, non
+    messo in pausa dal proprietario, non in attesa di cancellazione
+    (todo/UX_REDESIGN.md B3). `visibility` è un vincolo ulteriore, separato."""
+    return not blog.is_suspended and not blog.is_paused and blog.deleted_at is None
+
+
+def blog_publicly_listable_clause() -> ColumnElement[bool]:
+    """Equivalente SQL di `is_blog_publicly_readable` + `visibility=public`,
+    per feed, directory, sitemap ed elenchi pubblici per utente."""
+    return and_(
+        Blog.visibility == BlogVisibility.PUBLIC,
+        Blog.is_suspended.is_(False),
+        Blog.is_paused.is_(False),
+        Blog.deleted_at.is_(None),
+    )
+
+
 async def can_write_posts(session: AsyncSession, *, user_id: uuid.UUID, blog: Blog) -> bool:
     # Sospensione da admin di piattaforma (dashboard/blog): blocca la
-    # scrittura anche per il proprietario, finché non viene riattivato.
-    if blog.is_suspended:
+    # scrittura anche per il proprietario, finché non viene riattivato. Un
+    # blog in attesa di cancellazione va prima ripristinato; uno in pausa
+    # resta scrivibile (nulla è cancellato, solo i lettori sono fuori).
+    if blog.is_suspended or blog.deleted_at is not None:
         return False
     if blog.owner_id == user_id:
         return True
@@ -61,6 +81,15 @@ async def can_view_blog(
     Amministratore/Super Admin)."""
     if blog.is_suspended:
         return False
+    if blog.deleted_at is not None:
+        # solo il proprietario, per ripristinarlo dalla dashboard
+        return blog.owner_id == user_id
+    if blog.is_paused:
+        if user_id is None:
+            return False
+        if blog.owner_id == user_id:
+            return True
+        return await get_membership_role(session, user_id=user_id, blog_id=blog.id) is not None
     if blog.visibility == BlogVisibility.PUBLIC:
         return True
     if user_id is None:

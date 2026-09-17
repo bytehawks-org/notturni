@@ -1,158 +1,204 @@
-"use client";
-
+import { getLocale, getTranslations } from "next-intl/server";
 import Image from "next/image";
-import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { notFound } from "next/navigation";
 
-import { Alert } from "@/components/ui/Alert";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { ApiClientError, api } from "@/lib/api";
-import { useAuth } from "@/lib/auth-context";
+import { FeedPostCard } from "@/components/FeedPostCard";
+import { BlogDirectoryGridClient } from "@/components/home/BlogDirectoryClient";
+import { FollowUserButton } from "@/components/profile/FollowUserButton";
+import { ProfileTabs } from "@/components/profile/ProfileTabs";
+import { SiteHeader } from "@/components/SiteHeader";
+import { EmptyState } from "@/components/ui/States";
+import { VerificationBadge } from "@/components/ui/VerificationBadge";
+import { formatDate } from "@/lib/format";
 import { languageName } from "@/lib/languages";
+import {
+  getPublicUserBlogs,
+  getPublicUserComments,
+  getPublicUserFollowers,
+  getPublicUserPosts,
+  getPublicUserProfile,
+} from "@/lib/server-api";
 import { getSocialPlatform } from "@/lib/social-platforms";
 import type { Profile } from "@/lib/types";
 
-const countryNames = new Intl.DisplayNames(["it"], { type: "region" });
+interface PageParams {
+  username: string;
+}
 
-function countryName(code: string): string {
+function countryName(code: string, locale: string): string {
   try {
-    return countryNames.of(code) ?? code;
+    return new Intl.DisplayNames([locale], { type: "region" }).of(code) ?? code;
   } catch {
     return code;
   }
 }
 
-function errorMessage(err: unknown): string {
-  return err instanceof ApiClientError ? err.message : "Errore imprevisto.";
+/** Nome "personale" mostrato in testa al profilo pubblico: stessa
+ * preferenza `post_author_name_style` usata per firmare i post
+ * (dashboard/profilo, "Firma i miei post come" — mirror di
+ * `app/domain/display_names.py::resolve_personal_display_name`, che qui non
+ * si può importare da un Server Component frontend). Lo username resta
+ * comunque sempre visibile sotto, come @username. */
+function resolvePersonalDisplayName(profile: Profile): string {
+  if (profile.post_author_name_style === "full_name") {
+    const full = [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim();
+    return full || profile.username;
+  }
+  if (profile.post_author_name_style === "display_name") {
+    return profile.display_name || profile.username;
+  }
+  return profile.username;
 }
 
-export default function PublicProfilePage() {
-  const params = useParams<{ username: string }>();
-  const { user, authFetch } = useAuth();
+/** Profilo pubblico (mockup 3e): intestazione con avatar, luogo e lingue,
+ * bio, statistiche, link social e tab Post/Blog/Commenti
+ * (`GET /users/{username}/posts|blogs|comments`, solo contenuti firmati con
+ * lo username — CLAUDE.md #8). Server Component: tutto il contenuto è
+ * risolto lato server (SEO — prima era interamente client-side, invisibile
+ * ai crawler che non eseguono JS). Solo il follow/unfollow resta un client
+ * component isolato (`FollowUserButton`), richiede la sessione del
+ * visitatore, mai disponibile a un Server Component. */
+export default async function PublicProfilePage({ params }: { params: Promise<PageParams> }) {
+  const { username } = await params;
+  const [profile, posts, blogs, comments, followers, locale, t] = await Promise.all([
+    getPublicUserProfile(username),
+    getPublicUserPosts(username),
+    getPublicUserBlogs(username),
+    getPublicUserComments(username),
+    getPublicUserFollowers(username),
+    getLocale(),
+    getTranslations("PublicProfile"),
+  ]);
+  if (!profile) notFound();
 
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [followers, setFollowers] = useState<string[]>([]);
-  const [isFollowing, setIsFollowing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(() => {
-    api.users
-      .profile(params.username)
-      .then(setProfile)
-      .catch((err) => setError(errorMessage(err)));
-    api.users
-      .followers(params.username)
-      .then((list) => {
-        const usernames = list.map((f) => f.username);
-        setFollowers(usernames);
-        if (user) setIsFollowing(usernames.includes(user.username));
-      })
-      .catch(() => undefined);
-  }, [params.username, user]);
-
-  useEffect(load, [load]);
-
-  async function handleFollowToggle() {
-    try {
-      if (isFollowing) {
-        await authFetch((token) => api.users.unfollow(token, params.username));
-      } else {
-        await authFetch((token) => api.users.follow(token, params.username));
-      }
-      load();
-    } catch (err) {
-      setError(errorMessage(err));
-    }
-  }
-
-  if (error) return <Alert kind="error">{error}</Alert>;
-  if (!profile) return <p className="text-sm text-muted">Caricamento…</p>;
-
-  const canFollow = user && user.username !== params.username;
-  // todo/BLOG.md #4: l'alias pubblico ha la precedenza su nome/cognome e username.
-  const displayHeading =
-    profile.display_name ||
-    (profile.first_name || profile.last_name
-      ? [profile.first_name, profile.last_name].filter(Boolean).join(" ")
-      : profile.username);
+  const displayHeading = resolvePersonalDisplayName(profile);
+  const languages = [profile.native_language, ...profile.fallback_languages].filter((l): l is string => !!l);
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-16">
-      <Card>
-        <div className="flex items-center gap-4">
-          {profile.avatar_url ? (
-            <Image
-              src={profile.avatar_url}
-              alt={profile.username}
-              width={72}
-              height={72}
-              className="h-18 w-18 rounded-full object-cover"
-              unoptimized
-            />
-          ) : (
-            <div className="flex h-18 w-18 items-center justify-center rounded-full bg-foreground/10 text-xl text-muted">
-              {profile.username[0]?.toUpperCase()}
+    <>
+      <SiteHeader />
+      <main className="mx-auto w-full max-w-[860px] flex-1 px-5 py-10 lg:px-12 lg:py-14">
+        <div className="flex flex-col gap-8">
+          <header className="grid gap-5 md:grid-cols-[96px_minmax(0,1fr)_auto] md:items-start md:gap-7">
+            {profile.avatar_url ? (
+              <Image src={profile.avatar_url} alt={profile.username} width={96} height={96} className="h-24 w-24 rounded-full object-cover" unoptimized />
+            ) : (
+              <div className="flex h-24 w-24 items-center justify-center rounded-full bg-primary font-serif text-3xl text-background">
+                {profile.username[0]?.toUpperCase()}
+              </div>
+            )}
+            <div className="flex min-w-0 flex-col gap-2">
+              <h1 className="flex items-center gap-2 font-serif text-[30px] font-medium leading-tight text-foreground">
+                {displayHeading}
+                <VerificationBadge tier={profile.verification_tier} size={20} />
+              </h1>
+              <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted">
+                <span>@{profile.custom_domain ?? profile.username}</span>
+                {profile.country && <span>· {countryName(profile.country, locale)}</span>}
+                {languages.length > 0 && (
+                  <span>
+                    · {t("writesIn")} {languages.map((code) => languageName(code, locale)).join(", ")}
+                  </span>
+                )}
+              </p>
+              {profile.bio && <p className="max-w-[560px] text-[15px] leading-relaxed text-foreground">{profile.bio}</p>}
+              <div className="flex flex-wrap items-center gap-5 pt-1 text-sm">
+                <span>
+                  <span className="font-semibold text-foreground">{followers.length}</span>{" "}
+                  <span className="text-muted">{t("followers", { count: followers.length })}</span>
+                </span>
+                <span className="text-muted">
+                  {t("memberSince", { date: formatDate(profile.created_at, locale, { month: "long", year: "numeric" }) })}
+                </span>
+              </div>
             </div>
+            <FollowUserButton username={username} initialFollowers={followers} />
+          </header>
+
+          {profile.social_links.length > 0 && (
+            <section className="flex flex-col gap-2">
+              <span className="font-mono text-[11px] uppercase tracking-[.08em] text-muted">{t("links")}</span>
+              <ul className="flex flex-wrap gap-4">
+                {profile.social_links.map((link) => {
+                  const platform = getSocialPlatform(link.label);
+                  return (
+                    <li key={link.id}>
+                      <a
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={platform.label}
+                        className="flex items-center gap-1.5 text-sm text-muted no-underline hover:text-primary"
+                      >
+                        <platform.Icon />
+                        {platform.label}
+                      </a>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
           )}
-          <div>
-            <h1 className="font-serif text-2xl text-foreground">{displayHeading}</h1>
-            <p className="text-sm text-muted">
-              {displayHeading !== profile.username ? `@${profile.username} · ` : ""}
-              {followers.length} follower
-            </p>
-          </div>
-          {canFollow && (
-            <div className="ml-auto">
-              <Button variant={isFollowing ? "secondary" : "primary"} onClick={handleFollowToggle}>
-                {isFollowing ? "Non seguire più" : "Segui"}
-              </Button>
-            </div>
-          )}
+
+          <ProfileTabs
+            tabs={[
+              {
+                id: "posts",
+                label: t("tab.posts"),
+                count: posts.length,
+                content:
+                  posts.length === 0 ? (
+                    <EmptyState glyph="✎" title={t("noPostsTitle")} body={t("noPostsBody")} />
+                  ) : (
+                    <div className="flex flex-col">
+                      {posts.map((post) => (
+                        <FeedPostCard key={post.id} post={post} />
+                      ))}
+                    </div>
+                  ),
+              },
+              {
+                id: "blogs",
+                label: t("tab.blogs"),
+                count: blogs.length,
+                content:
+                  blogs.length === 0 ? (
+                    <EmptyState glyph="◫" title={t("noBlogsTitle")} body={t("noBlogsBody")} />
+                  ) : (
+                    <BlogDirectoryGridClient blogs={blogs} />
+                  ),
+              },
+              {
+                id: "comments",
+                label: t("tab.comments"),
+                count: comments.length,
+                content:
+                  comments.length === 0 ? (
+                    <EmptyState glyph="❝" title={t("noCommentsTitle")} body={t("noCommentsBody")} />
+                  ) : (
+                    <ul className="flex flex-col rounded-xl border border-border bg-surface">
+                      {comments.map((c) => (
+                        <li key={c.id} className="flex flex-col gap-1 border-b border-border px-4 py-3 last:border-0">
+                          <p className="text-[15px] leading-relaxed text-foreground">“{c.content}”</p>
+                          <span className="text-[13px] text-muted">
+                            {t("on")}{" "}
+                            <Link href={c.permalink} className="text-foreground no-underline hover:underline">
+                              {c.post_title}
+                            </Link>{" "}
+                            · {formatDate(c.created_at, locale, { day: "numeric", month: "short", year: "numeric" })}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ),
+              },
+            ]}
+          />
+
+          <p className="text-[13px] leading-relaxed text-muted">{t("privacyNote")}</p>
         </div>
-
-        {(profile.country || profile.native_language || profile.fallback_languages.length > 0) && (
-          <p className="mt-4 text-sm text-muted">
-            {profile.country && countryName(profile.country)}
-            {profile.native_language && (
-              <>
-                {profile.country && " · "}
-                Lingua madre: {languageName(profile.native_language)}
-              </>
-            )}
-            {profile.fallback_languages.length > 0 && (
-              <>
-                {" · "}
-                Traduce anche in: {profile.fallback_languages.map(languageName).join(", ")}
-              </>
-            )}
-          </p>
-        )}
-
-        {profile.bio && <p className="mt-4 text-sm text-foreground">{profile.bio}</p>}
-
-        {profile.social_links.length > 0 && (
-          <ul className="mt-4 flex flex-wrap gap-4">
-            {profile.social_links.map((link) => {
-              const platform = getSocialPlatform(link.label);
-              return (
-                <li key={link.id}>
-                  <a
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={platform.label}
-                    className="flex items-center gap-1.5 text-sm text-muted hover:text-primary"
-                  >
-                    <platform.Icon />
-                    {platform.label}
-                  </a>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Card>
-    </main>
+      </main>
+    </>
   );
 }

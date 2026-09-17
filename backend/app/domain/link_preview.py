@@ -11,17 +11,33 @@ richiesta resta teoricamente possibile, stessa complessità accettata altrove
 nel progetto — vedi CLAUDE.md #4 sulla moderazione automatica) ma alza
 comunque il costo di un attacco banale verso indirizzi interni.
 
-Nessuna cache: ogni chiamata rifà il fetch. Buon candidato per Redis quando
-verrà usato per la prima volta nel progetto (oggi deployato ma non ancora
-sfruttato — vedi ROADMAP.md)."""
+Cache a due livelli (todo/UX_REDESIGN.md, blocco "footer"/link preview):
+Redis come cache calda (TTL breve, `REDIS_TTL_SECONDS`), `link_preview_cache`
+come fonte persistente e deduplicata — una riga per URL (unique su
+`url_hash`), condivisa da qualunque post/utente citi lo stesso link, non
+rifatta a ogni rendering. Un'anteprima riuscita resta valida più a lungo di
+un fallimento (`STALE_AFTER_OK`/`STALE_AFTER_EMPTY`) prima di essere
+ricontrollata dal vivo — vedi `get_cached_or_fetch_link_preview`."""
 
+import hashlib
 import ipaddress
+import json
+import logging
 import re
 import socket
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
 import httpx
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.redis import get_redis
+from app.models.link_preview import LinkPreviewCache
+
+logger = logging.getLogger(__name__)
 
 _TIMEOUT = httpx.Timeout(8.0, connect=5.0)
 # Alcuni siti (es. YouTube) mettono un'enorme quantità di dati inline prima
@@ -128,3 +144,97 @@ async def fetch_link_preview(url: str) -> LinkPreview:
     image = meta.get("og:image")
 
     return LinkPreview(url=url, title=title, description=description, image=image)
+
+
+# ---------------------------------------------------------------------------
+# Cache (Redis calda + `link_preview_cache` persistente/deduplicata)
+# ---------------------------------------------------------------------------
+
+REDIS_TTL_SECONDS = 6 * 3600
+# Un'anteprima con dati Open Graph reali resta valida una settimana prima di
+# essere riverificata dal vivo; un fallimento (host irraggiungibile, nessun
+# meta tag, ...) molto meno, per non restare bloccati su un URL momentaneamente
+# giù più del necessario, ma comunque senza martellarlo a ogni richiesta.
+STALE_AFTER_OK = timedelta(days=7)
+STALE_AFTER_EMPTY = timedelta(hours=6)
+
+
+def _url_hash(url: str) -> str:
+    return hashlib.sha256(url.strip().encode("utf-8")).hexdigest()
+
+
+def _cache_key(url_hash: str) -> str:
+    return f"link-preview:{url_hash}"
+
+
+async def _read_hot_cache(url_hash: str) -> LinkPreview | None:
+    try:
+        raw = await get_redis().get(_cache_key(url_hash))
+    except Exception:
+        logger.warning("Redis non raggiungibile per l'anteprima link: si prosegue senza cache calda.", exc_info=True)
+        return None
+    if raw is None:
+        return None
+    data = json.loads(raw)
+    return LinkPreview(url=data["url"], title=data.get("title"), description=data.get("description"), image=data.get("image"))
+
+
+async def _write_hot_cache(url_hash: str, preview: LinkPreview) -> None:
+    try:
+        await get_redis().set(
+            _cache_key(url_hash),
+            json.dumps({"url": preview.url, "title": preview.title, "description": preview.description, "image": preview.image}),
+            ex=REDIS_TTL_SECONDS,
+        )
+    except Exception:
+        logger.warning("Redis non raggiungibile: anteprima link non messa in cache calda.", exc_info=True)
+
+
+async def get_cached_or_fetch_link_preview(session: AsyncSession, url: str) -> LinkPreview:
+    """Redis (cache calda) → `link_preview_cache` (persistente, deduplicata
+    per URL) → fetch dal vivo solo se assente o scaduta. Chi chiama deve aver
+    già validato l'URL (`validate_previewable_url`) — qui non si rifà, sarebbe
+    ridondante sia sul percorso cache sia su quello di fetch (che la richiama
+    comunque)."""
+    url_hash = _url_hash(url)
+
+    hot = await _read_hot_cache(url_hash)
+    if hot is not None:
+        return hot
+
+    row = (
+        await session.execute(select(LinkPreviewCache).where(LinkPreviewCache.url_hash == url_hash))
+    ).scalar_one_or_none()
+    now = datetime.now(timezone.utc)
+    if row is not None:
+        stale_after = STALE_AFTER_OK if row.fetch_ok else STALE_AFTER_EMPTY
+        if now - row.updated_at < stale_after:
+            preview = LinkPreview(url=url, title=row.title, description=row.description, image=row.image)
+            await _write_hot_cache(url_hash, preview)
+            return preview
+
+    preview = await fetch_link_preview(url)
+    fetch_ok = bool(preview.title or preview.description or preview.image)
+
+    # upsert: una riga per URL, condivisa da chiunque lo citi — l'unique
+    # constraint su url_hash è la deduplica reale, questo è solo il modo di
+    # scriverla senza un giro SELECT-poi-INSERT/UPDATE separato.
+    stmt = (
+        pg_insert(LinkPreviewCache)
+        .values(url_hash=url_hash, url=url, title=preview.title, description=preview.description, image=preview.image, fetch_ok=fetch_ok)
+        .on_conflict_do_update(
+            index_elements=["url_hash"],
+            set_={
+                "title": preview.title,
+                "description": preview.description,
+                "image": preview.image,
+                "fetch_ok": fetch_ok,
+                "updated_at": now,
+            },
+        )
+    )
+    await session.execute(stmt)
+    await session.commit()
+
+    await _write_hot_cache(url_hash, preview)
+    return preview

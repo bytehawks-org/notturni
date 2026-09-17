@@ -24,10 +24,16 @@ export const COMMON_LANGUAGES = [
   "ko",
 ];
 
-const displayNames = new Intl.DisplayNames(["it"], { type: "language" });
+const displayNamesCache = new Map<string, Intl.DisplayNames>();
 
-export function languageName(code: string): string {
+/** Nome della lingua `code` nella lingua dell'interfaccia `locale` (default: italiano). */
+export function languageName(code: string, locale = "it"): string {
   try {
+    let displayNames = displayNamesCache.get(locale);
+    if (!displayNames) {
+      displayNames = new Intl.DisplayNames([locale], { type: "language" });
+      displayNamesCache.set(locale, displayNames);
+    }
     const name = displayNames.of(code);
     return name ? name.charAt(0).toUpperCase() + name.slice(1) : code;
   } catch {

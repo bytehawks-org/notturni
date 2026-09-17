@@ -22,6 +22,10 @@ RESERVED_USERNAMES = {
 USERNAME_MIN_LENGTH = 3
 USERNAME_MAX_LENGTH = 32
 
+# CLAUDE.md #5: non più di un cambio ogni 5 giorni, per non rendere lo
+# username instabile come identificatore citabile (@menzioni, permalink).
+USERNAME_CHANGE_COOLDOWN_DAYS = 5
+
 # todo/USERS.md #1: lo username è un identificatore univoco e citabile come
 # `@username` nei contenuti (vedi app/api/v1/blogs.py::mentionable_users e il
 # rendering lato frontend). Il formato deve quindi essere prevedibile: solo

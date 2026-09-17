@@ -1,24 +1,27 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { FieldGroup, Input, Label } from "@/components/ui/Field";
-import { RichTextEditor } from "@/components/editor/RichTextEditor";
+import { RichTextEditor } from "@/components/editor/RichTextEditorLazy";
 import { TranslationsBar } from "@/components/editor/TranslationsBar";
 import { SearchInput } from "@/components/SearchInput";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import type { Page, PageTranslationSummary } from "@/lib/types";
 
-function errorMessage(err: unknown): string {
-  return err instanceof ApiClientError ? err.message : "Errore imprevisto.";
+function errorMessage(err: unknown, fallback: string): string {
+  return err instanceof ApiClientError ? err.message : fallback;
 }
 
 export default function DashboardPagesPage() {
   const { accessToken } = useAuth();
+  const t = useTranslations("AdminPages");
+  const tc = useTranslations("Common");
   const [locale, setLocale] = useState("it");
   const [q, setQ] = useState("");
   const [pages, setPages] = useState<Page[] | null>(null);
@@ -30,18 +33,18 @@ export default function DashboardPagesPage() {
     api.pages
       .list(accessToken, locale, q)
       .then(setPages)
-      .catch((err) => setError(errorMessage(err)));
-  }, [accessToken, locale, q]);
+      .catch((err) => setError(errorMessage(err, tc("unexpectedError"))));
+  }, [accessToken, locale, q, tc]);
 
   useEffect(load, [load]);
 
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-serif text-2xl text-foreground">Pagine statiche</h1>
+        <h1 className="font-serif text-2xl text-foreground">{t("title")}</h1>
         <div className="flex items-center gap-3">
-          <SearchInput value={q} onChange={setQ} placeholder="Cerca per titolo o slug…" />
-          <Label htmlFor="locale-filter">Lingua</Label>
+          <SearchInput value={q} onChange={setQ} placeholder={t("searchPlaceholder")} />
+          <Label htmlFor="locale-filter">{t("language")}</Label>
           <Input
             id="locale-filter"
             className="w-16"
@@ -49,7 +52,7 @@ export default function DashboardPagesPage() {
             value={locale}
             onChange={(e) => setLocale(e.target.value.toLowerCase())}
           />
-          <Button onClick={() => setShowCreate((s) => !s)}>{showCreate ? "Annulla" : "Nuova pagina"}</Button>
+          <Button onClick={() => setShowCreate((s) => !s)}>{showCreate ? tc("cancel") : t("newPage")}</Button>
         </div>
       </div>
 
@@ -72,18 +75,18 @@ export default function DashboardPagesPage() {
               <div>
                 <p className="font-serif text-lg text-foreground">{page.title}</p>
                 <p className="text-sm text-muted">
-                  /{page.slug} · {page.locale} · {page.is_published ? "pubblicata" : "bozza"}
+                  /{page.slug} · {page.locale} · {page.is_published ? t("published") : t("draft")}
                 </p>
               </div>
               <Button variant="secondary" onClick={() => setEditingId(editingId === page.id ? null : page.id)}>
-                {editingId === page.id ? "Chiudi" : "Modifica"}
+                {editingId === page.id ? t("close") : t("edit")}
               </Button>
             </div>
             {editingId === page.id && <EditPageForm page={page} onSaved={load} />}
           </Card>
         ))}
         {pages !== null && pages.length === 0 && (
-          <p className="text-sm text-muted">Nessuna pagina trovata per la lingua &quot;{locale}&quot;.</p>
+          <p className="text-sm text-muted">{t("emptyForLocale", { locale })}</p>
         )}
       </div>
     </div>
@@ -92,6 +95,8 @@ export default function DashboardPagesPage() {
 
 function CreatePageForm({ defaultLocale, onCreated }: { defaultLocale: string; onCreated: () => void }) {
   const { authFetch } = useAuth();
+  const t = useTranslations("AdminPages");
+  const tc = useTranslations("Common");
   const [slug, setSlug] = useState("");
   const [locale, setLocale] = useState(defaultLocale);
   const [title, setTitle] = useState("");
@@ -108,21 +113,21 @@ function CreatePageForm({ defaultLocale, onCreated }: { defaultLocale: string; o
       );
       onCreated();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, tc("unexpectedError")));
     }
   }
 
   return (
     <Card className="mb-6">
-      <CardTitle>Nuova pagina</CardTitle>
+      <CardTitle>{t("createTitle")}</CardTitle>
       <form onSubmit={handleSubmit}>
         <div className="grid gap-4 sm:grid-cols-2">
           <FieldGroup>
-            <Label htmlFor="new-page-slug">Slug</Label>
+            <Label htmlFor="new-page-slug">{t("slug")}</Label>
             <Input id="new-page-slug" required value={slug} onChange={(e) => setSlug(e.target.value)} />
           </FieldGroup>
           <FieldGroup>
-            <Label htmlFor="new-page-locale">Lingua</Label>
+            <Label htmlFor="new-page-locale">{t("language")}</Label>
             <Input
               id="new-page-locale"
               required
@@ -133,7 +138,7 @@ function CreatePageForm({ defaultLocale, onCreated }: { defaultLocale: string; o
           </FieldGroup>
         </div>
         <FieldGroup>
-          <Label htmlFor="new-page-title">Titolo</Label>
+          <Label htmlFor="new-page-title">{t("titleField")}</Label>
           <Input id="new-page-title" required value={title} onChange={(e) => setTitle(e.target.value)} />
         </FieldGroup>
         <div className="mb-4">
@@ -142,7 +147,7 @@ function CreatePageForm({ defaultLocale, onCreated }: { defaultLocale: string; o
         <FieldGroup>
           <label className="flex items-center gap-2 text-sm text-foreground">
             <input type="checkbox" checked={isPublished} onChange={(e) => setIsPublished(e.target.checked)} />
-            Pubblica subito
+            {t("publishNow")}
           </label>
         </FieldGroup>
         {error && (
@@ -150,7 +155,7 @@ function CreatePageForm({ defaultLocale, onCreated }: { defaultLocale: string; o
             <Alert kind="error">{error}</Alert>
           </div>
         )}
-        <Button type="submit">Crea</Button>
+        <Button type="submit">{t("create")}</Button>
       </form>
     </Card>
   );
@@ -158,6 +163,8 @@ function CreatePageForm({ defaultLocale, onCreated }: { defaultLocale: string; o
 
 function EditPageForm({ page, onSaved }: { page: Page; onSaved: () => void }) {
   const { authFetch } = useAuth();
+  const t = useTranslations("AdminPages");
+  const tc = useTranslations("Common");
   const [title, setTitle] = useState(page.title);
   const [content, setContent] = useState(page.content);
   const [isPublished, setIsPublished] = useState(page.is_published);
@@ -176,7 +183,7 @@ function EditPageForm({ page, onSaved }: { page: Page; onSaved: () => void }) {
       await authFetch((token) => api.pages.update(token, page.id, { title, content, is_published: isPublished }));
       onSaved();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, tc("unexpectedError")));
     }
   }
 
@@ -194,7 +201,7 @@ function EditPageForm({ page, onSaved }: { page: Page; onSaved: () => void }) {
     <div className="mt-4 border-t border-border pt-4">
       <form onSubmit={handleSave}>
         <FieldGroup>
-          <Label htmlFor={`edit-title-${page.id}`}>Titolo</Label>
+          <Label htmlFor={`edit-title-${page.id}`}>{t("titleField")}</Label>
           <Input id={`edit-title-${page.id}`} value={title} onChange={(e) => setTitle(e.target.value)} />
         </FieldGroup>
         <div className="mb-4">
@@ -203,7 +210,7 @@ function EditPageForm({ page, onSaved }: { page: Page; onSaved: () => void }) {
         <FieldGroup>
           <label className="flex items-center gap-2 text-sm text-foreground">
             <input type="checkbox" checked={isPublished} onChange={(e) => setIsPublished(e.target.checked)} />
-            Pubblicata
+            {t("publishedCheckbox")}
           </label>
         </FieldGroup>
         {error && (
@@ -211,7 +218,7 @@ function EditPageForm({ page, onSaved }: { page: Page; onSaved: () => void }) {
             <Alert kind="error">{error}</Alert>
           </div>
         )}
-        <Button type="submit">Salva</Button>
+        <Button type="submit">{tc("save")}</Button>
       </form>
 
       <TranslationsBar

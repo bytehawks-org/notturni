@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
@@ -8,97 +9,28 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { CategorySelect } from "@/components/editor/CategorySelect";
 import { CoverImageUpload } from "@/components/editor/CoverImageUpload";
-import { RichTextEditor } from "@/components/editor/RichTextEditor";
+import { EditorRail } from "@/components/editor/EditorRail";
+import { PostCommentsModeControl, PostCrawlingControl } from "@/components/editor/PostMetaControls";
+import { PostStatusControl } from "@/components/editor/PostStatusControl";
+import { PublicationSelect } from "@/components/editor/PublicationSelect";
+import { RichTextEditor } from "@/components/editor/RichTextEditorLazy";
 import { TagInput } from "@/components/editor/TagInput";
 import { TranslationsBar } from "@/components/editor/TranslationsBar";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import type { SensitivityCategory } from "@/lib/content-media";
-import { COMMENTS_MODE_LABELS, type CommentsMode, type Post, type PostNote, type PostTranslationSummary } from "@/lib/types";
+import { displayPostStatus } from "@/lib/post-status";
+import { type CommentsMode, type Post, type PostNote, type PostTranslationSummary } from "@/lib/types";
 
 const FORM_ID = "edit-post-form";
 
-function errorMessage(err: unknown): string {
-  return err instanceof ApiClientError ? err.message : "Errore imprevisto.";
+function errorMessage(err: unknown, fallback: string): string {
+  return err instanceof ApiClientError ? err.message : fallback;
 }
 
-/** Stato di pubblicazione nella toolbar, stesso stile di CategorySelect. La
- * sola transizione possibile da qui è bozza → pubblicato (non c'è un modo
- * per tornare a bozza una volta pubblicato): una volta pubblicato il select
- * mostra una singola opzione disattivata, non un vero multi-stato. */
-function PostStatusSelect({ status, onPublish }: { status: Post["status"]; onPublish: () => void }) {
+function RailLabel({ children }: { children: React.ReactNode }) {
   return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[11px] font-medium uppercase tracking-wide text-muted">Stato</span>
-      <select
-        value={status}
-        disabled={status === "published"}
-        onChange={(e) => {
-          if (e.target.value === "published") onPublish();
-        }}
-        className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-70"
-      >
-        <option value="draft">Bozza</option>
-        <option value="published">{status === "published" ? "Pubblicato" : "Pubblica ora"}</option>
-      </select>
-    </label>
-  );
-}
-
-/** Override di Blog.comments_mode per il solo post corrente; "" = eredita
- * dal blog (valore locale del <select>, tradotto in null verso l'API). */
-function PostCommentsModeSelect({
-  value,
-  onChange,
-}: {
-  value: CommentsMode | null;
-  onChange: (value: CommentsMode | null) => void;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[11px] font-medium uppercase tracking-wide text-muted">Commenti</span>
-      <select
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value === "" ? null : (e.target.value as CommentsMode))}
-        className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/40"
-      >
-        <option value="">Come il blog</option>
-        {(Object.keys(COMMENTS_MODE_LABELS) as CommentsMode[]).map((m) => (
-          <option key={m} value={m}>
-            {COMMENTS_MODE_LABELS[m]}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-/** Override di Blog.search_indexing_enabled/ai_crawling_enabled per il solo
- * post corrente; "" = eredita dal blog (valore locale del <select>, tradotto
- * in null verso l'API) — non può riaprire un crawler già escluso dal blog
- * (backend/app/domain/seo.py), solo restringerlo ulteriormente. */
-function PostCrawlingSelect({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: boolean | null;
-  onChange: (value: boolean | null) => void;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[11px] font-medium uppercase tracking-wide text-muted">{label}</span>
-      <select
-        value={value === null ? "" : value ? "true" : "false"}
-        onChange={(e) => onChange(e.target.value === "" ? null : e.target.value === "true")}
-        className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/40"
-      >
-        <option value="">Come il blog</option>
-        <option value="true">Consenti</option>
-        <option value="false">Blocca</option>
-      </select>
-    </label>
+    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[.04em] text-muted">{children}</span>
   );
 }
 
@@ -106,6 +38,9 @@ export default function PostEditorPage() {
   const params = useParams<{ slug: string; postId: string }>();
   const router = useRouter();
   const { user, accessToken, authFetch } = useAuth();
+  const t = useTranslations("PostEditorPage");
+  const tc = useTranslations("Common");
+  const tStatus = useTranslations("Status");
 
   const [post, setPost] = useState<Post | null>(null);
   const [title, setTitle] = useState("");
@@ -115,6 +50,7 @@ export default function PostEditorPage() {
   const [coverImageCategories, setCoverImageCategories] = useState<SensitivityCategory[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [publicationId, setPublicationId] = useState<string | null>(null);
   const [commentsMode, setCommentsMode] = useState<CommentsMode | null>(null);
   const [searchIndexingEnabled, setSearchIndexingEnabled] = useState<boolean | null>(null);
   const [aiCrawlingEnabled, setAiCrawlingEnabled] = useState<boolean | null>(null);
@@ -138,14 +74,15 @@ export default function PostEditorPage() {
         setCoverImageCategories(p.cover_image_categories);
         setTags(p.manual_tags);
         setCategoryId(p.category?.id ?? null);
+        setPublicationId(p.publication?.id ?? null);
         setCommentsMode(p.comments_mode);
         setSearchIndexingEnabled(p.search_indexing_enabled);
         setAiCrawlingEnabled(p.ai_crawling_enabled);
         setNotes(p.notes);
       })
-      .catch((err) => setError(errorMessage(err)));
+      .catch((err) => setError(errorMessage(err, tc("unexpectedError"))));
     api.posts.translations(params.postId).then(setTranslations).catch(() => undefined);
-  }, [params.postId, accessToken]);
+  }, [params.postId, accessToken, tc]);
 
   // Le lingue di fallback del profilo (vedi dashboard/profile) popolano il
   // selettore lingua in "Aggiungi traduzione", invece di dover scrivere la sigla.
@@ -173,6 +110,7 @@ export default function PostEditorPage() {
           cover_image_categories: coverImageCategories,
           tags,
           category_id: categoryId,
+          publication_id: publicationId,
           comments_mode: commentsMode,
           search_indexing_enabled: searchIndexingEnabled,
           ai_crawling_enabled: aiCrawlingEnabled,
@@ -183,18 +121,29 @@ export default function PostEditorPage() {
       setNotes(updated.notes);
       setSaved(true);
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, tc("unexpectedError")));
     } finally {
       setSaving(false);
     }
   }
 
-  async function handlePublish() {
+  async function handlePublish(publishedAt?: string) {
     try {
-      const updated = await authFetch((token) => api.posts.publish(token, params.postId));
+      const updated = await authFetch((token) => api.posts.publish(token, params.postId, publishedAt));
       setPost(updated);
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, tc("unexpectedError")));
+    }
+  }
+
+  async function handleChangeStatus(target: "draft" | "review") {
+    try {
+      const updated = await authFetch((token) =>
+        target === "review" ? api.posts.submitForReview(token, params.postId) : api.posts.returnToDraft(token, params.postId)
+      );
+      setPost(updated);
+    } catch (err) {
+      setError(errorMessage(err, tc("unexpectedError")));
     }
   }
 
@@ -211,97 +160,126 @@ export default function PostEditorPage() {
     router.push(`/dashboard/blogs/${params.slug}/posts/${translated.id}`);
   }
 
-  if (!post) return error ? <Alert kind="error">{error}</Alert> : <p className="text-sm text-muted">Caricamento…</p>;
+  if (!post) return error ? <Alert kind="error">{error}</Alert> : <p className="text-sm text-muted">{t("loading")}</p>;
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-y-2">
-        <Link href={`/dashboard/blogs/${params.slug}`} className="text-sm text-muted hover:text-foreground">
-          ← Torna al blog
-        </Link>
+    <div className="mx-auto max-w-[1080px]">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-y-2 border-b border-border pb-4">
+        <div className="flex min-w-0 items-center gap-3 text-sm text-muted">
+          <Link href={`/dashboard/blogs/${params.slug}`} className="hover:text-foreground">
+            ‹ {params.slug}
+          </Link>
+          <span className="text-border">|</span>
+          <span className="font-mono text-xs">
+            {tStatus(displayPostStatus(post))} · {saving ? t("savingInline") : t("savedInline")}
+          </span>
+        </div>
         <div className="flex flex-wrap items-center gap-4">
           {post.status === "published" && (
-            <Link href={post.permalink} className="text-sm text-primary hover:underline">
-              Vedi
+            <Link href={post.permalink} className="text-sm text-muted hover:text-foreground">
+              {t("preview")}
             </Link>
           )}
           <Button type="submit" form={FORM_ID} variant="secondary" disabled={saving}>
-            {saving ? "Salvataggio…" : "Salva"}
+            {saving ? t("savingButton") : t("saveButton")}
           </Button>
         </div>
       </div>
 
-      <form id={FORM_ID} onSubmit={handleSave}>
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          required
-          className="mb-8 w-full border-0 bg-transparent font-serif text-3xl font-semibold leading-tight text-foreground placeholder:text-muted/70 focus:outline-none sm:text-5xl"
-        />
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <form id={FORM_ID} onSubmit={handleSave} className="mx-auto w-full max-w-[680px]">
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            required
+            className="mb-6 w-full border-0 bg-transparent font-serif text-3xl font-semibold leading-tight text-foreground placeholder:text-muted/70 focus:outline-none sm:text-[42px]"
+          />
 
-        <div className="mb-8">
-          <TagInput value={tags} onChange={setTags} />
-        </div>
+          <div className="mb-8">
+            <CoverImageUpload
+              value={coverImageUrl}
+              isSensitive={coverImageIsSensitive}
+              categories={coverImageCategories}
+              onChange={(url, sensitive, categories) => {
+                setCoverImageUrl(url);
+                setCoverImageIsSensitive(sensitive);
+                setCoverImageCategories(categories);
+              }}
+              onUpload={(file) => authFetch((token) => api.blogs.uploadMedia(token, params.slug, file))}
+            />
+          </div>
 
-        <div className="mb-8">
-          <CoverImageUpload
-            value={coverImageUrl}
-            isSensitive={coverImageIsSensitive}
-            categories={coverImageCategories}
-            onChange={(url, sensitive, categories) => {
-              setCoverImageUrl(url);
-              setCoverImageIsSensitive(sensitive);
-              setCoverImageCategories(categories);
-            }}
+          <RichTextEditor
+            value={content}
+            onChange={setContent}
             blogSlug={params.slug}
             authFetch={authFetch}
+            notes={notes}
+            onNotesChange={setNotes}
           />
-        </div>
 
-        <RichTextEditor
-          value={content}
-          onChange={setContent}
-          blogSlug={params.slug}
-          authFetch={authFetch}
-          notes={notes}
-          onNotesChange={setNotes}
-          toolbarEnd={
-            <>
-              <CategorySelect blogSlug={params.slug} value={categoryId} onChange={setCategoryId} />
-              <PostCommentsModeSelect value={commentsMode} onChange={setCommentsMode} />
-              <PostCrawlingSelect
-                label="Motori di ricerca"
-                value={searchIndexingEnabled}
-                onChange={setSearchIndexingEnabled}
-              />
-              <PostCrawlingSelect label="Crawler IA/LLM" value={aiCrawlingEnabled} onChange={setAiCrawlingEnabled} />
-              <PostStatusSelect status={post.status} onPublish={handlePublish} />
-            </>
-          }
+          {error && (
+            <div className="mt-6">
+              <Alert kind="error">{error}</Alert>
+            </div>
+          )}
+          {saved && (
+            <div className="mt-6">
+              <Alert kind="success">{t("savedAlert")}</Alert>
+            </div>
+          )}
+        </form>
+
+        <EditorRail
+          tabs={[
+            {
+              id: "post",
+              label: t("postTab"),
+              content: (
+                <>
+                  <PostStatusControl post={post} onChangeStatus={handleChangeStatus} onPublish={handlePublish} />
+                  <div>
+                    <RailLabel>{t("slug")}</RailLabel>
+                    <span className="block truncate rounded-lg border border-border bg-surface px-3 py-2.5 font-mono text-[13px] text-muted">
+                      /{params.slug}/<span className="text-foreground">{post.slug}</span>
+                    </span>
+                  </div>
+                  <CategorySelect blogSlug={params.slug} value={categoryId} onChange={setCategoryId} />
+                  <PublicationSelect blogSlug={params.slug} value={publicationId} onChange={setPublicationId} />
+                  <div>
+                    <RailLabel>{t("tags")}</RailLabel>
+                    <TagInput value={tags} onChange={setTags} />
+                  </div>
+                  <PostCommentsModeControl value={commentsMode} onChange={setCommentsMode} />
+                  <PostCrawlingControl
+                    label={t("searchEngines")}
+                    value={searchIndexingEnabled}
+                    onChange={setSearchIndexingEnabled}
+                  />
+                  <PostCrawlingControl label={t("aiCrawlers")} value={aiCrawlingEnabled} onChange={setAiCrawlingEnabled} />
+                </>
+              ),
+            },
+            {
+              id: "translations",
+              label: t("translationsTab"),
+              badge: translations.length,
+              content: (
+                <TranslationsBar
+                  currentId={post.id}
+                  currentLocale={post.locale}
+                  blogSlug={params.slug}
+                  translations={translations}
+                  hrefFor={(id) => `/dashboard/blogs/${params.slug}/posts/${id}`}
+                  suggestedLocales={fallbackLanguages}
+                  authFetch={authFetch}
+                  onAddTranslation={handleAddTranslation}
+                />
+              ),
+            },
+          ]}
         />
-
-        {error && (
-          <div className="mt-6">
-            <Alert kind="error">{error}</Alert>
-          </div>
-        )}
-        {saved && (
-          <div className="mt-6">
-            <Alert kind="success">Salvato.</Alert>
-          </div>
-        )}
-      </form>
-
-      <TranslationsBar
-        currentId={post.id}
-        currentLocale={post.locale}
-        blogSlug={params.slug}
-        translations={translations}
-        hrefFor={(id) => `/dashboard/blogs/${params.slug}/posts/${id}`}
-        suggestedLocales={fallbackLanguages}
-        authFetch={authFetch}
-        onAddTranslation={handleAddTranslation}
-      />
+      </div>
     </div>
   );
 }

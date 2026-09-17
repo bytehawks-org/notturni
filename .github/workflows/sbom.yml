@@ -10,6 +10,10 @@ name: SBOM
 #     dipendenze di sistema installate nel Dockerfile), ma più lento.
 #     "moderation" (immagine pesante, dipendenze ML torch/transformers) è
 #     escluso da questo livello: la SBOM sorgenti la copre comunque.
+# Ogni SBOM è un artifact scaricabile del workflow run (retention 180 giorni)
+# più un conteggio componenti nel riepilogo della run (tab "Summary"),
+# leggibile senza scaricare nulla — solo per farsi un'idea delle dimensioni,
+# il dettaglio completo resta nel file CycloneDX.
 on:
   push:
     branches:
@@ -65,7 +69,25 @@ jobs:
             sbom-backend.cyclonedx.json
             sbom-frontend.cyclonedx.json
             sbom-moderation.cyclonedx.json
-          retention-days: 90
+          # 180 giorni invece dei 90 di default: la SBOM sorgenti resta
+          # comunque un artifact del workflow run (non un asset persistente
+          # come una release), ma così sopravvive più a lungo tra due
+          # scansioni di sicurezza fatte a distanza di mesi.
+          retention-days: 180
+
+      - name: Riepilogo componenti nella run
+        # Conteggio componenti per sotto-progetto nel riepilogo della run
+        # (tab "Summary"), visibile senza scaricare gli artifact.
+        if: always()
+        run: |
+          {
+            echo "## SBOM sorgenti — componenti rilevati"
+            echo "| Sotto-progetto | Componenti |"
+            echo "|---|---|"
+            echo "| backend | $(jq '.components | length' sbom-backend.cyclonedx.json 2>/dev/null || echo "n/d") |"
+            echo "| frontend | $(jq '.components | length' sbom-frontend.cyclonedx.json 2>/dev/null || echo "n/d") |"
+            echo "| moderation | $(jq '.components | length' sbom-moderation.cyclonedx.json 2>/dev/null || echo "n/d") |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   sbom-immagini:
     name: SBOM immagini container
@@ -104,4 +126,15 @@ jobs:
           path: |
             sbom-image-backend.cyclonedx.json
             sbom-image-frontend.cyclonedx.json
-          retention-days: 90
+          retention-days: 180
+
+      - name: Riepilogo componenti nella run
+        if: always()
+        run: |
+          {
+            echo "## SBOM immagini container — componenti rilevati"
+            echo "| Immagine | Componenti |"
+            echo "|---|---|"
+            echo "| backend | $(jq '.components | length' sbom-image-backend.cyclonedx.json 2>/dev/null || echo "n/d") |"
+            echo "| frontend | $(jq '.components | length' sbom-image-frontend.cyclonedx.json 2>/dev/null || echo "n/d") |"
+          } >> "$GITHUB_STEP_SUMMARY"

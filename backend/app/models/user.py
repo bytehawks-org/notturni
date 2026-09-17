@@ -1,7 +1,8 @@
 import enum
 import uuid
+from datetime import datetime
 
-from sqlalchemy import ARRAY, Boolean, Enum, String, Text
+from sqlalchemy import ARRAY, Boolean, DateTime, Enum, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
@@ -28,12 +29,32 @@ class PostAuthorNameStyle(str, enum.Enum):
     USERNAME = "username"
     FULL_NAME = "full_name"
     DISPLAY_NAME = "display_name"
+    # Dominio custom verificato (User.verified_domain) come handle pubblico
+    # (todo/USERS.md #2 seguito): se il dominio non è (più) verificato,
+    # ricade sullo username come gli altri stili (vedi resolve_personal_display_name).
+    VERIFIED_DOMAIN = "verified_domain"
+
+
+class VerificationTier(str, enum.Enum):
+    """Sigillo di verifica del profilo (stile Bluesky/Instagram/Twitter).
+    Solo BRONZE ha oggi una logica reale che lo assegna (dominio custom
+    verificato via DNS, app/domain/custom_domains.py) — SILVER/GOLD/BLUE
+    sono riservati per future integrazioni, come richiesto esplicitamente."""
+
+    NONE = "none"
+    BRONZE = "bronze"
+    SILVER = "silver"
+    GOLD = "gold"
+    BLUE = "blue"
 
 
 class User(Base, UUIDPKMixin, TimestampMixin):
     __tablename__ = "users"
 
     username: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    # cooldown di 5 giorni tra due cambi (CLAUDE.md #5): null = mai cambiato,
+    # nessun vincolo al primo cambio. Controllato in PATCH /users/me.
+    username_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     # nullable: un utente creato solo via SSO può non avere una password locale
     hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -101,12 +122,37 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     # tra S3/MinIO e storage locale su filesystem senza persistere un host
     # specifico.
     avatar_object_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # B6: lingua dell'interfaccia scelta dall'utente (null = default di
+    # piattaforma). Solo etichette/menu, non i contenuti.
+    ui_locale: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    # Sigillo di verifica (CLAUDE.md #5): assegnato oggi solo alla verifica
+    # di un dominio custom via DNS (bronzo), vedi app/domain/custom_domains.py.
+    verification_tier: Mapped[VerificationTier] = mapped_column(
+        Enum(
+            VerificationTier,
+            name="verification_tier",
+            native_enum=True,
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+        ),
+        default=VerificationTier.NONE,
+        nullable=False,
+    )
+    # Copia denormalizzata di CustomDomain.domain, valorizzata solo quando lo
+    # stato è VERIFIED (tenuta in sync in app/api/v1/users.py, stessi punti
+    # che aggiornano verification_tier: verify_my_domain/delete_my_domain).
+    # Evita di dover fare eager-load della relazione `custom_domain` nei
+    # tanti punti che risolvono il nome pubblico dell'utente (CLAUDE.md #4:
+    # un accesso lazy a una relazione fuori dal contesto della sessione
+    # async fallisce con MissingGreenlet) — qui basta una colonna semplice.
+    verified_domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     blogs: Mapped[list["Blog"]] = relationship(back_populates="owner")
     memberships: Mapped[list["BlogMembership"]] = relationship(back_populates="user")
     api_tokens: Mapped[list["ApiToken"]] = relationship(back_populates="user")
     sessions: Mapped[list["UserSession"]] = relationship(back_populates="user")
     mfa_email_codes: Mapped[list["MfaEmailCode"]] = relationship(back_populates="user")
+    email_change_requests: Mapped[list["EmailChangeRequest"]] = relationship(back_populates="user")
+    custom_domain: Mapped["CustomDomain | None"] = relationship(back_populates="user", uselist=False)
     sso_identities: Mapped[list["SsoIdentity"]] = relationship(back_populates="user")
     social_links: Mapped[list["SocialLink"]] = relationship(
         back_populates="user", cascade="all, delete-orphan", order_by="SocialLink.position"

@@ -18,7 +18,7 @@ import io
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Form, FastAPI, File, HTTPException, UploadFile
 from PIL import Image
 from pydantic import BaseModel
 from transformers import pipeline
@@ -72,7 +72,7 @@ async def health() -> dict[str, str]:
 
 
 @app.post("/classify", response_model=ClassifyResponse)
-async def classify(file: UploadFile = File(...)) -> ClassifyResponse:
+async def classify(file: UploadFile = File(...), threshold: float | None = Form(None)) -> ClassifyResponse:
     content = await file.read()
     try:
         image = Image.open(io.BytesIO(content)).convert("RGB")
@@ -82,5 +82,7 @@ async def classify(file: UploadFile = File(...)) -> ClassifyResponse:
     classifier = get_classifier()
     results = classifier(image)
     top = max(results, key=lambda r: r["score"])
-    is_sensitive = top["label"] == SENSITIVE_LABEL and top["score"] >= THRESHOLD
+    # `threshold` opzionale dal backend (platform_config.moderation_threshold, B6)
+    effective = threshold if threshold is not None and 0 < threshold <= 1 else THRESHOLD
+    is_sensitive = top["label"] == SENSITIVE_LABEL and top["score"] >= effective
     return ClassifyResponse(is_sensitive=is_sensitive, label=top["label"], score=top["score"])
