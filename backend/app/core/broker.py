@@ -39,10 +39,13 @@ def connect_with_retry(
     raise AssertionError("irraggiungibile")
 
 
-def publish_email_otp(email: str, code: str) -> None:
+def publish_email_otp(email: str, code: str, *, purpose: str = "login") -> None:
     """Accoda l'invio del codice OTP via email (CLAUDE.md #3) — inviato
     davvero via SMTP dal consumer, vedi app/workers/email_otp_consumer.py e
-    app/core/mail.py."""
+    app/core/mail.py. `purpose` sceglie solo oggetto/testo dell'email lato
+    consumer ("login" di default, MFA/cambio email; "password_reset" per il
+    flusso "password dimenticata") — stessa coda e medesimo formato di
+    codice, nessuna differenza di trasporto."""
     connection = pika.BlockingConnection(pika.URLParameters(settings.rabbitmq_url))
     try:
         channel = connection.channel()
@@ -50,7 +53,7 @@ def publish_email_otp(email: str, code: str) -> None:
         channel.basic_publish(
             exchange="",
             routing_key=EMAIL_OTP_QUEUE,
-            body=json.dumps({"email": email, "code": code}),
+            body=json.dumps({"email": email, "code": code, "purpose": purpose}),
             properties=pika.BasicProperties(delivery_mode=2),
         )
     finally:

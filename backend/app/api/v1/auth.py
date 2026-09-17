@@ -31,6 +31,7 @@ from app.domain.mfa import (
     verify_email_otp,
     verify_totp_code,
 )
+from app.domain.password_reset import request_password_reset, reset_password
 from app.domain.sso import ExternalProfile, SsoLinkPending, complete_pending_link, link_or_create_user
 from app.models.audit_log import AuditActorType
 from app.models.sso_identity import SsoProvider
@@ -45,6 +46,58 @@ router = APIRouter()
 LOGIN_IP_RATE_LIMIT = 20
 LOGIN_EMAIL_RATE_LIMIT = 5
 LOGIN_RATE_LIMIT_WINDOW_SECONDS = 300
+
+# Stesso principio sui codici MFA (TOTP a 6 cifre, OTP email): senza un
+# limite un attaccante con la sola sessione/challenge può provare in loop.
+# Per IP (contiene bot) e per soggetto del codice (utente autenticato per
+# setup/confirm, subject del challenge per il login) — stessa coppia di
+# limiti del login.
+MFA_CODE_IP_RATE_LIMIT = 20
+MFA_CODE_SUBJECT_RATE_LIMIT = 8
+MFA_CODE_RATE_LIMIT_WINDOW_SECONDS = 300
+
+
+async def _enforce_mfa_rate_limit(request: Request, *, subject: str) -> None:
+    ip = client_ip(request)
+    if ip is not None:
+        await enforce_rate_limit(
+            f"ratelimit:mfa:ip:{ip}",
+            limit=MFA_CODE_IP_RATE_LIMIT,
+            window_seconds=MFA_CODE_RATE_LIMIT_WINDOW_SECONDS,
+            message="Troppi tentativi di verifica da questo indirizzo. Riprova tra qualche minuto.",
+        )
+    await enforce_rate_limit(
+        f"ratelimit:mfa:subject:{subject}",
+        limit=MFA_CODE_SUBJECT_RATE_LIMIT,
+        window_seconds=MFA_CODE_RATE_LIMIT_WINDOW_SECONDS,
+        message="Troppi tentativi di verifica per questo account. Riprova tra qualche minuto.",
+    )
+
+# "Password dimenticata": stesso principio del login, per IP (contiene bot
+# che provano molte email) e per email (contiene tentativi mirati). Applicato
+# sia alla richiesta del codice sia alla sua verifica — un codice a 6 cifre è
+# indovinabile in un numero di tentativi gestibile senza un limite.
+PASSWORD_RESET_IP_RATE_LIMIT = 20
+PASSWORD_RESET_EMAIL_RATE_LIMIT = 5
+PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS = 300
+
+
+async def _enforce_password_reset_rate_limit(request: Request, *, email: str) -> None:
+    ip = client_ip(request)
+    if ip is not None:
+        await enforce_rate_limit(
+            f"ratelimit:password-reset:ip:{ip}",
+            limit=PASSWORD_RESET_IP_RATE_LIMIT,
+            window_seconds=PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS,
+            message="Troppi tentativi da questo indirizzo. Riprova tra qualche minuto.",
+        )
+    await enforce_rate_limit(
+        f"ratelimit:password-reset:email:{email.lower()}",
+        limit=PASSWORD_RESET_EMAIL_RATE_LIMIT,
+        window_seconds=PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS,
+        message="Troppi tentativi per questo indirizzo. Riprova tra qualche minuto.",
+    )
+
 
 # Sessione (ROADMAP.md "Sessione in localStorage"): il refresh token vive
 # solo in un cookie httpOnly, mai in JSON/localStorage — l'access token
@@ -161,6 +214,16 @@ class MfaCodeRequest(BaseModel):
     code: str
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    code: str
+    new_password: str
+
+
 # ---- registrazione / login --------------------------------------------------
 
 
@@ -245,6 +308,8 @@ async def verify_mfa(
     except ValueError as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
 
+    await _enforce_mfa_rate_limit(request, subject=claims["sub"])
+
     user = await session.get(User, uuid.UUID(claims["sub"]))
     if user is None or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Utente non valido.")
@@ -304,6 +369,31 @@ async def me(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
+# ---- password dimenticata ---------------------------------------------------
+
+
+@router.post("/password/forgot", status_code=status.HTTP_202_ACCEPTED)
+async def forgot_password(
+    payload: ForgotPasswordRequest, request: Request, session: AsyncSession = Depends(get_session)
+) -> None:
+    """Risponde sempre 202, email esistente o no (mai enumerabile) — se
+    l'email corrisponde a un account, accoda un codice di reset via
+    RabbitMQ (stesso meccanismo dell'OTP MFA, purpose="password_reset")."""
+    await _enforce_password_reset_rate_limit(request, email=payload.email)
+    await request_password_reset(session, payload.email)
+
+
+@router.post("/password/reset", status_code=status.HTTP_204_NO_CONTENT)
+async def reset_password_endpoint(
+    payload: ResetPasswordRequest, request: Request, session: AsyncSession = Depends(get_session)
+) -> None:
+    await _enforce_password_reset_rate_limit(request, email=payload.email)
+    try:
+        await reset_password(session, email=payload.email, code=payload.code, new_password=payload.new_password)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
 # ---- MFA: gestione (richiede sessione attiva) -------------------------------
 
 
@@ -328,9 +418,11 @@ async def setup_totp(
 @router.post("/mfa/totp/confirm", status_code=status.HTTP_204_NO_CONTENT)
 async def confirm_totp(
     payload: MfaCodeRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> None:
+    await _enforce_mfa_rate_limit(request, subject=str(current_user.id))
     if current_user.mfa_totp_secret is None or not verify_totp_code(
         current_user.mfa_totp_secret, payload.code
     ):
@@ -351,9 +443,11 @@ async def setup_email_mfa(
 @router.post("/mfa/email/confirm", status_code=status.HTTP_204_NO_CONTENT)
 async def confirm_email_mfa(
     payload: MfaCodeRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> None:
+    await _enforce_mfa_rate_limit(request, subject=str(current_user.id))
     if not await verify_email_otp(session, current_user, payload.code):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Codice non valido o scaduto.")
     current_user.mfa_enabled = True

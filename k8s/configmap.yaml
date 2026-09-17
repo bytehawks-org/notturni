@@ -80,15 +80,17 @@ data:
   # modalità di commenti non è selezionabile su questa istanza.
   NOCT_TURNSTILE_SITE_KEY: ""
 
-  # placeholder: CORS ad origine esatta non copre i sottodomini per-blog
-  # (nomeutente.notturni.eu) — da rivedere con un match a wildcard quando le
-  # pagine pubbliche dei blog chiameranno l'API dal browser.
   # ATTENZIONE per il test di stasera: senza dominio reale (ingress.yaml solo
   # http) il browser chiama l'API da "http://<ip-nodo>" — questa variabile
   # va aggiornata di conseguenza, altrimenti ogni richiesta del frontend
   # all'API viene bloccata dal browser come cross-origin non ammessa (nessun
   # errore lato backend: si vede solo in console/Network del browser).
   NOCT_CORS_ORIGINS: "https://notturni.eu"
+  # match a wildcard per i sottodomini per-blog (slug.notturni.eu,
+  # ingressroute.yaml): un'origine esatta per ciascuno non è enumerabile in
+  # anticipo. Con dominio reale + TLS attivi; per il test di stasera senza
+  # dominio (solo IP nodo) non c'è alcun sottodominio da coprire, resta vuoto.
+  NOCT_CORS_ORIGIN_REGEX: "https://([a-z0-9-]+\\.)?notturni\\.eu"
 
   # Cookie di sessione (refresh token httpOnly, backend/API.md).
   # NOCT_SESSION_COOKIE_SECURE="false" perché ingress.yaml, nella sua

@@ -48,9 +48,18 @@ build, non a runtime — vedi nota più sotto).
   `initdb` si rifiuta di inizializzare una data directory non vuota —
   fallirebbe al primo avvio senza questo accorgimento.
 - `redis.yaml` e `rabbitmq.yaml` non hanno persistenza in questo primo draft.
-- `ingress.yaml` gestisce un solo host path-based; il routing per sottodominio/blog
-  e per dominio custom utente è demandato a un lavoro successivo (vedi
-  [ROADMAP.md](../ROADMAP.md#3-architettura-stack-e-infrastruttura)).
+- `ingress.yaml` gestisce il routing catch-all path-based; il routing per
+  sottodominio-per-blog è invece in `ingressroute.yaml` (`IngressRoute`
+  Traefik, `HostRegexp` su `*.notturni.eu`) — le due risorse convivono, la
+  seconda non sostituisce la prima. Entrambe nella loro versione "test" (solo
+  `http`, entryPoint `web`): note di produzione (TLS wildcard via DNS-01,
+  `NOCT_CORS_ORIGIN_REGEX`/`NOCT_SESSION_COOKIE_DOMAIN`) in cima a
+  `ingressroute.yaml`. Il dominio custom per-utente resta invece un lavoro
+  successivo (vedi [ROADMAP.md](../ROADMAP.md#3-architettura-stack-e-infrastruttura)).
+- `middleware-security-headers.yaml` (Traefik `Middleware`): CSP/HSTS/
+  `X-Content-Type-Options: nosniff` minimi, applicato a entrambe le risorse
+  sopra (annotazione su `ingress.yaml`, campo `middlewares` su
+  `ingressroute.yaml`) — un solo posto da tenere aggiornato.
 - MinIO non è esposto pubblicamente da questi manifest (nessuna regola Ingress
   dedicata): `NOCT_S3_PUBLIC_URL` in `configmap.yaml` è un placeholder,
   senza un'esposizione reale gli avatar caricati non saranno raggiungibili
