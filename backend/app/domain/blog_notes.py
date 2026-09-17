@@ -5,6 +5,7 @@ import re
 import unicodedata
 import uuid
 from typing import Iterable
+from urllib.parse import urlparse
 
 from app.models.blog_note import NOTE_KINDS, BlogNote
 
@@ -29,11 +30,18 @@ def extract_url(content: str) -> str | None:
     return url.group(0).rstrip(".,;") if url else None
 
 
+def _is_doi_url(url: str) -> bool:
+    """Confronto sull'host effettivo, non una substring: `evil.com/?x=doi.org`
+    o `notdoi.org` non devono essere scambiati per un link DOI."""
+    hostname = urlparse(url).hostname
+    return hostname is not None and (hostname == "doi.org" or hostname.endswith(".doi.org"))
+
+
 def guess_kind(content: str, url: str | None) -> str:
     """Stima grossolana, sempre correggibile dalla libreria: DOI → articolo,
     URL → web, "anno + titolo" (es. "Zerby, C. The Devil's Details. 2002.")
     → libro, altrimenti nota dell'autore."""
-    if url and "doi.org" in url:
+    if url and _is_doi_url(url):
         return "article"
     if url:
         return "web"
@@ -105,15 +113,31 @@ def to_bibtex(notes: Iterable[BlogNote]) -> str:
     return "\n\n".join(entries) + ("\n" if entries else "")
 
 
-_ENTRY_RE = re.compile(r"@(\w+)\s*\{\s*([^,\s]*)\s*,(.*?)\n\}", re.S)
+# Gruppi atomici `(?>...)` intorno agli `\s*` adiacenti a `[^,\s]*` (che non
+# può mai sovrapporsi a uno spazio): senza, per un input con molti spazi e
+# nessuna `,` di chiusura il motore prova ogni modo di dividere quella
+# sequenza di spazi fra i due `\s*` prima di fallire — O(n²) per voce non
+# valida, sfruttabile come DoS su un endpoint autenticato senza limite di
+# lunghezza sull'input (CodeQL py/polynomial-redos, confermato empiricamente:
+# ~0.8s per 40.000 spazi prima della fix, sub-millisecondo dopo).
+_ENTRY_RE = re.compile(r"@(\w+)(?>\s*)\{(?>\s*)([^,\s]*)(?>\s*),(.*?)\n\}", re.S)
 _FIELD_RE = re.compile(r"(\w+)\s*=\s*(\{(?:[^{}]|\{[^{}]*\})*\}|\"[^\"]*\")", re.S)
+
+# Limite di lunghezza sull'input grezzo (difesa in profondità, oltre alla fix
+# della regex sopra): un import BibTeX legittimo non ha bisogno di megabyte di
+# testo, e mette un tetto assoluto al costo di qualunque pattern, noto o no,
+# che dovesse rivelarsi comunque costoso su input patologici.
+MAX_BIBTEX_LENGTH = 200_000
 
 
 def parse_bibtex(text: str) -> list[dict]:
     """Parser minimale: per ogni voce ricava i campi strutturati (title/
     author/source/issued/isbn/doi/url) più tipo e testo (`note` se presente,
     altrimenti "Autore. Titolo. Editore, anno.", sintetizzato dagli stessi
-    campi strutturati)."""
+    campi strutturati). Solleva `ValueError` oltre `MAX_BIBTEX_LENGTH` — vedi
+    il commento su `_ENTRY_RE` per il perché di un tetto esplicito."""
+    if len(text) > MAX_BIBTEX_LENGTH:
+        raise ValueError(f"Testo BibTeX troppo lungo (massimo {MAX_BIBTEX_LENGTH} caratteri).")
     out = []
     for m in _ENTRY_RE.finditer(text):
         entry_type = m.group(1).lower()

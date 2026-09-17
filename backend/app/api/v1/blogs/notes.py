@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 
 from fastapi import Depends, HTTPException, Response, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +15,7 @@ from app.api.v1.blogs._common import _get_blog_or_404, _require_blog_write_acces
 from app.api.v1.blogs._router import router
 from app.core.database import get_session
 from app.domain.authorization import get_membership_role
-from app.domain.blog_notes import find_duplicate_groups, normalize_note, parse_bibtex, to_bibtex
+from app.domain.blog_notes import MAX_BIBTEX_LENGTH, find_duplicate_groups, normalize_note, parse_bibtex, to_bibtex
 from app.models.blog import Blog
 from app.models.blog_note import NOTE_KINDS, BlogNote
 from app.models.post import Post
@@ -83,7 +83,10 @@ class MergeRequest(BaseModel):
 
 
 class ImportRequest(BaseModel):
-    bibtex: str
+    # MAX_BIBTEX_LENGTH (app/domain/blog_notes.py): rifiutato qui con 422
+    # invece che raggiungere il parser, stesso limite comunque applicato lì
+    # a difesa in profondità.
+    bibtex: str = Field(max_length=MAX_BIBTEX_LENGTH)
 
 
 async def _require_member(session: AsyncSession, user: User, blog: Blog) -> None:
