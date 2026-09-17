@@ -27,7 +27,7 @@ import re
 import socket
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 import httpx
 from sqlalchemy import select
@@ -78,6 +78,27 @@ def _resolve_is_safe(hostname: str) -> bool:
     return all(not _is_blocked_ip(info[4][0]) for info in infos)
 
 
+def _resolve_pinned_ip(hostname: str) -> str | None:
+    """Come `_resolve_is_safe`, ma ritorna l'indirizzo risolto invece di un
+    booleano: usato per il *pinning* IP di `fetch_link_preview` — connettersi
+    direttamente all'IP verificato invece di lasciare che sia httpx a
+    ri-risolvere l'hostname al momento della richiesta chiude la finestra di
+    DNS rebinding fra le due risoluzioni (un DNS malevolo può rispondere con
+    un IP pubblico alla prima verifica e uno privato alla seconda) — non solo
+    teorica: è quanto la query CodeQL `py/full-ssrf` segnala, perché l'URL
+    che raggiunge il client HTTP resta comunque quello fornito dall'utente,
+    a prescindere dal controllo fatto prima con `_resolve_is_safe`."""
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+    except OSError:
+        return None
+    for info in infos:
+        ip = info[4][0]
+        if not _is_blocked_ip(ip):
+            return ip
+    return None
+
+
 def validate_previewable_url(url: str) -> str:
     """Solleva ValueError se l'URL non è idoneo (schema non http/https,
     hostname mancante, o che risolve a un indirizzo privato/riservato)."""
@@ -117,10 +138,28 @@ async def fetch_link_preview(url: str) -> LinkPreview:
     fallire il salvataggio del post. Solleva ValueError solo per un URL non
     idoneo in partenza (vedi validate_previewable_url)."""
     validate_previewable_url(url)
+    parsed = urlparse(url)
+
+    # Pinning IP (vedi _resolve_pinned_ip): la richiesta va all'indirizzo
+    # verificato qui, non a quello che httpx risolverebbe da sé passando
+    # l'URL originale — mai un secondo giro di DNS fuori dal nostro controllo
+    # fra la verifica e la connessione effettiva.
+    pinned_ip = _resolve_pinned_ip(parsed.hostname)
+    if pinned_ip is None:
+        return LinkPreview(url=url)
+    netloc = f"[{pinned_ip}]" if ":" in pinned_ip else pinned_ip
+    if parsed.port:
+        netloc += f":{parsed.port}"
+    pinned_url = urlunparse(parsed._replace(netloc=netloc))
 
     try:
         async with httpx.AsyncClient(follow_redirects=False, timeout=_TIMEOUT) as client:
-            async with client.stream("GET", url, headers={"User-Agent": "NotturniLinkPreview/1.0"}) as resp:
+            async with client.stream(
+                "GET",
+                pinned_url,
+                headers={"User-Agent": "NotturniLinkPreview/1.0", "Host": parsed.hostname},
+                extensions={"sni_hostname": parsed.hostname},
+            ) as resp:
                 if resp.status_code >= 400:
                     return LinkPreview(url=url)
                 content_type = resp.headers.get("content-type", "")

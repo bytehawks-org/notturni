@@ -23,9 +23,22 @@ SENSITIVITY_CATEGORIES = ("suggestive", "nudity", "explicit", "other")
 # ![alt](url "title") — alt/title non possono contenere `]`/`"` in questa
 # forma semplificata (stesso compromesso di tags.py:_HASHTAG_RE: copre l'uso
 # reale dell'editor, non l'intera grammatica CommonMark).
-_IMAGE_RE = re.compile(r'!\[([^\]]*)\]\(\s*(\S+?)(?:\s+"([^"]*)")?\s*\)')
+#
+# Il gruppo url NON è più `\S+?` (lazy, senza limiti su cosa può attraversare):
+# su un contenuto con molte occorrenze di "![](" senza mai una ")" di
+# chiusura, quel lazy quantifier riparte a ogni posizione e scansiona quasi
+# fino alla fine della stringa cercando la ")" mancante — O(n²) rispetto alla
+# lunghezza del contenuto (CodeQL py/polynomial-redos, confermato
+# empiricamente: ~45s per 32.000 ripetizioni prima della fix). La nuova forma
+# (gruppo atomico, alternanza fra "sequenza senza spazi/parentesi" e "un
+# livello di parentesi bilanciate") non lascia ambiguità da cui backtrackare
+# e resta lineare — supporta anche URL con parentesi non escapate, es.
+# Wikipedia (".../Example_(disambiguation)"), che `\S+?` non gestiva comunque
+# in modo utile.
+_BALANCED_URL = r"(?>[^\s()]*(?:\([^\s()]*\)[^\s()]*)*)"
+_IMAGE_RE = re.compile(rf'!\[([^\]]*)\]\(\s*({_BALANCED_URL})(?:\s+"([^"]*)")?\s*\)')
 # [testo](url "title") — il lookbehind su "!" esclude le immagini sopra.
-_LINK_RE = re.compile(r'(?<!!)\[([^\]]*)\]\(\s*(\S+?)(?:\s+"([^"]*)")?\s*\)')
+_LINK_RE = re.compile(rf'(?<!!)\[([^\]]*)\]\(\s*({_BALANCED_URL})(?:\s+"([^"]*)")?\s*\)')
 
 
 class MediaRef(NamedTuple):
