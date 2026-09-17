@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { BlogHeader } from "@/components/shell/BlogHeader";
+import { blogBasePath } from "@/lib/blog-path";
 import { excerpt, renderMarkdown } from "@/lib/markdown";
 import { getPublicBlog, getPublicPage } from "@/lib/server-api";
 
@@ -44,9 +45,10 @@ export default async function PublicBlogPagePage({
 }) {
   const { blogSlug, pageSlug } = await params;
   const { locale = "it" } = await searchParams;
-  const [page, blog] = await Promise.all([
+  const [page, blog, basePath] = await Promise.all([
     getPublicPage(blogSlug, pageSlug, locale),
     getPublicBlog(blogSlug),
+    blogBasePath(blogSlug),
   ]);
   if (!page) notFound();
 
@@ -54,7 +56,7 @@ export default async function PublicBlogPagePage({
 
   return (
     <div className="flex flex-1 flex-col">
-      <BlogHeader slug={blogSlug} name={blog?.title ?? blogSlug} current="posts" />
+      <BlogHeader basePath={basePath} name={blog?.title ?? blogSlug} current="posts" />
       <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-12">
         <h1 className="font-serif text-5xl font-semibold leading-tight text-foreground">{page.title}</h1>
 

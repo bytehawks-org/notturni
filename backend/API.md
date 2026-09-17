@@ -88,7 +88,10 @@ automatico: va fatto separatamente. `409` se username o email già in uso.
 `400` se lo username non rispetta il formato (todo/USERS.md #1): minuscole,
 cifre, `-` e `_` come separatori interni (mai a inizio/fine né ripetuti),
 3–32 caratteri, e non in blacklist (`app/domain/usernames.py`). Lo username è
-l'identificatore citabile come `@username` nei contenuti.
+l'identificatore citabile come `@username` nei contenuti. `400` anche se la
+password è più corta di 10 caratteri (`app/domain/passwords.py`, unico
+requisito della policy — nessun vincolo su classi di caratteri): stesso
+controllo applicato dal flusso "password dimenticata" più sotto.
 
 Se `NOCT_DEPLOYMENT_MODE=solo` (installazione a singolo proprietario, es.
 blog personale — vedi `.env.example`): il **primo** utente registrato diventa
@@ -130,6 +133,10 @@ minuti dallo stesso IP o oltre 5 tentativi/5 minuti sulla stessa email
 
 → `200` con `access_token` come sopra (refresh token nel cookie). `401` se il
 codice è sbagliato/scaduto o il challenge non è più valido (dura 5 minuti).
+`429` oltre 20 tentativi/5 minuti dallo stesso IP o oltre 8 tentativi/5 minuti
+sullo stesso soggetto del challenge (stessa protezione del login, applicata
+anche a `mfa/totp/confirm` e `mfa/email/confirm` sotto — un codice a 6 cifre è
+altrimenti indovinabile in un numero di tentativi gestibile).
 
 **`POST /api/v1/auth/refresh`** — nessun corpo: il refresh token è letto dal
 cookie `noct_refresh_token`, richiede l'header `X-CSRF-Token` (vedi sopra).
@@ -146,6 +153,36 @@ se la sessione era già revocata o il cookie assente). `403` senza
 
 **`GET /api/v1/auth/me`** — richiede sessione. Ritorna
 `{id, username, email, mfa_enabled}`.
+
+### Password dimenticata
+
+**`POST /api/v1/auth/password/forgot`**
+
+```json
+{"email": "mario@example.com"}
+```
+
+→ **sempre** `202`, email esistente o no: la risposta non deve mai rendere
+enumerabile quali indirizzi hanno un account. Se l'email corrisponde a un
+utente attivo, accoda un codice a 6 cifre via email (stesso meccanismo
+dell'OTP MFA/cambio email — RabbitMQ + `app/workers/email_otp_consumer.py`,
+TTL 10 minuti). `429` oltre 20 tentativi/5 minuti dallo stesso IP o 5/5
+minuti sulla stessa email.
+
+**`POST /api/v1/auth/password/reset`**
+
+```json
+{"email": "mario@example.com", "code": "123456", "new_password": "..."}
+```
+
+→ `204`. Imposta la nuova password (stessa policy minima di 10 caratteri di
+sopra) e **revoca tutte le sessioni attive** dell'utente (ogni refresh token
+già emesso smette di funzionare, come per la cancellazione account —
+`app/domain/gdpr.py`): un reset di password è tipicamente una risposta a un
+account compromesso, non solo a una password dimenticata. `400` se il
+codice è sbagliato/scaduto/già usato o se `new_password` non rispetta la
+policy minima — stesso messaggio generico per email sconosciuta e codice
+errato. `429` con gli stessi limiti di `password/forgot`.
 
 ### MFA — gestione (richiede una sessione attiva, cioè un login già fatto)
 
@@ -1942,9 +1979,10 @@ riga porta:
 - `actor_type`/`actor_id`/`actor_label` — chi: tipo di attore, il suo id (se
   applicabile) e uno snapshot leggibile `username <email>` al momento del
   fatto (resta valido anche se l'account viene poi rinominato o cancellato).
-- `ip`/`user_agent` — indirizzo IP sorgente della richiesta (primo hop di
-  `X-Forwarded-For` dietro Traefik, altrimenti l'IP di connessione diretta —
-  `app/core/http.py::client_ip`) e user agent.
+- `ip`/`user_agent` — indirizzo IP sorgente della richiesta (**ultimo** hop di
+  `X-Forwarded-For` dietro Traefik — l'unico scritto dal proxy fidato, non dal
+  client, che potrebbe altrimenti spoofare un primo hop a piacere — altrimenti
+  l'IP di connessione diretta, `app/core/http.py::client_ip`) e user agent.
 - `target_type`/`target_id`/`blog_id` — su cosa: tipo e id dell'oggetto
   coinvolto, più il blog di contesto quando applicabile (denormalizzato per
   filtrare senza join).
@@ -2007,11 +2045,12 @@ l'unica base disponibile oggi per una sezione "di tendenza".
 
 ## CORS
 
-Il backend accetta chiamate dal browser solo dalle origini in
-`NOCT_CORS_ORIGINS` (separate da virgola; default `http://localhost:3000`).
-In produzione copre solo un'origine esatta — non i sottodomini per-blog
-(`nomeutente.notturni.eu`): da rivedere quando le pagine pubbliche dei blog
-chiameranno l'API direttamente dal browser.
+Il backend accetta chiamate dal browser dalle origini in `NOCT_CORS_ORIGINS`
+(separate da virgola; default `http://localhost:3000`, origini esatte) più,
+opzionalmente, `NOCT_CORS_ORIGIN_REGEX` (regex Python, `allow_origin_regex` di
+Starlette) — necessaria per i sottodomini per-blog (`slug.notturni.eu`, vedi
+`k8s/ingressroute.yaml`): un'origine esatta per ciascuno non è enumerabile in
+anticipo. Esempio produzione: `https://([a-z0-9-]+\.)?notturni\.eu`.
 
 ## Health
 

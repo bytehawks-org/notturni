@@ -15,3 +15,5 @@ resources:
   - backup.yaml
   - frontend.yaml
   - ingress.yaml
+  - middleware-security-headers.yaml
+  - ingressroute.yaml

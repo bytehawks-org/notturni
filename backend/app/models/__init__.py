@@ -23,6 +23,7 @@ from app.models.link_preview import LinkPreviewCache
 from app.models.media_file import MediaFile
 from app.models.mfa_email_code import MfaEmailCode
 from app.models.page import Page
+from app.models.password_reset_code import PasswordResetCode
 from app.models.platform_config import PlatformConfig
 from app.models.post import Post, PostStatus
 from app.models.post_fragment import PostFragment
@@ -79,6 +80,7 @@ __all__ = [
     "AuditArchiveRun",
     "UserSession",
     "MfaEmailCode",
+    "PasswordResetCode",
     "MediaFile",
     "LinkPreviewCache",
     "SsoIdentity",

@@ -1,7 +1,10 @@
-# Primo draft: un solo host, routing path-based verso frontend/backend.
-# Il routing per sottodominio-per-blog (nomeutente.notturni.eu) e per dominio
-# custom dell'utente (CLAUDE.md #2) richiede un IngressRoute Traefik dinamico
-# con TLS wildcard/cert-manager per dominio: non ancora implementato qui.
+# Primo draft: un solo host, routing path-based verso frontend/backend. Il
+# routing per sottodominio-per-blog (slug.notturni.eu) ha una risorsa propria
+# — ingressroute.yaml (IngressRoute Traefik dinamico, host jolly) — che
+# convive con questa, non la sostituisce: questa resta il catch-all
+# path-based (utile anche in sviluppo/test senza DNS wildcard configurato).
+# Dominio custom per-utente (CLAUDE.md #2): non ancora implementato,
+# nessuna delle due risorse lo copre oggi.
 #
 # Versione ATTUALE: solo http, nessun host fisso — pensata per un primo test
 # su un K3s a nodo singolo senza dominio reale né cert-manager già installato
@@ -14,13 +17,20 @@
 # con un ClusterIssuer, es. letsencrypt-prod): aggiungere di nuovo `host:
 # notturni.eu` a entrambe le regole sotto, l'annotazione
 # `cert-manager.io/cluster-issuer: letsencrypt-prod` e un blocco
-# `tls: [{hosts: ["notturni.eu"], secretName: notturni-eu-tls}]` — e
-# riportare NOCT_SESSION_COOKIE_SECURE a "true" in configmap.yaml.
+# `tls: [{hosts: ["notturni.eu"], secretName: notturni-eu-tls}]` — riportare
+# NOCT_SESSION_COOKIE_SECURE a "true" in configmap.yaml — e vedi anche le
+# note di produzione in cima a ingressroute.yaml (TLS wildcard via DNS-01,
+# NOCT_CORS_ORIGIN_REGEX/NOCT_SESSION_COOKIE_DOMAIN).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: notturni
   namespace: notturni
+  annotations:
+    # Security header minimi (CSP/HSTS/nosniff, CLAUDE.md #6) — Middleware
+    # Traefik definito in middleware-security-headers.yaml, riusato anche da
+    # ingressroute.yaml. Formato annotazione: <namespace>-<nome>@kubernetescrd.
+    traefik.ingress.kubernetes.io/router.middlewares: notturni-security-headers@kubernetescrd
 spec:
   ingressClassName: traefik
   rules:

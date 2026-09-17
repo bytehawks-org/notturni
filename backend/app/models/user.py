@@ -152,6 +152,7 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     sessions: Mapped[list["UserSession"]] = relationship(back_populates="user")
     mfa_email_codes: Mapped[list["MfaEmailCode"]] = relationship(back_populates="user")
     email_change_requests: Mapped[list["EmailChangeRequest"]] = relationship(back_populates="user")
+    password_reset_codes: Mapped[list["PasswordResetCode"]] = relationship(back_populates="user")
     custom_domain: Mapped["CustomDomain | None"] = relationship(back_populates="user", uselist=False)
     sso_identities: Mapped[list["SsoIdentity"]] = relationship(back_populates="user")
     social_links: Mapped[list["SocialLink"]] = relationship(

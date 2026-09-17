@@ -170,6 +170,10 @@ export const api = {
     emailConfirm: (token: string, code: string) =>
       request<void>("/api/v1/auth/mfa/email/confirm", { method: "POST", token, body: { code } }),
     disableMfa: (token: string) => request<void>("/api/v1/auth/mfa/disable", { method: "POST", token }),
+    forgotPassword: (payload: { email: string }) =>
+      request<void>("/api/v1/auth/password/forgot", { method: "POST", body: payload }),
+    resetPassword: (payload: { email: string; code: string; new_password: string }) =>
+      request<void>("/api/v1/auth/password/reset", { method: "POST", body: payload }),
   },
 
   blogs: {

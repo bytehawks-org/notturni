@@ -10,6 +10,7 @@ import { ExpandIcon } from "@/components/editor/icons";
 import { BlogHeader } from "@/components/shell/BlogHeader";
 import { FilterChip } from "@/components/ui/Pill";
 import { SENSITIVITY_CATEGORY_LABELS } from "@/lib/content-media";
+import { blogLinks } from "@/lib/blog-path";
 import { formatDate } from "@/lib/format";
 import { getBlogMediaBibliography, getPublicBlog, getPublicBlogConfig, getPublicPublications } from "@/lib/server-api";
 import type { MediaBibliographyEntry } from "@/lib/types";
@@ -31,7 +32,17 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
   };
 }
 
-function MediaFigure({ entry, locale, defaultLocale }: { entry: MediaBibliographyEntry; locale: string; defaultLocale: string }) {
+function MediaFigure({
+  entry,
+  locale,
+  defaultLocale,
+  resolvePermalink,
+}: {
+  entry: MediaBibliographyEntry;
+  locale: string;
+  defaultLocale: string;
+  resolvePermalink: (permalink: string) => string;
+}) {
   const sensitive = entry.categories.length > 0;
   const first = entry.citations[0];
   return (
@@ -57,7 +68,7 @@ function MediaFigure({ entry, locale, defaultLocale }: { entry: MediaBibliograph
         <span className="truncate font-medium">{entry.alt_text}</span>
         {first && (
           <span className="truncate text-muted">
-            <Link href={first.permalink} className="no-underline hover:underline">
+            <Link href={resolvePermalink(first.permalink)} className="no-underline hover:underline">
               {first.post_title}
               {first.locale !== defaultLocale ? ` (${first.locale})` : ""}
             </Link>
@@ -80,19 +91,20 @@ export default async function BlogMediaBibliographyPage({
   searchParams: Promise<{ view?: string }>;
 }) {
   const [{ blogSlug }, { view }] = await Promise.all([params, searchParams]);
-  const [blog, entries, config, t, locale] = await Promise.all([
+  const [blog, entries, config, t, locale, links] = await Promise.all([
     getPublicBlog(blogSlug),
     getBlogMediaBibliography(blogSlug),
     getPublicBlogConfig(blogSlug),
     getTranslations("MediaPage"),
     getLocale(),
+    blogLinks(blogSlug),
   ]);
   if (!blog) notFound();
   const hasPublications = (await getPublicPublications(blogSlug).catch(() => [])).length > 0;
   if (blogIsOffline(blog)) {
     return (
       <BlogPageShell config={config}>
-        <BlogHeader slug={blogSlug} name={blog.title} hasPublications={hasPublications} current="media" />
+        <BlogHeader basePath={links.basePath} name={blog.title} hasPublications={hasPublications} current="media" />
         <BlogStateNotice blog={blog} />
       </BlogPageShell>
     );
@@ -110,17 +122,17 @@ export default async function BlogMediaBibliographyPage({
 
   return (
     <BlogPageShell config={config}>
-      <BlogHeader slug={blogSlug} name={blog.title} hasPublications={hasPublications} current="media" actions={<BlogHeaderActions slug={blogSlug} />} />
+      <BlogHeader basePath={links.basePath} name={blog.title} hasPublications={hasPublications} current="media" actions={<BlogHeaderActions slug={blogSlug} />} />
       <main className="mx-auto w-full max-w-[1184px] flex-1 px-5 py-10 lg:px-12 lg:py-14">
         <div className="flex flex-col gap-1.5">
           <h1 className="font-serif text-[34px] font-medium leading-[1.12] tracking-tight md:text-[40px]">{t("title")}</h1>
           <p className="text-muted md:text-base">{t("subtitle", { count: entries.length })}</p>
         </div>
         <div className="mt-6 flex gap-1.5 border-b border-border pb-3">
-          <Link href={`/${blogSlug}/media`} className="no-underline">
+          <Link href={`${links.basePath}/media`} className="no-underline">
             <FilterChip active={view !== "post"}>{t("grid")}</FilterChip>
           </Link>
-          <Link href={`/${blogSlug}/media?view=post`} className="no-underline">
+          <Link href={`${links.basePath}/media?view=post`} className="no-underline">
             <FilterChip active={view === "post"}>{t("byPost")}</FilterChip>
           </Link>
         </div>
@@ -130,12 +142,12 @@ export default async function BlogMediaBibliographyPage({
           <div className="mt-6 flex flex-col gap-8">
             {[...byPost.entries()].map(([permalink, group]) => (
               <section key={permalink} className="flex flex-col gap-3">
-                <Link href={permalink} className="font-serif text-[19px] text-foreground no-underline hover:text-primary">
+                <Link href={links.fromPermalink(permalink)} className="font-serif text-[19px] text-foreground no-underline hover:text-primary">
                   {group.title}
                 </Link>
                 <div className="grid grid-cols-2 gap-3 md:gap-5 lg:grid-cols-4">
                   {group.items.map((entry, i) => (
-                    <MediaFigure key={i} entry={entry} locale={locale} defaultLocale={blog.default_locale} />
+                    <MediaFigure key={i} entry={entry} locale={locale} defaultLocale={blog.default_locale} resolvePermalink={links.fromPermalink} />
                   ))}
                 </div>
               </section>
@@ -144,7 +156,7 @@ export default async function BlogMediaBibliographyPage({
         ) : (
           <div className="mt-6 grid grid-cols-2 gap-3 md:gap-5 lg:grid-cols-4">
             {entries.map((entry, i) => (
-              <MediaFigure key={i} entry={entry} locale={locale} defaultLocale={blog.default_locale} />
+              <MediaFigure key={i} entry={entry} locale={locale} defaultLocale={blog.default_locale} resolvePermalink={links.fromPermalink} />
             ))}
           </div>
         )}
