@@ -23,9 +23,12 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
 
 ## Funzionalità implementate
 
-- **Auth completa:** registrazione/login con password, sessioni JWT (access +
-  refresh con rotation), MFA via TOTP o email, SSO (Google/Microsoft/GitHub/
-  LinkedIn) con account linking e gate 2FA.
+- **Auth completa:** registrazione/login con password (policy minima 10
+  caratteri), password dimenticata (reset via codice email, revoca tutte le
+  sessioni attive), sessioni JWT (access + refresh con rotation), MFA via
+  TOTP o email, SSO (Google/Microsoft/GitHub/LinkedIn, non ancora esposto in
+  UI in attesa di un test end-to-end con credenziali reali) con account
+  linking e gate 2FA.
 - **Blog, post e commenti:** CRUD con le regole di dominio del blueprint (slug,
   limite 5 blog/utente, moderazione commenti). Post in Markdown, con workflow
   di stato completo (bozza → in revisione → pubblicato, con pianificazione

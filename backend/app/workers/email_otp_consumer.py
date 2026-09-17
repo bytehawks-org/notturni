@@ -20,18 +20,35 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("email_otp_consumer")
 
 
+_SUBJECTS = {
+    "login": "Il tuo codice di accesso Notturni",
+    "password_reset": "Reimposta la tua password Notturni",
+}
+
+
+def _body_for(purpose: str, code: str) -> str:
+    if purpose == "password_reset":
+        return (
+            f"Il tuo codice per reimpostare la password su Notturni è: {code}\n\n"
+            f"Scade tra {EMAIL_OTP_TTL_MINUTES} minuti. Se non hai richiesto tu "
+            "questo reset, ignora pure questa email: la tua password attuale resta invariata."
+        )
+    return (
+        f"Il tuo codice di accesso a Notturni è: {code}\n\n"
+        f"Scade tra {EMAIL_OTP_TTL_MINUTES} minuti. Se non hai richiesto tu "
+        "questo accesso, ignora pure questa email."
+    )
+
+
 def _on_message(channel, method, _properties, body) -> None:
     payload = json.loads(body)
     email, code = payload["email"], payload["code"]
+    purpose = payload.get("purpose", "login")
     try:
         send_email(
             to=email,
-            subject="Il tuo codice di accesso Notturni",
-            body=(
-                f"Il tuo codice di accesso a Notturni è: {code}\n\n"
-                f"Scade tra {EMAIL_OTP_TTL_MINUTES} minuti. Se non hai richiesto tu "
-                "questo accesso, ignora pure questa email."
-            ),
+            subject=_SUBJECTS.get(purpose, _SUBJECTS["login"]),
+            body=_body_for(purpose, code),
         )
         logger.info("OTP inviato via email a %s", email)
         channel.basic_ack(delivery_tag=method.delivery_tag)

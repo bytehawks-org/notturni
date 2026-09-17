@@ -1,0 +1,39 @@
+# Security header minimi (CLAUDE.md #6: CSP, HSTS, X-Content-Type-Options)
+# applicati a livello Traefik, non nell'app: coprono anche le pagine servite
+# da Next.js senza dover toccare ogni singola response lato frontend/backend.
+# Referenziato sia da ingress.yaml (via annotazione
+# traefik.ingress.kubernetes.io/router.middlewares) sia da
+# ingressroute.yaml (campo middlewares) — un solo posto da tenere aggiornato.
+#
+# HSTS (stsSeconds) è configurato fin da subito ma, per costruzione di
+# Traefik, viene emesso solo sulle richieste già in TLS: con ingress.yaml
+# nella sua versione "test" (solo http, vedi commento in cima a quel file)
+# resta silenzioso, nessuna azione da fare quando si passa a TLS reale.
+#
+# CSP volutamente permissiva su img-src (https: oltre a 'self'): lo storage
+# oggetti (MinIO/S3/R2/CDN, NOCT_S3_PUBLIC_URL) è configurabile per
+# installazione, non un dominio fisso da poter elencare qui. connect-src
+# copre sia l'host di piattaforma sia i sottodomini per-blog
+# (slug.notturni.eu, ingressroute.yaml) per le chiamate XHR del frontend
+# verso l'API dal browser.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: security-headers
+  namespace: notturni
+spec:
+  headers:
+    stsSeconds: 31536000
+    stsIncludeSubdomains: true
+    stsPreload: true
+    contentTypeNosniff: true
+    customFrameOptionsValue: "DENY"
+    referrerPolicy: "strict-origin-when-cross-origin"
+    contentSecurityPolicy: >-
+      default-src 'self';
+      img-src 'self' data: https:;
+      style-src 'self' 'unsafe-inline';
+      script-src 'self';
+      font-src 'self' data:;
+      connect-src 'self' https://notturni.eu https://*.notturni.eu;
+      frame-ancestors 'none'

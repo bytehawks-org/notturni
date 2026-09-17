@@ -3,8 +3,9 @@
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useState, type FormEvent } from "react";
 
+import { OtpInput, OTP_INPUT_LENGTH } from "@/components/auth/OtpInput";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { FieldGroup, Input, Label } from "@/components/ui/Field";
@@ -12,56 +13,7 @@ import { ApiClientError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { isMfaRequired } from "@/lib/types";
 
-const OTP_LENGTH = 6;
-
-/** Sei caselle per cifra (mockup 1h) invece di un unico campo testuale. */
-function OtpInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  const refs = useRef<(HTMLInputElement | null)[]>([]);
-  const digits = Array.from({ length: OTP_LENGTH }, (_, i) => value[i] ?? "");
-
-  function setDigit(index: number, digit: string) {
-    const next = digits.slice();
-    next[index] = digit;
-    onChange(next.join(""));
-    if (digit && index < OTP_LENGTH - 1) refs.current[index + 1]?.focus();
-  }
-
-  function handleKeyDown(index: number, event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "Backspace" && !digits[index] && index > 0) {
-      refs.current[index - 1]?.focus();
-    }
-  }
-
-  function handlePaste(event: React.ClipboardEvent<HTMLInputElement>) {
-    const pasted = event.clipboardData.getData("text").replace(/\D/g, "").slice(0, OTP_LENGTH);
-    if (!pasted) return;
-    event.preventDefault();
-    onChange(pasted.padEnd(value.length, ""));
-    refs.current[Math.min(pasted.length, OTP_LENGTH - 1)]?.focus();
-  }
-
-  return (
-    <div className="grid grid-cols-6 gap-2">
-      {digits.map((digit, i) => (
-        <input
-          key={i}
-          ref={(el) => {
-            refs.current[i] = el;
-          }}
-          type="text"
-          inputMode="numeric"
-          maxLength={1}
-          autoFocus={i === 0}
-          value={digit}
-          onChange={(e) => setDigit(i, e.target.value.replace(/\D/g, "").slice(-1))}
-          onKeyDown={(e) => handleKeyDown(i, e)}
-          onPaste={handlePaste}
-          className="h-[52px] rounded-xl border border-border bg-surface text-center font-serif text-2xl text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
-        />
-      ))}
-    </div>
-  );
-}
+const OTP_LENGTH = OTP_INPUT_LENGTH;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -155,6 +107,9 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
+                <Link href="/forgot-password" className="mt-1 self-end text-[13px] text-muted no-underline hover:text-primary hover:underline">
+                  {t("forgotPassword")}
+                </Link>
               </FieldGroup>
             </div>
 
