@@ -29,6 +29,10 @@ class PostAuthorNameStyle(str, enum.Enum):
     USERNAME = "username"
     FULL_NAME = "full_name"
     DISPLAY_NAME = "display_name"
+    # Dominio custom verificato (User.verified_domain) come handle pubblico
+    # (todo/USERS.md #2 seguito): se il dominio non è (più) verificato,
+    # ricade sullo username come gli altri stili (vedi resolve_personal_display_name).
+    VERIFIED_DOMAIN = "verified_domain"
 
 
 class VerificationTier(str, enum.Enum):
@@ -133,6 +137,14 @@ class User(Base, UUIDPKMixin, TimestampMixin):
         default=VerificationTier.NONE,
         nullable=False,
     )
+    # Copia denormalizzata di CustomDomain.domain, valorizzata solo quando lo
+    # stato è VERIFIED (tenuta in sync in app/api/v1/users.py, stessi punti
+    # che aggiornano verification_tier: verify_my_domain/delete_my_domain).
+    # Evita di dover fare eager-load della relazione `custom_domain` nei
+    # tanti punti che risolvono il nome pubblico dell'utente (CLAUDE.md #4:
+    # un accesso lazy a una relazione fuori dal contesto della sessione
+    # async fallisce con MissingGreenlet) — qui basta una colonna semplice.
+    verified_domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     blogs: Mapped[list["Blog"]] = relationship(back_populates="owner")
     memberships: Mapped[list["BlogMembership"]] = relationship(back_populates="user")

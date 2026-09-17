@@ -12,7 +12,7 @@ from app.api.deps import get_current_user
 from app.api.v1.blogs._common import _get_blog_or_404, _require_blog_write_access
 from app.api.v1.blogs._router import router
 from app.core.database import get_session
-from app.core.storage import content_public_url, delete_content_object, upload_media
+from app.core.storage import avatar_public_url, content_public_url, delete_content_object, upload_media
 from app.domain.authorization import get_membership_role
 from app.domain.content_media import SENSITIVITY_CATEGORIES
 from app.domain.moderation import classify_image
@@ -276,6 +276,7 @@ async def delete_blog_media(
 class MentionableUserOut(BaseModel):
     username: str
     display_name: str | None
+    avatar_url: str | None
 
     model_config = {"from_attributes": True}
 
@@ -314,6 +315,10 @@ async def list_mentionable_users(
     stmt = stmt.order_by(User.username).limit(limit)
     result = await session.execute(stmt)
     return [
-        MentionableUserOut(username=u.username, display_name=u.display_name)
+        MentionableUserOut(
+            username=u.username,
+            display_name=u.display_name,
+            avatar_url=avatar_public_url(u.avatar_object_key) if u.avatar_object_key else None,
+        )
         for u in result.scalars().all()
     ]

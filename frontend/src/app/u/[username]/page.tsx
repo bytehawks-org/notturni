@@ -9,6 +9,7 @@ import { FollowUserButton } from "@/components/profile/FollowUserButton";
 import { ProfileTabs } from "@/components/profile/ProfileTabs";
 import { SiteHeader } from "@/components/SiteHeader";
 import { EmptyState } from "@/components/ui/States";
+import { VerificationBadge } from "@/components/ui/VerificationBadge";
 import { formatDate } from "@/lib/format";
 import { languageName } from "@/lib/languages";
 import {
@@ -19,6 +20,7 @@ import {
   getPublicUserProfile,
 } from "@/lib/server-api";
 import { getSocialPlatform } from "@/lib/social-platforms";
+import type { Profile } from "@/lib/types";
 
 interface PageParams {
   username: string;
@@ -30,6 +32,23 @@ function countryName(code: string, locale: string): string {
   } catch {
     return code;
   }
+}
+
+/** Nome "personale" mostrato in testa al profilo pubblico: stessa
+ * preferenza `post_author_name_style` usata per firmare i post
+ * (dashboard/profilo, "Firma i miei post come" — mirror di
+ * `app/domain/display_names.py::resolve_personal_display_name`, che qui non
+ * si può importare da un Server Component frontend). Lo username resta
+ * comunque sempre visibile sotto, come @username. */
+function resolvePersonalDisplayName(profile: Profile): string {
+  if (profile.post_author_name_style === "full_name") {
+    const full = [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim();
+    return full || profile.username;
+  }
+  if (profile.post_author_name_style === "display_name") {
+    return profile.display_name || profile.username;
+  }
+  return profile.username;
 }
 
 /** Profilo pubblico (mockup 3e): intestazione con avatar, luogo e lingue,
@@ -53,12 +72,7 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
   ]);
   if (!profile) notFound();
 
-  // todo/BLOG.md #4: l'alias pubblico ha la precedenza su nome/cognome e username.
-  const displayHeading =
-    profile.display_name ||
-    (profile.first_name || profile.last_name
-      ? [profile.first_name, profile.last_name].filter(Boolean).join(" ")
-      : profile.username);
+  const displayHeading = resolvePersonalDisplayName(profile);
   const languages = [profile.native_language, ...profile.fallback_languages].filter((l): l is string => !!l);
 
   return (
@@ -75,9 +89,12 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
               </div>
             )}
             <div className="flex min-w-0 flex-col gap-2">
-              <h1 className="font-serif text-[30px] font-medium leading-tight text-foreground">{displayHeading}</h1>
+              <h1 className="flex items-center gap-2 font-serif text-[30px] font-medium leading-tight text-foreground">
+                {displayHeading}
+                <VerificationBadge tier={profile.verification_tier} size={20} />
+              </h1>
               <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted">
-                <span>@{profile.username}</span>
+                <span>@{profile.custom_domain ?? profile.username}</span>
                 {profile.country && <span>· {countryName(profile.country, locale)}</span>}
                 {languages.length > 0 && (
                   <span>

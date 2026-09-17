@@ -390,7 +390,7 @@ const DEFAULT_FOOTNOTE_LABELS: FootnoteLabels = { title: "Note", backToText: "To
 export interface PostHeading {
   id: string;
   text: string;
-  level: 2 | 3;
+  level: 1 | 2 | 3;
 }
 
 const slugifyHeading = (text: string): string =>
@@ -402,12 +402,15 @@ const slugifyHeading = (text: string): string =>
     .replace(/^-+|-+$/g, "")
     .slice(0, 60) || "sezione";
 
-/** Mockup 1a ("In this post"): assegna un id stabile a h2/h3 e ne restituisce
- * l'elenco per l'indice laterale. Muta `document` in place. */
+/** Mockup 1a ("In this post"): assegna un id stabile a h1/h2/h3 del *corpo*
+ * del post (distinti dal titolo del post, un elemento separato nell'header
+ * della pagina, non nel Markdown renderizzato qui) e ne restituisce l'elenco
+ * per l'indice laterale. Muta `document` in place. */
 function anchorHeadings(document: Document): PostHeading[] {
   const seen = new Map<string, number>();
   const headings: PostHeading[] = [];
-  document.querySelectorAll("h2, h3").forEach((el) => {
+  const levelByTag: Record<string, 1 | 2 | 3> = { H1: 1, H2: 2, H3: 3 };
+  document.querySelectorAll("h1, h2, h3").forEach((el) => {
     if (el.closest(".footnotes")) return;
     const text = (el.textContent ?? "").replace(/\s+/g, " ").trim();
     if (!text) return;
@@ -416,7 +419,7 @@ function anchorHeadings(document: Document): PostHeading[] {
     seen.set(base, n);
     const id = n === 1 ? base : `${base}-${n}`;
     el.id = id;
-    headings.push({ id, text, level: el.tagName === "H2" ? 2 : 3 });
+    headings.push({ id, text, level: levelByTag[el.tagName] });
   });
   return headings;
 }

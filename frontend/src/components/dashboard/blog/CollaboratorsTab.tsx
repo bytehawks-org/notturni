@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import Image from "next/image";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { Alert } from "@/components/ui/Alert";
@@ -101,13 +102,24 @@ export function CollaboratorsTab({ blogSlug }: { blogSlug: string }) {
                 className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2.5 text-sm last:border-0"
               >
                 <div className="flex min-w-0 items-center gap-2.5">
-                  <span
-                    className="grid h-7 w-7 flex-none place-items-center rounded-full text-xs font-semibold text-white"
-                    style={{ background: hue(m.username) }}
-                    aria-hidden="true"
-                  >
-                    {m.username[0]?.toUpperCase()}
-                  </span>
+                  {m.avatar_url ? (
+                    <Image
+                      src={m.avatar_url}
+                      alt={m.username}
+                      width={28}
+                      height={28}
+                      className="h-7 w-7 flex-none rounded-full object-cover"
+                      unoptimized
+                    />
+                  ) : (
+                    <span
+                      className="grid h-7 w-7 flex-none place-items-center rounded-full text-xs font-semibold text-white"
+                      style={{ background: hue(m.username) }}
+                      aria-hidden="true"
+                    >
+                      {m.username[0]?.toUpperCase()}
+                    </span>
+                  )}
                   <div className="flex min-w-0 flex-col leading-tight">
                     <span className="text-foreground">@{m.username}</span>
                     {m.author_display_name && (

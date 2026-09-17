@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -186,9 +187,20 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
               </h1>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
                 <span className="flex items-center gap-2">
-                  <span className="grid h-7 w-7 place-items-center rounded-full bg-primary font-serif text-sm text-background">
-                    {post.author_display_name[0]?.toUpperCase()}
-                  </span>
+                  {post.author_avatar_url ? (
+                    <Image
+                      src={post.author_avatar_url}
+                      alt={post.author_display_name}
+                      width={28}
+                      height={28}
+                      className="h-7 w-7 rounded-full object-cover"
+                      unoptimized
+                    />
+                  ) : (
+                    <span className="grid h-7 w-7 place-items-center rounded-full bg-primary font-serif text-sm text-background">
+                      {post.author_display_name[0]?.toUpperCase()}
+                    </span>
+                  )}
                   <span className="font-medium text-foreground">{post.author_display_name}</span>
                 </span>
                 {publishedDate && <span>{publishedDate}</span>}

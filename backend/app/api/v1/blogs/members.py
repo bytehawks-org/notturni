@@ -19,6 +19,7 @@ from app.api.v1.blogs._common import (
 )
 from app.api.v1.blogs._router import router
 from app.core.database import get_session
+from app.core.storage import avatar_public_url
 from app.domain import audit
 from app.domain.authorization import get_membership
 from app.models.blog import BlogMembership, BlogRole
@@ -28,6 +29,7 @@ from app.models.user import User
 class MemberOut(BaseModel):
     user_id: uuid.UUID
     username: str
+    avatar_url: str | None
     role: BlogRole
     author_display_name: str | None
     created_at: datetime
@@ -62,6 +64,7 @@ async def list_blog_members(
         MemberOut(
             user_id=m.user_id,
             username=u.username,
+            avatar_url=avatar_public_url(u.avatar_object_key) if u.avatar_object_key else None,
             role=m.role,
             author_display_name=m.author_display_name,
             created_at=m.created_at,
@@ -106,6 +109,7 @@ async def update_blog_member(
     return MemberOut(
         user_id=membership.user_id,
         username=user.username,
+        avatar_url=avatar_public_url(user.avatar_object_key) if user.avatar_object_key else None,
         role=membership.role,
         author_display_name=membership.author_display_name,
         created_at=membership.created_at,

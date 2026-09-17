@@ -17,9 +17,20 @@ export function FeedPostCardClient({ post, blogTitle, showBlog = true }: { post:
     <article className="grid gap-4 border-b border-border py-5 last:border-0 md:grid-cols-[minmax(0,1fr)_128px] md:gap-7 md:py-6">
       <div className="flex min-w-0 flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted">
-          <span className="grid h-5 w-5 place-items-center rounded-full bg-primary/60 font-serif text-[11px] text-background">
-            {post.author_display_name[0]?.toUpperCase()}
-          </span>
+          {post.author_avatar_url ? (
+            <Image
+              src={post.author_avatar_url}
+              alt={post.author_display_name}
+              width={20}
+              height={20}
+              className="h-5 w-5 rounded-full object-cover"
+              unoptimized
+            />
+          ) : (
+            <span className="grid h-5 w-5 place-items-center rounded-full bg-primary/60 font-serif text-[11px] text-background">
+              {post.author_display_name[0]?.toUpperCase()}
+            </span>
+          )}
           <span className="font-medium text-foreground">{post.author_display_name}</span>
           {showBlog && (
             <span>

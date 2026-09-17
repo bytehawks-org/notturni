@@ -12,6 +12,7 @@ import TableRow from "@tiptap/extension-table-row";
 import type { Editor } from "@tiptap/react";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Markdown, type MarkdownStorage } from "tiptap-markdown";
 
@@ -102,6 +103,7 @@ function ToolbarDivider() {
 interface MentionCandidate {
   username: string;
   display_name: string | null;
+  avatar_url: string | null;
 }
 
 // La `@` deve essere a inizio riga o preceduta da uno spazio; poi 0..32
@@ -242,13 +244,24 @@ function useMentionAutocomplete(
               i === index ? "bg-primary/10 text-foreground" : "text-foreground/80 hover:bg-foreground/5"
             }`}
           >
-            <span
-              className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white"
-              style={{ background: mentionAvatarHue(item.username) }}
-              aria-hidden="true"
-            >
-              {item.username[0]?.toUpperCase()}
-            </span>
+            {item.avatar_url ? (
+              <Image
+                src={item.avatar_url}
+                alt={item.username}
+                width={24}
+                height={24}
+                className="h-6 w-6 shrink-0 rounded-full object-cover"
+                unoptimized
+              />
+            ) : (
+              <span
+                className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white"
+                style={{ background: mentionAvatarHue(item.username) }}
+                aria-hidden="true"
+              >
+                {item.username[0]?.toUpperCase()}
+              </span>
+            )}
             <span className="font-medium">{item.username}</span>
             {item.display_name && <span className="truncate text-muted">· {item.display_name}</span>}
           </button>

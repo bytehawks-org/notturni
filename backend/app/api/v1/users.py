@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, stat
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user
 from app.domain.authorization import blog_publicly_listable_clause
@@ -177,32 +176,40 @@ class FollowStatsOut(BaseModel):
 MAX_SOCIAL_LINKS = 5
 
 
-async def _get_user_or_404(session: AsyncSession, username: str) -> User:
-    result = await session.execute(select(User).where(User.username == username))
+async def _find_user_by_username_or_domain(session: AsyncSession, identifier: str) -> User | None:
+    """Risolve un utente per username oppure, se non trovato, per dominio
+    personalizzato verificato (`User.verified_domain`, copia denormalizzata
+    di `CustomDomain.domain` mantenuta in sync solo per lo stato VERIFIED —
+    vedi `app/models/user.py`): lo username di piattaforma resta comunque
+    sempre citabile/risolvibile (CLAUDE.md #5, ROADMAP.md #1), il dominio è
+    un identificativo aggiuntivo e non esclusivo. `identifier` è confrontato
+    as-is come username e in lowercase come dominio (i domini sono sempre
+    normalizzati in minuscolo, vedi `app/domain/custom_domains.py::validate_domain`)."""
+    result = await session.execute(select(User).where(User.username == identifier))
     user = result.scalar_one_or_none()
+    if user is not None:
+        return user
+
+    result = await session.execute(select(User).where(User.verified_domain == identifier.lower()))
+    return result.scalar_one_or_none()
+
+
+async def _get_user_or_404(session: AsyncSession, username: str) -> User:
+    user = await _find_user_by_username_or_domain(session, username)
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Utente non trovato.")
     return user
 
 
 async def _get_user_with_profile_or_404(session: AsyncSession, username: str) -> User:
-    result = await session.execute(
-        select(User)
-        .where(User.username == username)
-        .options(selectinload(User.social_links), selectinload(User.custom_domain))
-    )
-    user = result.scalar_one_or_none()
+    user = await _find_user_by_username_or_domain(session, username)
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Utente non trovato.")
+    await session.refresh(user, attribute_names=["social_links"])
     return user
 
 
 def _to_profile_out(user: User) -> ProfileOut:
-    verified_domain = (
-        user.custom_domain.domain
-        if user.custom_domain is not None and user.custom_domain.status == CustomDomainStatus.VERIFIED
-        else None
-    )
     return ProfileOut(
         username=user.username,
         bio=user.bio,
@@ -217,7 +224,7 @@ def _to_profile_out(user: User) -> ProfileOut:
         social_links=[SocialLinkOut.model_validate(link) for link in user.social_links],
         created_at=user.created_at,
         verification_tier=user.verification_tier,
-        custom_domain=verified_domain,
+        custom_domain=user.verified_domain,
         atproto_did=atproto_did_for(user),
         activitypub_actor_id=activitypub_actor_id_for(user),
     )
@@ -583,6 +590,7 @@ async def verify_my_domain(
     record.verified_at = datetime.now(timezone.utc)
     if current_user.verification_tier == VerificationTier.NONE:
         current_user.verification_tier = VerificationTier.BRONZE
+    current_user.verified_domain = record.domain
     await audit.record(
         session,
         action="user.domain_verified",
@@ -614,8 +622,10 @@ async def delete_my_domain(
         return
     was_verified = record.status == CustomDomainStatus.VERIFIED
     await session.delete(record)
-    if was_verified and current_user.verification_tier == VerificationTier.BRONZE:
-        current_user.verification_tier = VerificationTier.NONE
+    if was_verified:
+        current_user.verified_domain = None
+        if current_user.verification_tier == VerificationTier.BRONZE:
+            current_user.verification_tier = VerificationTier.NONE
     await session.commit()
 
 
