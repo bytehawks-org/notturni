@@ -148,7 +148,12 @@ export default function LoginPage() {
               </p>
             </div>
 
-            <OtpInput value={code} onChange={setCode} />
+            <OtpInput
+              value={code}
+              onChange={setCode}
+              legend={t("otpLegend")}
+              digitLabel={(index, total) => t("otpDigitLabel", { index, total })}
+            />
 
             {error && <Alert kind="error">{error}</Alert>}
 

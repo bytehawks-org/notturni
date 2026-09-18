@@ -4,8 +4,22 @@ import { useRef, type ClipboardEvent, type KeyboardEvent } from "react";
 
 const OTP_LENGTH = 6;
 
-/** Sei caselle per cifra (mockup 1h), condiviso da login e reset password. */
-export function OtpInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+/** Sei caselle per cifra (mockup 1h), condiviso da login e reset password.
+ * `legend`/`digitLabel` sono a carico del chiamante (entrambi via i18n
+ * `next-intl`): componente condiviso da flussi in più lingue, un testo
+ * fisso qui annuncerebbe sempre in italiano allo screen reader anche in
+ * pagine EN (bug segnalato dalla review Copilot). */
+export function OtpInput({
+  value,
+  onChange,
+  legend = "Codice di verifica a 6 cifre",
+  digitLabel = (index, total) => `Cifra ${index} di ${total}`,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  legend?: string;
+  digitLabel?: (index: number, total: number) => string;
+}) {
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const digits = Array.from({ length: OTP_LENGTH }, (_, i) => value[i] ?? "");
 
@@ -32,7 +46,7 @@ export function OtpInput({ value, onChange }: { value: string; onChange: (value:
 
   return (
     <fieldset className="grid grid-cols-6 gap-2 border-0 p-0 m-0">
-      <legend className="sr-only">Codice di verifica a 6 cifre</legend>
+      <legend className="sr-only">{legend}</legend>
       {digits.map((digit, i) => (
         <input
           key={i}
@@ -47,7 +61,7 @@ export function OtpInput({ value, onChange }: { value: string; onChange: (value:
           onChange={(e) => setDigit(i, e.target.value.replace(/\D/g, "").slice(-1))}
           onKeyDown={(e) => handleKeyDown(i, e)}
           onPaste={handlePaste}
-          aria-label={`Cifra ${i + 1} di ${OTP_LENGTH}`}
+          aria-label={digitLabel(i + 1, OTP_LENGTH)}
           className="h-[52px] rounded-xl border border-border bg-surface text-center font-serif text-2xl text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
         />
       ))}

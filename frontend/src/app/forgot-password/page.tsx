@@ -115,7 +115,12 @@ export default function ForgotPasswordPage() {
               <p className="text-[15px] text-muted">{t("resetPasswordIntro")}</p>
             </div>
 
-            <OtpInput value={code} onChange={setCode} />
+            <OtpInput
+              value={code}
+              onChange={setCode}
+              legend={t("otpLegend")}
+              digitLabel={(index, total) => t("otpDigitLabel", { index, total })}
+            />
 
             <FieldGroup className="mb-0">
               <Label htmlFor="new-password" hint={t("passwordHint")}>

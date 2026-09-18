@@ -470,7 +470,8 @@ async function renderPipeline(markdown: string, options: RenderOptions, withHead
   const dom = new JSDOM(`<body>${cleanHtml}</body>`);
   const { document } = dom.window;
 
-  wrapSensitiveImages(document, options.expandImageLabel ?? "Ingrandisci");
+  const expandImageLabel = options.expandImageLabel ?? "Ingrandisci";
+  wrapSensitiveImages(document, expandImageLabel);
   // Immagini di contenuto non segnalate come sensibili: cliccabili subito
   // per la Lightbox (Rifinitura #1) — quelle sensibili restano escluse (sono
   // comunque ancora <img> dentro il wrapper appena creato sopra, non
@@ -486,6 +487,13 @@ async function renderPipeline(markdown: string, options: RenderOptions, withHead
       // raggiungibile solo col mouse/touch, non da tastiera.
       img.setAttribute("tabindex", "0");
       img.setAttribute("role", "button");
+      // Un'immagine Markdown con alt vuoto (`![](url)`) diventerebbe un
+      // controllo da tastiera senza nome accessibile — l'`alt` da solo non
+      // basta più una volta che diventa un "button" (bug segnalato dalla
+      // review Copilot).
+      if (!img.getAttribute("alt")) {
+        img.setAttribute("aria-label", expandImageLabel);
+      }
     }
     // HTML grezzo (dangerouslySetInnerHTML, non componenti React): niente
     // next/image qui, ma il caricamento lazy nativo del browser resta

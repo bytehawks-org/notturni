@@ -38,6 +38,11 @@ export function SensitiveImage({
           data-lightbox="1"
           tabIndex={0}
           role="button"
+          // Con `alt` vuoto (copertina senza testo alternativo) il controllo
+          // da tastiera resterebbe senza nome accessibile — riusa la stessa
+          // etichetta del pulsante di ingrandimento del ramo sensibile qui
+          // sotto (bug segnalato dalla review Copilot).
+          aria-label={alt || expandLabel}
           fill
           unoptimized
           sizes="100vw"
