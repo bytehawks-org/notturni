@@ -17,6 +17,26 @@ const RESERVED_SUBDOMAINS = new Set([
   "status",
 ]);
 
+/** Primo segmento dei path *di piattaforma* (non del blog) raggiungibili
+ * anche da un sottodominio — es. `foo.notturni.eu/login`. I componenti
+ * pubblici del blog generano link relativi come `/login`, `/dashboard`,
+ * `/?category=...`: senza questo bypass la riscrittura sotto li porterebbe
+ * su `/{slug}/login` ecc., che non è una route del blog (sotto
+ * `frontend/src/app/[blogSlug]/` esistono solo `[postSlug]`, `bibliografia`,
+ * `link`, `media`, `pagina`, `pub`, `atom.xml`, `feed.xml`) e produrrebbe un
+ * 404 o il feed sbagliato invece della pagina di piattaforma attesa.
+ * Tenerla allineata alle route dirette sotto `frontend/src/app/`. */
+const PLATFORM_ONLY_PATHS = new Set([
+  "login",
+  "register",
+  "forgot-password",
+  "dashboard",
+  "admin",
+  "blogs",
+  "u",
+  "p",
+]);
+
 /** Routing per sottodominio-per-blog (CLAUDE.md #6, ROADMAP.md "Blog utente
  * su nomeutente.notturni.eu"): {slug}.notturni.eu viene riscritto
  * internamente su /{slug}/..., la stessa route path-based già servita da
@@ -36,6 +56,11 @@ export function proxy(request: NextRequest) {
   // Un'etichetta con un punto (es. un sottodominio "annidato" inatteso) o
   // riservata non va mai interpretata come slug di un blog.
   if (!subdomain || subdomain.includes(".") || RESERVED_SUBDOMAINS.has(subdomain)) {
+    return NextResponse.next();
+  }
+
+  const firstSegment = request.nextUrl.pathname.split("/")[1];
+  if (PLATFORM_ONLY_PATHS.has(firstSegment)) {
     return NextResponse.next();
   }
 

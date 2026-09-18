@@ -37,13 +37,20 @@ function MediaFigure({
   locale,
   defaultLocale,
   resolvePermalink,
+  expandLabel,
 }: {
   entry: MediaBibliographyEntry;
   locale: string;
   defaultLocale: string;
   resolvePermalink: (permalink: string) => string;
+  expandLabel: string;
 }) {
-  const sensitive = entry.categories.length > 0;
+  // `is_sensitive`, non `categories.length > 0`: un'immagine segnalata
+  // dalla sola automoderazione (o dal modal senza una categoria specifica
+  // scelta) ha `categories` vuoto ma è comunque sensibile — vedi
+  // backend/app/models/post_media.py e la pagina del post, che la sfoca
+  // già in base allo stesso flag.
+  const sensitive = entry.is_sensitive;
   const first = entry.citations[0];
   return (
     <figure className="flex min-w-0 flex-col gap-2">
@@ -53,15 +60,22 @@ function MediaFigure({
           <input type="checkbox" className="sensitive-image-toggle" />
           {/* eslint-disable-next-line @next/next/no-img-element -- URL storage esterno */}
           <img src={entry.url} alt={entry.alt_text} className="h-full w-full object-cover" />
-          <span className="sensitive-image-overlay">{SENSITIVITY_CATEGORY_LABELS[entry.categories[0]]}</span>
-          <button type="button" className="lightbox-expand-btn" data-lightbox-src={entry.url} data-lightbox-alt={entry.alt_text} aria-label="Ingrandisci">
+          <span className="sensitive-image-overlay">{SENSITIVITY_CATEGORY_LABELS[entry.categories[0] ?? "other"]}</span>
+          <button type="button" className="lightbox-expand-btn" data-lightbox-src={entry.url} data-lightbox-alt={entry.alt_text} aria-label={expandLabel}>
             <ExpandIcon />
           </button>
         </label>
       ) : (
         <span className="relative block aspect-square overflow-hidden rounded-[10px] border border-border bg-surface md:aspect-[4/3]">
           {/* eslint-disable-next-line @next/next/no-img-element -- URL storage esterno */}
-          <img src={entry.url} alt={entry.alt_text} data-lightbox="1" className="h-full w-full object-cover" />
+          <img
+            src={entry.url}
+            alt={entry.alt_text}
+            data-lightbox="1"
+            tabIndex={0}
+            role="button"
+            className="h-full w-full object-cover"
+          />
         </span>
       )}
       <figcaption className="flex flex-col gap-0.5 text-[13px] leading-snug">
@@ -147,7 +161,7 @@ export default async function BlogMediaBibliographyPage({
                 </Link>
                 <div className="grid grid-cols-2 gap-3 md:gap-5 lg:grid-cols-4">
                   {group.items.map((entry, i) => (
-                    <MediaFigure key={i} entry={entry} locale={locale} defaultLocale={blog.default_locale} resolvePermalink={links.fromPermalink} />
+                    <MediaFigure key={i} entry={entry} locale={locale} defaultLocale={blog.default_locale} resolvePermalink={links.fromPermalink} expandLabel={t("expandImage")} />
                   ))}
                 </div>
               </section>
@@ -156,7 +170,7 @@ export default async function BlogMediaBibliographyPage({
         ) : (
           <div className="mt-6 grid grid-cols-2 gap-3 md:gap-5 lg:grid-cols-4">
             {entries.map((entry, i) => (
-              <MediaFigure key={i} entry={entry} locale={locale} defaultLocale={blog.default_locale} resolvePermalink={links.fromPermalink} />
+              <MediaFigure key={i} entry={entry} locale={locale} defaultLocale={blog.default_locale} resolvePermalink={links.fromPermalink} expandLabel={t("expandImage")} />
             ))}
           </div>
         )}

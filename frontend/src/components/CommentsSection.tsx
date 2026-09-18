@@ -118,7 +118,7 @@ function CommentBody({ comment }: { comment: Comment }) {
         {comment.author_avatar_url ? (
           <Image
             src={comment.author_avatar_url}
-            alt={comment.author_display_name}
+            alt=""
             width={24}
             height={24}
             className="h-6 w-6 rounded-full object-cover"

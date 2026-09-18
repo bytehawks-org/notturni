@@ -4,7 +4,7 @@
 # host fisso di networking.k8s.io/v1 Ingress (ingress.yaml, che resta il
 # fallback path-based catch-all usato anche in sviluppo/test senza DNS — le
 # due risorse convivono, questa non lo sostituisce). Applicato dalla
-# risoluzione lato Next.js in frontend/src/middleware.ts, che riscrive
+# risoluzione lato Next.js in frontend/src/proxy.ts, che riscrive
 # {slug}.notturni.eu/... su /{slug}/... internamente (route già esistenti
 # sotto frontend/src/app/[blogSlug]/).
 #
@@ -14,7 +14,7 @@
 # riservate (www, blog, mail, ...): Traefik usa RE2 (motore regex di Go), che
 # non supporta i lookahead negativi necessari per farlo in una singola
 # espressione. L'esclusione è comunque applicata — lato Next.js
-# (frontend/src/middleware.ts::RESERVED_SUBDOMAINS, stessa lista di
+# (frontend/src/proxy.ts::RESERVED_SUBDOMAINS, stessa lista di
 # backend/app/domain/blog_rules.py::RESERVED_BLOG_SLUGS): un sottodominio
 # riservato arriva comunque al frontend ma non viene riscritto su un blog,
 # resta sulla home di piattaforma. Quando un sottodominio riservato avrà una

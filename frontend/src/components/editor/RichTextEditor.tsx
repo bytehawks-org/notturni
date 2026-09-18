@@ -247,7 +247,7 @@ function useMentionAutocomplete(
             {item.avatar_url ? (
               <Image
                 src={item.avatar_url}
-                alt={item.username}
+                alt=""
                 width={24}
                 height={24}
                 className="h-6 w-6 shrink-0 rounded-full object-cover"

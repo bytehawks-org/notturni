@@ -305,6 +305,12 @@ body {
   color: #fff;
   opacity: 0;
   pointer-events: none;
+  /* visibility (non solo opacity/pointer-events) toglie il pulsante anche
+     dall'ordine di tabulazione: senza, chi naviga da tastiera poteva
+     raggiungerlo e "premerlo" prima ancora di rivelare l'immagine sensibile
+     col checkbox, aprendo la lightbox senza passare dalla rivelazione
+     esplicita. */
+  visibility: hidden;
   transition: opacity 0.2s, background 0.15s;
   z-index: 1;
 }
@@ -314,6 +320,7 @@ body {
 .sensitive-image-toggle:checked ~ .lightbox-expand-btn {
   opacity: 1;
   pointer-events: auto;
+  visibility: visible;
 }
 
 img[data-lightbox] {

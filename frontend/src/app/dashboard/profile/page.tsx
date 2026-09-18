@@ -28,15 +28,22 @@ export default function ProfilePage() {
   const { user, authFetch, refreshUser, logout } = useAuth();
   const t = useTranslations("Profile");
   const tc = useTranslations("Common");
+  const tTier = useTranslations("VerificationTier");
   const errorMessage = useCallback(
     (err: unknown): string => (err instanceof ApiClientError ? err.message : tc("unexpectedError")),
     [tc]
   );
   const [profile, setProfile] = useState<MeProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // catturato una sola volta al mount: basta per decidere se mostrare il
-  // form disabilitato, non serve un valore che si aggiorni dal vivo.
-  const [nowMs] = useState(() => Date.now());
+  // Aggiornato periodicamente (non catturato una sola volta al mount): il
+  // cooldown username dura 5 giorni, una scheda lasciata aperta oltre quel
+  // confine deve poter sbloccare da sola l'input invece di restarci
+  // bloccata fino a un refresh manuale della pagina.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   const [username, setUsername] = useState("");
   const [bio, setBio] = useState("");
@@ -249,12 +256,23 @@ export default function ProfilePage() {
     }
   }
 
-  function handleCancelEmailChange() {
+  async function handleCancelEmailChange() {
     setNewEmail("");
     setEmailChangeCode("");
     setEmailChangeError(null);
     setEmailChangeMessage(null);
     setProfile((prev) => (prev ? { ...prev, pending_email_change: null } : prev));
+    try {
+      // Senza questa chiamata la richiesta pending restava in DB (e il
+      // vecchio OTP valido) anche dopo "Annulla" — sparivano solo lo stato
+      // React locale, tornando visibili a un refresh della pagina.
+      await authFetch((token) => api.users.cancelEmailChange(token));
+    } catch {
+      // Nessun riscontro bloccante qui: lo stato locale è già pulito e
+      // request_email_change sostituisce comunque una pending precedente,
+      // quindi un fallimento di rete su questa chiamata non lascia
+      // l'interfaccia in uno stato inconsistente da segnalare.
+    }
   }
 
   async function handleSaveDomain(event: FormEvent) {
@@ -286,6 +304,11 @@ export default function ProfilePage() {
       }
     } catch (err) {
       setDomainError(errorMessage(err));
+      // Il backend marca già il record "failed" in DB prima di rispondere
+      // con l'errore (vedi app/api/v1/users.py::verify_my_domain) — senza
+      // questo il badge di stato restava bloccato su "pending" fino a un
+      // refresh, il ramo "failed" dell'interfaccia non si vedeva mai.
+      setDomainInfo((prev) => (prev ? { ...prev, status: "failed" } : prev));
     } finally {
       setDomainSubmitting(false);
     }
@@ -774,7 +797,11 @@ export default function ProfilePage() {
             <h2 className="font-serif text-lg text-foreground">{t("nav.verification")}</h2>
 
             <div className="flex items-center gap-2">
-              <VerificationBadge tier={profile?.verification_tier ?? "none"} size={20} />
+              <VerificationBadge
+                tier={profile?.verification_tier ?? "none"}
+                size={20}
+                label={profile && profile.verification_tier !== "none" ? tTier(profile.verification_tier) : undefined}
+              />
               <span className="text-sm text-foreground">
                 {profile && profile.verification_tier !== "none"
                   ? t("verificationBadgeActive")

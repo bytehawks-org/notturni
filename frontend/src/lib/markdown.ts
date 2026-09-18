@@ -44,7 +44,7 @@ const renderer = new MarkdownIt({ html: false, linkify: true, breaks: false });
  *
  * Muta `document` in place: fa parte della pipeline di `renderMarkdown`, che
  * fa un solo parse DOM per tutte le trasformazioni. */
-function wrapSensitiveImages(document: Document): void {
+function wrapSensitiveImages(document: Document, expandImageLabel: string): void {
   document.querySelectorAll('img[title^="sensitive"]').forEach((img) => {
     const wrapper = document.createElement("label");
     wrapper.className = "sensitive-image-wrapper";
@@ -60,7 +60,7 @@ function wrapSensitiveImages(document: Document): void {
     expandBtn.className = "lightbox-expand-btn";
     expandBtn.setAttribute("data-lightbox-src", src);
     expandBtn.setAttribute("data-lightbox-alt", img.getAttribute("alt") ?? "");
-    expandBtn.setAttribute("aria-label", "Ingrandisci");
+    expandBtn.setAttribute("aria-label", expandImageLabel);
     expandBtn.innerHTML =
       '<svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3.5h3.5V7"/><path d="M14.5 3.5 10 8"/><path d="M7 14.5H3.5V11"/><path d="M3.5 14.5 8 10"/></svg>';
     img.replaceWith(wrapper);
@@ -280,8 +280,12 @@ function buildNoteCitationElement(
   }
 
   // Un link generico (a differenza del DOI, non implica di per sé un dominio
-  // fisso) solo se diverso dalla pagina doi.org già mostrata sopra.
-  if (note.url && !(note.doi && note.url.includes(`doi.org/${note.doi}`))) {
+  // fisso) solo se diverso dalla pagina doi.org già mostrata sopra. Lo schema
+  // è già validato alla scrittura (app/domain/notes.py::_clean_url), ma qui
+  // finisce direttamente in un href dopo l'ultimo DOMPurify della pipeline
+  // (vedi commento sopra la funzione): un secondo controllo difende anche
+  // righe salvate prima di quella validazione.
+  if (note.url && /^https?:\/\//i.test(note.url) && !(note.doi && note.url.includes(`doi.org/${note.doi}`))) {
     if (parts.length > 0 || p.childNodes.length > 0) p.append(" · ");
     const a = document.createElement("a");
     a.setAttribute("href", note.url);
@@ -433,6 +437,12 @@ export interface RenderOptions {
   notes?: PostNote[];
   /** Etichette dell'elenco note nella lingua dell'interfaccia (next-intl). */
   footnoteLabels?: FootnoteLabels;
+  /** Etichetta del pulsante di ingrandimento sulle immagini segnalate come
+   * sensibili (Common.expandImage, next-intl) — questa pipeline gira
+   * server-side senza contesto di richiesta/lingua proprio, va passata da
+   * chi chiama. Default in italiano per i chiamanti che non la passano
+   * ancora (pagine statiche, `excerpt`). */
+  expandImageLabel?: string;
 }
 
 export interface RenderedPost {
@@ -460,7 +470,7 @@ async function renderPipeline(markdown: string, options: RenderOptions, withHead
   const dom = new JSDOM(`<body>${cleanHtml}</body>`);
   const { document } = dom.window;
 
-  wrapSensitiveImages(document);
+  wrapSensitiveImages(document, options.expandImageLabel ?? "Ingrandisci");
   // Immagini di contenuto non segnalate come sensibili: cliccabili subito
   // per la Lightbox (Rifinitura #1) — quelle sensibili restano escluse (sono
   // comunque ancora <img> dentro il wrapper appena creato sopra, non
@@ -469,7 +479,14 @@ async function renderPipeline(markdown: string, options: RenderOptions, withHead
   // (altrimenti il primo click aprirebbe subito la lightbox invece di
   // limitarsi a rivelarla).
   document.querySelectorAll("img").forEach((img) => {
-    if (!img.closest(".sensitive-image-wrapper")) img.setAttribute("data-lightbox", "1");
+    if (!img.closest(".sensitive-image-wrapper")) {
+      img.setAttribute("data-lightbox", "1");
+      // L'unico handler è un listener globale di click/keydown
+      // (LightboxProvider): senza tabIndex/role l'immagine resta
+      // raggiungibile solo col mouse/touch, non da tastiera.
+      img.setAttribute("tabindex", "0");
+      img.setAttribute("role", "button");
+    }
     // HTML grezzo (dangerouslySetInnerHTML, non componenti React): niente
     // next/image qui, ma il caricamento lazy nativo del browser resta
     // comunque disponibile senza JS aggiuntivo.

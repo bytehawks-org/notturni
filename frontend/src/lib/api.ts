@@ -631,6 +631,9 @@ export const api = {
         token,
         body: { code },
       }),
+    /** Annulla una richiesta di cambio email pending, a qualunque passo. */
+    cancelEmailChange: (token: string) =>
+      request<void>("/api/v1/users/me/email/request", { method: "DELETE", token }),
     /** Registra/sostituisce il dominio custom (stato `pending`), ritorna le
      * istruzioni per il record TXT da pubblicare sul DNS. */
     setDomain: (token: string, domain: string) =>

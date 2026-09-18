@@ -89,7 +89,8 @@
   "Post": {
     "notes": "Notes",
     "blogBibliography": "Blog bibliography →",
-    "backToText": "Back to text"
+    "backToText": "Back to text",
+    "expandImage": "Expand"
   },
   "Fragment": {
     "meta": "{words} words · {ratio}% of post",
@@ -793,7 +794,8 @@
     "subtitle": "{count, plural, one {# image cited} other {# images cited}} across published posts. Every image carries its alt text; flagged images stay blurred until you choose to reveal them.",
     "grid": "Grid",
     "byPost": "By post",
-    "empty": "No images yet."
+    "empty": "No images yet.",
+    "expandImage": "Expand"
   },
   "LinksPage": {
     "title": "Links",
@@ -1129,6 +1131,12 @@
     "previewDark": "Preview dark theme",
     "previewLight": "Preview light theme",
     "previewHintDark": "The dark variant is applied to public pages when the reader uses the dark theme."
+  },
+  "VerificationTier": {
+    "bronze": "Verified — custom domain",
+    "silver": "Verified — silver",
+    "gold": "Verified — gold",
+    "blue": "Verified — blue"
   },
   "PublicProfile": {
     "writesIn": "writes in",

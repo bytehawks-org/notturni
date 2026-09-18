@@ -105,7 +105,7 @@ export function CollaboratorsTab({ blogSlug }: { blogSlug: string }) {
                   {m.avatar_url ? (
                     <Image
                       src={m.avatar_url}
-                      alt={m.username}
+                      alt=""
                       width={28}
                       height={28}
                       className="h-7 w-7 flex-none rounded-full object-cover"

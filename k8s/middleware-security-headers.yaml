@@ -16,6 +16,14 @@
 # copre sia l'host di piattaforma sia i sottodomini per-blog
 # (slug.notturni.eu, ingressroute.yaml) per le chiamate XHR del frontend
 # verso l'API dal browser.
+#
+# script-src resta 'self' senza 'unsafe-inline'/nonce: l'unico script inline
+# che serviva (init del tema, prima dell'idratazione React) è stato spostato
+# in frontend/public/theme-init.js proprio per restare compatibile con questa
+# policy (vedi frontend/src/app/layout.tsx). challenges.cloudflare.com è
+# necessario per il widget Turnstile dei commenti anonimi
+# (frontend/src/components/CommentsSection.tsx): script e iframe della sfida
+# vengono da quell'origine, non da 'self'.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
@@ -33,7 +41,8 @@ spec:
       default-src 'self';
       img-src 'self' data: https:;
       style-src 'self' 'unsafe-inline';
-      script-src 'self';
+      script-src 'self' https://challenges.cloudflare.com;
+      frame-src https://challenges.cloudflare.com;
       font-src 'self' data:;
-      connect-src 'self' https://notturni.eu https://*.notturni.eu;
+      connect-src 'self' https://notturni.eu https://*.notturni.eu https://challenges.cloudflare.com;
       frame-ancestors 'none'
