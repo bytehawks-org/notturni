@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 
 import { FeedPostCard } from "@/components/FeedPostCard";
@@ -15,10 +16,11 @@ export const metadata: Metadata = { alternates: { canonical: "/" }, openGraph: {
 /** Same data as before (feed + trending, tag/category filters) plus the blog directory sidebar. Mockups 4a / 4b. */
 export default async function Home({ searchParams }: { searchParams: Promise<{ tag?: string; category?: string; locale?: string }> }) {
   const { tag, category, locale } = await searchParams;
-  const [posts, trending, blogs] = await Promise.all([
+  const [posts, trending, blogs, t] = await Promise.all([
     getPublicFeed({ limit: 20, tag, category, locale }).catch(() => []),
     getTrendingTags({ days: 7, limit: 8 }).catch(() => []),
     getPublicBlogs({ limit: 5, sort: "active" }).catch(() => []), // new server-api helper → GET /api/v1/blogs?public=1
+    getTranslations("HomePage"),
   ]);
   const filtered = Boolean(tag || category);
 

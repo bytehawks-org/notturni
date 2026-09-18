@@ -27,6 +27,7 @@ export function MediaGrid({ items, editable = false, onOpen }: { items: MediaIte
   );
 }
 function Badge({ kind }: { kind: NonNullable<MediaItem["badge"]> }) {
+  const t = useTranslations("Media");
   const cls = { cover: "bg-primary text-background", "no-alt": "bg-danger text-white", unused: "bg-muted text-background" }[kind];
   return <span className={`absolute left-2 top-2 rounded px-1.5 py-0.5 text-[11px] font-semibold ${cls}`}>{t(`badge.${kind}`)}</span>;
 }

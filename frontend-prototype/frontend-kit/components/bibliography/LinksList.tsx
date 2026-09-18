@@ -6,7 +6,6 @@ export interface LinkGroup { host: string; postCount: number; items: SharedLink[
 
 /** /{blog}/link — grouped by host. `groupByHost` is a pure helper for the server component. */
 export function groupByHost(links: SharedLink[]): LinkGroup[] {
-  const t = useTranslations("Links");
   const map = new Map<string, SharedLink[]>();
   for (const l of links) { const h = new URL(l.url).hostname.replace(/^www\./, ""); map.set(h, [...(map.get(h) ?? []), l]); }
   return [...map.entries()].map(([host, items]) => ({ host, items, postCount: new Set(items.map((i) => i.post.href)).size })).sort((a, b) => b.items.length - a.items.length);

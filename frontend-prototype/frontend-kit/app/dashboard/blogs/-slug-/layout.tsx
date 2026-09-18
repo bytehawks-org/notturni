@@ -1,4 +1,5 @@
 "use client";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
@@ -10,6 +11,7 @@ import { VisibilityLabel, type Visibility } from "@/components/blog/VisibilityBa
 /** Layout for every blog-admin tab: header (avatar, title, slug, visibility, role) + role-gated tab strip. Mockups 5a–5c. */
 export default function BlogAdminLayout({ children, params }: { children: ReactNode; params: { slug: string } }) {
   const path = usePathname();
+  const t = useTranslations("BlogAdmin");
   // TODO replace with useBlog(params.slug) from lib/api
   const blog = { slug: params.slug, title: "Quaderno Notturno", visibility: "public" as Visibility, role: "owner" as BlogRole, pendingComments: 3 };
   return (

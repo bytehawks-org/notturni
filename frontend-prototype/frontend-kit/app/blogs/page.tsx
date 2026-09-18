@@ -8,7 +8,7 @@ import { getPublicBlogs } from "@/lib/server-api";
 import Link from "next/link";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const t = await getTranslations("BlogsPage"); const t = await getTranslations("BlogsPage"); return { title: t("title"), alternates: { canonical: "/blogs" } }; }
+  const t = await getTranslations("BlogsPage"); return { title: t("title"), alternates: { canonical: "/blogs" } }; }
 
 /** /blogs — mockup 4c. Only blogs with search_indexing_enabled and visibility=public are returned by the API. */
 export default async function BlogsPage({ searchParams }: { searchParams: Promise<{ locale?: string; q?: string }> }) {
