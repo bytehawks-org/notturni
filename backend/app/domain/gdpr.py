@@ -90,6 +90,14 @@ async def export_user_data(session: AsyncSession, user: User) -> dict[str, Any]:
     api_tokens = (
         (await session.execute(select(ApiToken).where(ApiToken.user_id == user.id))).scalars().all()
     )
+    # `User.verified_domain` copre solo il dominio già verificato: una
+    # richiesta ancora pending/failed vive solo qui e altrimenti sparirebbe
+    # dall'export se l'utente lo scarica prima di completare la verifica DNS
+    # (bug segnalato dalla review Copilot). Mai il verification_token: è un
+    # segreto operativo, non un dato personale da portare fuori.
+    custom_domain_claim = (
+        await session.execute(select(CustomDomain).where(CustomDomain.user_id == user.id))
+    ).scalar_one_or_none()
     audit_events = (
         (
             await session.execute(
@@ -120,6 +128,18 @@ async def export_user_data(session: AsyncSession, user: User) -> dict[str, Any]:
             "verified_domain": user.verified_domain,
             "verification_tier": user.verification_tier.value,
             "created_at": user.created_at.isoformat(),
+            "custom_domain_claim": (
+                {
+                    "domain": custom_domain_claim.domain,
+                    "status": custom_domain_claim.status.value,
+                    "created_at": custom_domain_claim.created_at.isoformat(),
+                    "verified_at": custom_domain_claim.verified_at.isoformat()
+                    if custom_domain_claim.verified_at
+                    else None,
+                }
+                if custom_domain_claim is not None
+                else None
+            ),
         },
         "social_links": [
             {"label": s.label, "url": s.url, "position": s.position} for s in social_links

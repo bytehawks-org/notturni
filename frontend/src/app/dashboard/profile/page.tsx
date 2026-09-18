@@ -257,21 +257,20 @@ export default function ProfilePage() {
   }
 
   async function handleCancelEmailChange() {
-    setNewEmail("");
-    setEmailChangeCode("");
     setEmailChangeError(null);
     setEmailChangeMessage(null);
-    setProfile((prev) => (prev ? { ...prev, pending_email_change: null } : prev));
     try {
-      // Senza questa chiamata la richiesta pending restava in DB (e il
-      // vecchio OTP valido) anche dopo "Annulla" — sparivano solo lo stato
-      // React locale, tornando visibili a un refresh della pagina.
+      // Pulire lo stato locale solo dopo la conferma del server: prima
+      // azzerava subito React mentre la richiesta pending (e il vecchio
+      // OTP valido) restava in DB in caso di errore, mostrando "annullato"
+      // all'utente senza che lo fosse davvero (bug segnalato dalla review
+      // Copilot).
       await authFetch((token) => api.users.cancelEmailChange(token));
-    } catch {
-      // Nessun riscontro bloccante qui: lo stato locale è già pulito e
-      // request_email_change sostituisce comunque una pending precedente,
-      // quindi un fallimento di rete su questa chiamata non lascia
-      // l'interfaccia in uno stato inconsistente da segnalare.
+      setNewEmail("");
+      setEmailChangeCode("");
+      setProfile((prev) => (prev ? { ...prev, pending_email_change: null } : prev));
+    } catch (err) {
+      setEmailChangeError(errorMessage(err));
     }
   }
 
@@ -304,11 +303,15 @@ export default function ProfilePage() {
       }
     } catch (err) {
       setDomainError(errorMessage(err));
-      // Il backend marca già il record "failed" in DB prima di rispondere
-      // con l'errore (vedi app/api/v1/users.py::verify_my_domain) — senza
-      // questo il badge di stato restava bloccato su "pending" fino a un
-      // refresh, il ramo "failed" dell'interfaccia non si vedeva mai.
-      setDomainInfo((prev) => (prev ? { ...prev, status: "failed" } : prev));
+      // Il backend marca il record "failed" in DB solo per la risposta 400
+      // di mismatch DNS (vedi app/api/v1/users.py::verify_my_domain) — per
+      // qualunque altro errore (rete, 401/429, 404 dominio assente) il
+      // record resta invariato, e replicare "failed" qui a prescindere
+      // disallineava il badge dallo stato reale nel database (bug segnalato
+      // dalla review Copilot).
+      if (err instanceof ApiClientError && err.status === 400) {
+        setDomainInfo((prev) => (prev ? { ...prev, status: "failed" } : prev));
+      }
     } finally {
       setDomainSubmitting(false);
     }

@@ -74,6 +74,10 @@ function MediaFigure({
             data-lightbox="1"
             tabIndex={0}
             role="button"
+            // `alt_text` può essere vuoto: senza un fallback il controllo da
+            // tastiera resterebbe senza nome accessibile (bug segnalato
+            // dalla review Copilot).
+            aria-label={entry.alt_text || expandLabel}
             className="h-full w-full object-cover"
           />
         </span>

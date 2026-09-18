@@ -203,12 +203,23 @@ async def sync_blog_media(
             .where(Post.blog_id == blog.id)
         )
     ).all()
+    # La stessa immagine può ricorrere in più post con `is_sensitive`
+    # diverso (nessun ORDER BY qui, ordine non deterministico): raggruppare
+    # per URL prima di inserire, così una sola citazione sensibile basta a
+    # marcare l'intera riga importata, invece di dipendere da quale post
+    # viene incontrato per primo (bug segnalato dalla review Copilot).
+    to_import: dict[str, tuple[str, list[str], bool]] = {}
     for url, alt_text, categories, is_sensitive in rows:
         if url in known:
             continue
-        known.add(url)
+        existing = to_import.get(url)
+        if existing is None:
+            to_import[url] = (alt_text or "", list(categories or []), is_sensitive)
+        elif is_sensitive and not existing[2]:
+            to_import[url] = (existing[0], existing[1], True)
+    for url, (alt_text, categories, is_sensitive) in to_import.items():
         session.add(
-            MediaFile(blog_id=blog.id, uploader_id=None, object_key=None, url=url, content_type="", size_bytes=0, alt_text=alt_text or "", categories=list(categories or []), is_sensitive=is_sensitive)
+            MediaFile(blog_id=blog.id, uploader_id=None, object_key=None, url=url, content_type="", size_bytes=0, alt_text=alt_text, categories=categories, is_sensitive=is_sensitive)
         )
     await session.commit()
     return await list_blog_media(slug, current_user, session)

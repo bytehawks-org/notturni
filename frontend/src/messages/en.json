@@ -620,7 +620,9 @@
     "resetting": "Resetting…",
     "resetPassword": "Reset password",
     "resetSuccess": "Password updated. You can now sign in with the new password.",
-    "backToLogin": "Back to sign in"
+    "backToLogin": "Back to sign in",
+    "otpLegend": "6-digit verification code",
+    "otpDigitLabel": "Digit {index} of {total}"
   },
   "FragmentsPage": {
     "title": "Fragments",

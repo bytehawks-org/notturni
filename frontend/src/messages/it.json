@@ -620,7 +620,9 @@
     "resetting": "Reimpostazione…",
     "resetPassword": "Reimposta password",
     "resetSuccess": "Password aggiornata. Ora puoi accedere con la nuova password.",
-    "backToLogin": "Torna al login"
+    "backToLogin": "Torna al login",
+    "otpLegend": "Codice di verifica a 6 cifre",
+    "otpDigitLabel": "Cifra {index} di {total}"
   },
   "FragmentsPage": {
     "title": "Frammenti",

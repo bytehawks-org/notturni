@@ -1615,7 +1615,9 @@ il dominio non è verificato).
 
 `400` se il formato non è un hostname valido o è un (sotto)dominio della
 piattaforma stessa (`NOCT_INSTANCE_FQDN`); `409` se già rivendicato e
-verificato da un altro account.
+verificato da un altro account, o se due utenti rivendicano in parallelo lo
+stesso dominio ancora libero (vince chi fa commit per primo, l'altro riceve
+`409` invece di un errore generico).
 
 **`POST /api/v1/users/me/domain/verify`** — richiede sessione. Interroga il
 DNS per il record TXT atteso (timeout 5s, fail sulla singola verifica non
@@ -1694,10 +1696,12 @@ accesso/portabilità (Art. 20): istantanea JSON di tutti i dati collegati
 all'account — profilo, blog di proprietà, post e commenti scritti (ovunque,
 non solo sui propri blog — restano comunque parole scritte dall'utente),
 frammenti salvati, follow (in entrambe le direzioni, solo gli id), token API
-(nome/prefisso/date, mai il segreto o l'hash) ed eventi di audit di cui è
-l'attore (fino a 1000, i più recenti). Struttura libera, non un
-`response_model` tipizzato: vedi `app/domain/gdpr.py::export_user_data` per
-i campi esatti.
+(nome/prefisso/date, mai il segreto o l'hash), eventi di audit di cui è
+l'attore (fino a 1000, i più recenti) e l'eventuale claim di dominio custom
+(anche se ancora `pending`/`failed`, non solo quello già verificato — mai il
+`verification_token`, segreto operativo e non dato personale). Struttura
+libera, non un `response_model` tipizzato: vedi
+`app/domain/gdpr.py::export_user_data` per i campi esatti.
 
 **`DELETE /api/v1/users/me`** — richiede sessione.
 `{"confirm_username": "il-proprio-username"}` → `204`, `400` se non

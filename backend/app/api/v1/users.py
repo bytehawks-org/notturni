@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -587,7 +588,17 @@ async def set_my_domain(
             status=CustomDomainStatus.PENDING,
         )
         session.add(record)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        # La DELETE sopra rimuove solo le righe pending/failed già viste in
+        # questa richiesta: due utenti che rivendicano lo stesso dominio non
+        # ancora reclamato in parallelo possono comunque superare entrambi i
+        # controlli prima che uno dei due faccia commit — senza questo
+        # catch il secondo commit fallisce sul vincolo unique con un 500
+        # invece di un 409 pulito (bug segnalato dalla review Copilot).
+        await session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "Dominio già rivendicato da un altro account.") from exc
     await session.refresh(record)
 
     return DomainOut(
