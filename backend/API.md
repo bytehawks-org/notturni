@@ -558,6 +558,7 @@ citati nel corpo dei post **pubblicati**, raggruppati per URL identico:
     "url": "https://.../media/....jpg",
     "alt_text": "Descrizione dell'immagine",
     "categories": ["nudity", "explicit"],
+    "is_sensitive": true,
     "citations": [
       {"post_title": "...", "post_slug": "...", "permalink": "/{blog}/{slug}", "locale": "it", "used_at": "2026-01-01T00:00:00Z"}
     ]
@@ -567,8 +568,12 @@ citati nel corpo dei post **pubblicati**, raggruppati per URL identico:
 
 `categories` è il sottoinsieme di `suggestive`/`nudity`/`explicit`/`other`
 scelto dall'autore per quell'immagine (vedi "Avviso sui contenuti" nella
-sezione Post) — vuoto se non segnalata o segnalata senza una categoria
-specifica. `used_at` è la data di pubblicazione del post che la cita.
+sezione Post) — vuoto se non segnalata *oppure* segnalata (dalla sola
+automoderazione, o dal modal senza una categoria specifica) senza una
+categoria: per questo `is_sensitive` è un campo separato, non derivabile da
+`categories.length > 0` — è lui a decidere se l'immagine va mostrata sfocata
+nella griglia, stesso flag usato dal rendering del post. `used_at` è la data
+di pubblicazione del post che la cita.
 
 **`GET /api/v1/blogs/{slug}/links-bibliography`** — stesso principio, per i
 link citati nel corpo dei post pubblicati:
@@ -1450,8 +1455,8 @@ opzionali).
 }
 ```
 
-`verification_tier` (`none`|`bronze`|`silver`|`gold`|`blue`, CLAUDE.md §5):
-sigillo di verifica del profilo, stile Bluesky/Instagram/Twitter. Solo
+`verification_tier` (`none`|`bronze`|`silver`|`gold`|`blue`): sigillo di
+verifica del profilo, stile Bluesky/Instagram/Twitter. Solo
 `bronze` è oggi assegnato da una logica reale (dominio custom verificato via
 DNS, vedi sotto) — `silver`/`gold`/`blue` sono riservati per future
 integrazioni, nessun endpoint li assegna. `custom_domain` è valorizzato solo
@@ -1544,7 +1549,7 @@ scritte nel testo di post/pagine esistenti, salvate come testo semplice e non
 riscritte. Evento di audit `user.username_changed`
 (`payload.old_username`/`new_username`).
 
-### Cambio email verificato (CLAUDE.md §5)
+### Cambio email verificato
 
 Nessun `email` in `ProfileUpdateRequest`/`PATCH /users/me`: il cambio email
 passa da un flusso dedicato a **due passi**, a prova che chi lo richiede
@@ -1574,7 +1579,13 @@ cambio (ricontrollando l'unicità per evitare race condition). `400` se
 codice errato/scaduto o passo precedente non completato. Evento di audit
 `user.email_changed` (`payload.old_email`/`new_email`).
 
-### Dominio custom verificato via DNS (CLAUDE.md §5, stile Bluesky)
+**`DELETE /api/v1/users/me/email/request`** — richiede sessione. `204`,
+idempotente (anche senza una richiesta pending). Annulla la richiesta
+pending a qualunque passo si trovi — cancella la riga in
+`email_change_requests`, non solo lo stato lato client, altrimenti l'OTP già
+inviato resterebbe comunque valido fino a scadenza.
+
+### Dominio custom verificato via DNS (stile Bluesky)
 
 Un dominio per utente (`custom_domains`, `user_id` unico), verificato
 dimostrando il possesso pubblicando un record TXT sul proprio DNS — nessuna

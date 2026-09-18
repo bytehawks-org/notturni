@@ -583,6 +583,7 @@ async def _sync_post_media(session: AsyncSession, post: Post) -> None:
                     "url": r.url,
                     "alt_text": r.alt_text,
                     "categories": list(r.categories),
+                    "is_sensitive": r.is_sensitive,
                 }
                 for r in refs
             ],

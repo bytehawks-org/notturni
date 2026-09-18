@@ -6,6 +6,7 @@
 -- (vedi backend/README.md). Se lo schema cambia, questo file va rigenerato con
 -- lo stesso comando e ricommittato — non modificarlo a mano.
 
+
 BEGIN;
 
 CREATE TABLE alembic_version (
@@ -596,6 +597,409 @@ ALTER TABLE posts ADD COLUMN search_indexing_enabled BOOLEAN;
 ALTER TABLE posts ADD COLUMN ai_crawling_enabled BOOLEAN;
 
 UPDATE alembic_version SET version_num='139cf285ee44' WHERE alembic_version.version_num = 'c5c5ea3b5cf6';
+
+-- Running upgrade 139cf285ee44 -> a7c1d2e3f4b5
+
+CREATE TABLE post_reads_daily (
+    post_id UUID NOT NULL, 
+    day DATE NOT NULL, 
+    reads INTEGER NOT NULL, 
+    PRIMARY KEY (post_id, day), 
+    FOREIGN KEY(post_id) REFERENCES posts (id) ON DELETE CASCADE
+);
+
+UPDATE alembic_version SET version_num='a7c1d2e3f4b5' WHERE alembic_version.version_num = '139cf285ee44';
+
+-- Running upgrade a7c1d2e3f4b5 -> b8d2e3f4a5c6
+
+ALTER TABLE blogs ADD COLUMN is_paused BOOLEAN DEFAULT false NOT NULL;
+
+ALTER TABLE blogs ADD COLUMN deleted_at TIMESTAMP WITH TIME ZONE;
+
+ALTER TABLE blogs ADD COLUMN extra_locales VARCHAR(2)[] DEFAULT '{}' NOT NULL;
+
+UPDATE alembic_version SET version_num='b8d2e3f4a5c6' WHERE alembic_version.version_num = 'a7c1d2e3f4b5';
+
+-- Running upgrade b8d2e3f4a5c6 -> c9e3f4a5b6d7
+
+ALTER TABLE comments ADD COLUMN reported_to_platform BOOLEAN DEFAULT false NOT NULL;
+
+ALTER TABLE comments ADD COLUMN report_note TEXT;
+
+ALTER TABLE comments ADD COLUMN reported_at TIMESTAMP WITH TIME ZONE;
+
+ALTER TABLE blogs ADD COLUMN comments_auto_close_days INTEGER;
+
+CREATE TABLE blog_blocked_authors (
+    blog_id UUID NOT NULL, 
+    user_id UUID, 
+    email_hash VARCHAR(64), 
+    label VARCHAR(255) NOT NULL, 
+    note VARCHAR(255), 
+    created_by_id UUID NOT NULL, 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    FOREIGN KEY(blog_id) REFERENCES blogs (id) ON DELETE CASCADE, 
+    FOREIGN KEY(user_id) REFERENCES users (id), 
+    FOREIGN KEY(created_by_id) REFERENCES users (id)
+);
+
+CREATE INDEX ix_blog_blocked_authors_blog_id ON blog_blocked_authors (blog_id);
+
+UPDATE alembic_version SET version_num='c9e3f4a5b6d7' WHERE alembic_version.version_num = 'b8d2e3f4a5c6';
+
+-- Running upgrade c9e3f4a5b6d7 -> d0f4a5b6c7e8
+
+CREATE TYPE report_target_type AS ENUM ('blog', 'post');
+
+CREATE TYPE report_reason AS ENUM ('spam', 'abuse', 'illegal', 'other');
+
+CREATE TYPE report_status AS ENUM ('open', 'dismissed', 'actioned');
+
+CREATE TABLE content_reports (
+    reporter_id UUID NOT NULL, 
+    target_type report_target_type NOT NULL, 
+    target_id UUID NOT NULL, 
+    blog_id UUID NOT NULL, 
+    reason report_reason NOT NULL, 
+    note VARCHAR(500), 
+    status report_status NOT NULL, 
+    resolved_at TIMESTAMP WITH TIME ZONE, 
+    resolved_by_id UUID, 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    FOREIGN KEY(blog_id) REFERENCES blogs (id) ON DELETE CASCADE, 
+    FOREIGN KEY(reporter_id) REFERENCES users (id), 
+    FOREIGN KEY(resolved_by_id) REFERENCES users (id), 
+    CONSTRAINT uq_content_report_per_reporter UNIQUE (reporter_id, target_type, target_id)
+);
+
+CREATE INDEX ix_content_reports_blog_id ON content_reports (blog_id);
+
+CREATE INDEX ix_content_reports_reporter_id ON content_reports (reporter_id);
+
+CREATE INDEX ix_content_reports_status ON content_reports (status);
+
+CREATE INDEX ix_content_reports_target_id ON content_reports (target_id);
+
+UPDATE alembic_version SET version_num='d0f4a5b6c7e8' WHERE alembic_version.version_num = 'c9e3f4a5b6d7';
+
+-- Running upgrade d0f4a5b6c7e8 -> e1a5b6c7d8f9
+
+ALTER TABLE users ADD COLUMN ui_locale VARCHAR(2);
+
+CREATE TABLE platform_config (
+    id SERIAL NOT NULL, 
+    default_locale VARCHAR(2) NOT NULL, 
+    registration_mode VARCHAR(10) NOT NULL, 
+    sso_providers VARCHAR(20)[] NOT NULL, 
+    mfa_required_for_admins BOOLEAN NOT NULL, 
+    reserved_blog_names VARCHAR(63)[] NOT NULL, 
+    moderation_threshold FLOAT NOT NULL, 
+    max_blogs_per_user INTEGER NOT NULL, 
+    anonymous_comments_allowed BOOLEAN NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE, 
+    updated_by_id UUID, 
+    PRIMARY KEY (id), 
+    FOREIGN KEY(updated_by_id) REFERENCES users (id)
+);
+
+CREATE TYPE gdpr_request_type AS ENUM ('export', 'deletion');
+
+CREATE TYPE gdpr_request_status AS ENUM ('open', 'approved', 'completed', 'rejected');
+
+CREATE TABLE gdpr_requests (
+    user_id UUID NOT NULL, 
+    username VARCHAR(32) NOT NULL, 
+    type gdpr_request_type NOT NULL, 
+    status gdpr_request_status NOT NULL, 
+    deadline_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+    note TEXT, 
+    created_by_id UUID, 
+    approved_by_id UUID, 
+    approved_at TIMESTAMP WITH TIME ZONE, 
+    completed_at TIMESTAMP WITH TIME ZONE, 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    FOREIGN KEY(user_id) REFERENCES users (id), 
+    FOREIGN KEY(created_by_id) REFERENCES users (id), 
+    FOREIGN KEY(approved_by_id) REFERENCES users (id)
+);
+
+CREATE INDEX ix_gdpr_requests_user_id ON gdpr_requests (user_id);
+
+CREATE INDEX ix_gdpr_requests_status ON gdpr_requests (status);
+
+UPDATE alembic_version SET version_num='e1a5b6c7d8f9' WHERE alembic_version.version_num = 'd0f4a5b6c7e8';
+
+-- Running upgrade e1a5b6c7d8f9 -> f2b6c7d8e9a0
+
+CREATE TABLE media_files (
+    blog_id UUID NOT NULL, 
+    uploader_id UUID, 
+    object_key VARCHAR(512), 
+    url TEXT NOT NULL, 
+    content_type VARCHAR(100) NOT NULL, 
+    size_bytes INTEGER NOT NULL, 
+    alt_text TEXT NOT NULL, 
+    caption TEXT, 
+    categories VARCHAR(20)[] NOT NULL, 
+    is_sensitive BOOLEAN NOT NULL, 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    FOREIGN KEY(blog_id) REFERENCES blogs (id) ON DELETE CASCADE, 
+    FOREIGN KEY(uploader_id) REFERENCES users (id), 
+    UNIQUE (url)
+);
+
+CREATE INDEX ix_media_files_blog_id ON media_files (blog_id);
+
+UPDATE alembic_version SET version_num='f2b6c7d8e9a0' WHERE alembic_version.version_num = 'e1a5b6c7d8f9';
+
+-- Running upgrade f2b6c7d8e9a0 -> a3c7d8e9f0b1
+
+CREATE TABLE blog_notes (
+    blog_id UUID NOT NULL, 
+    content TEXT NOT NULL, 
+    normalized VARCHAR(600) NOT NULL, 
+    kind VARCHAR(10) NOT NULL, 
+    url TEXT, 
+    created_by_id UUID, 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    FOREIGN KEY(blog_id) REFERENCES blogs (id) ON DELETE CASCADE, 
+    FOREIGN KEY(created_by_id) REFERENCES users (id)
+);
+
+CREATE INDEX ix_blog_notes_blog_id ON blog_notes (blog_id);
+
+CREATE INDEX ix_blog_notes_normalized ON blog_notes (normalized);
+
+ALTER TABLE post_notes ADD COLUMN note_id UUID;
+
+ALTER TABLE post_notes ADD CONSTRAINT fk_post_notes_note_id FOREIGN KEY(note_id) REFERENCES blog_notes (id) ON DELETE SET NULL;
+
+CREATE INDEX ix_post_notes_note_id ON post_notes (note_id);
+
+UPDATE alembic_version SET version_num='a3c7d8e9f0b1' WHERE alembic_version.version_num = 'f2b6c7d8e9a0';
+
+-- Running upgrade a3c7d8e9f0b1 -> b4d8e9f0a1c2
+
+CREATE TABLE publications (
+    blog_id UUID NOT NULL, 
+    name VARCHAR(60) NOT NULL, 
+    title VARCHAR(255) NOT NULL, 
+    description TEXT, 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    FOREIGN KEY(blog_id) REFERENCES blogs (id) ON DELETE CASCADE, 
+    CONSTRAINT uq_publication_blog_name UNIQUE (blog_id, name)
+);
+
+CREATE INDEX ix_publications_blog_id ON publications (blog_id);
+
+ALTER TABLE posts ADD COLUMN publication_id UUID;
+
+ALTER TABLE posts ADD COLUMN chapter_order INTEGER;
+
+ALTER TABLE posts ADD CONSTRAINT fk_posts_publication_id FOREIGN KEY(publication_id) REFERENCES publications (id) ON DELETE SET NULL;
+
+CREATE INDEX ix_posts_publication_id ON posts (publication_id);
+
+UPDATE alembic_version SET version_num='b4d8e9f0a1c2' WHERE alembic_version.version_num = 'a3c7d8e9f0b1';
+
+-- Running upgrade b4d8e9f0a1c2 -> c5e9f0a1b2d3
+
+ALTER TABLE blogs ADD COLUMN cover_image_url VARCHAR(2048);
+
+ALTER TABLE blogs ADD COLUMN cover_image_is_sensitive BOOLEAN DEFAULT 'false' NOT NULL;
+
+ALTER TABLE blogs ADD COLUMN cover_image_categories VARCHAR(20)[] DEFAULT '{}' NOT NULL;
+
+ALTER TABLE blogs ADD COLUMN favicon_object_key VARCHAR(255);
+
+UPDATE alembic_version SET version_num='c5e9f0a1b2d3' WHERE alembic_version.version_num = 'b4d8e9f0a1c2';
+
+-- Running upgrade c5e9f0a1b2d3 -> d7f0a1b2c3e4
+
+ALTER TABLE platform_config ADD COLUMN audit_retention_days INTEGER DEFAULT '105' NOT NULL;
+
+UPDATE alembic_version SET version_num='d7f0a1b2c3e4' WHERE alembic_version.version_num = 'c5e9f0a1b2d3';
+
+-- Running upgrade d7f0a1b2c3e4 -> e8a1b2c3d4f5
+
+ALTER TABLE platform_config ADD COLUMN footer_column1_markdown TEXT;
+
+ALTER TABLE platform_config ADD COLUMN footer_column2_markdown TEXT;
+
+ALTER TABLE platform_config ADD COLUMN footer_column3_markdown TEXT;
+
+ALTER TABLE platform_config ADD COLUMN footer_bottom_bar_markdown TEXT;
+
+UPDATE alembic_version SET version_num='e8a1b2c3d4f5' WHERE alembic_version.version_num = 'd7f0a1b2c3e4';
+
+-- Running upgrade e8a1b2c3d4f5 -> f1b2c3d4e5a6
+
+CREATE TABLE link_preview_cache (
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    url_hash VARCHAR(64) NOT NULL, 
+    url TEXT NOT NULL, 
+    title TEXT, 
+    description TEXT, 
+    image TEXT, 
+    fetch_ok BOOLEAN DEFAULT 'false' NOT NULL, 
+    PRIMARY KEY (id)
+);
+
+CREATE UNIQUE INDEX ix_link_preview_cache_url_hash ON link_preview_cache (url_hash);
+
+UPDATE alembic_version SET version_num='f1b2c3d4e5a6' WHERE alembic_version.version_num = 'e8a1b2c3d4f5';
+
+-- Running upgrade f1b2c3d4e5a6 -> b3d5e6f7a8c9
+
+ALTER TABLE post_notes ADD COLUMN title TEXT;
+
+ALTER TABLE post_notes ADD COLUMN author TEXT;
+
+ALTER TABLE post_notes ADD COLUMN isbn VARCHAR(32);
+
+ALTER TABLE post_notes ADD COLUMN doi VARCHAR(255);
+
+ALTER TABLE post_notes ADD COLUMN page VARCHAR(32);
+
+ALTER TABLE blog_notes ADD COLUMN title TEXT;
+
+ALTER TABLE blog_notes ADD COLUMN author TEXT;
+
+ALTER TABLE blog_notes ADD COLUMN isbn VARCHAR(32);
+
+ALTER TABLE blog_notes ADD COLUMN doi VARCHAR(255);
+
+ALTER TABLE blog_notes ADD COLUMN page VARCHAR(32);
+
+UPDATE alembic_version SET version_num='b3d5e6f7a8c9' WHERE alembic_version.version_num = 'f1b2c3d4e5a6';
+
+-- Running upgrade b3d5e6f7a8c9 -> c4d6e7f8a9b0
+
+ALTER TABLE post_notes ADD COLUMN kind VARCHAR(10);
+
+ALTER TABLE post_notes ADD COLUMN url TEXT;
+
+ALTER TABLE post_notes ADD COLUMN source TEXT;
+
+ALTER TABLE post_notes ADD COLUMN issued VARCHAR(32);
+
+ALTER TABLE blog_notes ADD COLUMN source TEXT;
+
+ALTER TABLE blog_notes ADD COLUMN issued VARCHAR(32);
+
+UPDATE alembic_version SET version_num='c4d6e7f8a9b0' WHERE alembic_version.version_num = 'b3d5e6f7a8c9';
+
+-- Running upgrade f1b2c3d4e5a6 -> c1d2e3f4a5b6
+
+ALTER TABLE users ADD COLUMN username_changed_at TIMESTAMP WITH TIME ZONE;
+
+CREATE TYPE verification_tier AS ENUM ('none', 'bronze', 'silver', 'gold', 'blue');
+
+ALTER TABLE users ADD COLUMN verification_tier verification_tier DEFAULT 'none' NOT NULL;
+
+CREATE TABLE email_change_requests (
+    id UUID NOT NULL, 
+    user_id UUID NOT NULL, 
+    new_email VARCHAR(255) NOT NULL, 
+    old_code_hash VARCHAR(64) NOT NULL, 
+    old_expires_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+    old_consumed_at TIMESTAMP WITH TIME ZONE, 
+    new_code_hash VARCHAR(64), 
+    new_expires_at TIMESTAMP WITH TIME ZONE, 
+    new_consumed_at TIMESTAMP WITH TIME ZONE, 
+    completed_at TIMESTAMP WITH TIME ZONE, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    FOREIGN KEY(user_id) REFERENCES users (id)
+);
+
+CREATE INDEX ix_email_change_requests_user_id ON email_change_requests (user_id);
+
+CREATE TYPE custom_domain_status AS ENUM ('pending', 'verified', 'failed');
+
+CREATE TABLE custom_domains (
+    id UUID NOT NULL, 
+    user_id UUID NOT NULL, 
+    domain VARCHAR(255) NOT NULL, 
+    verification_token VARCHAR(64) NOT NULL, 
+    status custom_domain_status DEFAULT 'pending' NOT NULL, 
+    verified_at TIMESTAMP WITH TIME ZONE, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    UNIQUE (user_id), 
+    FOREIGN KEY(user_id) REFERENCES users (id), 
+    UNIQUE (domain)
+);
+
+INSERT INTO alembic_version (version_num) VALUES ('c1d2e3f4a5b6') RETURNING alembic_version.version_num;
+
+-- Running upgrade c1d2e3f4a5b6, c4d6e7f8a9b0 -> cf49d59f6471
+
+ALTER TYPE post_author_name_style ADD VALUE IF NOT EXISTS 'verified_domain';
+
+ALTER TABLE users ADD COLUMN verified_domain VARCHAR(255);
+
+UPDATE users
+        SET verified_domain = custom_domains.domain
+        FROM custom_domains
+        WHERE custom_domains.user_id = users.id
+          AND custom_domains.status = 'verified';
+
+DELETE FROM alembic_version WHERE alembic_version.version_num = 'c1d2e3f4a5b6';
+
+UPDATE alembic_version SET version_num='cf49d59f6471' WHERE alembic_version.version_num = 'c4d6e7f8a9b0';
+
+-- Running upgrade cf49d59f6471 -> a1c2b3d4e5f6
+
+CREATE TABLE password_reset_codes (
+    id UUID NOT NULL, 
+    user_id UUID NOT NULL, 
+    code_hash VARCHAR(64) NOT NULL, 
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL, 
+    consumed_at TIMESTAMP WITH TIME ZONE, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    FOREIGN KEY(user_id) REFERENCES users (id)
+);
+
+CREATE INDEX ix_password_reset_codes_user_id ON password_reset_codes (user_id);
+
+UPDATE alembic_version SET version_num='a1c2b3d4e5f6' WHERE alembic_version.version_num = 'cf49d59f6471';
+
+-- Running upgrade a1c2b3d4e5f6 -> b2c3d4e5f6a7
+
+ALTER TABLE post_media ADD COLUMN is_sensitive BOOLEAN;
+
+UPDATE post_media SET is_sensitive = (array_length(categories, 1) > 0);
+
+UPDATE post_media SET is_sensitive = false WHERE is_sensitive IS NULL;
+
+ALTER TABLE post_media ALTER COLUMN is_sensitive SET NOT NULL;
+
+UPDATE alembic_version SET version_num='b2c3d4e5f6a7' WHERE alembic_version.version_num = 'a1c2b3d4e5f6';
 
 COMMIT;
 

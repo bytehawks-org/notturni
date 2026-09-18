@@ -106,6 +106,8 @@ def to_bibtex(notes: Iterable[BlogNote]) -> str:
             fields.append(f"  isbn = {{{n.isbn}}}")
         if n.doi:
             fields.append(f"  doi = {{{n.doi}}}")
+        if n.page:
+            fields.append(f"  pages = {{{_bibtex_escape(n.page)}}}")
         if n.url:
             fields.append(f"  url = {{{n.url}}}")
         fields.append(f"  note = {{{_bibtex_escape(n.content)}}}")
@@ -165,6 +167,7 @@ def parse_bibtex(text: str) -> list[dict]:
                 "issued": fields.get("year") or fields.get("date"),
                 "isbn": fields.get("isbn"),
                 "doi": fields.get("doi"),
+                "page": fields.get("pages") or fields.get("page"),
             }
         )
     return out
