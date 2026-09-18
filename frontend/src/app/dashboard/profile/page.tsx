@@ -115,7 +115,11 @@ export default function ProfilePage() {
         if (p.domain_pending_verification && p.domain_verification_instructions) {
           setDomainInfo({
             domain: p.domain_pending_verification,
-            status: "pending",
+            // Prima era sempre "pending": un fallimento di verifica
+            // persistito in DB come "failed" tornava a mostrarsi "pending"
+            // a ogni refresh del profilo (bug segnalato dalla review
+            // Copilot).
+            status: p.domain_status ?? "pending",
             txt_record_name: p.domain_verification_instructions.txt_record_name,
             txt_record_value: p.domain_verification_instructions.txt_record_value,
           });

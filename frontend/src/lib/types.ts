@@ -576,6 +576,7 @@ export interface MeProfile extends Profile {
   next_username_change_allowed_at: string | null;
   pending_email_change: PendingEmailChange | null;
   domain_pending_verification: string | null;
+  domain_status: CustomDomainStatus | null;
   domain_verification_instructions: DomainVerificationInstructions | null;
 }
 
