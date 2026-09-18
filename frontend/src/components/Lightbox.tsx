@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { CloseIcon } from "@/components/editor/icons";
@@ -26,6 +27,7 @@ const LightboxContext = createContext<((src: string, alt?: string) => void) | nu
  * l'immagine se la troverebbe comunque ingrandita in faccia.
  */
 export function LightboxProvider({ children }: { children: ReactNode }) {
+  const t = useTranslations("Common");
   const [state, setState] = useState<LightboxState | null>(null);
 
   const open = useCallback((src: string, alt: string = "") => setState({ src, alt }), []);
@@ -54,11 +56,33 @@ export function LightboxProvider({ children }: { children: ReactNode }) {
 
       const img = target.closest<HTMLElement>("img[data-lightbox]");
       if (img) {
+        // Un'immagine di contenuto può trovarsi dentro un link Markdown
+        // (`[![alt](src)](href)`): senza questo lo stesso click apre la
+        // lightbox *e* segue il link, portando via dal post.
+        event.preventDefault();
         open(img.getAttribute("src") ?? "", img.getAttribute("alt") ?? "");
       }
     }
     document.addEventListener("click", onClick);
     return () => document.removeEventListener("click", onClick);
+  }, [open]);
+
+  // Le stesse immagini sono raggiungibili da tastiera (tabIndex sull'img,
+  // impostato in lib/markdown.ts/CoverImage) — qui basta intercettare
+  // Invio/Spazio con la stessa delega globale del click, senza un handler
+  // per immagine.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const target = event.target as HTMLElement | null;
+      const img = target?.closest<HTMLElement>("img[data-lightbox]");
+      if (img) {
+        event.preventDefault();
+        open(img.getAttribute("src") ?? "", img.getAttribute("alt") ?? "");
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
   }, [open]);
 
   useEffect(() => {
@@ -90,7 +114,7 @@ export function LightboxProvider({ children }: { children: ReactNode }) {
           <button
             type="button"
             onClick={close}
-            aria-label="Chiudi"
+            aria-label={t("close")}
             className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full text-white/80 hover:bg-white/10 hover:text-white [&>svg]:h-5 [&>svg]:w-5"
           >
             <CloseIcon />

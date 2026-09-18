@@ -89,7 +89,8 @@
   "Post": {
     "notes": "Note",
     "blogBibliography": "Bibliografia del blog →",
-    "backToText": "Torna al testo"
+    "backToText": "Torna al testo",
+    "expandImage": "Ingrandisci"
   },
   "Fragment": {
     "meta": "{words} parole · {ratio}% del post",
@@ -793,7 +794,8 @@
     "subtitle": "{count, plural, one {# immagine citata} other {# immagini citate}} nei post pubblicati. Ogni immagine porta il suo testo alternativo; quelle segnalate restano sfocate finché non scegli di mostrarle.",
     "grid": "Griglia",
     "byPost": "Per post",
-    "empty": "Nessuna immagine, per ora."
+    "empty": "Nessuna immagine, per ora.",
+    "expandImage": "Ingrandisci"
   },
   "LinksPage": {
     "title": "Link",
@@ -1129,6 +1131,12 @@
     "previewDark": "Anteprima tema scuro",
     "previewLight": "Anteprima tema chiaro",
     "previewHintDark": "La variante scura è applicata alle pagine pubbliche quando il lettore usa il tema scuro."
+  },
+  "VerificationTier": {
+    "bronze": "Verificato — dominio personalizzato",
+    "silver": "Verificato — argento",
+    "gold": "Verificato — oro",
+    "blue": "Verificato — blu"
   },
   "PublicProfile": {
     "writesIn": "scrive in",

@@ -198,17 +198,17 @@ async def sync_blog_media(
     known = set((await session.execute(select(MediaFile.url).where(MediaFile.blog_id == blog.id))).scalars().all())
     rows = (
         await session.execute(
-            select(post_media.c.url, post_media.c.alt_text, post_media.c.categories)
+            select(post_media.c.url, post_media.c.alt_text, post_media.c.categories, post_media.c.is_sensitive)
             .join(Post, Post.id == post_media.c.post_id)
             .where(Post.blog_id == blog.id)
         )
     ).all()
-    for url, alt_text, categories in rows:
+    for url, alt_text, categories, is_sensitive in rows:
         if url in known:
             continue
         known.add(url)
         session.add(
-            MediaFile(blog_id=blog.id, uploader_id=None, object_key=None, url=url, content_type="", size_bytes=0, alt_text=alt_text or "", categories=list(categories or []), is_sensitive=bool(categories))
+            MediaFile(blog_id=blog.id, uploader_id=None, object_key=None, url=url, content_type="", size_bytes=0, alt_text=alt_text or "", categories=list(categories or []), is_sensitive=is_sensitive)
         )
     await session.commit()
     return await list_blog_media(slug, current_user, session)

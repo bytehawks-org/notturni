@@ -48,6 +48,9 @@ function resolvePersonalDisplayName(profile: Profile): string {
   if (profile.post_author_name_style === "display_name") {
     return profile.display_name || profile.username;
   }
+  if (profile.post_author_name_style === "verified_domain") {
+    return profile.custom_domain || profile.username;
+  }
   return profile.username;
 }
 
@@ -61,7 +64,7 @@ function resolvePersonalDisplayName(profile: Profile): string {
  * visitatore, mai disponibile a un Server Component. */
 export default async function PublicProfilePage({ params }: { params: Promise<PageParams> }) {
   const { username } = await params;
-  const [profile, posts, blogs, comments, followers, locale, t] = await Promise.all([
+  const [profile, posts, blogs, comments, followers, locale, t, tTier] = await Promise.all([
     getPublicUserProfile(username),
     getPublicUserPosts(username),
     getPublicUserBlogs(username),
@@ -69,6 +72,7 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
     getPublicUserFollowers(username),
     getLocale(),
     getTranslations("PublicProfile"),
+    getTranslations("VerificationTier"),
   ]);
   if (!profile) notFound();
 
@@ -91,7 +95,11 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
             <div className="flex min-w-0 flex-col gap-2">
               <h1 className="flex items-center gap-2 font-serif text-[30px] font-medium leading-tight text-foreground">
                 {displayHeading}
-                <VerificationBadge tier={profile.verification_tier} size={20} />
+                <VerificationBadge
+                  tier={profile.verification_tier}
+                  size={20}
+                  label={profile.verification_tier !== "none" ? tTier(profile.verification_tier) : undefined}
+                />
               </h1>
               <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted">
                 <span>@{profile.custom_domain ?? profile.username}</span>

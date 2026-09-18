@@ -40,7 +40,7 @@ export async function FeedPostCard({
       {post.author_avatar_url ? (
         <Image
           src={post.author_avatar_url}
-          alt={post.author_display_name}
+          alt=""
           width={20}
           height={20}
           className="h-5 w-5 rounded-full object-cover"

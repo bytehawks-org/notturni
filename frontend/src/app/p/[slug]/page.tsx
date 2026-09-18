@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 
 import { SiteHeader } from "@/components/SiteHeader";
@@ -44,7 +45,8 @@ export default async function PublicPlatformPagePage({
   const page = await getPublicPlatformPage(slug, locale);
   if (!page) notFound();
 
-  const html = await renderMarkdown(page.content);
+  const tPost = await getTranslations("Post");
+  const html = await renderMarkdown(page.content, { expandImageLabel: tPost("expandImage") });
 
   return (
     <div className="flex flex-1 flex-col">

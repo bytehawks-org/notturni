@@ -45,14 +45,22 @@ export function PostStatusControl({
     { value: "published", label: status === "published" ? ts("published") : status === "scheduled" ? ts("scheduled") : t("publishNow") },
   ];
 
+  // Lo stato "scheduled" non ha una propria voce nel controllo (mostra
+  // "published" come selezionato, vedi `status === "scheduled" ? ...` sotto)
+  // — il confronto nell'onChange deve usare la stessa normalizzazione,
+  // altrimenti cliccare l'opzione già selezionata mentre il post è
+  // programmato non veniva riconosciuto come "nessun cambiamento" e
+  // pubblicava subito invece di non fare nulla.
+  const selected = status === "scheduled" ? "published" : status;
+
   return (
     <div className="flex flex-col gap-2">
       <span className="text-xs font-semibold uppercase tracking-[.04em] text-muted">{t("status")}</span>
       <SegmentedControl
-        value={status === "scheduled" ? "published" : status}
+        value={selected}
         options={options}
         onChange={(v) => {
-          if (busy || v === status) return;
+          if (busy || v === selected) return;
           if (v === "published") void run(() => onPublish());
           else void run(() => onChangeStatus(v === "review" ? "review" : "draft"));
         }}

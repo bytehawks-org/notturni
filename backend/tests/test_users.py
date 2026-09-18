@@ -1,7 +1,10 @@
 from collections.abc import Callable
 
 from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.user import User
 from tests.conftest import AuthedUser, FakeS3Client
 
 
@@ -31,6 +34,33 @@ async def test_public_profile(client: AsyncClient, make_user: Callable) -> None:
 
     missing_res = await client.get("/api/v1/users/non-esiste")
     assert missing_res.status_code == 404
+
+
+async def test_resolve_profile_by_verified_domain(
+    client: AsyncClient, make_user: Callable, db_session: AsyncSession
+) -> None:
+    """GET /users/{identifier} risolve anche su `verified_domain` (copia
+    denormalizzata di CustomDomain per lo stato VERIFIED — vedi
+    app/api/v1/users.py::_find_user_by_username_or_domain), non solo su
+    username. Qui il dominio è scritto direttamente in DB (come make_admin
+    fa per platform_role): non esiste un endpoint pubblico per impostarlo,
+    normalmente arriva dal flusso di verifica DNS di CustomDomain."""
+    await make_user("dominio-verificato")
+    result = await db_session.execute(select(User).where(User.username == "dominio-verificato"))
+    user = result.scalar_one()
+    user.verified_domain = "esempio.eu"
+    await db_session.commit()
+
+    by_username = await client.get("/api/v1/users/dominio-verificato")
+    by_domain = await client.get("/api/v1/users/esempio.eu")
+    assert by_username.status_code == by_domain.status_code == 200
+    assert by_username.json() == by_domain.json()
+    assert by_domain.json()["custom_domain"] == "esempio.eu"
+
+    # Nessun match né su username né su verified_domain → 404 (non un caso
+    # a parte: stessa risoluzione, stesso fallback).
+    missing = await client.get("/api/v1/users/dominio-inesistente.eu")
+    assert missing.status_code == 404
 
 
 async def test_update_bio(client: AsyncClient, make_user: Callable) -> None:
@@ -256,6 +286,40 @@ async def test_post_author_name_style_choice(client: AsyncClient, make_user: Cal
         "/api/v1/users/me", json={"post_author_name_style": "pseudonimo"}, headers=user.headers
     )
     assert bad.status_code == 422
+
+
+async def test_post_author_name_style_verified_domain(
+    client: AsyncClient, make_user: Callable, db_session: AsyncSession
+) -> None:
+    """Copre app/domain/display_names.py::resolve_personal_display_name per
+    PostAuthorNameStyle.VERIFIED_DOMAIN, non toccato da
+    test_post_author_name_style_choice sopra: sia il ramo con dominio
+    presente sia il fallback a username quando è assente (utente che sceglie
+    lo stile ma non ha (più) un dominio verificato — non deve rompersi)."""
+    user: AuthedUser = await make_user("stile-dominio")
+    await client.post("/api/v1/blogs", json={"slug": "blog-stile-dominio", "title": "x"}, headers=user.headers)
+
+    async def author_of_new_post(slug: str) -> str:
+        res = await client.post(
+            "/api/v1/blogs/blog-stile-dominio/posts",
+            json={"slug": slug, "title": "t", "content": "c"},
+            headers=user.headers,
+        )
+        assert res.status_code == 201, res.text
+        return res.json()["author_display_name"]
+
+    await client.patch(
+        "/api/v1/users/me", json={"post_author_name_style": "verified_domain"}, headers=user.headers
+    )
+    # Fallback: stile scelto ma nessun dominio verificato ancora associato.
+    assert await author_of_new_post("p-nodominio") == "stile-dominio"
+
+    result = await db_session.execute(select(User).where(User.username == "stile-dominio"))
+    db_user = result.scalar_one()
+    db_user.verified_domain = "stile.eu"
+    await db_session.commit()
+
+    assert await author_of_new_post("p-dominio") == "stile.eu"
 
 
 async def test_post_author_name_style_ignored_when_blog_imposes_alias(

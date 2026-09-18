@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -483,6 +483,16 @@ async def verify_current_email(
     return {"detail": "Codice inviato al nuovo indirizzo email."}
 
 
+@router.delete("/me/email/request", status_code=status.HTTP_204_NO_CONTENT)
+async def cancel_email_change(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Annulla una richiesta di cambio email pending, a qualunque passo si
+    trovi (prima o dopo aver verificato la vecchia casella)."""
+    await email_change_domain.cancel_email_change(session, current_user)
+
+
 @router.post("/me/email/verify-new", response_model=MeProfileOut)
 async def verify_new_email(
     payload: EmailChangeCodeIn,
@@ -522,22 +532,53 @@ async def set_my_domain(
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
+    # Solo un claim già VERIFIED di un altro account blocca il dominio (vedi
+    # API.md: "409 se già rivendicato e verificato da un altro account") —
+    # un pending/failed non prova alcun controllo sul dominio, altrimenti
+    # chiunque potrebbe "prenotare" un dominio arbitrario senza mai
+    # verificarlo, bloccandolo indefinitamente al vero proprietario.
     existing_owner = await session.execute(
         select(CustomDomain).where(
-            CustomDomain.domain == normalized, CustomDomain.user_id != current_user.id
+            CustomDomain.domain == normalized,
+            CustomDomain.user_id != current_user.id,
+            CustomDomain.status == CustomDomainStatus.VERIFIED,
         )
     )
     if existing_owner.scalar_one_or_none() is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Dominio già rivendicato da un altro account.")
 
+    # `CustomDomain.domain` è unique a livello di DB (un solo proprietario per
+    # riga, chiunque esso sia): una riga pending/failed di un altro utente non
+    # blocca la richiesta sopra, ma resterebbe comunque a occupare la stessa
+    # colonna unique e farebbe fallire l'insert/update sotto con un
+    # IntegrityError invece che con un 409 pulito. Sotto la stessa regola per
+    # cui non blocca ("non prova il possesso"), va rimossa qui: la si
+    # considera riconquistabile, non la si "eredita".
+    await session.execute(
+        delete(CustomDomain).where(
+            CustomDomain.domain == normalized,
+            CustomDomain.user_id != current_user.id,
+            CustomDomain.status != CustomDomainStatus.VERIFIED,
+        )
+    )
+
     await session.refresh(current_user, attribute_names=["custom_domain"])
     token = custom_domains_domain.generate_verification_token()
     if current_user.custom_domain is not None:
         record = current_user.custom_domain
+        was_verified = record.status == CustomDomainStatus.VERIFIED
         record.domain = normalized
         record.verification_token = token
         record.status = CustomDomainStatus.PENDING
         record.verified_at = None
+        # Sostituire un dominio già verificato con uno nuovo (ancora da
+        # verificare) non deve lasciare il profilo pubblico a mostrare il
+        # vecchio dominio/badge bronzo come se fosse ancora attivo — stessa
+        # pulizia di delete_my_domain sotto.
+        if was_verified:
+            current_user.verified_domain = None
+            if current_user.verification_tier == VerificationTier.BRONZE:
+                current_user.verification_tier = VerificationTier.NONE
     else:
         record = CustomDomain(
             user_id=current_user.id,

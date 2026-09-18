@@ -89,6 +89,7 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
     mentions: post.mentions_enabled,
     notes: post.notes,
     footnoteLabels: { title: tPost("notes"), backToText: tPost("backToText") },
+    expandImageLabel: tPost("expandImage"),
   });
   const blogTitle = blog?.title ?? blogSlug;
   const minutes = readingMinutes(post.content);
@@ -193,7 +194,7 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
                   {post.author_avatar_url ? (
                     <Image
                       src={post.author_avatar_url}
-                      alt={post.author_display_name}
+                      alt=""
                       width={28}
                       height={28}
                       className="h-7 w-7 rounded-full object-cover"

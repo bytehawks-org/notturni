@@ -4,6 +4,7 @@ BibTeX. Proprietario e collaboratori."""
 
 import uuid
 from datetime import datetime
+from typing import NamedTuple
 
 from fastapi import Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
@@ -16,6 +17,18 @@ from app.api.v1.blogs._router import router
 from app.core.database import get_session
 from app.domain.authorization import get_membership_role
 from app.domain.blog_notes import MAX_BIBTEX_LENGTH, find_duplicate_groups, normalize_note, parse_bibtex, to_bibtex
+from app.domain.notes import (
+    MAX_NOTE_AUTHOR_LENGTH,
+    MAX_NOTE_DOI_LENGTH,
+    MAX_NOTE_ISBN_LENGTH,
+    MAX_NOTE_ISSUED_LENGTH,
+    MAX_NOTE_PAGE_LENGTH,
+    MAX_NOTE_SOURCE_LENGTH,
+    MAX_NOTE_TITLE_LENGTH,
+    MAX_NOTE_URL_LENGTH,
+    _clean_optional,
+    _clean_url,
+)
 from app.models.blog import Blog
 from app.models.blog_note import NOTE_KINDS, BlogNote
 from app.models.post import Post
@@ -138,11 +151,72 @@ async def _notes_out(session: AsyncSession, notes: list[BlogNote], all_notes: li
     ]
 
 
-def _validate(kind: str | None, url: str | None) -> None:
+def _validate_kind(kind: str | None) -> None:
     if kind is not None and kind not in NOTE_KINDS:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Tipo non valido: usare uno tra {', '.join(NOTE_KINDS)}.")
-    if url and not (url.startswith("http://") or url.startswith("https://")):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "L'URL deve iniziare con http:// o https://.")
+
+
+class _CleanBibFields(NamedTuple):
+    title: str | None
+    author: str | None
+    source: str | None
+    issued: str | None
+    isbn: str | None
+    doi: str | None
+    page: str | None
+    url: str | None
+
+
+def _clean_bib_fields(
+    *,
+    title: str | None,
+    author: str | None,
+    source: str | None,
+    issued: str | None,
+    isbn: str | None,
+    doi: str | None,
+    page: str | None,
+    url: str | None,
+) -> _CleanBibFields:
+    """Stessi limiti di lunghezza e stessa validazione dello schema dell'URL
+    applicati alle note dei post (app/domain/notes.py) — senza questo i campi
+    "compatibilità BibTeX" della libreria potevano raggiungere le colonne
+    VARCHAR con valori troppo lunghi e l'URL non era ristretto a http(s) come
+    lo è altrove."""
+    try:
+        return _CleanBibFields(
+            title=_clean_optional(title, max_length=MAX_NOTE_TITLE_LENGTH, label="titolo"),
+            author=_clean_optional(author, max_length=MAX_NOTE_AUTHOR_LENGTH, label="autore"),
+            source=_clean_optional(source, max_length=MAX_NOTE_SOURCE_LENGTH, label="editore/rivista/sito"),
+            issued=_clean_optional(issued, max_length=MAX_NOTE_ISSUED_LENGTH, label="anno/data"),
+            isbn=_clean_optional(isbn, max_length=MAX_NOTE_ISBN_LENGTH, label="ISBN"),
+            doi=_clean_optional(doi, max_length=MAX_NOTE_DOI_LENGTH, label="DOI"),
+            page=_clean_optional(page, max_length=MAX_NOTE_PAGE_LENGTH, label="pagina"),
+            url=_clean_url(url, max_length=MAX_NOTE_URL_LENGTH) if url is not None else None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
+def _import_clean(value: str | None, *, max_length: int) -> str | None:
+    """Come `_clean_optional`, ma tronca invece di rifiutare: un import
+    BibTeX è un lotto di voci, un singolo campo fuori limite non deve far
+    fallire l'intero batch (a differenza della form della libreria, dove
+    l'utente può correggere subito il singolo valore)."""
+    if not value:
+        return None
+    text = " ".join(value.split())[:max_length]
+    return text or None
+
+
+def _import_clean_url(value: str | None, *, max_length: int) -> str | None:
+    """Come `_import_clean`, ma un URL fuori dalla policy http(s) viene
+    scartato (mai troncato): un valore troncato potrebbe restare comunque
+    uno schema pericoloso, e un URL non è comunque utile spezzato a metà."""
+    text = _import_clean(value, max_length=max_length)
+    if text is None or not (text.startswith("http://") or text.startswith("https://")):
+        return None
+    return text
 
 
 @router.get("/{slug}/notes", response_model=list[BlogNoteOut])
@@ -175,20 +249,30 @@ async def create_blog_note(
     content = payload.content.strip()
     if not content:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Il testo della nota è obbligatorio.")
-    _validate(payload.kind, payload.url)
+    _validate_kind(payload.kind)
+    bib = _clean_bib_fields(
+        title=payload.title,
+        author=payload.author,
+        source=payload.source,
+        issued=payload.issued,
+        isbn=payload.isbn,
+        doi=payload.doi,
+        page=payload.page,
+        url=payload.url,
+    )
     note = BlogNote(
         blog_id=blog.id,
         content=content[:2000],
         normalized=normalize_note(content),
         kind=payload.kind,
-        url=payload.url or None,
-        title=payload.title or None,
-        author=payload.author or None,
-        source=payload.source or None,
-        issued=payload.issued or None,
-        isbn=payload.isbn or None,
-        doi=payload.doi or None,
-        page=payload.page or None,
+        url=bib.url,
+        title=bib.title,
+        author=bib.author,
+        source=bib.source,
+        issued=bib.issued,
+        isbn=bib.isbn,
+        doi=bib.doi,
+        page=bib.page,
         created_by_id=current_user.id,
     )
     session.add(note)
@@ -218,25 +302,28 @@ async def update_blog_note(
     blog = await _get_blog_or_404(session, slug)
     await _require_blog_write_access(session, current_user, blog)
     note = await _get_note(session, blog, note_id)
-    _validate(payload.kind, payload.url)
+    _validate_kind(payload.kind)
     if payload.kind is not None:
         note.kind = payload.kind
-    if payload.url is not None:
-        note.url = payload.url.strip() or None
-    if payload.title is not None:
-        note.title = payload.title.strip() or None
-    if payload.author is not None:
-        note.author = payload.author.strip() or None
-    if payload.source is not None:
-        note.source = payload.source.strip() or None
-    if payload.issued is not None:
-        note.issued = payload.issued.strip() or None
-    if payload.isbn is not None:
-        note.isbn = payload.isbn.strip() or None
-    if payload.doi is not None:
-        note.doi = payload.doi.strip() or None
-    if payload.page is not None:
-        note.page = payload.page.strip() or None
+    try:
+        if payload.url is not None:
+            note.url = _clean_url(payload.url, max_length=MAX_NOTE_URL_LENGTH)
+        if payload.title is not None:
+            note.title = _clean_optional(payload.title, max_length=MAX_NOTE_TITLE_LENGTH, label="titolo")
+        if payload.author is not None:
+            note.author = _clean_optional(payload.author, max_length=MAX_NOTE_AUTHOR_LENGTH, label="autore")
+        if payload.source is not None:
+            note.source = _clean_optional(payload.source, max_length=MAX_NOTE_SOURCE_LENGTH, label="editore/rivista/sito")
+        if payload.issued is not None:
+            note.issued = _clean_optional(payload.issued, max_length=MAX_NOTE_ISSUED_LENGTH, label="anno/data")
+        if payload.isbn is not None:
+            note.isbn = _clean_optional(payload.isbn, max_length=MAX_NOTE_ISBN_LENGTH, label="ISBN")
+        if payload.doi is not None:
+            note.doi = _clean_optional(payload.doi, max_length=MAX_NOTE_DOI_LENGTH, label="DOI")
+        if payload.page is not None:
+            note.page = _clean_optional(payload.page, max_length=MAX_NOTE_PAGE_LENGTH, label="pagina")
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     if payload.content is not None:
         content = payload.content.strip()
         if not content:
@@ -329,13 +416,14 @@ async def import_blog_notes(
             content=item["content"],
             normalized=key,
             kind=item["kind"],
-            url=item["url"],
-            title=item.get("title"),
-            author=item.get("author"),
-            source=item.get("source"),
-            issued=item.get("issued"),
-            isbn=item.get("isbn"),
-            doi=item.get("doi"),
+            url=_import_clean_url(item["url"], max_length=MAX_NOTE_URL_LENGTH),
+            title=_import_clean(item.get("title"), max_length=MAX_NOTE_TITLE_LENGTH),
+            author=_import_clean(item.get("author"), max_length=MAX_NOTE_AUTHOR_LENGTH),
+            source=_import_clean(item.get("source"), max_length=MAX_NOTE_SOURCE_LENGTH),
+            issued=_import_clean(item.get("issued"), max_length=MAX_NOTE_ISSUED_LENGTH),
+            isbn=_import_clean(item.get("isbn"), max_length=MAX_NOTE_ISBN_LENGTH),
+            doi=_import_clean(item.get("doi"), max_length=MAX_NOTE_DOI_LENGTH),
+            page=_import_clean(item.get("page"), max_length=MAX_NOTE_PAGE_LENGTH),
             created_by_id=current_user.id,
         )
         session.add(note)

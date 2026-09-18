@@ -6,7 +6,7 @@ export interface BlogLinks {
    * `${basePath}/media`): `/{blogSlug}` quando la pagina è raggiunta
    * path-based (`notturni.eu/{blogSlug}/...`, sempre vero finché il DNS
    * wildcard non è configurato), stringa vuota quando è raggiunta dal
-   * proprio sottodominio (`{blogSlug}.notturni.eu/...`, `src/middleware.ts`
+   * proprio sottodominio (`{blogSlug}.notturni.eu/...`, `src/proxy.ts`
    * ha già riscritto internamente il path aggiungendo lo slug — ripeterlo
    * nell'href genererebbe un doppio segmento). */
   basePath: string;

@@ -31,7 +31,8 @@ export function OtpInput({ value, onChange }: { value: string; onChange: (value:
   }
 
   return (
-    <div className="grid grid-cols-6 gap-2">
+    <fieldset className="grid grid-cols-6 gap-2 border-0 p-0 m-0">
+      <legend className="sr-only">Codice di verifica a 6 cifre</legend>
       {digits.map((digit, i) => (
         <input
           key={i}
@@ -46,10 +47,11 @@ export function OtpInput({ value, onChange }: { value: string; onChange: (value:
           onChange={(e) => setDigit(i, e.target.value.replace(/\D/g, "").slice(-1))}
           onKeyDown={(e) => handleKeyDown(i, e)}
           onPaste={handlePaste}
+          aria-label={`Cifra ${i + 1} di ${OTP_LENGTH}`}
           className="h-[52px] rounded-xl border border-border bg-surface text-center font-serif text-2xl text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
         />
       ))}
-    </div>
+    </fieldset>
   );
 }
 

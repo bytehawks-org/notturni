@@ -381,6 +381,7 @@ export interface MediaBibliographyEntry {
   url: string;
   alt_text: string;
   categories: SensitivityCategory[];
+  is_sensitive: boolean;
   citations: ContentCitation[];
 }
 

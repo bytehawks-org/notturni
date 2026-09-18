@@ -46,21 +46,6 @@ export const metadata: Metadata = {
   },
 };
 
-// Applica subito il tema salvato (o la preferenza di sistema come primissima
-// stima) prima che React idrati, per evitare un flash del tema sbagliato.
-// ThemeProvider corregge poi con il calcolo alba/tramonto se la modalità è "auto".
-const THEME_INIT_SCRIPT = `
-(function () {
-  try {
-    var stored = localStorage.getItem('notturni_theme_mode');
-    var resolved = (stored === 'light' || stored === 'dark')
-      ? stored
-      : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-    document.documentElement.setAttribute('data-theme', resolved);
-  } catch (e) {}
-})();
-`;
-
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   // Lingua dell'interfaccia (src/i18n/request.ts): cookie → Accept-Language → fallback.
   const locale = await getLocale();
@@ -71,9 +56,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       className={`${bodyFont.variable} ${headingFont.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground font-sans">
-        <Script id="theme-init" strategy="beforeInteractive">
-          {THEME_INIT_SCRIPT}
-        </Script>
+        {/* File esterno (public/theme-init.js), non inline — vedi la nota lì
+            sulla CSP script-src 'self' (k8s/middleware-security-headers.yaml). */}
+        <Script src="/theme-init.js" strategy="beforeInteractive" />
         <NextIntlClientProvider locale={locale} messages={messages}>
           <ThemeProvider>
             <AuthProvider>

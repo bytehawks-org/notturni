@@ -35,7 +35,13 @@ SENSITIVITY_CATEGORIES = ("suggestive", "nudity", "explicit", "other")
 # e resta lineare — supporta anche URL con parentesi non escapate, es.
 # Wikipedia (".../Example_(disambiguation)"), che `\S+?` non gestiva comunque
 # in modo utile.
-_BALANCED_URL = r"(?>[^\s()]*(?:\([^\s()]*\)[^\s()]*)*)"
+#
+# Il primo tratto è `+` (non `*`): un URL vuoto (`![]()`/`[]()`) non deve
+# fare match — con `\S+?` (form precedente) non lo faceva già (richiedeva
+# almeno un carattere), un `*` qui lo avrebbe reintrodotto silenziosamente,
+# propagando un MediaRef/LinkRef con `url == ""` fino alle tabelle di
+# bibliografia.
+_BALANCED_URL = r"(?>[^\s()]+(?:\([^\s()]*\)[^\s()]*)*)"
 _IMAGE_RE = re.compile(rf'!\[([^\]]*)\]\(\s*({_BALANCED_URL})(?:\s+"([^"]*)")?\s*\)')
 # [testo](url "title") — il lookbehind su "!" esclude le immagini sopra.
 _LINK_RE = re.compile(rf'(?<!!)\[([^\]]*)\]\(\s*({_BALANCED_URL})(?:\s+"([^"]*)")?\s*\)')
@@ -46,6 +52,11 @@ class MediaRef(NamedTuple):
     url: str
     alt_text: str
     categories: tuple[str, ...]
+    # Separato da `categories`: un'immagine segnalata dalla sola
+    # automoderazione (o dal modal senza una categoria specifica scelta)
+    # ha `categories == ()` ma è comunque sensibile — `bool(categories)`
+    # da solo non basta a saperlo (vedi is_flagged_sensitive sotto).
+    is_sensitive: bool
 
 
 class LinkRef(NamedTuple):
@@ -84,6 +95,7 @@ def extract_media(content: str) -> list[MediaRef]:
             url=match.group(2),
             alt_text=match.group(1),
             categories=parse_sensitivity_categories(match.group(3)),
+            is_sensitive=is_flagged_sensitive(match.group(3)),
         )
         for i, match in enumerate(_IMAGE_RE.finditer(content))
     ]

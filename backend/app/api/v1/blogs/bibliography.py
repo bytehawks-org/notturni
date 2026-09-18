@@ -128,6 +128,7 @@ class MediaBibliographyEntryOut(BaseModel):
     url: str
     alt_text: str
     categories: list[str]
+    is_sensitive: bool
     citations: list[ContentCitationOut]
 
 
@@ -145,7 +146,7 @@ async def get_blog_media_bibliography(
     await _require_blog_viewable(session, current_user, blog)
 
     rows = await session.execute(
-        select(Post, post_media.c.alt_text, post_media.c.categories, post_media.c.url)
+        select(Post, post_media.c.alt_text, post_media.c.categories, post_media.c.is_sensitive, post_media.c.url)
         .join(post_media, post_media.c.post_id == Post.id)
         .where(
             Post.blog_id == blog.id,
@@ -157,10 +158,12 @@ async def get_blog_media_bibliography(
     )
 
     entries: dict[str, MediaBibliographyEntryOut] = {}
-    for post, alt_text, categories, url in rows.all():
+    for post, alt_text, categories, is_sensitive, url in rows.all():
         entry = entries.get(url)
         if entry is None:
-            entry = MediaBibliographyEntryOut(url=url, alt_text=alt_text, categories=categories, citations=[])
+            entry = MediaBibliographyEntryOut(
+                url=url, alt_text=alt_text, categories=categories, is_sensitive=is_sensitive, citations=[]
+            )
             entries[url] = entry
         entry.citations.append(
             ContentCitationOut(

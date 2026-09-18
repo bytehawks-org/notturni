@@ -71,6 +71,18 @@ async def request_email_change(session: AsyncSession, user: User, new_email: str
     return change_request
 
 
+async def cancel_email_change(session: AsyncSession, user: User) -> None:
+    """Annulla la richiesta pending (qualunque passo): senza questo, il
+    pulsante "Annulla" lato dashboard puliva solo lo stato React locale — la
+    riga in `email_change_requests` restava, con il vecchio OTP ancora
+    valido e la richiesta che ricompariva a un refresh."""
+    pending = await _get_pending_request(session, user)
+    if pending is None:
+        return
+    await session.delete(pending)
+    await session.commit()
+
+
 async def confirm_old_email(session: AsyncSession, user: User, code: str) -> EmailChangeRequest:
     """Passo 2: verifica il codice inviato alla vecchia casella, poi invia
     il codice alla nuova."""

@@ -152,12 +152,21 @@ async def fetch_link_preview(url: str) -> LinkPreview:
         netloc += f":{parsed.port}"
     pinned_url = urlunparse(parsed._replace(netloc=netloc))
 
+    # L'header Host deve rispecchiare esattamente l'authority dell'URL
+    # originale (porta inclusa, IPv6 fra parentesi quadre) — altrimenti un
+    # virtual host lato server che discrimina sulla porta, o un hostname
+    # IPv6 letterale, riceve un Host non valido/non corrispondente e la
+    # richiesta fallisce a valle del pinning IP.
+    host_header = f"[{parsed.hostname}]" if ":" in parsed.hostname else parsed.hostname
+    if parsed.port:
+        host_header += f":{parsed.port}"
+
     try:
         async with httpx.AsyncClient(follow_redirects=False, timeout=_TIMEOUT) as client:
             async with client.stream(
                 "GET",
                 pinned_url,
-                headers={"User-Agent": "NotturniLinkPreview/1.0", "Host": parsed.hostname},
+                headers={"User-Agent": "NotturniLinkPreview/1.0", "Host": host_header},
                 extensions={"sni_hostname": parsed.hostname},
             ) as resp:
                 if resp.status_code >= 400:

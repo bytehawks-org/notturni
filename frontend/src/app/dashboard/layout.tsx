@@ -57,16 +57,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
       <DashboardShell
         items={items}
-        footer={
-          <div className="flex flex-col gap-3 px-3 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="truncate text-muted">{user.username}</span>
-              <ThemeToggle />
+        footer={(collapsed) =>
+          collapsed ? (
+            <div className="flex flex-col items-center gap-2 px-1">
+              <div className="flex flex-wrap justify-center gap-1">
+                <ThemeToggle />
+              </div>
+              <button
+                type="button"
+                onClick={() => logout().then(() => router.push("/login"))}
+                title={tc("signOut")}
+                aria-label={tc("signOut")}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-foreground/5 hover:text-foreground"
+              >
+                <span aria-hidden="true">⏻</span>
+              </button>
             </div>
-            <Button variant="secondary" size="sm" onClick={() => logout().then(() => router.push("/login"))}>
-            {tc("signOut")}
-          </Button>
-          </div>
+          ) : (
+            <div className="flex flex-col gap-3 px-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="truncate text-muted">{user.username}</span>
+                <ThemeToggle />
+              </div>
+              <Button variant="secondary" size="sm" onClick={() => logout().then(() => router.push("/login"))}>
+                {tc("signOut")}
+              </Button>
+            </div>
+          )
         }
       >
         {children}

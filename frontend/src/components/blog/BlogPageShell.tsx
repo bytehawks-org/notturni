@@ -37,8 +37,16 @@ const HEX_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 export function paletteStyle(config: BlogConfig | null): CSSProperties | null {
   const palette = config?.palette;
   const dark = config?.palette_dark;
+  // Il validatore backend ammette valori non-stringa nella palette (li
+  // ignora silenziosamente invece di rifiutarli, vedi
+  // app/domain/blog_config.py::validate_blog_config) — `v.toLowerCase()`
+  // incondizionato qui sotto avrebbe fatto esplodere il rendering
+  // dell'intera pagina pubblica del blog su un valore così (es. `null`).
   const lightIsDefault =
-    !palette || Object.entries(palette).every(([k, v]) => DEFAULT_PALETTE[k]?.toLowerCase() === v.toLowerCase());
+    !palette ||
+    Object.entries(palette).every(
+      ([k, v]) => typeof v === "string" && DEFAULT_PALETTE[k]?.toLowerCase() === v.toLowerCase()
+    );
   if (lightIsDefault && !dark) return null;
   const style: Record<string, string> = {};
   if (palette && !lightIsDefault) {

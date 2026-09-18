@@ -32,7 +32,17 @@ export function SensitiveImage({
   if (!sensitive) {
     return (
       <div className={`relative ${className}`}>
-        <Image src={src} alt={alt} data-lightbox="1" fill unoptimized sizes="100vw" className="object-cover" />
+        <Image
+          src={src}
+          alt={alt}
+          data-lightbox="1"
+          tabIndex={0}
+          role="button"
+          fill
+          unoptimized
+          sizes="100vw"
+          className="object-cover"
+        />
       </div>
     );
   }

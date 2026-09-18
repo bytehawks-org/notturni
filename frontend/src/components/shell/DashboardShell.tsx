@@ -32,7 +32,11 @@ export function DashboardShell({
   items: NavItem[];
   eyebrow?: string;
   homeHref?: string;
-  footer?: ReactNode;
+  /** Sia il nodo espanso sia un compattatore `(collapsed) => ReactNode`: il
+   * footer porta azioni sempre raggiungibili (logout, tema) — con il solo
+   * `ReactNode` sparivano del tutto a sidebar collassata, non solo
+   * ridimensionate. */
+  footer?: ReactNode | ((collapsed: boolean) => ReactNode);
   children: ReactNode;
 }) {
   const path = usePathname();
@@ -88,7 +92,11 @@ export function DashboardShell({
           </Link>
         ))}
         <div className="mt-auto flex flex-col gap-3">
-          {footer && !collapsed && <div className="border-t border-border pt-4">{footer}</div>}
+          {footer && (
+            <div className={collapsed ? "" : "border-t border-border pt-4"}>
+              {typeof footer === "function" ? footer(collapsed) : !collapsed && footer}
+            </div>
+          )}
           <button
             type="button"
             onClick={toggleCollapsed}
