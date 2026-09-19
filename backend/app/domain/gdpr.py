@@ -17,8 +17,12 @@ Cancellati per intero (dati puramente personali, mai condivisi con altri):
 sessioni, token API, codici MFA email/reset password pendenti, richieste di
 cambio email pendenti, dominio custom (verificato o no) e il relativo badge
 bronzo, identità SSO, link social, frammenti salvati, i follow (in entrambe
-le direzioni) e le membership su blog altrui (l'utente anonimizzato non ha
-più senso come "collaboratore attivo"). Lasciati intatti: blog di proprietà, post, commenti — il
+le direzioni), le membership su blog altrui (l'utente anonimizzato non ha
+più senso come "collaboratore attivo") e le iscrizioni alla newsletter
+collegate all'account (stesso trattamento di SocialLink/PostFragment: dato
+puramente personale, cancellato per intero — chi vuole restare iscritto
+alla newsletter di un blog può comunque farlo di nuovo con l'email che
+preferisce, senza account). Lasciati intatti: blog di proprietà, post, commenti — il
 `post_author_name_style`/`display_name` impostati qui li fa comparire da
 subito con l'autore "Utente eliminato" ovunque (stessa risoluzione dinamica
 già usata per gli alias, `app/domain/display_names.py`)."""
@@ -37,6 +41,7 @@ from app.models.follow import BlogFollow, UserFollow
 from app.models.custom_domain import CustomDomain
 from app.models.email_change_request import EmailChangeRequest
 from app.models.mfa_email_code import MfaEmailCode
+from app.models.newsletter import NewsletterSubscriber
 from app.models.password_reset_code import PasswordResetCode
 from app.models.post import Post
 from app.models.post_fragment import PostFragment
@@ -98,6 +103,15 @@ async def export_user_data(session: AsyncSession, user: User) -> dict[str, Any]:
     custom_domain_claim = (
         await session.execute(select(CustomDomain).where(CustomDomain.user_id == user.id))
     ).scalar_one_or_none()
+    newsletter_subscriptions = (
+        (
+            await session.execute(
+                select(NewsletterSubscriber).where(NewsletterSubscriber.user_id == user.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
     audit_events = (
         (
             await session.execute(
@@ -198,6 +212,15 @@ async def export_user_data(session: AsyncSession, user: User) -> dict[str, Any]:
             }
             for t in api_tokens
         ],
+        "newsletter_subscriptions": [
+            {
+                "blog_id": str(s.blog_id) if s.blog_id else None,
+                "email": s.email,
+                "status": s.status.value,
+                "confirmed_at": s.confirmed_at.isoformat() if s.confirmed_at else None,
+            }
+            for s in newsletter_subscriptions
+        ],
         "audit_log": [
             {
                 "occurred_at": a.occurred_at.isoformat(),
@@ -234,6 +257,7 @@ async def anonymize_and_deactivate_user(session: AsyncSession, user: User) -> No
     await session.execute(delete(SsoIdentity).where(SsoIdentity.user_id == user.id))
     await session.execute(delete(SocialLink).where(SocialLink.user_id == user.id))
     await session.execute(delete(PostFragment).where(PostFragment.user_id == user.id))
+    await session.execute(delete(NewsletterSubscriber).where(NewsletterSubscriber.user_id == user.id))
     await session.execute(
         delete(UserFollow).where(
             (UserFollow.follower_id == user.id) | (UserFollow.followed_user_id == user.id)

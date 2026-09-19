@@ -91,6 +91,38 @@ async def list_feed(
     return await _posts_out(session, [(post, blog) for post, blog in result.all()])
 
 
+class LocaleCountOut(BaseModel):
+    locale: str
+    count: int
+
+
+MAX_LOCALES_LIMIT = 5
+
+
+@router.get("/locales", response_model=list[LocaleCountOut])
+async def list_feed_locales(session: AsyncSession = Depends(get_session)) -> list[LocaleCountOut]:
+    """Conteggio post per lingua tra i post pubblici del feed (homepage,
+    pillole di lingua): stessa clausola di visibilità di `list_feed`, le
+    prime 5 lingue per numero di post, dalla più frequente. Il GROUP BY
+    esclude già da sé le lingue senza alcun post."""
+    post_count = func.count(Post.id)
+    stmt = (
+        select(Post.locale, post_count)
+        .join(Blog, Post.blog_id == Blog.id)
+        .where(
+            Post.status == PostStatus.PUBLISHED,
+            Post.published_at <= datetime.now(timezone.utc),
+            Post.is_hidden.is_(False),
+            blog_publicly_listable_clause(),
+        )
+        .group_by(Post.locale)
+        .order_by(post_count.desc())
+        .limit(MAX_LOCALES_LIMIT)
+    )
+    result = await session.execute(stmt)
+    return [LocaleCountOut(locale=locale, count=count) for locale, count in result.all()]
+
+
 class TrendingTagOut(BaseModel):
     tag: str
     post_count: int

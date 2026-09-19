@@ -9,7 +9,7 @@ from sqlalchemy import delete, insert, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_optional_current_user
-from app.core.broker import publish_post_backup
+from app.core.broker import publish_newsletter_campaign, publish_post_backup
 from app.core.captcha import turnstile_configured
 from app.core.database import get_session
 from app.core.storage import avatar_public_url
@@ -33,6 +33,7 @@ from app.domain.tags import resolve_tags
 from app.models.blog import Blog, BlogMembership, BlogVisibility
 from app.models.comment import CommentsMode
 from app.models.category import Category
+from app.models.newsletter import NewsletterCampaign, NewsletterCampaignKind, NewsletterCampaignStatus
 from app.models.publication import Publication
 from app.models.post import Post, PostStatus
 from app.models.post_read import PostReadDaily
@@ -630,6 +631,37 @@ def _backup_to_s3(blog: Blog, post: Post) -> None:
         logger.warning("Impossibile accodare il backup S3 per il post %s", post.id, exc_info=True)
 
 
+async def _queue_newsletter_notification(session: AsyncSession, post: Post, blog: Blog) -> uuid.UUID | None:
+    """Crea (una sola volta per post, indice unico parziale su
+    `newsletter_campaigns.post_id`) la campagna di notifica automatica agli
+    iscritti alla newsletter del blog, nella stessa transazione della
+    pubblicazione: se il commit del post fallisce, non deve restare in giro
+    una campagna orfana. Il pre-check SELECT invece dell'IntegrityError
+    copre il caso più comune (ripubblicazione dopo un ritorno in bozza) senza
+    dover gestire un rollback parziale della transazione in corso.
+
+    Ritorna l'id della campagna appena creata (da accodare su RabbitMQ *dopo*
+    il commit, stesso principio fire-and-forget di `_backup_to_s3`), o None
+    se non è stata creata nessuna campagna (opt-out del blog o già esistente)."""
+    if not blog.newsletter_auto_notify_enabled:
+        return None
+    existing = await session.execute(
+        select(NewsletterCampaign.id).where(NewsletterCampaign.post_id == post.id)
+    )
+    if existing.scalar_one_or_none() is not None:
+        return None
+    campaign = NewsletterCampaign(
+        blog_id=blog.id,
+        kind=NewsletterCampaignKind.POST_NOTIFICATION,
+        post_id=post.id,
+        status=NewsletterCampaignStatus.SENDING,
+        subject=f"Nuovo post su {blog.title}: {post.title}",
+    )
+    session.add(campaign)
+    await session.flush()
+    return campaign.id
+
+
 @router.post("/blogs/{blog_slug}/posts", response_model=PostOut, status_code=status.HTTP_201_CREATED)
 async def create_post(
     blog_slug: str,
@@ -1086,8 +1118,11 @@ async def publish_post(
 
     post.status = PostStatus.PUBLISHED
     post.published_at = scheduled_at or datetime.now(timezone.utc)
+    newsletter_campaign_id = await _queue_newsletter_notification(session, post, blog)
     await session.commit()
     await session.refresh(post)
+    if newsletter_campaign_id is not None:
+        publish_newsletter_campaign(str(newsletter_campaign_id))
     if is_publicly_visible(post):
         await _revalidate_post(post, blog)
     return await _post_out(session, post, blog)

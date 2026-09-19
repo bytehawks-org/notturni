@@ -50,7 +50,12 @@
     "register": "Audit register",
     "pages": "Pages",
     "commentModeration": "Comment moderation",
-    "administrationShort": "Administration"
+    "administrationShort": "Administration",
+    "newsletter": "Newsletter",
+    "media": "Media",
+    "publications": "Publications",
+    "links": "Links",
+    "bibliography": "Bibliography"
   },
   "BlogNav": {
     "posts": "Posts",
@@ -257,7 +262,8 @@
     "followers": "Followers",
     "appearance": "Appearance",
     "settings": "Settings",
-    "media": "Media"
+    "media": "Media",
+    "newsletter": "Newsletter"
   },
   "Overview": {
     "attention": {
@@ -628,7 +634,13 @@
     "resetSuccess": "Password updated. You can now sign in with the new password.",
     "backToLogin": "Back to sign in",
     "otpLegend": "6-digit verification code",
-    "otpDigitLabel": "Digit {index} of {total}"
+    "otpDigitLabel": "Digit {index} of {total}",
+    "repeatPassword": "Repeat password",
+    "repeatPasswordMismatch": "Passwords don't match.",
+    "usernameChecking": "Checking availability…",
+    "usernameAvailable": "Username available.",
+    "usernameTaken": "Username already taken.",
+    "usernameInvalidFormat": "Invalid username."
   },
   "FragmentsPage": {
     "title": "Fragments",
@@ -742,7 +754,15 @@
     "fediverseActivitypub": "ActivityPub",
     "directoryListed": "Listed in the user directory",
     "directoryListedSub": "If off, your profile stays reachable only via direct link (@username), not in the public search/listing at /users.",
-    "interests": "{count, plural, one {# interest} other {# interests}} of {max}"
+    "interests": "{count, plural, one {# interest} other {# interests}} of {max}",
+    "changePasswordTitle": "Change password",
+    "changePasswordSub": "On save, every open session (including this one) is closed: you'll need to sign in again.",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "repeatNewPassword": "Repeat new password",
+    "passwordMismatch": "Passwords don't match.",
+    "changePassword": "Change password",
+    "changingPassword": "Changing…"
   },
   "PostPage": {
     "inThisPost": "In this post",
@@ -1557,5 +1577,133 @@
     "noMatch": "No users match.",
     "follow": "Follow",
     "followers": "{count} followers"
+  },
+  "NewsletterSignup": {
+    "title": "Notturni newsletter",
+    "titleBlog": "Subscribe to the newsletter",
+    "intro": "Get an email when there's something new. We'll send you a confirmation email before activating the subscription.",
+    "emailPlaceholder": "Your email",
+    "consent": "I accept the <privacy>privacy notice</privacy> and agree to receive the confirmation email.",
+    "submit": "Subscribe",
+    "submitting": "Sending…",
+    "success": "Check your inbox: we've sent you an email to confirm the subscription.",
+    "error": "We couldn't complete the subscription. Please try again in a few minutes."
+  },
+  "NewsletterConfirmPage": {
+    "title": "Confirm subscription",
+    "confirmedTitle": "Subscription confirmed",
+    "confirmedBody": "You'll now receive newsletter emails. Thank you!",
+    "alreadyTitle": "Subscription already confirmed",
+    "alreadyBody": "This link has already been used: your subscription is already active.",
+    "invalidTitle": "Expired or invalid link",
+    "invalidBody": "This confirmation link is no longer valid. If you'd still like to subscribe, request a new email from the signup form.",
+    "backHome": "Back to home"
+  },
+  "NewsletterUnsubscribePage": {
+    "title": "Unsubscribe from the newsletter",
+    "missingToken": "Invalid link: the unsubscribe code is missing.",
+    "intro": "Sorry to see you go. You can unsubscribe, or if you prefer, delete your data from our list entirely.",
+    "reasonLabel": "Reason (optional)",
+    "reasonPlaceholder": "Tell us why you're leaving, if you'd like…",
+    "unsubscribe": "Unsubscribe me",
+    "unsubscribing": "Unsubscribing…",
+    "unsubscribedSuccess": "Done: you've been unsubscribed from the newsletter.",
+    "deleteExplanation": "Instead of a plain unsubscribe, you can request permanent deletion of your email address and every piece of data tied to this subscription (right to erasure, GDPR). This action cannot be undone.",
+    "deleteData": "Delete my data too",
+    "deleting": "Deleting…",
+    "deletedSuccess": "Done: your data has been deleted."
+  },
+  "NewsletterKind": {
+    "post_notification": "Automatic notification",
+    "manual": "Manual campaign"
+  },
+  "NewsletterStatus": {
+    "draft": "Draft",
+    "scheduled": "Scheduled",
+    "sending": "Sending",
+    "sent": "Sent",
+    "canceled": "Canceled",
+    "failed": "Failed"
+  },
+  "NewsletterCampaignModal": {
+    "title": "New campaign",
+    "subject": "Subject",
+    "body": "Content",
+    "bodyHint": "Markdown supported",
+    "bodyPlaceholder": "Write the email content…",
+    "scheduledAt": "Schedule for (optional)",
+    "scheduledAtHint": "leave empty to send right away",
+    "creating": "Creating…",
+    "create": "Create campaign"
+  },
+  "NewsletterTab": {
+    "pending": "Awaiting confirmation",
+    "confirmed": "Confirmed",
+    "unsubscribed": "Unsubscribed",
+    "autoNotifyLabel": "Notify subscribers on every new post",
+    "autoNotifyHint": "When enabled, an email is automatically sent to this blog's confirmed subscribers every time you publish a post.",
+    "campaignsTitle": "Campaigns",
+    "newCampaign": "New campaign",
+    "noCampaigns": "No campaign sent yet.",
+    "recipients": "{count} recipients",
+    "failed": "{count} failed",
+    "sentAt": "sent on {date}",
+    "scheduledAt": "scheduled for {date}"
+  },
+  "AdminNewsletter": {
+    "title": "Platform newsletter",
+    "newCampaign": "New campaign",
+    "pending": "Awaiting confirmation",
+    "confirmed": "Confirmed",
+    "unsubscribed": "Unsubscribed",
+    "campaignsTitle": "Campaigns",
+    "noCampaigns": "No campaign sent yet.",
+    "recipients": "{count} recipients",
+    "sentAt": "sent on {date}",
+    "scheduledAt": "scheduled for {date}"
+  },
+  "MyPostsPage": {
+    "title": "Posts",
+    "subtitle": "Every post from every one of your blogs, in a single list.",
+    "filter": {
+      "all": "All",
+      "draft": "Drafts",
+      "review": "In review",
+      "scheduled": "Scheduled",
+      "published": "Published"
+    },
+    "emptyTitle": "No posts",
+    "emptyBody": "Posts you write on your blogs will show up here.",
+    "noneInFilter": "No posts match this filter.",
+    "view": "View"
+  },
+  "MyMediaPage": {
+    "title": "Media",
+    "subtitle": "{count, plural, one {# file} other {# file}} from all of your blogs.",
+    "emptyTitle": "No images",
+    "emptyBody": "Images uploaded to your blogs will show up here.",
+    "sensitive": "Sensitive",
+    "missingAlt": "Missing alt text",
+    "in": "in",
+    "notUsed": "Not used in any post"
+  },
+  "MyPublicationsPage": {
+    "title": "Publications",
+    "subtitle": "Every publication from every one of your blogs, in a single list.",
+    "emptyTitle": "No publications",
+    "emptyBody": "Publications created on your blogs will show up here.",
+    "chaptersOf": "{published} of {total} chapters"
+  },
+  "MyLinksPage": {
+    "title": "Links",
+    "subtitle": "Every URL cited across all your blogs' posts, grouped by site.",
+    "emptyTitle": "No links",
+    "emptyBody": "Links cited in your posts will show up here."
+  },
+  "MyBibliographyPage": {
+    "title": "Bibliography",
+    "subtitle": "Every note across all your blogs' posts, deduplicated.",
+    "emptyTitle": "No notes",
+    "emptyBody": "Footnotes from your posts will show up here."
   }
 }

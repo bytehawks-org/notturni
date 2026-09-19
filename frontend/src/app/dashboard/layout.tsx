@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { DashboardShell, type NavItem } from "@/components/shell/DashboardShell";
+import { UiLanguagePicker } from "@/components/shell/UiLanguagePicker";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/lib/auth-context";
@@ -35,6 +36,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const items: NavItem[] = [
     { href: "/dashboard", label: t("myBlogs"), icon: "✎", mobile: true },
+    { href: "/dashboard/post", label: t("posts"), icon: "▤", mobile: true },
+    { href: "/dashboard/media", label: t("media"), icon: "▣", mobile: true },
+    { href: "/dashboard/pubblicazioni", label: t("publications"), icon: "▥", mobile: true },
+    { href: "/dashboard/link", label: t("links"), icon: "⛓", mobile: true },
+    { href: "/dashboard/bibliografia", label: t("bibliography"), icon: "❦", mobile: true },
     { href: "/dashboard/frammenti", label: t("fragments"), icon: "❝", mobile: true },
     { href: "/dashboard/profile", label: t("profile"), icon: "◯", mobile: true },
     { href: "/dashboard/token", label: t("apiTokens"), icon: "◈", mobile: true },
@@ -63,6 +69,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div className="flex flex-wrap justify-center gap-1">
                 <ThemeToggle />
               </div>
+              <UiLanguagePicker className="w-full" />
               <button
                 type="button"
                 onClick={() => logout().then(() => router.push("/login"))}
@@ -79,6 +86,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <span className="truncate text-muted">{user.username}</span>
                 <ThemeToggle />
               </div>
+              <UiLanguagePicker className="w-full" />
               <Button variant="secondary" size="sm" onClick={() => logout().then(() => router.push("/login"))}>
                 {tc("signOut")}
               </Button>

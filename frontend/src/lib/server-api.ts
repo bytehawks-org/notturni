@@ -242,6 +242,17 @@ export async function searchBlogPosts(
   return (await res.json()) as Post[];
 }
 
+/** Lingue con almeno un post pubblico, con conteggio — per le pillole di
+ * lingua della homepage (fino a 5, dalla più frequente: vedi
+ * backend/app/api/v1/feed.py::list_feed_locales). */
+export async function getFeedLocales(): Promise<{ locale: string; count: number }[]> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/feed/locales`, {
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.feed()] },
+  });
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero delle lingue del feed.`);
+  return (await res.json()) as { locale: string; count: number }[];
+}
+
 /** Tag più usati tra i post pubblicati di recente, per la sezione "di tendenza" della homepage. */
 export async function getTrendingTags(
   options: { days?: number; limit?: number } = {}

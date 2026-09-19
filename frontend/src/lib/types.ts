@@ -99,6 +99,9 @@ export interface Blog {
    * un eventuale override di Post.search_indexing_enabled/ai_crawling_enabled. */
   search_indexing_enabled: boolean;
   ai_crawling_enabled: boolean;
+  /** Invio automatico di una notifica newsletter ad ogni post pubblicato
+   * (backend/app/api/v1/newsletter.py), gestito da PATCH .../newsletter/settings. */
+  newsletter_auto_notify_enabled: boolean;
   default_locale: string;
   /** Lingue secondarie del blog (informative), oltre a default_locale. */
   extra_locales: string[];
@@ -897,4 +900,105 @@ export interface FragmentCollectionEntry {
   author_display_name: string;
   /** Permalink pubblico /{blog}/{slug} del post di provenienza. */
   permalink: string;
+}
+
+/** Viste aggregate "tutti i miei blog" (backend/app/api/v1/fragments.py,
+ * sezione dedicata in fondo al file): stessa forma degli equivalenti
+ * per-blog, con l'attribuzione del blog di appartenenza per riga (`blog_slug`/
+ * `blog_title`). Vista autore, mai filtrata dalla visibilità pubblica. */
+export interface MyMediaUsage {
+  post_id: string;
+  post_slug: string;
+  post_title: string;
+  permalink: string;
+}
+
+export interface MyMediaFile {
+  id: string;
+  url: string;
+  content_type: string;
+  size_bytes: number;
+  alt_text: string;
+  caption: string | null;
+  categories: SensitivityCategory[];
+  is_sensitive: boolean;
+  uploader_username: string | null;
+  created_at: string;
+  used_in: MyMediaUsage[];
+  blog_slug: string;
+  blog_title: string;
+}
+
+export interface MyPublication {
+  id: string;
+  name: string;
+  title: string;
+  description: string | null;
+  chapters_total: number;
+  chapters_published: number;
+  created_at: string;
+  blog_slug: string;
+  blog_title: string;
+}
+
+export interface MyContentCitation {
+  post_title: string;
+  post_slug: string;
+  permalink: string;
+  locale: string;
+  used_at: string | null;
+  blog_slug: string;
+  blog_title: string;
+}
+
+export interface MyLinkBibliographyEntry {
+  url: string;
+  link_text: string;
+  citations: MyContentCitation[];
+}
+
+export interface MyBibliographyCitation {
+  post_title: string;
+  post_slug: string;
+  permalink: string;
+  locale: string;
+  idx: number;
+  blog_slug: string;
+  blog_title: string;
+}
+
+export interface MyBibliographyEntry extends StructuredNoteFields {
+  content: string;
+  citations: MyBibliographyCitation[];
+}
+
+/** Newsletter/mailing-list (backend/app/api/v1/newsletter.py): iscrizione
+ * pubblica a doppio opt-in per un blog (`blog_id` valorizzato) o per il
+ * digest di piattaforma (`blog_id` null). */
+export type NewsletterCampaignKind = "post_notification" | "manual";
+
+/** `scheduled` non implica un invio automatico: nessuno scheduler esiste
+ * ancora lato backend, resta così finché non arriva un invio manuale o un
+ * worker futuro — non presentarlo in UI come "verrà inviata il...". */
+export type NewsletterCampaignStatus = "draft" | "scheduled" | "sending" | "sent" | "canceled" | "failed";
+
+export interface NewsletterStats {
+  pending: number;
+  confirmed: number;
+  unsubscribed: number;
+}
+
+export interface NewsletterCampaign {
+  id: string;
+  blog_id: string | null;
+  kind: NewsletterCampaignKind;
+  post_id: string | null;
+  subject: string;
+  body_markdown: string | null;
+  status: NewsletterCampaignStatus;
+  scheduled_at: string | null;
+  sent_at: string | null;
+  recipient_count: number;
+  failed_count: number;
+  created_at: string;
 }

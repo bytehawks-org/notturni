@@ -40,6 +40,12 @@ import type {
   MediaFile,
   MediaLibrary,
   MembershipBlog,
+  MyBibliographyEntry,
+  MyLinkBibliographyEntry,
+  MyMediaFile,
+  MyPublication,
+  NewsletterCampaign,
+  NewsletterStats,
   NoteKind,
   Page,
   PageTranslationSummary,
@@ -146,6 +152,12 @@ export const api = {
   auth: {
     register: (payload: { username: string; email: string; password: string }) =>
       request<CurrentUser>("/api/v1/auth/register", { method: "POST", body: payload }),
+    /** Verifica in tempo reale durante la registrazione, prima di inviare il
+     * form: `reason` distingue formato non valido da username già preso. */
+    usernameAvailable: (username: string) =>
+      request<{ available: boolean; reason: "invalid_format" | "taken" | null }>(
+        `/api/v1/auth/username-available?username=${encodeURIComponent(username)}`
+      ),
     login: (payload: { email: string; password: string }) =>
       request<LoginResponse>("/api/v1/auth/login", { method: "POST", body: payload, withCredentials: true }),
     verifyMfa: (payload: { challenge: string; code: string }) =>
@@ -654,6 +666,18 @@ export const api = {
       request<DomainOut>("/api/v1/users/me/domain/verify", { method: "POST", token }),
     deleteDomain: (token: string) =>
       request<void>("/api/v1/users/me/domain", { method: "DELETE", token }),
+    /** Cambio password autenticato (richiede la password attuale): invalida
+     * ogni sessione già aperta, anche quella corrente — il chiamante deve
+     * rifare login subito dopo. */
+    changePassword: (token: string, payload: { current_password: string; new_password: string }) =>
+      request<{ status: string }>("/api/v1/users/me/password", { method: "POST", token, body: payload }),
+    /** Vista aggregata "tutti i miei blog": tutti i post (qualunque stato),
+     * dal più recente — generalizza `posts.list` a più blog insieme. */
+    myPosts: (token: string) => request<Post[]>("/api/v1/users/me/posts", { token }),
+    myMedia: (token: string) => request<MyMediaFile[]>("/api/v1/users/me/media", { token }),
+    myPublications: (token: string) => request<MyPublication[]>("/api/v1/users/me/publications", { token }),
+    myLinks: (token: string) => request<MyLinkBibliographyEntry[]>("/api/v1/users/me/links", { token }),
+    myBibliography: (token: string) => request<MyBibliographyEntry[]>("/api/v1/users/me/bibliography", { token }),
   },
 
   fragments: {
@@ -781,5 +805,49 @@ export const api = {
       request<ApiTokenCreated>("/api/v1/tokens", { method: "POST", token, body: { name } }),
     revoke: (token: string, tokenId: string) =>
       request<void>(`/api/v1/tokens/${tokenId}`, { method: "DELETE", token }),
+  },
+
+  newsletter: {
+    /** Pubblico, nessuna autenticazione: doppio opt-in. Risposta sempre
+     * generica (202 `{status:"ok"}`), anche se l'indirizzo è già iscritto —
+     * anti-enumerazione, vedi backend/app/api/v1/newsletter.py. */
+    subscribe: (payload: { email: string; blog_slug?: string | null; locale?: string | null }) =>
+      request<{ status: string }>("/api/v1/newsletter/subscribe", { method: "POST", body: payload }),
+    confirm: (token: string) =>
+      request<{ status: "confirmed" | "already_confirmed" | "invalid" }>(
+        `/api/v1/newsletter/confirm?token=${encodeURIComponent(token)}`
+      ),
+    unsubscribe: (payload: { token: string; reason?: string | null }) =>
+      request<{ status: string }>("/api/v1/newsletter/unsubscribe", { method: "POST", body: payload }),
+    /** Cancellazione GDPR self-service (Art. 17), idempotente, senza login:
+     * chi riceve l'email è già identificato dal token firmato del link. */
+    unsubscribeAndDelete: (payload: { token: string }) =>
+      request<{ status: string }>("/api/v1/newsletter/unsubscribe/delete", { method: "POST", body: payload }),
+    blogStats: (token: string, slug: string) =>
+      request<NewsletterStats>(`/api/v1/blogs/${slug}/newsletter/stats`, { token }),
+    blogCampaigns: (token: string, slug: string) =>
+      request<NewsletterCampaign[]>(`/api/v1/blogs/${slug}/newsletter/campaigns`, { token }),
+    createBlogCampaign: (
+      token: string,
+      slug: string,
+      payload: { subject: string; body_markdown: string; scheduled_at?: string | null }
+    ) =>
+      request<NewsletterCampaign>(`/api/v1/blogs/${slug}/newsletter/campaigns`, {
+        method: "POST",
+        token,
+        body: payload,
+      }),
+    updateBlogSettings: (token: string, slug: string, payload: { newsletter_auto_notify_enabled: boolean }) =>
+      request<{ newsletter_auto_notify_enabled: boolean }>(`/api/v1/blogs/${slug}/newsletter/settings`, {
+        method: "PATCH",
+        token,
+        body: payload,
+      }),
+    adminStats: (token: string) => request<NewsletterStats>("/api/v1/admin/newsletter/stats", { token }),
+    adminCampaigns: (token: string) => request<NewsletterCampaign[]>("/api/v1/admin/newsletter/campaigns", { token }),
+    createAdminCampaign: (
+      token: string,
+      payload: { subject: string; body_markdown: string; scheduled_at?: string | null }
+    ) => request<NewsletterCampaign>("/api/v1/admin/newsletter/campaigns", { method: "POST", token, body: payload }),
   },
 };

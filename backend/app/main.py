@@ -15,6 +15,7 @@ from app.api.v1.fragments import router as fragments_router
 from app.api.v1.health import router as health_router
 from app.api.v1.interests import router as interests_router
 from app.api.v1.link_preview import router as link_preview_router
+from app.api.v1.newsletter import router as newsletter_router
 from app.api.v1.pages import router as pages_router
 from app.api.v1.posts import router as posts_router
 from app.api.v1.reports import router as reports_router
@@ -64,6 +65,7 @@ app.include_router(reports_router, prefix="/api/v1", tags=["reports"])
 app.include_router(link_preview_router, prefix="/api/v1/link-preview", tags=["link-preview"])
 app.include_router(interests_router, prefix="/api/v1/interests", tags=["interests"])
 app.include_router(search_router, prefix="/api/v1/search", tags=["search"])
+app.include_router(newsletter_router, prefix="/api/v1", tags=["newsletter"])
 
 # Backend di storage "localstorage" (alternativa a S3/MinIO, vedi
 # app/core/storage.py): serve media/avatar direttamente dal filesystem
