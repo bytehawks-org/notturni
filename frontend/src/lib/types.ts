@@ -132,6 +132,20 @@ export interface PublicBlog extends Blog {
   last_published_at: string | null;
 }
 
+/** Voce di `GET /users` (directory pubblica utenti): sottoinsieme di
+ * `Profile` per le card, più il conteggio follower — stesso schema di
+ * `PublicBlog` per la directory blog. */
+export interface PublicUser {
+  username: string;
+  display_name: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+  verification_tier: VerificationTier;
+  custom_domain: string | null;
+  interests: string[];
+  follower_count: number;
+}
+
 /** `GET /blogs/{slug}/overview` (todo/UX_REDESIGN.md B1): conteggi per la tab Panoramica. */
 export interface BlogOverview {
   posts_total: number;
@@ -535,6 +549,9 @@ export interface Profile {
   country: string | null;
   native_language: string | null;
   fallback_languages: string[];
+  /** Chiavi canoniche (blocco "interessi utente"), al più 5 — risolvere
+   * l'etichetta nella lingua corrente tramite `GET /api/v1/interests`. */
+  interests: string[];
   avatar_url: string | null;
   social_links: SocialLink[];
   created_at: string;
@@ -578,6 +595,8 @@ export interface MeProfile extends Profile {
   domain_pending_verification: string | null;
   domain_status: CustomDomainStatus | null;
   domain_verification_instructions: DomainVerificationInstructions | null;
+  /** Opt-out dalla directory pubblica utenti (`GET /users`), attivo (listato) di default. */
+  directory_listed: boolean;
 }
 
 export interface AdminUser {
@@ -818,8 +837,18 @@ export interface PlatformConfig {
   footer_column2_markdown: string | null;
   footer_column3_markdown: string | null;
   footer_bottom_bar_markdown: string | null;
+  /** Elenco completo (sostituisce, non aggiunge) — vedi `Interest` sotto. */
+  interests: Interest[];
   updated_at: string | null;
   infrastructure: Record<string, string | boolean | null>;
+}
+
+/** Voce di `GET /api/v1/interests` (blocco "interessi utente"): tag fisso
+ * multilingua, chiave canonica non linguistica + un'etichetta per lingua.
+ * Il frontend risolve la lingua corrente da sé (fallback a `key`). */
+export interface Interest {
+  key: string;
+  translations: Record<string, string>;
 }
 
 export type GdprRequestType = "export" | "deletion";

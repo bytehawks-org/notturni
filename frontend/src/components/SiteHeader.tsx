@@ -18,7 +18,9 @@ export function SiteHeader() {
   const items: [string, string][] = [
     ["/", t("latest")],
     ["/blogs", t("blogs")],
+    ["/users", t("people")],
   ];
+  const onSearch = path === "/search";
 
   return (
     <header className="border-b border-border">
@@ -43,6 +45,14 @@ export function SiteHeader() {
           </nav>
         </div>
         <div className="flex items-center gap-3 text-sm">
+          <Link
+            href="/search"
+            aria-label={t("search")}
+            title={t("search")}
+            className={`no-underline ${onSearch ? "font-medium text-foreground" : "text-muted hover:text-foreground"}`}
+          >
+            <span aria-hidden="true">⌕</span>
+          </Link>
           <span className="hidden sm:inline-flex">
             <ThemeToggle />
           </span>

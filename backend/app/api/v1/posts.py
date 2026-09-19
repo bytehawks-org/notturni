@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy import delete, insert, select, tuple_
+from sqlalchemy import delete, insert, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_optional_current_user
@@ -814,6 +814,51 @@ async def list_posts(
     result = await session.execute(stmt)
     posts = list(result.scalars().all())
 
+    return await _posts_out(session, [(p, blog) for p in posts])
+
+
+MAX_SEARCH_LIMIT = 50
+DEFAULT_SEARCH_LIMIT = 20
+
+
+@router.get("/blogs/{blog_slug}/search", response_model=list[PostOut])
+async def search_blog_posts(
+    blog_slug: str,
+    q: str,
+    limit: int = DEFAULT_SEARCH_LIMIT,
+    offset: int = 0,
+    current_user: User | None = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[PostOut]:
+    """Ricerca ristretta a un singolo blog (sottodominio `{slug}.notturni.eu`):
+    `q` cerca in titolo e contenuto dei soli post effettivamente pubblicati,
+    a prescindere da chi effettua la richiesta (a differenza di
+    `GET /blogs/{blog_slug}/posts`, non mostra mai bozze/revisione a chi ha
+    accesso in scrittura — è una casella di ricerca pubblica, non uno
+    strumento di editing). 404 se il blog non è visibile al richiedente,
+    stesso comportamento di `list_posts`."""
+    blog = await _get_blog_or_404(session, blog_slug)
+    await _require_blog_viewable(session, current_user, blog)
+    q = q.strip()
+    if not q:
+        return []
+    limit = min(max(limit, 1), MAX_SEARCH_LIMIT)
+    offset = max(offset, 0)
+
+    needle = f"%{q}%"
+    stmt = (
+        select(Post)
+        .where(
+            Post.blog_id == blog.id,
+            publicly_visible_clause(),
+            or_(Post.title.ilike(needle), Post.content.ilike(needle)),
+        )
+        .order_by(Post.published_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    result = await session.execute(stmt)
+    posts = list(result.scalars().all())
     return await _posts_out(session, [(p, blog) for p in posts])
 
 

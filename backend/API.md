@@ -1438,7 +1438,42 @@ ricerca della sezione Pagine del dashboard (`frontend/src/app/admin/pagine`).
 singola traduzione (`slug`, `title`, `content`, `is_published`, tutti
 opzionali).
 
+## Interessi utente
+
+**`GET /api/v1/interests`** — pubblico, nessuna autenticazione. Elenco
+corrente degli interessi selezionabili (blocco "interessi utente", tag
+fissi multilingua — chiave canonica non linguistica, mai testo libero):
+
+```json
+[{"key": "music", "translations": {"it": "Musica", "en": "Music"}}, ...]
+```
+
+Sola sorgente di verità: `platform_config.interests`, seminata da
+`NOCT_DEFAULT_INTERESTS` (JSON, stesso schema) o da un elenco builtin
+curato alla prima installazione, poi modificabile in qualsiasi momento da
+un Super Admin (`PATCH /api/v1/admin/config`, campo `interests` — vedi
+sezione Amministrazione). Il frontend risolve la traduzione nella lingua
+corrente da sé (fallback `en`, poi la prima disponibile, poi `key`).
+
 ## Profilo utente e follow
+
+**`GET /api/v1/users`** — pubblico, nessuna autenticazione. Directory
+pubblica degli utenti (blocco "directory di utenti", stesso schema di
+`GET /blogs`): solo account attivi (non anonimizzati/cancellati) che non
+hanno scelto l'opt-out (`User.directory_listed`, vedi `PATCH /users/me`
+sotto). `q` cerca in username/alias pubblico/bio (`ILIKE`), `locale` filtra
+per lingua madre (`native_language`), `interest` filtra per chiave canonica
+di interesse (per trovare persone con cui condividerlo e seguirle), `sort`
+è `new` (registrazione, default) o `followers`, `limit` (default 30,
+massimo 100), `offset`. Voce:
+
+```json
+{
+  "username": "...", "display_name": "...", "bio": "...",
+  "avatar_url": "...", "verification_tier": "none", "custom_domain": null,
+  "interests": ["music", "cinema"], "follower_count": 3
+}
+```
 
 **`GET /api/v1/users/{username}`** — pubblico. Profilo pubblico:
 
@@ -1448,6 +1483,7 @@ opzionali).
   "first_name": "...", "last_name": "...", "display_name": "...",
   "post_author_name_style": "username",
   "country": "IT", "native_language": "it", "fallback_languages": ["en", "fr"],
+  "interests": ["music", "cinema"],
   "avatar_url": "...", "social_links": [...], "created_at": "...",
   "verification_tier": "none", "custom_domain": null,
   "atproto_did": "did:web:notturni.eu:users:<uuid>",
@@ -1490,7 +1526,8 @@ privati del proprietario, mai esposti sul profilo pubblico di nessuno:
   "next_username_change_allowed_at": "2026-09-15T12:00:00Z",
   "pending_email_change": {"new_email": "...", "stage": "awaiting_old_confirmation"},
   "domain_pending_verification": "...",
-  "domain_verification_instructions": {"txt_record_name": "...", "txt_record_value": "..."}
+  "domain_verification_instructions": {"txt_record_name": "...", "txt_record_value": "..."},
+  "directory_listed": true, "interests": ["music", "cinema"]
 }
 ```
 
@@ -1502,6 +1539,10 @@ flusso di cambio email sotto. `domain_pending_verification`/
 `domain_verification_instructions` sono valorizzati solo se esiste un
 dominio custom non ancora verificato (`pending`/`failed`), per poter
 riprendere il flusso senza dover richiamare `POST .../domain`.
+`directory_listed` (privato, mai esposto su `GET /{username}`): opt-out
+dalla directory pubblica (`GET /users` sotto), attivo di default — il
+profilo resta comunque sempre raggiungibile dal link diretto `@username`,
+questo flag esclude solo dall'elenco/ricerca.
 
 `display_name` è un alias pubblico globale (todo/BLOG.md #4): quando
 valorizzato, è l'intestazione del profilo pubblico al posto di username /
@@ -1535,7 +1576,12 @@ invariato — accettato anche senza un dominio verificato attivo (ricade sullo
 username finché non lo è, stesso comportamento di `display_name` non
 impostato). Per
 `fallback_languages`: assente lascia invariata la lista, una lista (anche
-vuota) la sostituisce (`400` se oltre 5 o un codice non valido). `username`:
+vuota) la sostituisce (`400` se oltre 5 o un codice non valido).
+`directory_listed`: booleano, assente lascia invariato — opt-out dalla
+directory pubblica (`GET /users` sotto). `interests`: array di chiavi
+canoniche (vedi `GET /api/v1/interests`), assente lascia invariato, una
+lista (anche vuota) la sostituisce — massimo 5, `400` se oltre il limite o
+se contiene una chiave non tra quelle correnti di piattaforma. `username`:
 assente lo lascia invariato, altrimenti stesso formato/blacklist della
 registrazione (`app/domain/usernames.py`, `400` se non valido, `409` se già
 in uso) **più un cooldown di 5 giorni** (`USERNAME_CHANGE_COOLDOWN_DAYS`,
@@ -1853,7 +1899,16 @@ modificabile a sé, non un valore d'ambiente), `footer_column1_markdown`/
 su ogni pagina pubblica di piattaforma e di ogni blog, vedi `GET /api/v1/footer`
 sotto; le colonne 1/2 sono solo il default, sovrascrivibile per singolo blog
 in `PUT /blogs/{slug}/config` — mai la 3 né `bottom_bar`, sempre e solo di
-piattaforma). Ogni modifica va nel registro (`platform.config_updated`, con
+piattaforma), `interests` (blocco "interessi utente": elenco completo —
+questo campo **sostituisce**, non aggiunge, a differenza di
+`reserved_blog_names` — di `{"key": "...", "translations": {"it": "...",
+"en": "..."}}`; chiave canonica in formato slug `[a-z0-9_-]{1,40}`, univoca,
+almeno una traduzione non vuota per voce, massimo 200 voci; seminato alla
+creazione della riga da `NOCT_DEFAULT_INTERESTS` (JSON, stesso schema) se
+valorizzata, altrimenti da un elenco builtin curato
+(`app/domain/interests.py::DEFAULT_INTERESTS`) — vedi `GET /api/v1/interests`
+sotto per l'elenco pubblico e `PATCH /users/me` per la scelta dell'utente).
+Ogni modifica va nel registro (`platform.config_updated`, con
 `changes: {campo: {from, to}}`) e, se cambia un campo `footer_*`, invalida la
 cache del frontend sul tag condiviso `platform-footer` (tutte le pagine
 pubbliche, non solo quelle di un blog).
@@ -1911,6 +1966,21 @@ per username o email (`ilike`, sottostringa).
 - Non è possibile disattivare il proprio stesso account (`400`) — evita
   l'auto-blocco dell'unico Super Admin rimasto.
 - Un utente disattivato (`is_active=false`) non può più fare login.
+
+**`POST /api/v1/admin/users/{user_id}/reset-password`** — richiede
+`Amministratore`/`Super Admin`, sempre `202`, nessun corpo. Reset forzoso
+della password: innesca verso l'utente lo stesso ciclo email di
+`POST /auth/password/forgot` (stessa funzione di dominio
+`app/domain/password_reset.py::request_password_reset` — codice a 6 cifre,
+TTL 10 minuti, invio via coda RabbitMQ), ma avviato dall'admin invece che
+dall'utente stesso: l'admin non imposta né vede alcuna password, solo
+innesca l'invio. `400` se l'utente target non è attivo. Nessun rate limit
+per IP/email (quello di `/auth/password/forgot` è pensato per un anonimo
+che enumera indirizzi): solo un limite più permissivo per attore admin
+(20/5 min), contro un account admin compromesso che spamma reset su molti
+utenti. Evento di audit `user.password_reset_triggered` (nessuna nota
+richiesta, a differenza di cambio ruolo/attivazione — non è un cambio di
+stato persistente sull'account).
 
 Non esiste un endpoint per creare il primo Super Admin (nessuna sessione da
 cui autenticare la richiesta), ma non serve più promuoverlo a mano sul
@@ -2057,6 +2127,30 @@ giorni (default 7, massimo 90), dal più frequente:
 param opzionali: `days`, `limit` (default 10, massimo 30). Non esistono
 ancora contatori di like/condivisioni in piattaforma (vedi ROADMAP.md): è
 l'unica base disponibile oggi per una sezione "di tendenza".
+
+## Ricerca
+
+Due endpoint distinti, non uno solo con uno scope opzionale: la ricerca sul
+portale attraversa tutti i blog pubblici, quella su un singolo blog (anche
+raggiunto dal proprio sottodominio) resta ristretta ai suoi soli post.
+Entrambi cercano in titolo e contenuto con `ILIKE` (nessuno stemming/full
+text search Postgres oggi, stesso approccio pragmatico già usato da
+`GET /blogs?q=`), quindi case-insensitive e senza bisogno di parole intere.
+
+**`GET /api/v1/search/posts`** — pubblico, nessuna autenticazione. `q`
+(obbligatorio, stringa vuota o solo spazi → `[]` senza errore) cerca in
+titolo/contenuto tra i post pubblicati dei soli blog `public`, stessi
+vincoli di visibilità di `GET /feed/posts`, dal più recente. Query param
+opzionali: `limit` (default 20, massimo 50), `offset` (paginazione, default
+0). Per cercare i blog stessi per nome vedi `GET /blogs?q=` (sezione Blog).
+
+**`GET /blogs/{slug}/search`** — pubblico. Come sopra ma ristretto ai post
+del blog `{slug}` (`404` se il blog non è visibile al richiedente, stesso
+comportamento di `GET /blogs/{slug}/posts`); sempre solo post effettivamente
+pubblicati, anche per chi ha accesso in scrittura al blog (a differenza di
+`GET /blogs/{slug}/posts`, che a loro mostra anche bozze/revisione: la
+ricerca è una casella pubblica, non uno strumento di editing). Stessi
+`limit`/`offset` di sopra.
 
 ## CORS
 

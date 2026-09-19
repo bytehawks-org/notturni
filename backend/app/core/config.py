@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     # riga `platform_config` alla prima installazione, poi modificabile dal
     # Super Admin. Ogni utente può sovrascriverla nel profilo (users.ui_locale).
     default_locale: Literal["it", "en"] = "it"
+    # Elenco di interessi utente (blocco "interessi", massimo 5 per utente,
+    # tag fissi multilingua — non testo libero): seme JSON opzionale per
+    # `platform_config.interests` alla prima installazione (stesso schema
+    # della colonna: `[{"key": "music", "translations": {"it": "Musica",
+    # "en": "Music"}}, ...]`), poi modificabile dal Super Admin. Assente:
+    # usa i default builtin curati in app/domain/interests.py::DEFAULT_INTERESTS.
+    default_interests: str | None = None
 
     # Bootstrap del primo Super Admin all'avvio del backend (CLAUDE.md #5),
     # per accedere all'area di amministrazione del dashboard senza

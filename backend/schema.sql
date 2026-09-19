@@ -1001,5 +1001,27 @@ ALTER TABLE post_media ALTER COLUMN is_sensitive SET NOT NULL;
 
 UPDATE alembic_version SET version_num='b2c3d4e5f6a7' WHERE alembic_version.version_num = 'a1c2b3d4e5f6';
 
+-- Running upgrade b2c3d4e5f6a7 -> c9839d73bf05
+
+ALTER TABLE users ADD COLUMN directory_listed BOOLEAN DEFAULT true NOT NULL;
+
+ALTER TABLE users ALTER COLUMN directory_listed DROP DEFAULT;
+
+UPDATE alembic_version SET version_num='c9839d73bf05' WHERE alembic_version.version_num = 'b2c3d4e5f6a7';
+
+-- Running upgrade c9839d73bf05 -> 4d23cdb0ccc3
+
+ALTER TABLE platform_config ADD COLUMN interests JSONB DEFAULT '[]'::jsonb NOT NULL;
+
+ALTER TABLE platform_config ALTER COLUMN interests DROP DEFAULT;
+
+UPDATE platform_config SET interests = CAST('[{"key": "music", "translations": {"it": "Musica", "en": "Music", "de": "Musik", "fr": "Musique"}}, {"key": "technology", "translations": {"it": "Tecnologia", "en": "Technology", "de": "Technologie", "fr": "Technologie"}}, {"key": "photography", "translations": {"it": "Fotografia", "en": "Photography", "de": "Fotografie", "fr": "Photographie"}}, {"key": "literature", "translations": {"it": "Letteratura", "en": "Literature", "de": "Literatur", "fr": "Litt\\u00e9rature"}}, {"key": "cinema", "translations": {"it": "Cinema", "en": "Cinema", "de": "Kino", "fr": "Cin\\u00e9ma"}}, {"key": "travel", "translations": {"it": "Viaggi", "en": "Travel", "de": "Reisen", "fr": "Voyages"}}, {"key": "food", "translations": {"it": "Cucina", "en": "Food", "de": "Kochen", "fr": "Cuisine"}}, {"key": "art", "translations": {"it": "Arte", "en": "Art", "de": "Kunst", "fr": "Art"}}, {"key": "nature", "translations": {"it": "Natura", "en": "Nature", "de": "Natur", "fr": "Nature"}}, {"key": "science", "translations": {"it": "Scienza", "en": "Science", "de": "Wissenschaft", "fr": "Science"}}, {"key": "sports", "translations": {"it": "Sport", "en": "Sports", "de": "Sport", "fr": "Sport"}}, {"key": "gaming", "translations": {"it": "Videogiochi", "en": "Gaming", "de": "Gaming", "fr": "Jeux vid\\u00e9o"}}, {"key": "fashion", "translations": {"it": "Moda", "en": "Fashion", "de": "Mode", "fr": "Mode"}}, {"key": "politics", "translations": {"it": "Politica", "en": "Politics", "de": "Politik", "fr": "Politique"}}, {"key": "philosophy", "translations": {"it": "Filosofia", "en": "Philosophy", "de": "Philosophie", "fr": "Philosophie"}}, {"key": "history", "translations": {"it": "Storia", "en": "History", "de": "Geschichte", "fr": "Histoire"}}]' AS jsonb) WHERE interests = '[]'::jsonb;
+
+ALTER TABLE users ADD COLUMN interests VARCHAR(40)[] DEFAULT '{}' NOT NULL;
+
+ALTER TABLE users ALTER COLUMN interests DROP DEFAULT;
+
+UPDATE alembic_version SET version_num='4d23cdb0ccc3' WHERE alembic_version.version_num = 'c9839d73bf05';
+
 COMMIT;
 

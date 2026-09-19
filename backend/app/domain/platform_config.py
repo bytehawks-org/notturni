@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.domain.blog_rules import MAX_BLOGS_PER_USER
+from app.domain.interests import DEFAULT_INTERESTS, default_interests_from_env
 from app.models.platform_config import PlatformConfig
 
 REGISTRATION_MODES = ("open", "invite", "closed")
@@ -54,6 +55,7 @@ async def get_platform_config(session: AsyncSession) -> PlatformConfig:
                 # altri, modificabile o azzerabile da un Super Admin in
                 # qualsiasi momento.
                 footer_bottom_bar_markdown="[Notturni su GitHub](https://github.com/bytehawks-org/notturni) · 🇪🇺 Fatto in UE",
+                interests=default_interests_from_env(settings.default_interests) or DEFAULT_INTERESTS,
             )
             .on_conflict_do_nothing(index_elements=["id"])
         )

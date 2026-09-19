@@ -28,6 +28,10 @@ export default function DashboardUsersPage() {
   const [error, setError] = useState<string | null>(null);
   const [rowError, setRowError] = useState<Record<string, string>>({});
   const [pending, setPending] = useState<{ user: AdminUser; payload: { platform_role?: PlatformRole; is_active?: boolean } } | null>(null);
+  const [confirmingReset, setConfirmingReset] = useState<string | null>(null);
+  const [resettingPassword, setResettingPassword] = useState<string | null>(null);
+  const [resetDone, setResetDone] = useState<Record<string, boolean>>({});
+  const [resetError, setResetError] = useState<Record<string, string>>({});
 
   const errorMessage = useCallback(
     (err: unknown) => (err instanceof ApiClientError ? err.message : tc("unexpectedError")),
@@ -49,6 +53,20 @@ export default function DashboardUsersPage() {
       setUsers((prev) => prev?.map((u) => (u.id === userId ? updated : u)) ?? null);
     } catch (err) {
       setRowError((prev) => ({ ...prev, [userId]: errorMessage(err) }));
+    }
+  }
+
+  async function triggerPasswordReset(userId: string) {
+    setConfirmingReset(null);
+    setResetError((prev) => ({ ...prev, [userId]: "" }));
+    setResettingPassword(userId);
+    try {
+      await authFetch((token) => api.admin.resetUserPassword(token, userId));
+      setResetDone((prev) => ({ ...prev, [userId]: true }));
+    } catch (err) {
+      setResetError((prev) => ({ ...prev, [userId]: errorMessage(err) }));
+    } finally {
+      setResettingPassword(null);
     }
   }
 
@@ -98,6 +116,7 @@ export default function DashboardUsersPage() {
                 <th className="px-4 py-3">{t("col.since")}</th>
                 <th className="px-4 py-3">{t("col.lastSeen")}</th>
                 <th className="px-4 py-3">{t("col.status")}</th>
+                <th className="px-4 py-3">{t("col.actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -150,6 +169,26 @@ export default function DashboardUsersPage() {
                           </Button>
                         )}
                       </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {confirmingReset === u.id ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted">{t("confirmResetPassword")}</span>
+                          <Button size="sm" variant="danger" disabled={resettingPassword === u.id} onClick={() => triggerPasswordReset(u.id)}>
+                            {resettingPassword === u.id ? tc("saving") : tc("confirm")}
+                          </Button>
+                          <Button size="sm" variant="secondary" onClick={() => setConfirmingReset(null)}>
+                            {tc("cancel")}
+                          </Button>
+                        </div>
+                      ) : resetDone[u.id] ? (
+                        <Pill tone="ok">{t("resetPasswordSent")}</Pill>
+                      ) : (
+                        <Button size="sm" variant="secondary" onClick={() => setConfirmingReset(u.id)}>
+                          {t("resetPassword")}
+                        </Button>
+                      )}
+                      {resetError[u.id] && <p className="mt-1 text-xs text-danger">{resetError[u.id]}</p>}
                     </td>
                   </tr>
                 );
