@@ -51,7 +51,11 @@
     "pages": "Pagine",
     "commentModeration": "Moderazione commenti",
     "administrationShort": "Amministrazione",
-    "newsletter": "Newsletter"
+    "newsletter": "Newsletter",
+    "media": "Media",
+    "publications": "Pubblicazioni",
+    "links": "Link",
+    "bibliography": "Bibliografia"
   },
   "BlogNav": {
     "posts": "Post",
@@ -630,7 +634,13 @@
     "resetSuccess": "Password aggiornata. Ora puoi accedere con la nuova password.",
     "backToLogin": "Torna al login",
     "otpLegend": "Codice di verifica a 6 cifre",
-    "otpDigitLabel": "Cifra {index} di {total}"
+    "otpDigitLabel": "Cifra {index} di {total}",
+    "repeatPassword": "Ripeti password",
+    "repeatPasswordMismatch": "Le password non coincidono.",
+    "usernameChecking": "Verifica disponibilità…",
+    "usernameAvailable": "Username disponibile.",
+    "usernameTaken": "Username già in uso.",
+    "usernameInvalidFormat": "Username non valido."
   },
   "FragmentsPage": {
     "title": "Frammenti",
@@ -744,7 +754,15 @@
     "fediverseActivitypub": "ActivityPub",
     "directoryListed": "Elencato nella directory utenti",
     "directoryListedSub": "Se disattivato, il tuo profilo resta raggiungibile solo dal link diretto (@username), non nella ricerca/elenco pubblico di /users.",
-    "interests": "{count, plural, one {# interesse} other {# interessi}} su {max}"
+    "interests": "{count, plural, one {# interesse} other {# interessi}} su {max}",
+    "changePasswordTitle": "Cambia password",
+    "changePasswordSub": "Al salvataggio, tutte le sessioni aperte (compresa questa) vengono chiuse: dovrai accedere di nuovo.",
+    "currentPassword": "Password attuale",
+    "newPassword": "Nuova password",
+    "repeatNewPassword": "Ripeti nuova password",
+    "passwordMismatch": "Le password non coincidono.",
+    "changePassword": "Cambia password",
+    "changingPassword": "Cambio in corso…"
   },
   "PostPage": {
     "inThisPost": "In questo post",
@@ -1643,5 +1661,49 @@
     "recipients": "{count} destinatari",
     "sentAt": "inviata il {date}",
     "scheduledAt": "pianificata per il {date}"
+  },
+  "MyPostsPage": {
+    "title": "Post",
+    "subtitle": "Tutti i post di tutti i tuoi blog, in un unico elenco.",
+    "filter": {
+      "all": "Tutti",
+      "draft": "Bozze",
+      "review": "In revisione",
+      "scheduled": "Pianificati",
+      "published": "Pubblicati"
+    },
+    "emptyTitle": "Nessun post",
+    "emptyBody": "I post che scrivi nei tuoi blog compariranno qui.",
+    "noneInFilter": "Nessun post in questo filtro.",
+    "view": "Vedi"
+  },
+  "MyMediaPage": {
+    "title": "Media",
+    "subtitle": "{count, plural, one {# file} other {# file}} da tutti i tuoi blog.",
+    "emptyTitle": "Nessuna immagine",
+    "emptyBody": "Le immagini caricate nei tuoi blog compariranno qui.",
+    "sensitive": "Sensibile",
+    "missingAlt": "Testo alternativo mancante",
+    "in": "in",
+    "notUsed": "Non usata in nessun post"
+  },
+  "MyPublicationsPage": {
+    "title": "Pubblicazioni",
+    "subtitle": "Tutte le pubblicazioni di tutti i tuoi blog, in un unico elenco.",
+    "emptyTitle": "Nessuna pubblicazione",
+    "emptyBody": "Le pubblicazioni create nei tuoi blog compariranno qui.",
+    "chaptersOf": "{published} di {total} capitoli"
+  },
+  "MyLinksPage": {
+    "title": "Link",
+    "subtitle": "Tutti gli URL citati nei post di tutti i tuoi blog, raggruppati per sito.",
+    "emptyTitle": "Nessun link",
+    "emptyBody": "I link citati nei tuoi post compariranno qui."
+  },
+  "MyBibliographyPage": {
+    "title": "Bibliografia",
+    "subtitle": "Tutte le note dei post di tutti i tuoi blog, deduplicate.",
+    "emptyTitle": "Nessuna nota",
+    "emptyBody": "Le note a piè di pagina dei tuoi post compariranno qui."
   }
 }

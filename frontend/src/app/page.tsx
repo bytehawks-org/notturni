@@ -13,6 +13,7 @@ import { SiteFooter } from "@/components/shell/SiteFooter";
 import { FilterChip } from "@/components/ui/Pill";
 import { languageName } from "@/lib/languages";
 import {
+  getFeedLocales,
   getPublicBlogs,
   getPublicFeed,
   getTrendingTags,
@@ -25,10 +26,6 @@ export const metadata: Metadata = {
   },
   openGraph: { type: "website", url: "/" },
 };
-
-/** Lingue dei contenuti proposte come filtro rapido del feed (mockup 4a);
- * il filtro `locale` del backend accetta qualunque codice a 2 lettere. */
-const FEED_LOCALES = ["it", "en", "de", "fr"];
 
 /** Home di piattaforma (mockup 4a desktop / 4b mobile): manifesto, tendenze,
  * feed con filtri tag/categoria/lingua, tab "Seguiti" (client, richiede
@@ -45,10 +42,11 @@ export default async function Home({
 }) {
   const { tag, category, locale, tab } = await searchParams;
   const followingTab = tab === "following";
-  const [posts, trending, blogs, t, tHome] = await Promise.all([
+  const [posts, trending, blogs, feedLocales, t, tHome] = await Promise.all([
     getPublicFeed({ limit: 20, tag, category, locale }).catch(() => []),
     getTrendingTags({ days: 7, limit: 8 }).catch(() => []),
     getPublicBlogs({ limit: 6, sort: "active" }).catch(() => []),
+    getFeedLocales().catch(() => []),
     getTranslations("HomePage"),
     getTranslations("Home"),
   ]);
@@ -86,21 +84,25 @@ export default async function Home({
                 {t("following")}
               </Link>
             </div>
-            <div className="flex gap-1.5 overflow-x-auto">
-              {FEED_LOCALES.map((code) => (
-                <Link
-                  key={code}
-                  href={localeHref(code)}
-                  className="no-underline"
-                >
-                  <FilterChip active={locale === code}>
-                    {languageName(code, code)}
-                  </FilterChip>
-                </Link>
-              ))}
-              <Link href={localeHref("")} className="no-underline">
-                <FilterChip active={!locale}>{t("allLanguages")}</FilterChip>
-              </Link>
+            <div className="flex flex-wrap gap-1.5">
+              {feedLocales.length > 0 && (
+                <>
+                  {feedLocales.map(({ locale: code }) => (
+                    <Link
+                      key={code}
+                      href={localeHref(code)}
+                      className="no-underline"
+                    >
+                      <FilterChip active={locale === code}>
+                        {languageName(code, code)}
+                      </FilterChip>
+                    </Link>
+                  ))}
+                  <Link href={localeHref("")} className="no-underline">
+                    <FilterChip active={!locale}>{t("allLanguages")}</FilterChip>
+                  </Link>
+                </>
+              )}
               <Link href="/feed.xml" className="ml-1 text-[13px] text-muted no-underline hover:text-foreground">
                 {t("rssLink")}
               </Link>

@@ -84,6 +84,12 @@ export default function ProfilePage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [repeatNewPassword, setRepeatNewPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [changingPassword, setChangingPassword] = useState(false);
+
   const [mfaMessage, setMfaMessage] = useState<string | null>(null);
   const [mfaError, setMfaError] = useState<string | null>(null);
   const [totpSetup, setTotpSetup] = useState<{
@@ -361,6 +367,28 @@ export default function ProfilePage() {
       setDomainError(errorMessage(err));
     } finally {
       setDomainSubmitting(false);
+    }
+  }
+
+  async function handleChangePassword(event: FormEvent) {
+    event.preventDefault();
+    setPasswordError(null);
+    if (newPassword !== repeatNewPassword) {
+      setPasswordError(t("passwordMismatch"));
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      await authFetch((token) =>
+        api.users.changePassword(token, { current_password: currentPassword, new_password: newPassword })
+      );
+      // Il backend revoca tutte le sessioni (anche quella corrente): serve
+      // rifare login, non ha senso restare su una sessione già invalidata.
+      await logout();
+      router.push("/login");
+    } catch (err) {
+      setPasswordError(errorMessage(err));
+      setChangingPassword(false);
     }
   }
 
@@ -1026,6 +1054,57 @@ export default function ProfilePage() {
             )}
             {mfaMessage && <Alert kind="success">{mfaMessage}</Alert>}
             {mfaError && <Alert kind="error">{mfaError}</Alert>}
+
+            <div className="flex flex-col gap-3 border-t border-border pt-5">
+              <h3 className="text-sm font-semibold text-foreground">{t("changePasswordTitle")}</h3>
+              <p className="text-[13px] text-muted">{t("changePasswordSub")}</p>
+              <form onSubmit={handleChangePassword} className="flex flex-col gap-3.5">
+                <FieldGroup className="mb-0">
+                  <Label htmlFor="current-password">{t("currentPassword")}</Label>
+                  <Input
+                    id="current-password"
+                    type="password"
+                    required
+                    autoComplete="current-password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                  />
+                </FieldGroup>
+                <FieldGroup className="mb-0">
+                  <Label htmlFor="new-password">{t("newPassword")}</Label>
+                  <Input
+                    id="new-password"
+                    type="password"
+                    required
+                    minLength={10}
+                    autoComplete="new-password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                  />
+                </FieldGroup>
+                <FieldGroup className="mb-0">
+                  <Label htmlFor="repeat-new-password">{t("repeatNewPassword")}</Label>
+                  <Input
+                    id="repeat-new-password"
+                    type="password"
+                    required
+                    minLength={10}
+                    autoComplete="new-password"
+                    value={repeatNewPassword}
+                    onChange={(e) => setRepeatNewPassword(e.target.value)}
+                  />
+                  {repeatNewPassword.length > 0 && newPassword !== repeatNewPassword && (
+                    <p className="mt-1 text-xs text-danger">{t("passwordMismatch")}</p>
+                  )}
+                </FieldGroup>
+                {passwordError && <Alert kind="error">{passwordError}</Alert>}
+                <div>
+                  <Button type="submit" variant="secondary" disabled={changingPassword}>
+                    {changingPassword ? t("changingPassword") : t("changePassword")}
+                  </Button>
+                </div>
+              </form>
+            </div>
           </section>
 
           <section id="privacy" className="flex scroll-mt-6 flex-col gap-4">

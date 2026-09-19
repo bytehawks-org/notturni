@@ -902,6 +902,76 @@ export interface FragmentCollectionEntry {
   permalink: string;
 }
 
+/** Viste aggregate "tutti i miei blog" (backend/app/api/v1/fragments.py,
+ * sezione dedicata in fondo al file): stessa forma degli equivalenti
+ * per-blog, con l'attribuzione del blog di appartenenza per riga (`blog_slug`/
+ * `blog_title`). Vista autore, mai filtrata dalla visibilità pubblica. */
+export interface MyMediaUsage {
+  post_id: string;
+  post_slug: string;
+  post_title: string;
+  permalink: string;
+}
+
+export interface MyMediaFile {
+  id: string;
+  url: string;
+  content_type: string;
+  size_bytes: number;
+  alt_text: string;
+  caption: string | null;
+  categories: SensitivityCategory[];
+  is_sensitive: boolean;
+  uploader_username: string | null;
+  created_at: string;
+  used_in: MyMediaUsage[];
+  blog_slug: string;
+  blog_title: string;
+}
+
+export interface MyPublication {
+  id: string;
+  name: string;
+  title: string;
+  description: string | null;
+  chapters_total: number;
+  chapters_published: number;
+  created_at: string;
+  blog_slug: string;
+  blog_title: string;
+}
+
+export interface MyContentCitation {
+  post_title: string;
+  post_slug: string;
+  permalink: string;
+  locale: string;
+  used_at: string | null;
+  blog_slug: string;
+  blog_title: string;
+}
+
+export interface MyLinkBibliographyEntry {
+  url: string;
+  link_text: string;
+  citations: MyContentCitation[];
+}
+
+export interface MyBibliographyCitation {
+  post_title: string;
+  post_slug: string;
+  permalink: string;
+  locale: string;
+  idx: number;
+  blog_slug: string;
+  blog_title: string;
+}
+
+export interface MyBibliographyEntry extends StructuredNoteFields {
+  content: string;
+  citations: MyBibliographyCitation[];
+}
+
 /** Newsletter/mailing-list (backend/app/api/v1/newsletter.py): iscrizione
  * pubblica a doppio opt-in per un blog (`blog_id` valorizzato) o per il
  * digest di piattaforma (`blog_id` null). */

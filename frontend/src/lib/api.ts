@@ -40,6 +40,10 @@ import type {
   MediaFile,
   MediaLibrary,
   MembershipBlog,
+  MyBibliographyEntry,
+  MyLinkBibliographyEntry,
+  MyMediaFile,
+  MyPublication,
   NewsletterCampaign,
   NewsletterStats,
   NoteKind,
@@ -148,6 +152,12 @@ export const api = {
   auth: {
     register: (payload: { username: string; email: string; password: string }) =>
       request<CurrentUser>("/api/v1/auth/register", { method: "POST", body: payload }),
+    /** Verifica in tempo reale durante la registrazione, prima di inviare il
+     * form: `reason` distingue formato non valido da username già preso. */
+    usernameAvailable: (username: string) =>
+      request<{ available: boolean; reason: "invalid_format" | "taken" | null }>(
+        `/api/v1/auth/username-available?username=${encodeURIComponent(username)}`
+      ),
     login: (payload: { email: string; password: string }) =>
       request<LoginResponse>("/api/v1/auth/login", { method: "POST", body: payload, withCredentials: true }),
     verifyMfa: (payload: { challenge: string; code: string }) =>
@@ -656,6 +666,18 @@ export const api = {
       request<DomainOut>("/api/v1/users/me/domain/verify", { method: "POST", token }),
     deleteDomain: (token: string) =>
       request<void>("/api/v1/users/me/domain", { method: "DELETE", token }),
+    /** Cambio password autenticato (richiede la password attuale): invalida
+     * ogni sessione già aperta, anche quella corrente — il chiamante deve
+     * rifare login subito dopo. */
+    changePassword: (token: string, payload: { current_password: string; new_password: string }) =>
+      request<{ status: string }>("/api/v1/users/me/password", { method: "POST", token, body: payload }),
+    /** Vista aggregata "tutti i miei blog": tutti i post (qualunque stato),
+     * dal più recente — generalizza `posts.list` a più blog insieme. */
+    myPosts: (token: string) => request<Post[]>("/api/v1/users/me/posts", { token }),
+    myMedia: (token: string) => request<MyMediaFile[]>("/api/v1/users/me/media", { token }),
+    myPublications: (token: string) => request<MyPublication[]>("/api/v1/users/me/publications", { token }),
+    myLinks: (token: string) => request<MyLinkBibliographyEntry[]>("/api/v1/users/me/links", { token }),
+    myBibliography: (token: string) => request<MyBibliographyEntry[]>("/api/v1/users/me/bibliography", { token }),
   },
 
   fragments: {
