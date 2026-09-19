@@ -8,6 +8,7 @@ import { BlogPageShell, blogLayout } from "@/components/blog/BlogPageShell";
 import { BlogStateNotice, blogIsOffline } from "@/components/blog/BlogStateNotice";
 import { BlogHeaderActions } from "@/components/blog/PostHeaderActions";
 import { FeedPostCard } from "@/components/FeedPostCard";
+import { NewsletterSignup } from "@/components/NewsletterSignup";
 import { SensitiveImage } from "@/components/blog/SensitiveImage";
 import { BlogHeader } from "@/components/shell/BlogHeader";
 import { FilterChip } from "@/components/ui/Pill";
@@ -172,6 +173,7 @@ export default async function BlogHomePage({
                 {t("rssLink")}
               </Link>
             </div>
+            <NewsletterSignup blogSlug={blogSlug} variant="blog" />
           </aside>
         </div>
       </main>

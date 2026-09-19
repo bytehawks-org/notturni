@@ -10,6 +10,7 @@ import { AppearanceTab } from "@/components/dashboard/blog/AppearanceTab";
 import { CollaboratorsTab } from "@/components/dashboard/blog/CollaboratorsTab";
 import { CommentsTab } from "@/components/dashboard/blog/CommentsTab";
 import { MediaTab } from "@/components/dashboard/blog/MediaTab";
+import { NewsletterTab } from "@/components/dashboard/blog/NewsletterTab";
 import { NotesTab } from "@/components/dashboard/blog/NotesTab";
 import { MyMembershipCard } from "@/components/dashboard/blog/MyMembershipCard";
 import { OverviewTab } from "@/components/dashboard/blog/OverviewTab";
@@ -26,8 +27,8 @@ import { useAuth } from "@/lib/auth-context";
 import { SITE_HOST } from "@/lib/site";
 import { type Blog, type BlogRole } from "@/lib/types";
 
-type Tab = "overview" | "posts" | "pages" | "publications" | "notes" | "media" | "comments" | "appearance" | "collaborators" | "settings";
-const TABS: Tab[] = ["overview", "posts", "pages", "publications", "notes", "media", "comments", "appearance", "collaborators", "settings"];
+type Tab = "overview" | "posts" | "pages" | "publications" | "notes" | "media" | "newsletter" | "comments" | "appearance" | "collaborators" | "settings";
+const TABS: Tab[] = ["overview", "posts", "pages", "publications", "notes", "media", "newsletter", "comments", "appearance", "collaborators", "settings"];
 
 /** Tab visibili per ruolo (frontend-prototype/frontend-kit/ADMIN-IA.md,
  * todo/UX_REDESIGN.md "Gating per ruolo delle tab"): rispecchia le capacità
@@ -42,7 +43,7 @@ function tabsForRole(isOwner: boolean, role: BlogRole | null): Tab[] {
   const isModerator = role === "mediatore";
   const tabs: Tab[] = ["overview"];
   if (isWriter || isReviewer) tabs.push("posts");
-  if (isWriter) tabs.push("pages", "publications", "notes", "media");
+  if (isWriter) tabs.push("pages", "publications", "notes", "media", "newsletter");
   if (isModerator) tabs.push("comments");
   return tabs;
 }
@@ -157,6 +158,7 @@ export default function BlogDetailPage() {
       {tab === "publications" && <PublicationsTab blogSlug={blog.slug} canWrite={isWriter} />}
       {tab === "notes" && <NotesTab blogSlug={blog.slug} canWrite={isWriter} />}
       {tab === "media" && <MediaTab blogSlug={blog.slug} canWrite={isWriter} />}
+      {tab === "newsletter" && isWriter && <NewsletterTab blogSlug={blog.slug} />}
       {tab === "comments" && <CommentsTab blog={blog} canModerate={isModerator} onBlogUpdated={setBlog} />}
       {tab === "appearance" && isOwner && <AppearanceTab blogSlug={blog.slug} canEdit={isOwner} />}
       {tab === "collaborators" && isOwner && <CollaboratorsTab blogSlug={blog.slug} />}

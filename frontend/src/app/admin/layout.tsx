@@ -56,6 +56,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       : []),
     ...(isAdmin ? [{ href: "/admin/blog", label: t("allBlogs"), icon: "✎", mobile: true } as NavItem] : []),
     ...(isAdmin ? [{ href: "/admin/moderazione", label: t("moderation"), icon: "◔", mobile: true } as NavItem] : []),
+    ...(isAdmin ? [{ href: "/admin/newsletter", label: t("newsletter"), icon: "✉", mobile: true } as NavItem] : []),
     ...(isModerator
       ? [{ href: "/admin/moderazione-commenti", label: t("commentModeration"), icon: "◔", mobile: true } as NavItem]
       : []),

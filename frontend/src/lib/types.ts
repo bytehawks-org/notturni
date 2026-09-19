@@ -898,3 +898,34 @@ export interface FragmentCollectionEntry {
   /** Permalink pubblico /{blog}/{slug} del post di provenienza. */
   permalink: string;
 }
+
+/** Newsletter/mailing-list (backend/app/api/v1/newsletter.py): iscrizione
+ * pubblica a doppio opt-in per un blog (`blog_id` valorizzato) o per il
+ * digest di piattaforma (`blog_id` null). */
+export type NewsletterCampaignKind = "post_notification" | "manual";
+
+/** `scheduled` non implica un invio automatico: nessuno scheduler esiste
+ * ancora lato backend, resta così finché non arriva un invio manuale o un
+ * worker futuro — non presentarlo in UI come "verrà inviata il...". */
+export type NewsletterCampaignStatus = "draft" | "scheduled" | "sending" | "sent" | "canceled" | "failed";
+
+export interface NewsletterStats {
+  pending: number;
+  confirmed: number;
+  unsubscribed: number;
+}
+
+export interface NewsletterCampaign {
+  id: string;
+  blog_id: string | null;
+  kind: NewsletterCampaignKind;
+  post_id: string | null;
+  subject: string;
+  body_markdown: string | null;
+  status: NewsletterCampaignStatus;
+  scheduled_at: string | null;
+  sent_at: string | null;
+  recipient_count: number;
+  failed_count: number;
+  created_at: string;
+}

@@ -50,7 +50,8 @@
     "register": "Audit register",
     "pages": "Pages",
     "commentModeration": "Comment moderation",
-    "administrationShort": "Administration"
+    "administrationShort": "Administration",
+    "newsletter": "Newsletter"
   },
   "BlogNav": {
     "posts": "Posts",
@@ -257,7 +258,8 @@
     "followers": "Followers",
     "appearance": "Appearance",
     "settings": "Settings",
-    "media": "Media"
+    "media": "Media",
+    "newsletter": "Newsletter"
   },
   "Overview": {
     "attention": {
@@ -1557,5 +1559,89 @@
     "noMatch": "No users match.",
     "follow": "Follow",
     "followers": "{count} followers"
+  },
+  "NewsletterSignup": {
+    "title": "Notturni newsletter",
+    "titleBlog": "Subscribe to the newsletter",
+    "intro": "Get an email when there's something new. We'll send you a confirmation email before activating the subscription.",
+    "emailPlaceholder": "Your email",
+    "consent": "I accept the <privacy>privacy notice</privacy> and agree to receive the confirmation email.",
+    "submit": "Subscribe",
+    "submitting": "Sending…",
+    "success": "Check your inbox: we've sent you an email to confirm the subscription.",
+    "error": "We couldn't complete the subscription. Please try again in a few minutes."
+  },
+  "NewsletterConfirmPage": {
+    "title": "Confirm subscription",
+    "confirmedTitle": "Subscription confirmed",
+    "confirmedBody": "You'll now receive newsletter emails. Thank you!",
+    "alreadyTitle": "Subscription already confirmed",
+    "alreadyBody": "This link has already been used: your subscription is already active.",
+    "invalidTitle": "Expired or invalid link",
+    "invalidBody": "This confirmation link is no longer valid. If you'd still like to subscribe, request a new email from the signup form.",
+    "backHome": "Back to home"
+  },
+  "NewsletterUnsubscribePage": {
+    "title": "Unsubscribe from the newsletter",
+    "missingToken": "Invalid link: the unsubscribe code is missing.",
+    "intro": "Sorry to see you go. You can unsubscribe, or if you prefer, delete your data from our list entirely.",
+    "reasonLabel": "Reason (optional)",
+    "reasonPlaceholder": "Tell us why you're leaving, if you'd like…",
+    "unsubscribe": "Unsubscribe me",
+    "unsubscribing": "Unsubscribing…",
+    "unsubscribedSuccess": "Done: you've been unsubscribed from the newsletter.",
+    "deleteExplanation": "Instead of a plain unsubscribe, you can request permanent deletion of your email address and every piece of data tied to this subscription (right to erasure, GDPR). This action cannot be undone.",
+    "deleteData": "Delete my data too",
+    "deleting": "Deleting…",
+    "deletedSuccess": "Done: your data has been deleted."
+  },
+  "NewsletterKind": {
+    "post_notification": "Automatic notification",
+    "manual": "Manual campaign"
+  },
+  "NewsletterStatus": {
+    "draft": "Draft",
+    "scheduled": "Scheduled",
+    "sending": "Sending",
+    "sent": "Sent",
+    "canceled": "Canceled",
+    "failed": "Failed"
+  },
+  "NewsletterCampaignModal": {
+    "title": "New campaign",
+    "subject": "Subject",
+    "body": "Content",
+    "bodyHint": "Markdown supported",
+    "bodyPlaceholder": "Write the email content…",
+    "scheduledAt": "Schedule for (optional)",
+    "scheduledAtHint": "leave empty to send right away",
+    "creating": "Creating…",
+    "create": "Create campaign"
+  },
+  "NewsletterTab": {
+    "pending": "Awaiting confirmation",
+    "confirmed": "Confirmed",
+    "unsubscribed": "Unsubscribed",
+    "autoNotifyLabel": "Notify subscribers on every new post",
+    "autoNotifyHint": "When enabled, an email is automatically sent to this blog's confirmed subscribers every time you publish a post.",
+    "campaignsTitle": "Campaigns",
+    "newCampaign": "New campaign",
+    "noCampaigns": "No campaign sent yet.",
+    "recipients": "{count} recipients",
+    "failed": "{count} failed",
+    "sentAt": "sent on {date}",
+    "scheduledAt": "scheduled for {date}"
+  },
+  "AdminNewsletter": {
+    "title": "Platform newsletter",
+    "newCampaign": "New campaign",
+    "pending": "Awaiting confirmation",
+    "confirmed": "Confirmed",
+    "unsubscribed": "Unsubscribed",
+    "campaignsTitle": "Campaigns",
+    "noCampaigns": "No campaign sent yet.",
+    "recipients": "{count} recipients",
+    "sentAt": "sent on {date}",
+    "scheduledAt": "scheduled for {date}"
   }
 }

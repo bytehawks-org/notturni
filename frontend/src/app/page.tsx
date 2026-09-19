@@ -7,6 +7,7 @@ import { BlogDirectoryList } from "@/components/home/BlogDirectory";
 import { FollowingFeed } from "@/components/home/FollowingFeed";
 import { Manifesto } from "@/components/home/Manifesto";
 import { TrendingTags } from "@/components/home/TrendingTags";
+import { NewsletterSignup } from "@/components/NewsletterSignup";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/shell/SiteFooter";
 import { FilterChip } from "@/components/ui/Pill";
@@ -172,6 +173,7 @@ export default async function Home({
               {tHome("startBlog")} →
             </Link>
           </div>
+          <NewsletterSignup variant="platform" />
         </aside>
       </div>
       <SiteFooter />

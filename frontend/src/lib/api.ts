@@ -40,6 +40,8 @@ import type {
   MediaFile,
   MediaLibrary,
   MembershipBlog,
+  NewsletterCampaign,
+  NewsletterStats,
   NoteKind,
   Page,
   PageTranslationSummary,
@@ -781,5 +783,49 @@ export const api = {
       request<ApiTokenCreated>("/api/v1/tokens", { method: "POST", token, body: { name } }),
     revoke: (token: string, tokenId: string) =>
       request<void>(`/api/v1/tokens/${tokenId}`, { method: "DELETE", token }),
+  },
+
+  newsletter: {
+    /** Pubblico, nessuna autenticazione: doppio opt-in. Risposta sempre
+     * generica (202 `{status:"ok"}`), anche se l'indirizzo è già iscritto —
+     * anti-enumerazione, vedi backend/app/api/v1/newsletter.py. */
+    subscribe: (payload: { email: string; blog_slug?: string | null; locale?: string | null }) =>
+      request<{ status: string }>("/api/v1/newsletter/subscribe", { method: "POST", body: payload }),
+    confirm: (token: string) =>
+      request<{ status: "confirmed" | "already_confirmed" | "invalid" }>(
+        `/api/v1/newsletter/confirm?token=${encodeURIComponent(token)}`
+      ),
+    unsubscribe: (payload: { token: string; reason?: string | null }) =>
+      request<{ status: string }>("/api/v1/newsletter/unsubscribe", { method: "POST", body: payload }),
+    /** Cancellazione GDPR self-service (Art. 17), idempotente, senza login:
+     * chi riceve l'email è già identificato dal token firmato del link. */
+    unsubscribeAndDelete: (payload: { token: string }) =>
+      request<{ status: string }>("/api/v1/newsletter/unsubscribe/delete", { method: "POST", body: payload }),
+    blogStats: (token: string, slug: string) =>
+      request<NewsletterStats>(`/api/v1/blogs/${slug}/newsletter/stats`, { token }),
+    blogCampaigns: (token: string, slug: string) =>
+      request<NewsletterCampaign[]>(`/api/v1/blogs/${slug}/newsletter/campaigns`, { token }),
+    createBlogCampaign: (
+      token: string,
+      slug: string,
+      payload: { subject: string; body_markdown: string; scheduled_at?: string | null }
+    ) =>
+      request<NewsletterCampaign>(`/api/v1/blogs/${slug}/newsletter/campaigns`, {
+        method: "POST",
+        token,
+        body: payload,
+      }),
+    updateBlogSettings: (token: string, slug: string, payload: { newsletter_auto_notify_enabled: boolean }) =>
+      request<{ newsletter_auto_notify_enabled: boolean }>(`/api/v1/blogs/${slug}/newsletter/settings`, {
+        method: "PATCH",
+        token,
+        body: payload,
+      }),
+    adminStats: (token: string) => request<NewsletterStats>("/api/v1/admin/newsletter/stats", { token }),
+    adminCampaigns: (token: string) => request<NewsletterCampaign[]>("/api/v1/admin/newsletter/campaigns", { token }),
+    createAdminCampaign: (
+      token: string,
+      payload: { subject: string; body_markdown: string; scheduled_at?: string | null }
+    ) => request<NewsletterCampaign>("/api/v1/admin/newsletter/campaigns", { method: "POST", token, body: payload }),
   },
 };
