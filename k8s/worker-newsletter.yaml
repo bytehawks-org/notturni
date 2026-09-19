@@ -1,0 +1,33 @@
+# image: come backend.yaml, riferimento a un'immagine costruita/caricata
+# localmente sul nodo finché non c'è un registro in CI/CD.
+#
+# Consumer della coda newsletter_send (app/workers/newsletter_consumer.py):
+# email di conferma iscrizione e invio delle campagne agli iscritti — a
+# differenza di worker-email-otp/worker-post-backup accede anche al
+# database (iscritti, post/blog, stato della campagna), stesso
+# ConfigMap/Secret condiviso di backend.yaml copre già anche Postgres.
+# Deployment long-running (non un CronJob). Nessun Service: un consumer
+# non riceve richieste in ingresso.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-newsletter
+  namespace: notturni
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker-newsletter
+  template:
+    metadata:
+      labels:
+        app: worker-newsletter
+    spec:
+      containers:
+        - name: worker-newsletter
+          image: notturni-backend:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "app.workers.newsletter_consumer"]
+          envFrom:
+            - configMapRef: {name: notturni-config}
+            - secretRef: {name: notturni-secrets}

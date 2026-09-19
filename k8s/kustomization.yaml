@@ -11,9 +11,15 @@ resources:
   - minio.yaml
   - smtp-relay.yaml
   - backend.yaml
+  - worker-post-backup.yaml
+  - worker-email-otp.yaml
+  - worker-newsletter.yaml
+  - moderation.yaml
   - audit-maintenance.yaml
   - backup.yaml
   - frontend.yaml
+  - cert-manager-issuer.yaml
+  - certificate.yaml
   - ingress.yaml
   - middleware-security-headers.yaml
   - ingressroute.yaml

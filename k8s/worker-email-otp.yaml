@@ -1,0 +1,34 @@
+# image: come backend.yaml, riferimento a un'immagine costruita/caricata
+# localmente sul nodo finché non c'è un registro in CI/CD.
+#
+# Consumer della coda email_otp (app/workers/email_otp_consumer.py): invia
+# davvero via SMTP il codice MFA e il codice di reset password
+# (NOCT_SMTP_HOST/_PORT/_USER/_PASSWORD/_USE_TLS/_FROM_EMAIL già in
+# configmap.yaml/secret.yaml). Senza questo Deployment i messaggi restano
+# accodati su RabbitMQ ma nessuno li consuma: login MFA via email e reset
+# password non arrivano mai a destinazione. Deployment long-running (non un
+# CronJob), stesso schema di backend.yaml. Nessun Service: un consumer non
+# riceve richieste in ingresso.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-email-otp
+  namespace: notturni
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker-email-otp
+  template:
+    metadata:
+      labels:
+        app: worker-email-otp
+    spec:
+      containers:
+        - name: worker-email-otp
+          image: notturni-backend:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "app.workers.email_otp_consumer"]
+          envFrom:
+            - configMapRef: {name: notturni-config}
+            - secretRef: {name: notturni-secrets}

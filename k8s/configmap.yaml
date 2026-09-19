@@ -39,6 +39,11 @@ data:
   # bucket privato per gli archivi di audit (mai esposto pubblicamente)
   NOCT_S3_BUCKET_AUDIT: "notturni-audit"
 
+  # Servizio di moderazione automatica delle immagini (moderation.yaml),
+  # chiamato da app/domain/moderation.py ad ogni upload (fail open: un
+  # problema di questo servizio non blocca mai l'upload).
+  NOCT_MODERATION_SERVICE_URL: "http://moderation:8100"
+
   # Backup infrastrutturale di Postgres e MinIO (app/workers/backup.py,
   # backup-cronjob.yaml) verso uno storage S3 **esterno** — placeholder,
   # da sostituire con un provider realmente esterno e separato da quello dei
@@ -93,14 +98,14 @@ data:
   NOCT_CORS_ORIGIN_REGEX: "https://([a-z0-9-]+\\.)?notturni\\.eu"
 
   # Cookie di sessione (refresh token httpOnly, backend/API.md).
-  # NOCT_SESSION_COOKIE_SECURE="false" perché ingress.yaml, nella sua
-  # versione attuale, serve solo http (nessun dominio reale/cert-manager
-  # ancora configurato — vedi commento in cima a quel file): un cookie
+  # NOCT_SESSION_COOKIE_SECURE="true" perché ingress.yaml/ingressroute.yaml
+  # servono ora https (TLS via cert-manager, certificate.yaml) — un cookie
   # Secure non verrebbe accettato dal browser su una connessione non
-  # cifrata. Passare a "true" **insieme** al blocco TLS di ingress.yaml non
-  # appena l'istanza è raggiunta in https, mai prima (altrimenti il login
-  # smette di "restare loggato" senza errori visibili).
-  NOCT_SESSION_COOKIE_SECURE: "false"
+  # cifrata. Se si torna temporaneamente a un test solo http (nessun
+  # dominio/cert-manager), riportarlo a "false" **insieme** alla rimozione
+  # del blocco tls in ingress.yaml, mai uno senza l'altro (altrimenti il
+  # login smette di "restare loggato" senza errori visibili).
+  NOCT_SESSION_COOKIE_SECURE: "true"
   NOCT_SESSION_COOKIE_SAMESITE: "lax"
   NOCT_SESSION_COOKIE_DOMAIN: ""
 

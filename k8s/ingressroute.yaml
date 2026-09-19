@@ -8,9 +8,12 @@
 # {slug}.notturni.eu/... su /{slug}/... internamente (route già esistenti
 # sotto frontend/src/app/[blogSlug]/).
 #
-# Versione ATTUALE: entryPoint "web" (solo http), stesso principio di
-# ingress.yaml — pensata per un primo test su un K3s a nodo singolo senza
-# dominio reale né cert-manager. Il regex qui sotto NON esclude le etichette
+# entryPoint "websecure" (https), TLS condiviso con ingress.yaml (Secret
+# notturni-eu-tls, provisionato dalla Certificate esplicita in
+# certificate.yaml — un host jolly non può passare dall'annotazione
+# cert-manager.io/cluster-issuer di un singolo Ingress, serve una
+# Certificate a sé che copra anche questo IngressRoute). Il regex qui sotto
+# NON esclude le etichette
 # riservate (www, blog, mail, ...): Traefik usa RE2 (motore regex di Go), che
 # non supporta i lookahead negativi necessari per farlo in una singola
 # espressione. L'esclusione è comunque applicata — lato Next.js
@@ -22,12 +25,9 @@
 # ROADMAP.md), andrà aggiunta una `IngressRoute` propria con priorità
 # maggiore (campo `priority`), non modificato questo regex.
 #
-# Per passare alla produzione: entryPoints -> ["websecure"], aggiungere il
-# blocco tls sotto (cert-manager + una risorsa Certificate con DNS-01 per il
-# wildcard *.notturni.eu — la sfida HTTP-01 non copre un host jolly,
-# serve un solver DNS-01 per il provider DNS reale, non incluso qui) e
-# valorizzare NOCT_CORS_ORIGIN_REGEX/NOCT_SESSION_COOKIE_DOMAIN in
-# configmap.yaml (vedi commenti lì).
+# NOCT_CORS_ORIGIN_REGEX/NOCT_SESSION_COOKIE_DOMAIN in configmap.yaml sono
+# già valorizzati per notturni.eu (vedi commenti lì) — da rivedere solo se
+# il dominio cambia.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -35,7 +35,9 @@ metadata:
   namespace: notturni
 spec:
   entryPoints:
-    - web
+    - websecure
+  tls:
+    secretName: notturni-eu-tls
   routes:
     - kind: Rule
       match: "HostRegexp(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?\\.notturni\\.eu$`)"

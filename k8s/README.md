@@ -6,14 +6,42 @@ Longhorn (storage class `longhorn`), Traefik come IngressController (entrambi
 già inclusi in una installazione K3s standard, salvo li si sia disattivati
 esplicitamente).
 
-`ingress.yaml`, nella versione attuale, serve solo **http** e senza host
-fisso — pensato per un primo test senza dominio reale né cert-manager ancora
-installati (si accede via IP del nodo). **cert-manager con un
-`ClusterIssuer`** (es. `letsencrypt-prod`) **serve solo quando si passa a un
-dominio reale in https** — vedi il commento in cima a `ingress.yaml` per
-cosa aggiungere a quel punto (annotazione + blocco `tls`), e ricordarsi di
-riportare `NOCT_SESSION_COOKIE_SECURE` a `"true"` in `configmap.yaml` nello
-stesso momento (i due vanno sempre cambiati insieme).
+`ingress.yaml`/`ingressroute.yaml` servono ora **https** sotto il dominio
+reale `notturni.eu` (apex + wildcard `*.notturni.eu` per i blog per
+sottodominio), con TLS gestito da **cert-manager** (non incluso in questi
+manifest, va installato a parte — vedi sotto) tramite una risorsa
+`Certificate` esplicita (`certificate.yaml`) e un `ClusterIssuer` Let's
+Encrypt con sfida DNS-01 su Cloudflare (`cert-manager-issuer.yaml`,
+obbligatoria per il wildcard: la sfida HTTP-01 non lo copre).
+`NOCT_SESSION_COOKIE_SECURE="true"` in `configmap.yaml` è coerente con
+questo (i due vanno sempre cambiati insieme, mai uno senza l'altro — per
+tornare a un test solo-http via IP nodo, senza dominio/cert-manager,
+rimuovere i blocchi `tls`/`host` da `ingress.yaml`/`ingressroute.yaml` **e**
+riportare quella variabile a `"false"` nello stesso momento).
+
+## Certificati TLS (cert-manager)
+
+```bash
+# cert-manager non è incluso in un'installazione K3s standard (a differenza
+# di Longhorn/Traefik) — installarlo prima di applicare questi manifest:
+helm repo add jetstack https://charts.jetstack.io
+helm install cert-manager jetstack/cert-manager \
+  --namespace cert-manager --create-namespace --set crds.enabled=true
+
+# token API Cloudflare (permesso Zone:DNS:Edit sulla sola zona notturni.eu)
+# in secret.yaml, chiave NOCT_CLOUDFLARE_API_TOKEN — vedi commento lì
+```
+
+**Primo test con `letsencrypt-staging`**: Let's Encrypt di produzione ha
+limiti stretti (5 certificati duplicati/settimana per dominio esatto).
+Cambiare temporaneamente `issuerRef.name` in `certificate.yaml` da
+`letsencrypt-prod` a `letsencrypt-staging`, verificare che
+`kubectl describe certificate notturni-eu-tls -n notturni` arrivi a `Ready`
+(il certificato staging non è fidato dal browser, ma la sua emissione
+conferma che il solver DNS-01/il token Cloudflare funzionano), poi tornare
+a `letsencrypt-prod` e cancellare il Secret `notturni-eu-tls` per far
+ripartire l'emissione con l'issuer giusto
+(`kubectl delete secret notturni-eu-tls -n notturni`).
 
 ## Setup
 
@@ -48,14 +76,18 @@ build, non a runtime — vedi nota più sotto).
   `initdb` si rifiuta di inizializzare una data directory non vuota —
   fallirebbe al primo avvio senza questo accorgimento.
 - `redis.yaml` e `rabbitmq.yaml` non hanno persistenza in questo primo draft.
-- `ingress.yaml` gestisce il routing catch-all path-based; il routing per
-  sottodominio-per-blog è invece in `ingressroute.yaml` (`IngressRoute`
-  Traefik, `HostRegexp` su `*.notturni.eu`) — le due risorse convivono, la
-  seconda non sostituisce la prima. Entrambe nella loro versione "test" (solo
-  `http`, entryPoint `web`): note di produzione (TLS wildcard via DNS-01,
-  `NOCT_CORS_ORIGIN_REGEX`/`NOCT_SESSION_COOKIE_DOMAIN`) in cima a
-  `ingressroute.yaml`. Il dominio custom per-utente resta invece un lavoro
-  successivo (vedi [ROADMAP.md](../ROADMAP.md#3-architettura-stack-e-infrastruttura)).
+- `ingress.yaml` gestisce il routing catch-all path-based sotto l'host fisso
+  `notturni.eu`; il routing per sottodominio-per-blog è invece in
+  `ingressroute.yaml` (`IngressRoute` Traefik, `HostRegexp` su
+  `*.notturni.eu`) — le due risorse convivono, la seconda non sostituisce la
+  prima. Entrambe in `https` (`entryPoints: [websecure]`), stesso Secret TLS
+  condiviso `notturni-eu-tls` (vedi sezione "Certificati TLS" sopra) —
+  condiviso perché cert-manager non può annotare direttamente una CRD
+  Traefik `IngressRoute` come farebbe con un `Ingress` standard, da cui la
+  scelta di una risorsa `Certificate` esplicita invece dell'annotazione
+  `cert-manager.io/cluster-issuer`. Il dominio custom per-utente resta
+  invece un lavoro successivo (vedi
+  [ROADMAP.md](../ROADMAP.md#3-architettura-stack-e-infrastruttura)).
 - `middleware-security-headers.yaml` (Traefik `Middleware`): CSP/HSTS/
   `X-Content-Type-Options: nosniff` minimi, applicato a entrambe le risorse
   sopra (annotazione su `ingress.yaml`, campo `middlewares` su
@@ -78,11 +110,20 @@ build, non a runtime — vedi nota più sotto).
   il dominio pubblico reale del sito (es. `https://notturni.eu`), non
   `localhost`, altrimenti canonical/sitemap/robots puntano tutti all'host
   sbagliato.
-- I worker consumer di coda (`app/workers/post_backup_consumer.py`,
-  `email_otp_consumer.py`) non hanno ancora un Deployment dedicato in questi
-  manifest — vedi `compose.yaml` per l'equivalente locale funzionante; senza
-  il worker di backup, i post non vengono replicati su S3 anche se
-  l'accodamento su RabbitMQ continua a funzionare (i messaggi restano in coda).
+- I worker consumer di coda (`worker-post-backup.yaml`,
+  `worker-email-otp.yaml`, `worker-newsletter.yaml`) sono Deployment
+  long-running senza `Service` (non ricevono richieste in ingresso, solo
+  consumo da RabbitMQ) — stesso `envFrom` di `backend.yaml`, niente
+  override locali stile `mailhog`/`localhost:9000` di `compose.yaml`.
+  `worker-newsletter` è l'unico dei tre che accede anche al database
+  (iscritti/campagne), coperto dallo stesso ConfigMap/Secret condiviso.
+- `moderation.yaml` (Deployment+Service, porta 8100): servizio di
+  moderazione automatica delle immagini (`moderation/`), `fail open` per
+  design (un problema di questo servizio non blocca mai l'upload — vedi
+  `app/domain/moderation.py`) ma senza `NOCT_MODERATION_SERVICE_URL`
+  valorizzato in `configmap.yaml` (ora presente) nessuna immagine verrebbe
+  mai moderata. `readinessProbe`/`livenessProbe` con `initialDelaySeconds`
+  più alto del solito: il modello (torch) viene caricato all'avvio.
 - `audit-maintenance.yaml` è invece un `CronJob` (non un consumer): archivia
   su storage le settimane ISO chiuse di `audit_log` e cancella gli eventi
   oltre `NOCT_AUDIT_RETENTION_DAYS`. Gira una volta al giorno; in locale

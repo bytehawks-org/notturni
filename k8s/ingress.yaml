@@ -1,26 +1,21 @@
-# Primo draft: un solo host, routing path-based verso frontend/backend. Il
-# routing per sottodominio-per-blog (slug.notturni.eu) ha una risorsa propria
-# — ingressroute.yaml (IngressRoute Traefik dinamico, host jolly) — che
-# convive con questa, non la sostituisce: questa resta il catch-all
-# path-based (utile anche in sviluppo/test senza DNS wildcard configurato).
-# Dominio custom per-utente (CLAUDE.md #2): non ancora implementato,
-# nessuna delle due risorse lo copre oggi.
+# Routing path-based verso frontend/backend, sotto l'host di produzione
+# notturni.eu. Il routing per sottodominio-per-blog (slug.notturni.eu) ha
+# una risorsa propria — ingressroute.yaml (IngressRoute Traefik dinamico,
+# host jolly) — che convive con questa, non la sostituisce: questa resta il
+# catch-all path-based. Dominio custom per-utente (CLAUDE.md #2): non
+# ancora implementato, nessuna delle due risorse lo copre oggi.
 #
-# Versione ATTUALE: solo http, nessun host fisso — pensata per un primo test
-# su un K3s a nodo singolo senza dominio reale né cert-manager già installato
-# (si accede via IP del nodo, es. `curl http://<ip-nodo>/api/v1/health`,
-# senza dover configurare DNS). Coerente con
-# NOCT_SESSION_COOKIE_SECURE="false" in configmap.yaml: un cookie Secure non
-# verrebbe accettato dal browser su una connessione http.
-#
-# Per passare alla produzione (dominio reale + cert-manager già installato
-# con un ClusterIssuer, es. letsencrypt-prod): aggiungere di nuovo `host:
-# notturni.eu` a entrambe le regole sotto, l'annotazione
-# `cert-manager.io/cluster-issuer: letsencrypt-prod` e un blocco
-# `tls: [{hosts: ["notturni.eu"], secretName: notturni-eu-tls}]` — riportare
-# NOCT_SESSION_COOKIE_SECURE a "true" in configmap.yaml — e vedi anche le
-# note di produzione in cima a ingressroute.yaml (TLS wildcard via DNS-01,
-# NOCT_CORS_ORIGIN_REGEX/NOCT_SESSION_COOKIE_DOMAIN).
+# TLS: certificato condiviso con ingressroute.yaml (Secret notturni-eu-tls,
+# provisionato dalla risorsa Certificate esplicita in certificate.yaml, non
+# dall'annotazione cert-manager.io/cluster-issuer — quest'ultima
+# funzionerebbe solo per questa singola risorsa Ingress, non per
+# l'IngressRoute Traefik di ingressroute.yaml che condivide lo stesso
+# certificato, da cui la scelta di una Certificate a sé). Storico: la
+# versione precedente di questo file serviva solo http senza host fisso,
+# per un primo test via IP nodo senza dominio/cert-manager ancora
+# installati — coerente allora con NOCT_SESSION_COOKIE_SECURE="false" in
+# configmap.yaml, ora "true" insieme a questo passaggio a TLS (i due vanno
+# sempre cambiati insieme, mai uno senza l'altro).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -33,8 +28,12 @@ metadata:
     traefik.ingress.kubernetes.io/router.middlewares: notturni-security-headers@kubernetescrd
 spec:
   ingressClassName: traefik
+  tls:
+    - hosts: ["notturni.eu"]
+      secretName: notturni-eu-tls
   rules:
-    - http:
+    - host: notturni.eu
+      http:
         paths:
           - path: /api
             pathType: Prefix
