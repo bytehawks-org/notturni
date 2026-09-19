@@ -158,7 +158,9 @@ export default function BlogDetailPage() {
       {tab === "publications" && <PublicationsTab blogSlug={blog.slug} canWrite={isWriter} />}
       {tab === "notes" && <NotesTab blogSlug={blog.slug} canWrite={isWriter} />}
       {tab === "media" && <MediaTab blogSlug={blog.slug} canWrite={isWriter} />}
-      {tab === "newsletter" && isWriter && <NewsletterTab blogSlug={blog.slug} />}
+      {tab === "newsletter" && isWriter && (
+        <NewsletterTab blogSlug={blog.slug} initialAutoNotify={blog.newsletter_auto_notify_enabled} />
+      )}
       {tab === "comments" && <CommentsTab blog={blog} canModerate={isModerator} onBlogUpdated={setBlog} />}
       {tab === "appearance" && isOwner && <AppearanceTab blogSlug={blog.slug} canEdit={isOwner} />}
       {tab === "collaborators" && isOwner && <CollaboratorsTab blogSlug={blog.slug} />}

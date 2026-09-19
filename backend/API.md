@@ -2152,6 +2152,57 @@ pubblicati, anche per chi ha accesso in scrittura al blog (a differenza di
 ricerca è una casella pubblica, non uno strumento di editing). Stessi
 `limit`/`offset` di sopra.
 
+## Newsletter (ROADMAP.md §3)
+
+Una lista per blog (`blog_slug`) più una lista di piattaforma (digest,
+nessun `blog_slug`), doppio opt-in via email, disiscrizione/cancellazione
+self-service senza login.
+
+**`POST /api/v1/newsletter/subscribe`** — pubblico. Body `{email, blog_slug?,
+locale?}`. Rate-limited (5/ora per IP, 3/ora per email). Risponde sempre
+`202 {"status": "ok"}`, incluso quando l'email è già iscritta e confermata:
+nessuna enumerazione di indirizzi via risposta diversa. Se nuovo o non
+ancora confermato, genera un token di conferma opaco (hash sha256 in
+tabella, come i token API) e accoda l'invio dell'email su RabbitMQ.
+
+**`GET /api/v1/newsletter/confirm?token=...`** — pubblico. `200
+{"status": "confirmed"|"already_confirmed"|"invalid"}`, idempotente (un
+secondo click sullo stesso link valido risponde `already_confirmed`, non
+errore). Token scaduto dopo 48 ore → `invalid`.
+
+**`POST /api/v1/newsletter/unsubscribe`** — pubblico. Body `{token,
+reason?}`. Il `token` è un link firmato HMAC (non un hash in tabella: serve
+poterlo ricostruire ad ogni invio, non solo verificarlo una volta), incluso
+in fondo a ogni email inviata. `400` se il token non è valido.
+
+**`POST /api/v1/newsletter/unsubscribe/delete`** — pubblico. Body
+`{token}`. Cancellazione permanente della riga (diritto alla cancellazione
+GDPR Art. 17), self-service senza bisogno di login: chi riceve l'email è
+già identificato dal token firmato.
+
+**Gestione per blog** (proprietario o membership `autore`/`co_autore`,
+stessa logica di `can_write_posts`):
+
+- `GET /blogs/{slug}/newsletter/stats` → `{pending, confirmed,
+  unsubscribed}`.
+- `GET /blogs/{slug}/newsletter/campaigns` → elenco campagne (automatiche e
+  manuali), più recenti prima.
+- `POST /blogs/{slug}/newsletter/campaigns` — body `{subject, body_markdown,
+  scheduled_at?}`. Senza `scheduled_at` (o nel passato): invio immediato
+  (`status=sending`, accodato su RabbitMQ). Con `scheduled_at` futuro:
+  resta `status=scheduled` — **nessuno scheduler la invia ancora
+  automaticamente**, è solo lo stato persistito.
+- `PATCH /blogs/{slug}/newsletter/settings` — body
+  `{newsletter_auto_notify_enabled}`. Disattiva/riattiva la notifica
+  automatica ad ogni post pubblicato per questo blog (attiva di default,
+  `Blog.newsletter_auto_notify_enabled`). Un solo invio automatico per
+  post, anche in caso di ripubblicazione (vincolo unique su `post_id`).
+
+**Digest di piattaforma** (Super Admin/Amministratore,
+`require_platform_admin`), stesse forme di sopra con `blog_id=None`:
+`GET /admin/newsletter/stats`, `GET /admin/newsletter/campaigns`,
+`POST /admin/newsletter/campaigns`.
+
 ## CORS
 
 Il backend accetta chiamate dal browser dalle origini in `NOCT_CORS_ORIGINS`

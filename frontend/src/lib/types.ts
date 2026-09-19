@@ -99,6 +99,9 @@ export interface Blog {
    * un eventuale override di Post.search_indexing_enabled/ai_crawling_enabled. */
   search_indexing_enabled: boolean;
   ai_crawling_enabled: boolean;
+  /** Invio automatico di una notifica newsletter ad ogni post pubblicato
+   * (backend/app/api/v1/newsletter.py), gestito da PATCH .../newsletter/settings. */
+  newsletter_auto_notify_enabled: boolean;
   default_locale: string;
   /** Lingue secondarie del blog (informative), oltre a default_locale. */
   extra_locales: string[];

@@ -189,8 +189,15 @@ async def _handle_payload(payload: dict) -> None:
             except Exception:
                 # fallimento non per-destinatario (DB irraggiungibile, bug):
                 # prova comunque a segnare la campagna come fallita, così non
-                # resta bloccata in "sending" all'infinito.
+                # resta bloccata in "sending" all'infinito. Serve il rollback
+                # esplicito prima: una `AsyncSession` con una query fallita
+                # resta in transazione abortita (asyncpg) finché non viene
+                # chiuso il blocco — qualunque query successiva sulla stessa
+                # sessione fallirebbe a sua volta con "current transaction is
+                # aborted", mascherando l'errore vero e facendo girare a vuoto
+                # il nack/requeue ad ogni tentativo (bug scoperto dal vivo).
                 logger.exception("Elaborazione campagna %s fallita", payload.get("campaign_id"))
+                await session.rollback()
                 try:
                     campaign = await session.get(NewsletterCampaign, uuid.UUID(payload["campaign_id"]))
                     if campaign is not None:
@@ -203,10 +210,19 @@ async def _handle_payload(payload: dict) -> None:
     logger.warning("Messaggio newsletter_send con kind sconosciuto: %r", payload.get("kind"))
 
 
-def _on_message(channel, method, _properties, body) -> None:
+def _on_message(channel, method, _properties, body, *, loop: asyncio.AbstractEventLoop) -> None:
     payload = json.loads(body)
     try:
-        asyncio.run(_handle_payload(payload))
+        # Un solo event loop per l'intera vita del processo (`loop`, creato in
+        # `main()`), non un `asyncio.run()` nuovo ad ogni messaggio: il pool di
+        # connessioni asyncpg di `SessionLocal` (app/core/database.py, un
+        # `AsyncEngine` a livello di modulo, condiviso) lega ogni connessione
+        # al loop che l'ha aperta — un `asyncio.run()` per messaggio chiude
+        # quel loop a fine chiamata e la connessione pooled resta legata a un
+        # loop già distrutto, corrotta per il messaggio successivo
+        # ("InterfaceError: another operation is in progress",
+        # "InFailedSQLTransactionError" a catena — bug scoperto dal vivo).
+        loop.run_until_complete(_handle_payload(payload))
         channel.basic_ack(delivery_tag=method.delivery_tag)
     except MailNotConfigured:
         logger.warning("NOCT_SMTP_HOST non configurato — messaggio non inviato (solo log, sviluppo locale).")
@@ -217,11 +233,17 @@ def _on_message(channel, method, _properties, body) -> None:
 
 
 def main() -> None:
+    loop = asyncio.new_event_loop()
     connection = connect_with_retry()
     channel = connection.channel()
     channel.queue_declare(queue=NEWSLETTER_SEND_QUEUE, durable=True)
     channel.basic_qos(prefetch_count=1)
-    channel.basic_consume(queue=NEWSLETTER_SEND_QUEUE, on_message_callback=_on_message)
+    channel.basic_consume(
+        queue=NEWSLETTER_SEND_QUEUE,
+        on_message_callback=lambda ch, method, properties, body: _on_message(
+            ch, method, properties, body, loop=loop
+        ),
+    )
     logger.info("In ascolto sulla coda %s...", NEWSLETTER_SEND_QUEUE)
     channel.start_consuming()
 

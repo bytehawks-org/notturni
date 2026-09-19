@@ -147,6 +147,10 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   con indice automatico, ordine esplicito e navigazione tra capitoli.
 - **RSS/Atom:** feed cronologico di piattaforma (`/feed.xml`, `/atom.xml`) e
   per ogni blog (`/{blog}/feed.xml`, `/{blog}/atom.xml`), con autodiscovery.
+- **Newsletter:** iscrizione pubblica con doppio opt-in via email (per singolo
+  blog o al digest di piattaforma), notifica automatica ad ogni post
+  pubblicato (disattivabile per blog) e campagne manuali dalla dashboard,
+  disiscrizione e cancellazione dati senza bisogno di login.
 - **SEO:** canonical, Open Graph/Twitter card e dati strutturati JSON-LD
   (`BlogPosting`) su tutte le pagine pubbliche (post, home di piattaforma e
   di blog, bibliografia/media/link, pagine statiche, profilo utente),

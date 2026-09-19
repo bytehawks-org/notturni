@@ -83,6 +83,10 @@ class BlogOut(BaseModel):
     static_pages_enabled: bool
     search_indexing_enabled: bool
     ai_crawling_enabled: bool
+    # gestito da PATCH /blogs/{slug}/newsletter/settings (app/api/v1/newsletter.py),
+    # non da BlogUpdateRequest — qui solo in lettura, per far riflettere alla
+    # tab Newsletter della dashboard lo stato persistito al caricamento.
+    newsletter_auto_notify_enabled: bool
     default_locale: str
     # B3: lingue secondarie (informative), pausa volontaria, sospensione da
     # admin e cancellazione con tolleranza (`deleted_at`, ripristinabile).

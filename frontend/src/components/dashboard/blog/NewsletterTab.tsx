@@ -29,7 +29,13 @@ const STATUS_TONE: Record<NewsletterCampaignStatus, "neutral" | "ok" | "warn" | 
 /** Tab Newsletter (dashboard blog): iscritti, avviso automatico alla
  * pubblicazione (`newsletter_auto_notify_enabled`) e campagne manuali,
  * backend/app/api/v1/newsletter.py. */
-export function NewsletterTab({ blogSlug }: { blogSlug: string }) {
+export function NewsletterTab({
+  blogSlug,
+  initialAutoNotify,
+}: {
+  blogSlug: string;
+  initialAutoNotify: boolean;
+}) {
   const { authFetch } = useAuth();
   const t = useTranslations("NewsletterTab");
   const tKind = useTranslations("NewsletterKind");
@@ -39,11 +45,7 @@ export function NewsletterTab({ blogSlug }: { blogSlug: string }) {
 
   const [stats, setStats] = useState<NewsletterStats | null>(null);
   const [campaigns, setCampaigns] = useState<NewsletterCampaign[] | null>(null);
-  // Nessun GET per leggere lo stato corrente (solo PATCH lato backend,
-  // backend/app/api/v1/newsletter.py): il default riflette quello del
-  // modello (Blog.newsletter_auto_notify_enabled = True), il toggle
-  // aggiorna lo stato reale a ogni interazione in questa sessione.
-  const [autoNotify, setAutoNotify] = useState(true);
+  const [autoNotify, setAutoNotify] = useState(initialAutoNotify);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
 
