@@ -4,6 +4,7 @@ import uuid
 from authlib.integrations.starlette_client import OAuthError
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -23,6 +24,7 @@ from app.domain.auth import (
     rotate_refresh_token,
 )
 from app.domain.rate_limit import enforce_rate_limit
+from app.domain.usernames import validate_username
 from app.domain.mfa import (
     generate_totp_secret,
     send_email_otp,
@@ -224,7 +226,15 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 
+class UsernameAvailabilityOut(BaseModel):
+    available: bool
+    reason: str | None = None
+
+
 # ---- registrazione / login --------------------------------------------------
+
+USERNAME_AVAILABILITY_IP_RATE_LIMIT = 30
+USERNAME_AVAILABILITY_RATE_LIMIT_WINDOW_SECONDS = 60
 
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
@@ -246,6 +256,33 @@ async def register(payload: RegisterRequest, session: AsyncSession = Depends(get
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
+@router.get("/username-available", response_model=UsernameAvailabilityOut)
+async def check_username_available(
+    username: str, request: Request, session: AsyncSession = Depends(get_session)
+) -> UsernameAvailabilityOut:
+    """Pubblico: verifica in tempo reale durante la registrazione, prima
+    ancora di inviare il form (`reason` distingue formato non valido da
+    username già preso, per un messaggio mirato lato frontend)."""
+    ip = client_ip(request)
+    if ip is not None:
+        await enforce_rate_limit(
+            f"ratelimit:username-available:ip:{ip}",
+            limit=USERNAME_AVAILABILITY_IP_RATE_LIMIT,
+            window_seconds=USERNAME_AVAILABILITY_RATE_LIMIT_WINDOW_SECONDS,
+            message="Troppi controlli di disponibilità username. Riprova tra qualche minuto.",
+        )
+
+    try:
+        validate_username(username)
+    except ValueError:
+        return UsernameAvailabilityOut(available=False, reason="invalid_format")
+
+    existing = await session.execute(select(User).where(User.username == username))
+    if existing.scalar_one_or_none() is not None:
+        return UsernameAvailabilityOut(available=False, reason="taken")
+    return UsernameAvailabilityOut(available=True, reason=None)
 
 
 @router.post("/login", response_model=SessionResponse | MfaRequiredResponse)

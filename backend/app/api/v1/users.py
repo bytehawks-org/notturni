@@ -12,6 +12,7 @@ from app.domain.authorization import blog_publicly_listable_clause
 from app.api.v1.blogs._common import BlogOut, _to_blog_out
 from app.api.v1.posts import PostOut, _posts_out
 from app.core.database import get_session
+from app.core.security import hash_password, verify_password
 from app.core.storage import avatar_public_url, delete_avatar, upload_avatar
 from app.domain import audit
 from app.domain import custom_domains as custom_domains_domain
@@ -22,6 +23,7 @@ from app.domain.gdpr_queue import log_self_service_request
 from app.models.gdpr_request import GdprRequestType
 from app.domain.i18n import validate_locale
 from app.domain.interests import validate_user_interest_keys
+from app.domain.passwords import validate_password_policy
 from app.domain.platform_config import SUPPORTED_LOCALES, get_platform_config
 from app.domain.profile import validate_country_code, validate_fallback_languages
 from app.domain.rate_limit import enforce_rate_limit
@@ -34,6 +36,7 @@ from app.models.post import Post, PostStatus
 from app.models.follow import BlogFollow, UserFollow
 from app.models.social_link import SocialLink
 from app.models.user import PostAuthorNameStyle, User, VerificationTier
+from app.models.user_session import UserSession
 
 router = APIRouter()
 
@@ -485,6 +488,45 @@ async def update_profile(
 
     await session.commit()
     return await _to_me_profile_out(session, current_user)
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class StatusOut(BaseModel):
+    status: str = "ok"
+
+
+@router.post("/me/password", response_model=StatusOut)
+async def change_my_password(
+    payload: PasswordChangeRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> StatusOut:
+    """Cambio password autenticato (a differenza del reset "password
+    dimenticata" in app/domain/password_reset.py, richiede di conoscere la
+    password attuale, non un codice via email)."""
+    if current_user.hashed_password is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Questo account non ha una password impostata (accesso solo tramite SSO).",
+        )
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Password attuale non corretta.")
+    try:
+        validate_password_policy(payload.new_password)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    current_user.hashed_password = hash_password(payload.new_password)
+    # Come il reset "password dimenticata" (app/domain/password_reset.py):
+    # una password cambiata invalida ogni sessione già aperta altrove, non
+    # solo il refresh token della richiesta corrente.
+    await session.execute(delete(UserSession).where(UserSession.user_id == current_user.id))
+    await session.commit()
+    return StatusOut()
 
 
 @router.post("/me/avatar", response_model=AvatarOut)
