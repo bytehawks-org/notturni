@@ -122,6 +122,11 @@ class MeProfileOut(ProfileOut):
     next_username_change_allowed_at: datetime | None
     pending_email_change: PendingEmailChangeOut | None
     domain_pending_verification: str | None
+    # `pending`/`failed` del dominio non ancora verificato — senza questo il
+    # frontend non ha modo di distinguerli al caricamento del profilo e
+    # ricostruiva sempre "pending" a un refresh, perdendo lo stato "failed"
+    # persistito in DB (bug segnalato dalla review Copilot).
+    domain_status: CustomDomainStatus | None
     domain_verification_instructions: dict | None
 
 
@@ -253,9 +258,11 @@ async def _to_me_profile_out(session: AsyncSession, user: User) -> MeProfileOut:
         next_change = user.username_changed_at + timedelta(days=USERNAME_CHANGE_COOLDOWN_DAYS)
 
     domain_pending = None
+    domain_status = None
     domain_instructions = None
     if user.custom_domain is not None and user.custom_domain.status != CustomDomainStatus.VERIFIED:
         domain_pending = user.custom_domain.domain
+        domain_status = user.custom_domain.status
         domain_instructions = {
             "txt_record_name": custom_domains_domain.txt_record_name(user.custom_domain.domain),
             "txt_record_value": custom_domains_domain.txt_record_value(user.custom_domain.verification_token),
@@ -268,6 +275,7 @@ async def _to_me_profile_out(session: AsyncSession, user: User) -> MeProfileOut:
         next_username_change_allowed_at=next_change,
         pending_email_change=pending_out,
         domain_pending_verification=domain_pending,
+        domain_status=domain_status,
         domain_verification_instructions=domain_instructions,
     )
 
