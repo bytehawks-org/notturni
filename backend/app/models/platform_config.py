@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import ARRAY, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -43,5 +44,13 @@ class PlatformConfig(Base):
     footer_column2_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)
     footer_column3_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)
     footer_bottom_bar_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Elenco di interessi selezionabili dagli utenti (blocco "interessi",
+    # massimo 5 a testa — app/domain/interests.py): `[{"key": "music",
+    # "translations": {"it": "Musica", "en": "Music"}}, ...]`. Seminato da
+    # NOCT_DEFAULT_INTERESTS o dai default builtin alla creazione della riga,
+    # poi modificabile liberamente da un Super Admin (non solo aggiunte in
+    # coda a un elenco builtin, a differenza di reserved_blog_names: qui non
+    # c'è un vincolo di sicurezza/namespace da preservare).
+    interests: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, default=list)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)

@@ -28,6 +28,9 @@ export default function PlatformSettingsPage() {
   const [config, setConfig] = useState<PlatformConfig | null>(null);
   const [draft, setDraft] = useState<PlatformConfig | null>(null);
   const [reservedInput, setReservedInput] = useState("");
+  const [newInterestKey, setNewInterestKey] = useState("");
+  const [newInterestIt, setNewInterestIt] = useState("");
+  const [newInterestEn, setNewInterestEn] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -68,6 +71,7 @@ export default function PlatformSettingsPage() {
           footer_column2_markdown: draft.footer_column2_markdown ?? "",
           footer_column3_markdown: draft.footer_column3_markdown ?? "",
           footer_bottom_bar_markdown: draft.footer_bottom_bar_markdown ?? "",
+          interests: draft.interests,
         })
       );
       setConfig(updated);
@@ -225,6 +229,75 @@ export default function PlatformSettingsPage() {
           </div>
         </div>
         <Toggle checked={draft.anonymous_comments_allowed} onChange={(v) => patch({ anonymous_comments_allowed: v })} label={t("anonComments")} />
+      </Card>
+
+      <Card className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1">
+          <CardTitle>{t("interests")}</CardTitle>
+          <p className="text-[13px] text-muted">{t("interestsNote")}</p>
+        </div>
+        <div className="flex flex-col gap-2">
+          {draft.interests.map((interest) => (
+            <div key={interest.key} className="grid grid-cols-[100px_1fr_1fr_auto] items-center gap-2">
+              <span className="truncate font-mono text-xs text-muted">{interest.key}</span>
+              <Input
+                aria-label={`${interest.key} (it)`}
+                value={interest.translations.it ?? ""}
+                onChange={(e) =>
+                  patch({
+                    interests: draft.interests.map((i) =>
+                      i.key === interest.key ? { ...i, translations: { ...i.translations, it: e.target.value } } : i
+                    ),
+                  })
+                }
+                className="h-8 px-2 py-1 text-sm"
+              />
+              <Input
+                aria-label={`${interest.key} (en)`}
+                value={interest.translations.en ?? ""}
+                onChange={(e) =>
+                  patch({
+                    interests: draft.interests.map((i) =>
+                      i.key === interest.key ? { ...i, translations: { ...i.translations, en: e.target.value } } : i
+                    ),
+                  })
+                }
+                className="h-8 px-2 py-1 text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => patch({ interests: draft.interests.filter((i) => i.key !== interest.key) })}
+                className="text-muted hover:text-danger"
+                aria-label={tc("remove")}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+        <form
+          className="grid grid-cols-[100px_1fr_1fr_auto] items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const key = newInterestKey.trim().toLowerCase();
+            if (!key || draft.interests.some((i) => i.key === key)) return;
+            const translations: Record<string, string> = {};
+            if (newInterestIt.trim()) translations.it = newInterestIt.trim();
+            if (newInterestEn.trim()) translations.en = newInterestEn.trim();
+            if (Object.keys(translations).length === 0) return;
+            patch({ interests: [...draft.interests, { key, translations }] });
+            setNewInterestKey("");
+            setNewInterestIt("");
+            setNewInterestEn("");
+          }}
+        >
+          <Input value={newInterestKey} onChange={(e) => setNewInterestKey(e.target.value)} placeholder={t("interestKeyPlaceholder")} className="h-8 px-2 py-1 text-xs" />
+          <Input value={newInterestIt} onChange={(e) => setNewInterestIt(e.target.value)} placeholder="it" className="h-8 px-2 py-1 text-sm" />
+          <Input value={newInterestEn} onChange={(e) => setNewInterestEn(e.target.value)} placeholder="en" className="h-8 px-2 py-1 text-sm" />
+          <Button type="submit" size="sm" variant="secondary">
+            {tc("add")}
+          </Button>
+        </form>
       </Card>
 
       <Card className="flex flex-col gap-4">

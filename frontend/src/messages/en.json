@@ -58,7 +58,8 @@
     "bibliography": "Bibliography",
     "media": "Media",
     "links": "Links",
-    "about": "About"
+    "about": "About",
+    "search": "Search"
   },
   "Site": {
     "latest": "Latest",
@@ -72,7 +73,9 @@
     "privacy": "Privacy",
     "terms": "Terms",
     "status": "Status",
-    "latestPosts": "Latest posts"
+    "latestPosts": "Latest posts",
+    "search": "Search",
+    "people": "People"
   },
   "Visibility": {
     "public": "Public",
@@ -576,7 +579,10 @@
     "registrationNote": "\"Invite\" and \"Closed\" block new sign-ups with different messages; invitations are not managed by the platform yet.",
     "ssoNote": "Only providers configured in the environment can be selected; no selection = all configured ones.",
     "reservedPlaceholder": "name",
-    "savedToast": "Settings saved"
+    "savedToast": "Settings saved",
+    "interests": "User interests",
+    "interestsNote": "Selectable by users on their profile (max 5 each) — canonical key not editable after creation, Italian/English labels here; other languages only via NOCT_DEFAULT_INTERESTS.",
+    "interestKeyPlaceholder": "key"
   },
   "Theme": {
     "light": "Light",
@@ -733,7 +739,10 @@
     "fediverseTitle": "Fediverse identifiers",
     "fediverseNote": "Reserved for a possible future federation (AT Protocol/Bluesky, then ActivityPub/Mastodon) — not active yet, only created and shown here.",
     "fediverseAtproto": "AT Protocol (DID)",
-    "fediverseActivitypub": "ActivityPub"
+    "fediverseActivitypub": "ActivityPub",
+    "directoryListed": "Listed in the user directory",
+    "directoryListedSub": "If off, your profile stays reachable only via direct link (@username), not in the public search/listing at /users.",
+    "interests": "{count, plural, one {# interest} other {# interests}} of {max}"
   },
   "PostPage": {
     "inThisPost": "In this post",
@@ -1211,7 +1220,8 @@
       "since": "Member since",
       "status": "Status",
       "blogs": "Blogs",
-      "lastSeen": "Last seen"
+      "lastSeen": "Last seen",
+      "actions": "Actions"
     },
     "role": {
       "utente": "User",
@@ -1227,7 +1237,10 @@
     "activate": "Reactivate",
     "never": "Never",
     "exportCsv": "Export CSV",
-    "noteTitle": "Change for @{username}"
+    "noteTitle": "Change for @{username}",
+    "resetPassword": "Reset password",
+    "confirmResetPassword": "Send reset code?",
+    "resetPasswordSent": "Email sent"
   },
   "Tokens": {
     "title": "API tokens",
@@ -1515,5 +1528,34 @@
     "addHint": "To add a chapter open the post in the editor and pick the publication in the right rail.",
     "deleteTitle": "Delete “{title}”?",
     "deleteBody": "Posts stay, just without a publication. Type the URL name to confirm."
+  },
+  "SearchPage": {
+    "title": "Search",
+    "placeholder": "Search posts on Notturni…",
+    "searchButton": "Search",
+    "resultsCount": "{count} results for \"{query}\"",
+    "noQuery": "Type something to search.",
+    "noResults": "No results for \"{query}\"."
+  },
+  "BlogSearchPage": {
+    "title": "Search {blog}",
+    "placeholder": "Search this blog…",
+    "searchButton": "Search",
+    "resultsCount": "{count} results for \"{query}\"",
+    "noQuery": "Type something to search.",
+    "noResults": "No results for \"{query}\"."
+  },
+  "UsersPage": {
+    "title": "People on Notturni",
+    "subtitle": "{count} public profiles · listed only if the user allows it",
+    "search": "Search people",
+    "all": "All",
+    "filteredByInterest": "with interest",
+    "removeFilter": "Remove filter"
+  },
+  "UserDirectory": {
+    "noMatch": "No users match.",
+    "follow": "Follow",
+    "followers": "{count} followers"
   }
 }

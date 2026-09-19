@@ -12,7 +12,7 @@ export interface BlogNavProps {
    * Server Component senza bisogno di rileggere l'header Host più volte. */
   basePath: string;
   name: string;
-  current: "posts" | "publications" | "bibliography" | "media" | "links";
+  current: "posts" | "publications" | "bibliography" | "media" | "links" | "search";
   hasPublications?: boolean;
   actions?: ReactNode;
 }
@@ -30,6 +30,7 @@ export async function BlogHeader({ basePath, name, current, hasPublications, act
     ["bibliography", t("bibliography"), `${basePath}/bibliografia`],
     ["media", t("media"), `${basePath}/media`],
     ["links", t("links"), `${basePath}/link`],
+    ["search", t("search"), `${basePath}/search`],
   ];
   return (
     <header className="border-b border-border">

@@ -23,7 +23,7 @@ const RESERVED_SUBDOMAINS = new Set([
  * `/?category=...`: senza questo bypass la riscrittura sotto li porterebbe
  * su `/{slug}/login` ecc., che non è una route del blog (sotto
  * `frontend/src/app/[blogSlug]/` esistono solo `[postSlug]`, `bibliografia`,
- * `link`, `media`, `pagina`, `pub`, `atom.xml`, `feed.xml`) e produrrebbe un
+ * `link`, `media`, `pagina`, `pub`, `search`, `atom.xml`, `feed.xml`) e produrrebbe un
  * 404 o il feed sbagliato invece della pagina di piattaforma attesa.
  * Tenerla allineata alle route dirette sotto `frontend/src/app/`. */
 const PLATFORM_ONLY_PATHS = new Set([
@@ -33,6 +33,7 @@ const PLATFORM_ONLY_PATHS = new Set([
   "dashboard",
   "admin",
   "blogs",
+  "users",
   "u",
   "p",
 ]);

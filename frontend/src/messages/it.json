@@ -58,7 +58,8 @@
     "bibliography": "Bibliografia",
     "media": "Media",
     "links": "Link",
-    "about": "Chi siamo"
+    "about": "Chi siamo",
+    "search": "Cerca"
   },
   "Site": {
     "latest": "Ultimi",
@@ -72,7 +73,9 @@
     "privacy": "Privacy",
     "terms": "Termini",
     "status": "Stato",
-    "latestPosts": "Ultimi articoli"
+    "latestPosts": "Ultimi articoli",
+    "search": "Cerca",
+    "people": "Persone"
   },
   "Visibility": {
     "public": "Pubblico",
@@ -576,7 +579,10 @@
     "registrationNote": "\"Su invito\" e \"Chiusa\" bloccano le nuove registrazioni con messaggi diversi; gli inviti non sono ancora gestiti dalla piattaforma.",
     "ssoNote": "Solo i provider configurati nell'ambiente sono selezionabili; nessuna selezione = tutti quelli configurati.",
     "reservedPlaceholder": "nome",
-    "savedToast": "Impostazioni salvate"
+    "savedToast": "Impostazioni salvate",
+    "interests": "Interessi utente",
+    "interestsNote": "Elenco selezionabile dagli utenti nel profilo (massimo 5 a testa) — chiave canonica non modificabile dopo la creazione, etichette in italiano/inglese qui; altre lingue solo via NOCT_DEFAULT_INTERESTS.",
+    "interestKeyPlaceholder": "chiave"
   },
   "Theme": {
     "light": "Chiaro",
@@ -733,7 +739,10 @@
     "fediverseTitle": "Identificativi per il fediverse",
     "fediverseNote": "Riservati per un'eventuale federazione futura (AT Protocol/Bluesky, poi ActivityPub/Mastodon) — non ancora attiva, solo creati e mostrati qui.",
     "fediverseAtproto": "AT Protocol (DID)",
-    "fediverseActivitypub": "ActivityPub"
+    "fediverseActivitypub": "ActivityPub",
+    "directoryListed": "Elencato nella directory utenti",
+    "directoryListedSub": "Se disattivato, il tuo profilo resta raggiungibile solo dal link diretto (@username), non nella ricerca/elenco pubblico di /users.",
+    "interests": "{count, plural, one {# interesse} other {# interessi}} su {max}"
   },
   "PostPage": {
     "inThisPost": "In questo post",
@@ -1211,7 +1220,8 @@
       "since": "Iscritto dal",
       "status": "Stato",
       "blogs": "Blog",
-      "lastSeen": "Ultimo accesso"
+      "lastSeen": "Ultimo accesso",
+      "actions": "Azioni"
     },
     "role": {
       "utente": "Utente",
@@ -1227,7 +1237,10 @@
     "activate": "Riattiva",
     "never": "Mai",
     "exportCsv": "Esporta CSV",
-    "noteTitle": "Modifica di @{username}"
+    "noteTitle": "Modifica di @{username}",
+    "resetPassword": "Reset password",
+    "confirmResetPassword": "Inviare il codice di reset?",
+    "resetPasswordSent": "Email inviata"
   },
   "Tokens": {
     "title": "Token API",
@@ -1515,5 +1528,34 @@
     "addHint": "Per aggiungere un capitolo apri il post nell'editor e scegli la pubblicazione nel pannello a destra.",
     "deleteTitle": "Eliminare “{title}”?",
     "deleteBody": "I post restano, solo senza pubblicazione. Digita il nome nell'URL per confermare."
+  },
+  "SearchPage": {
+    "title": "Ricerca",
+    "placeholder": "Cerca articoli su Notturni…",
+    "searchButton": "Cerca",
+    "resultsCount": "{count} risultati per «{query}»",
+    "noQuery": "Scrivi qualcosa da cercare.",
+    "noResults": "Nessun risultato per «{query}»."
+  },
+  "BlogSearchPage": {
+    "title": "Cerca in {blog}",
+    "placeholder": "Cerca in questo blog…",
+    "searchButton": "Cerca",
+    "resultsCount": "{count} risultati per «{query}»",
+    "noQuery": "Scrivi qualcosa da cercare.",
+    "noResults": "Nessun risultato per «{query}»."
+  },
+  "UsersPage": {
+    "title": "Persone su Notturni",
+    "subtitle": "{count} profili pubblici · elencati solo se l'utente lo consente",
+    "search": "Cerca persone",
+    "all": "Tutte",
+    "filteredByInterest": "con l'interesse",
+    "removeFilter": "Rimuovi filtro"
+  },
+  "UserDirectory": {
+    "noMatch": "Nessun utente trovato.",
+    "follow": "Segui",
+    "followers": "{count} follower"
   }
 }

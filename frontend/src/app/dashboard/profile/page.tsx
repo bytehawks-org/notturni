@@ -1,6 +1,6 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
@@ -9,17 +9,22 @@ import { LanguagePicker } from "@/components/LanguagePicker";
 import { UiLanguagePicker } from "@/components/shell/UiLanguagePicker";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { Toggle } from "@/components/ui/Controls";
 import { FieldGroup, Input, Label, TextArea } from "@/components/ui/Field";
 import { VerificationBadge } from "@/components/ui/VerificationBadge";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { interestLabel } from "@/lib/interests";
 import { SOCIAL_PLATFORMS, getSocialPlatform } from "@/lib/social-platforms";
 import {
   type DomainOut,
   type FollowStats,
+  type Interest,
   type MeProfile,
   type PostAuthorNameStyle,
 } from "@/lib/types";
+
+const MAX_USER_INTERESTS = 5;
 
 const AUTHOR_NAME_STYLES: PostAuthorNameStyle[] = ["username", "full_name", "display_name", "verified_domain"];
 
@@ -27,6 +32,7 @@ export default function ProfilePage() {
   const router = useRouter();
   const { user, authFetch, refreshUser, logout } = useAuth();
   const t = useTranslations("Profile");
+  const uiLocale = useLocale();
   const tc = useTranslations("Common");
   const tTier = useTranslations("VerificationTier");
   const errorMessage = useCallback(
@@ -54,7 +60,13 @@ export default function ProfilePage() {
   const [country, setCountry] = useState("");
   const [nativeLanguage, setNativeLanguage] = useState<string | null>(null);
   const [fallbackLanguages, setFallbackLanguages] = useState<string[]>([]);
+  const [interests, setInterests] = useState<string[]>([]);
+  const [availableInterests, setAvailableInterests] = useState<Interest[]>([]);
   const [savingBio, setSavingBio] = useState(false);
+
+  useEffect(() => {
+    api.interests.list().then(setAvailableInterests).catch(() => {});
+  }, []);
 
   const [linkPlatform, setLinkPlatform] = useState(SOCIAL_PLATFORMS[0].key);
   const [linkUrl, setLinkUrl] = useState("");
@@ -109,6 +121,7 @@ export default function ProfilePage() {
         setCountry(p.country ?? "");
         setNativeLanguage(p.native_language);
         setFallbackLanguages(p.fallback_languages);
+        setInterests(p.interests);
         if (p.pending_email_change) {
           setNewEmail(p.pending_email_change.new_email);
         }
@@ -151,6 +164,7 @@ export default function ProfilePage() {
           country,
           native_language: nativeLanguage ?? "",
           fallback_languages: fallbackLanguages,
+          interests,
         })
       );
       setProfile(updated);
@@ -161,6 +175,21 @@ export default function ProfilePage() {
       setError(errorMessage(err));
     } finally {
       setSavingBio(false);
+    }
+  }
+
+  function toggleInterest(key: string) {
+    setInterests((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : prev.length >= MAX_USER_INTERESTS ? prev : [...prev, key]
+    );
+  }
+
+  async function handleToggleDirectoryListed(value: boolean) {
+    try {
+      const updated = await authFetch((token) => api.users.updateMe(token, { directory_listed: value }));
+      setProfile(updated);
+    } catch (err) {
+      setError(errorMessage(err));
     }
   }
 
@@ -616,6 +645,30 @@ export default function ProfilePage() {
                   placeholder={t("bioPlaceholder")}
                 />
               </FieldGroup>
+
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-semibold uppercase tracking-[.04em] text-muted">
+                  {t("interests", { count: interests.length, max: MAX_USER_INTERESTS })}
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {availableInterests.map((interest) => {
+                    const active = interests.includes(interest.key);
+                    return (
+                      <button
+                        key={interest.key}
+                        type="button"
+                        onClick={() => toggleInterest(interest.key)}
+                        disabled={!active && interests.length >= MAX_USER_INTERESTS}
+                        className={`rounded-full border px-3 py-1 text-[13px] transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                          active ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted hover:border-primary/40"
+                        }`}
+                      >
+                        {interestLabel(interest, interest.key, uiLocale)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </section>
 
             <section id="lingue" className="flex scroll-mt-6 flex-col gap-5">
@@ -978,6 +1031,16 @@ export default function ProfilePage() {
           <section id="privacy" className="flex scroll-mt-6 flex-col gap-4">
             <h2 className="font-serif text-lg text-foreground">{t("nav.privacy")}</h2>
             <div className="overflow-hidden rounded-lg border border-border">
+              {profile && (
+                <div className="border-b border-border px-4 py-4">
+                  <Toggle
+                    checked={profile.directory_listed}
+                    onChange={handleToggleDirectoryListed}
+                    label={t("directoryListed")}
+                  />
+                  <p className="mt-1 text-[13px] text-muted">{t("directoryListedSub")}</p>
+                </div>
+              )}
               <div className="flex items-center justify-between gap-5 border-b border-border px-4 py-4 last:border-0">
                 <div className="flex flex-col gap-0.5">
                   <span className="text-sm font-medium text-foreground">{t("downloadData")}</span>

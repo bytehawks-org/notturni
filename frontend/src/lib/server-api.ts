@@ -6,6 +6,7 @@ import type {
   Blog,
   BlogConfig,
   Category,
+  Interest,
   LinkBibliographyEntry,
   MediaBibliographyEntry,
   Page,
@@ -14,6 +15,7 @@ import type {
   Profile,
   PublicBlog,
   PublicComment,
+  PublicUser,
   Publication,
   PublicationDetail,
   TrendingTag,
@@ -193,6 +195,53 @@ export async function getPublicBlogs(
   return (await res.json()) as PublicBlog[];
 }
 
+/** Elenco pubblico degli interessi correnti (blocco "interessi utente",
+ * `GET /api/v1/interests`) — usato dalle pagine server (directory utenti,
+ * profilo pubblico) per risolvere le chiavi canoniche in etichette. */
+export async function getPublicInterests(): Promise<Interest[]> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/interests`, {
+    next: { revalidate: REVALIDATE_SECONDS },
+  });
+  if (!res.ok) return [];
+  return (await res.json()) as Interest[];
+}
+
+/** Ricerca globale (`GET /api/v1/search/posts`): titolo/contenuto tra i post
+ * pubblicati di ogni blog pubblico. Nessuna cache: `q` varia ad ogni
+ * richiesta, cacheare per query non avrebbe beneficio (`cache: "no-store"`,
+ * come i fetch autenticati/interattivi già presenti altrove). */
+export async function searchPosts(
+  q: string,
+  options: { limit?: number; offset?: number } = {}
+): Promise<Post[]> {
+  const params = new URLSearchParams({ q });
+  if (options.limit) params.set("limit", String(options.limit));
+  if (options.offset) params.set("offset", String(options.offset));
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/search/posts?${params.toString()}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Errore ${res.status} nella ricerca.`);
+  return (await res.json()) as Post[];
+}
+
+/** Ricerca ristretta a un singolo blog (`GET /api/v1/blogs/{slug}/search`) —
+ * usata dalla pagina di ricerca sul sottodominio del blog. */
+export async function searchBlogPosts(
+  slug: string,
+  q: string,
+  options: { limit?: number; offset?: number } = {}
+): Promise<Post[] | null> {
+  const params = new URLSearchParams({ q });
+  if (options.limit) params.set("limit", String(options.limit));
+  if (options.offset) params.set("offset", String(options.offset));
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}/search?${params.toString()}`, {
+    cache: "no-store",
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Errore ${res.status} nella ricerca.`);
+  return (await res.json()) as Post[];
+}
+
 /** Tag più usati tra i post pubblicati di recente, per la sezione "di tendenza" della homepage. */
 export async function getTrendingTags(
   options: { days?: number; limit?: number } = {}
@@ -259,6 +308,36 @@ export async function getPublicBlogConfig(slug: string): Promise<BlogConfig | nu
   });
   if (!res.ok) return null;
   return (await res.json()) as BlogConfig;
+}
+
+/** Directory pubblica degli utenti (`GET /api/v1/users`): ricerca `q`
+ * (username/nome pubblico/bio), filtro `locale` (lingua madre), ordinamento
+ * `new|followers` — stesso schema di `getPublicBlogs`. Esclude già lato
+ * backend gli account inattivi/anonimizzati e chi ha scelto l'opt-out
+ * (`User.directory_listed`). */
+export async function getPublicUsers(
+  options: {
+    limit?: number;
+    offset?: number;
+    q?: string;
+    locale?: string;
+    interest?: string;
+    sort?: "new" | "followers";
+  } = {}
+): Promise<PublicUser[]> {
+  const params = new URLSearchParams();
+  if (options.limit) params.set("limit", String(options.limit));
+  if (options.offset) params.set("offset", String(options.offset));
+  if (options.q) params.set("q", options.q);
+  if (options.locale) params.set("locale", options.locale);
+  if (options.interest) params.set("interest", options.interest);
+  if (options.sort) params.set("sort", options.sort);
+  const qs = params.toString();
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/users${qs ? `?${qs}` : ""}`, {
+    next: { revalidate: REVALIDATE_SECONDS },
+  });
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero della directory degli utenti.`);
+  return (await res.json()) as PublicUser[];
 }
 
 /** Profilo pubblico (mockup 3e, `GET /users/{username}`, nessuna autenticazione

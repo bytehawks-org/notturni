@@ -145,6 +145,20 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     # un accesso lazy a una relazione fuori dal contesto della sessione
     # async fallisce con MissingGreenlet) — qui basta una colonna semplice.
     verified_domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Opt-out dalla directory pubblica utenti (GET /api/v1/users, blocco
+    # "ricerca globale"), attivo di default — stesso principio di
+    # Blog.search_indexing_enabled, ma per la ricerca *interna* alla
+    # piattaforma, non i crawler esterni: nome diverso apposta per non
+    # confonderla con quel concetto. Il profilo resta comunque sempre
+    # raggiungibile per username/link diretto (GET /{username}), questo
+    # flag esclude solo dall'elenco/ricerca.
+    directory_listed: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Interessi (blocco "interessi utente", app/domain/interests.py): al più
+    # 5 chiavi canoniche tra quelle correnti di `platform_config.interests`
+    # — enforcement applicativo (PATCH /users/me), non a livello di DB, come
+    # già per Post.manual_tags. Colonna semplice (non relazione ORM): niente
+    # join/FK verso un elenco che l'admin può riscrivere in ogni momento.
+    interests: Mapped[list[str]] = mapped_column(ARRAY(String(40)), default=list, nullable=False)
 
     blogs: Mapped[list["Blog"]] = relationship(back_populates="owner")
     memberships: Mapped[list["BlogMembership"]] = relationship(back_populates="user")

@@ -33,6 +33,7 @@ import type {
   GdprRequestStatus,
   GdprRequestType,
   InstanceConfig,
+  Interest,
   LinkBibliographyEntry,
   LoginResponse,
   MediaBibliographyEntry,
@@ -174,6 +175,13 @@ export const api = {
       request<void>("/api/v1/auth/password/forgot", { method: "POST", body: payload }),
     resetPassword: (payload: { email: string; code: string; new_password: string }) =>
       request<void>("/api/v1/auth/password/reset", { method: "POST", body: payload }),
+  },
+
+  interests: {
+    /** Pubblico, nessun token — elenco di interessi correnti (blocco
+     * "interessi utente"): usato dal selettore del profilo e dalla
+     * directory utenti, entrambi client component. */
+    list: () => request<Interest[]>("/api/v1/interests"),
   },
 
   blogs: {
@@ -570,6 +578,10 @@ export const api = {
         country?: string;
         native_language?: string;
         fallback_languages?: string[];
+        /** Opt-out dalla directory pubblica (`GET /users`); assente non tocca. */
+        directory_listed?: boolean;
+        /** Chiavi canoniche (blocco "interessi utente"), al più 5; assente non tocca. */
+        interests?: string[];
       }
     ) => request<MeProfile>("/api/v1/users/me", { method: "PATCH", token, body: payload }),
     followStats: (token: string) => request<FollowStats>("/api/v1/users/me/follow-stats", { token }),
@@ -723,6 +735,11 @@ export const api = {
       userId: string,
       payload: Partial<{ platform_role: PlatformRole; is_active: boolean; note: string }>
     ) => request<AdminUser>(`/api/v1/admin/users/${userId}`, { method: "PATCH", token, body: payload }),
+    /** Reset forzoso della password: innesca verso l'utente lo stesso ciclo
+     * email di "password dimenticata" — l'admin non imposta una password,
+     * solo avvia l'invio. Sempre 202, nessun corpo. */
+    resetUserPassword: (token: string, userId: string) =>
+      request<void>(`/api/v1/admin/users/${userId}/reset-password`, { method: "POST", token }),
     listBlogs: (token: string, q?: string) =>
       request<AdminBlog[]>(withQuery("/api/v1/admin/blogs", { q }), { token }),
     /** B5: `state` filtra per stato, `reported` = solo con segnalazioni aperte. */

@@ -23,6 +23,7 @@ async def test_public_profile(client: AsyncClient, make_user: Callable) -> None:
         "country": None,
         "native_language": None,
         "fallback_languages": [],
+        "interests": [],
         "avatar_url": None,
         "social_links": [],
         "created_at": body["created_at"],

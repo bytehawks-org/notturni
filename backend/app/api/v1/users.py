@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import delete, func, select
+from sqlalchemy import any_, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,7 +21,8 @@ from app.domain.gdpr import anonymize_and_deactivate_user, export_user_data
 from app.domain.gdpr_queue import log_self_service_request
 from app.models.gdpr_request import GdprRequestType
 from app.domain.i18n import validate_locale
-from app.domain.platform_config import SUPPORTED_LOCALES
+from app.domain.interests import validate_user_interest_keys
+from app.domain.platform_config import SUPPORTED_LOCALES, get_platform_config
 from app.domain.profile import validate_country_code, validate_fallback_languages
 from app.domain.rate_limit import enforce_rate_limit
 from app.domain.usernames import USERNAME_CHANGE_COOLDOWN_DAYS, validate_username
@@ -62,6 +63,12 @@ class ProfileUpdateRequest(BaseModel):
     fallback_languages: list[str] | None = None
     # B6: lingua dell'interfaccia ("" = torna al default di piattaforma)
     ui_locale: str | None = None
+    # Opt-out dalla directory pubblica (GET /users), assente lascia invariato
+    directory_listed: bool | None = None
+    # Interessi (blocco "interessi utente"): al più 5 chiavi canoniche tra
+    # quelle correnti di GET /interests. Assente lascia invariato, una lista
+    # (anche vuota) la sostituisce — stesso schema di fallback_languages.
+    interests: list[str] | None = None
 
 
 class SocialLinkCreateRequest(BaseModel):
@@ -92,6 +99,9 @@ class ProfileOut(BaseModel):
     country: str | None
     native_language: str | None
     fallback_languages: list[str]
+    # Chiavi canoniche (blocco "interessi utente"): il frontend le risolve
+    # nella lingua corrente tramite GET /interests, mai stringhe libere.
+    interests: list[str]
     avatar_url: str | None
     social_links: list[SocialLinkOut]
     created_at: datetime
@@ -128,6 +138,9 @@ class MeProfileOut(ProfileOut):
     # persistito in DB (bug segnalato dalla review Copilot).
     domain_status: CustomDomainStatus | None
     domain_verification_instructions: dict | None
+    # Impostazione privata (GET /{username} non la espone): opt-out dalla
+    # directory pubblica, vedi ProfileUpdateRequest.directory_listed.
+    directory_listed: bool
 
 
 class DomainUpdateRequest(BaseModel):
@@ -226,6 +239,7 @@ def _to_profile_out(user: User) -> ProfileOut:
         country=user.country,
         native_language=user.native_language,
         fallback_languages=user.fallback_languages,
+        interests=user.interests,
         avatar_url=avatar_public_url(user.avatar_object_key) if user.avatar_object_key else None,
         social_links=[SocialLinkOut.model_validate(link) for link in user.social_links],
         created_at=user.created_at,
@@ -277,7 +291,84 @@ async def _to_me_profile_out(session: AsyncSession, user: User) -> MeProfileOut:
         domain_pending_verification=domain_pending,
         domain_status=domain_status,
         domain_verification_instructions=domain_instructions,
+        directory_listed=user.directory_listed,
     )
+
+
+class DirectoryUserOut(BaseModel):
+    """Voce della directory pubblica (`GET /users`, blocco "directory
+    utenti"): sottoinsieme di `ProfileOut` per le card, più il conteggio
+    follower — stesso schema di `PublicBlogOut` per la directory blog."""
+
+    username: str
+    display_name: str | None
+    bio: str | None
+    avatar_url: str | None
+    verification_tier: VerificationTier
+    custom_domain: str | None
+    interests: list[str]
+    follower_count: int
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("", response_model=list[DirectoryUserOut])
+async def list_public_users(
+    q: str | None = None,
+    locale: str | None = None,
+    interest: str | None = None,
+    sort: str = "new",
+    limit: int = 30,
+    offset: int = 0,
+    session: AsyncSession = Depends(get_session),
+) -> list[DirectoryUserOut]:
+    """Directory pubblica degli utenti: solo account attivi (non anonimizzati/
+    cancellati, `is_active`) che non hanno scelto l'opt-out
+    (`User.directory_listed`) — stesso principio di `GET /blogs` per i blog,
+    ma qui il criterio di esclusione è impostabile dall'utente stesso, non
+    derivato da stato dell'account. `q` cerca in username/nome
+    pubblico/bio, `locale` filtra per lingua madre, `interest` filtra per
+    chiave canonica di interesse (blocco "interessi utente", per trovare
+    persone con lo stesso interesse da seguire), `sort` è `new`
+    (registrazione, default) o `followers`."""
+    limit = max(1, min(limit, 100))
+    follower_count = (
+        select(func.count())
+        .select_from(UserFollow)
+        .where(UserFollow.followed_user_id == User.id)
+        .correlate(User)
+        .scalar_subquery()
+    )
+    stmt = select(User, follower_count).where(
+        User.is_active.is_(True), User.directory_listed.is_(True)
+    )
+    if q:
+        needle = f"%{q.strip()}%"
+        stmt = stmt.where(
+            or_(User.username.ilike(needle), User.display_name.ilike(needle), User.bio.ilike(needle))
+        )
+    if locale:
+        stmt = stmt.where(User.native_language == locale)
+    if interest:
+        stmt = stmt.where(interest == any_(User.interests))
+    if sort == "followers":
+        stmt = stmt.order_by(follower_count.desc(), User.created_at.desc())
+    else:
+        stmt = stmt.order_by(User.created_at.desc())
+    result = await session.execute(stmt.limit(limit).offset(max(offset, 0)))
+    return [
+        DirectoryUserOut(
+            username=user.username,
+            display_name=user.display_name,
+            bio=user.bio,
+            avatar_url=avatar_public_url(user.avatar_object_key) if user.avatar_object_key else None,
+            verification_tier=user.verification_tier,
+            custom_domain=user.verified_domain,
+            interests=user.interests,
+            follower_count=int(followers or 0),
+        )
+        for user, followers in result.all()
+    ]
 
 
 @router.get("/me", response_model=MeProfileOut)
@@ -382,6 +473,15 @@ async def update_profile(
         except ValueError as exc:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
         current_user.fallback_languages = normalized
+    if payload.directory_listed is not None:
+        current_user.directory_listed = payload.directory_listed
+    if payload.interests is not None:
+        config = await get_platform_config(session)
+        available = {item["key"] for item in config.interests}
+        try:
+            current_user.interests = validate_user_interest_keys(payload.interests, available)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
     await session.commit()
     return await _to_me_profile_out(session, current_user)

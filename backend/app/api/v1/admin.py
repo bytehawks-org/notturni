@@ -20,6 +20,9 @@ from app.domain import audit
 from app.domain.display_names import resolve_personal_display_name
 from app.domain.gdpr import anonymize_and_deactivate_user, export_user_data
 from app.domain.gdpr_queue import new_request
+from app.domain.interests import validate_interest_list
+from app.domain.password_reset import request_password_reset
+from app.domain.rate_limit import enforce_rate_limit
 from app.domain.platform_config import (
     MAX_AUDIT_RETENTION_DAYS,
     MAX_FOOTER_MARKDOWN_LENGTH,
@@ -175,6 +178,55 @@ async def update_user(
     await session.commit()
     await session.refresh(target)
     return (await _admin_users_out(session, [target]))[0]
+
+
+# Riusa lo stesso limite del self-service (auth.py) come ordine di
+# grandezza, ma per-attore invece che per-IP/email: qui il richiedente è un
+# admin autenticato, non un anonimo da tenere a bada — la protezione serve
+# solo contro un account admin compromesso che spamma reset su molti utenti.
+ADMIN_PASSWORD_RESET_RATE_LIMIT = 20
+ADMIN_PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS = 300
+
+
+@router.post("/users/{user_id}/reset-password", status_code=status.HTTP_202_ACCEPTED)
+async def trigger_password_reset(
+    user_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Reset forzoso della password (CLAUDE.md "lato amministrazione"): innesca
+    verso l'utente lo stesso ciclo email del self-service "password
+    dimenticata" (`app/domain/password_reset.py::request_password_reset`,
+    identica funzione di dominio — nessuna duplicazione di codice email/DB),
+    ma avviato dall'admin invece che dall'utente. Nessun rate limit per
+    IP/email del richiedente (quello di `POST /auth/password/forgot` è
+    pensato per un anonimo che enumera indirizzi, non per un admin
+    autenticato che agisce su un utente specifico già noto): solo un limite
+    più permissivo per attore, contro un account admin compromesso."""
+    target = await session.get(User, user_id)
+    if target is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Utente non trovato.")
+    if not target.is_active:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "L'utente non è attivo.")
+
+    await enforce_rate_limit(
+        f"ratelimit:admin-password-reset:actor:{current_user.id}",
+        limit=ADMIN_PASSWORD_RESET_RATE_LIMIT,
+        window_seconds=ADMIN_PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS,
+        message="Troppi reset avviati di recente. Riprova tra qualche minuto.",
+    )
+
+    await audit.record(
+        session,
+        action="user.password_reset_triggered",
+        actor=current_user,
+        target_type="user",
+        target_id=target.id,
+        request=request,
+    )
+    await session.commit()
+    await request_password_reset(session, target.email)
 
 
 class ServiceStatus(BaseModel):
@@ -882,6 +934,7 @@ class PlatformConfigOut(BaseModel):
     footer_column2_markdown: str | None
     footer_column3_markdown: str | None
     footer_bottom_bar_markdown: str | None
+    interests: list[dict]
     updated_at: datetime | None
     infrastructure: dict[str, str | bool | None]
 
@@ -902,6 +955,11 @@ class PlatformConfigUpdateRequest(BaseModel):
     footer_column2_markdown: str | None = None
     footer_column3_markdown: str | None = None
     footer_bottom_bar_markdown: str | None = None
+    # Elenco completo (sostituisce, non aggiunge — a differenza di
+    # reserved_blog_names non c'è un builtin da preservare separatamente):
+    # ogni voce `{"key": "...", "translations": {"it": "...", ...}}`,
+    # validata da app/domain/interests.py::validate_interest_list.
+    interests: list[dict] | None = None
 
 
 def _config_out(config: PlatformConfig) -> PlatformConfigOut:
@@ -921,6 +979,7 @@ def _config_out(config: PlatformConfig) -> PlatformConfigOut:
         footer_column2_markdown=config.footer_column2_markdown,
         footer_column3_markdown=config.footer_column3_markdown,
         footer_bottom_bar_markdown=config.footer_bottom_bar_markdown,
+        interests=list(config.interests),
         updated_at=config.updated_at,
         # sola lettura: riepilogo dell'ambiente NOCT_* (mai segreti). La
         # retention dell'audit log non ci sta più: da B6+ è configurabile a
@@ -1011,6 +1070,12 @@ async def update_admin_config(
                     f"Il testo del footer supera i {MAX_FOOTER_MARKDOWN_LENGTH} caratteri.",
                 )
             apply(field, value or None)
+    if payload.interests is not None:
+        try:
+            cleaned_interests = validate_interest_list(payload.interests)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        apply("interests", cleaned_interests)
 
     if changes:
         touch(config, by_id=current_user.id)
