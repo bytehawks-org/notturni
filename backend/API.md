@@ -527,21 +527,27 @@ Immagine di copertina del blog (banner della home pubblica, facoltativa):
 stessi formati/limite di dimensione e stessa moderazione automatica di
 `POST .../media` sotto — l'upload aggiorna `cover_image_url` e
 `cover_image_is_sensitive` (risultato della moderazione), azzera
-`cover_image_categories`. Sostituire una cover esistente non cancella
-l'oggetto precedente su storage (stessa scelta di `Post.cover_image_url`).
-Ritorna il `Blog` aggiornato (`BlogOut`).
+`cover_image_categories`/`cover_image_alt_text`. Sostituire una cover
+esistente non cancella l'oggetto precedente su storage (stessa scelta di
+`Post.cover_image_url`). Ritorna il `Blog` aggiornato (`BlogOut`).
+Crea anche una riga nella libreria media del blog (`GET .../media` sotto,
+`used_as_blog_cover=true` finché resta la cover corrente) — prima non ci
+finiva mai, a differenza della cover di un post (che passa dallo stesso
+endpoint di `POST .../media`).
 
 **`PATCH /api/v1/blogs/{slug}/cover-image`** — solo il proprietario, `400`
-se il blog non ha ancora una cover. `{"categories": ["nudity", ...]}`
-(vocabolario in `backend/app/domain/content_media.py::SENSITIVITY_CATEGORIES`):
-aggiorna l'avviso manuale sui contenuti senza ricaricare l'immagine, stesso
+se il blog non ha ancora una cover. `{"categories": ["nudity", ...],
+"alt_text"?}` (vocabolario categorie in
+`backend/app/domain/content_media.py::SENSITIVITY_CATEGORIES`): aggiorna
+l'avviso manuale sui contenuti senza ricaricare l'immagine, stesso
 principio del `PATCH /posts/{id}` quando cambia solo `cover_image_categories`
-— categorie non vuote forzano `cover_image_is_sensitive=true`. Ritorna il
-`Blog` aggiornato.
+— categorie non vuote forzano `cover_image_is_sensitive=true`. `alt_text`
+assente lascia invariato, presente (anche `null`/`""`) lo azzera o
+sostituisce. Ritorna il `Blog` aggiornato.
 
 **`DELETE /api/v1/blogs/{slug}/cover-image`** — solo il proprietario. Azzera
-cover/avviso/categorie (l'oggetto su storage non viene cancellato, stessa
-scelta di cui sopra). Ritorna il `Blog` aggiornato.
+cover/avviso/categorie/alt text (l'oggetto su storage non viene cancellato,
+stessa scelta di cui sopra). Ritorna il `Blog` aggiornato.
 
 **`POST /api/v1/blogs/{slug}/favicon`** — richiede sessione, solo il
 proprietario. `multipart/form-data`, campo `file`. Favicon dedicata del blog
@@ -879,8 +885,10 @@ sezione "Moderazione automatica delle immagini" più sotto; non viene
 ricalcolato qui. `cover_image_categories` (default `[]`) sono le categorie
 di avviso sui contenuti scelte manualmente dall'autore (vedi "Avviso sui
 contenuti" più sotto): non vuoto forza anche `cover_image_is_sensitive` a
-`true`, indipendentemente dal valore passato per quel campo. `tags` è
-opzionale (vedi sezione "Tag" sotto).
+`true`, indipendentemente dal valore passato per quel campo.
+`cover_image_alt_text` (default `""`) è il testo alternativo della cover
+(accessibilità), indipendente dall'eventuale alt text della stessa immagine
+in libreria media. `tags` è opzionale (vedi sezione "Tag" sotto).
 `category_id` è opzionale: l'UUID di una categoria esistente del blog (vedi
 sezione "Categorie" sopra) — `404` se non appartiene a questo blog. `409` se
 lo slug è già in uso su quel blog per quella lingua. `notes` è opzionale
@@ -964,8 +972,11 @@ esporre l'UUID nell'URL. `404` se blog/slug non corrispondono a nessun post
 
 **`PATCH /api/v1/posts/{post_id}`** — stessa autorizzazione della creazione.
 Aggiorna
-`title`/`content`/`cover_image_url`/`cover_image_is_sensitive`/`cover_image_categories`/`tags`/`category_id`/`notes`
-(tutti opzionali). Se `content` cambia, accoda di nuovo il backup su S3 e
+`title`/`content`/`cover_image_url`/`cover_image_is_sensitive`/`cover_image_categories`/`cover_image_alt_text`/`tags`/`category_id`/`notes`
+(tutti opzionali). `cover_image_alt_text` è indipendente da `cover_image_url`
+(stesso principio di `cover_image_categories` sotto): campo assente lascia
+l'alt text invariato, presente (anche `null`/`""`) lo azzera o sostituisce.
+Se `content` cambia, accoda di nuovo il backup su S3 e
 ricalcola anche i media/link citati (vedi "Avviso sui contenuti" e
 "Media e link citati" più sotto). Per `notes`: campo assente lascia le note
 invariate, una lista (anche vuota `[]`) le sostituisce. Per
@@ -1197,8 +1208,15 @@ immagine in `media_files` e risponde anche con `media_id`.
 **`GET /api/v1/blogs/{slug}/media`** — proprietario e collaboratori
 (`403` altrimenti). `{items: [{id, url, content_type, size_bytes, alt_text,
 caption, categories, is_sensitive, uploader_username, created_at, used_in:
-[{post_id, post_slug, post_title, permalink}]}], total_bytes}`, dal più
-recente. `used_in` viene da `post_media` (immagini citate nei post).
+[{post_id, post_slug, post_title, permalink}], used_as_blog_cover}],
+total_bytes}`, dal più recente. `used_in` copre sia le immagini citate nel
+contenuto (`post_media`) sia quelle usate come cover di un post
+(`Post.cover_image_url`) — prima tracciava solo le prime, quindi
+un'immagine usata solo come cover risultava "non usata da nessuno" e
+cancellabile mentre era ancora la cover live del post (bug corretto).
+`used_as_blog_cover` è `true` se l'immagine è l'attuale cover del blog
+(`Blog.cover_image_url`, sezione cover-image sopra) — anch'essa ora sempre
+registrata qui all'upload.
 
 **`POST /api/v1/blogs/{slug}/media/sync`** — accesso in scrittura. Importa
 nella libreria le immagini citate nei post che non hanno ancora una riga
@@ -1212,8 +1230,9 @@ non vengono riscritti: i valori della libreria sono il default per gli usi
 futuri.
 
 **`DELETE /api/v1/blogs/{slug}/media/{media_id}`** — `204`; `409` se
-l'immagine è ancora citata in un post. Rimuove la riga e, se caricata via
-libreria, l'oggetto su storage.
+l'immagine è ancora citata in un post (contenuto o cover) o è l'attuale
+cover del blog. Rimuove la riga e, se caricata via libreria, l'oggetto su
+storage.
 
 ## Anteprima di un link
 
@@ -2307,16 +2326,51 @@ stessa logica di `can_write_posts`):
   messaggio (`NewsletterCampaign.sent_to_subscriber_ids`): un iscritto già
   notificato non riceve una seconda email se il worker viene interrotto a
   metà invio e il messaggio torna in coda.
-- `PATCH /blogs/{slug}/newsletter/settings` — body
-  `{newsletter_auto_notify_enabled}`. Disattiva/riattiva la notifica
-  automatica ad ogni post pubblicato per questo blog (attiva di default,
-  `Blog.newsletter_auto_notify_enabled`). Un solo invio automatico per
-  post, anche in caso di ripubblicazione (vincolo unique su `post_id`).
+- `PATCH /blogs/{slug}/newsletter/campaigns/{id}` / `DELETE .../campaigns/{id}`
+  — modifica (`{subject?, body_markdown?, scheduled_at?}`) o annulla una
+  campagna, **solo mentre `status=scheduled`** (409 altrimenti: una
+  campagna già `sending` può essere già stata presa in carico dal worker,
+  nessuna finestra sicura per intercettarla; le automatiche
+  `post_notification` nascono già `sending`, quindi non sono mai in questo
+  stato). `DELETE` non cancella la riga, la porta a `status=canceled` (il
+  worker la salta se il messaggio è già in coda). `scheduled_at` è
+  tri-state come le impostazioni sopra: omesso lascia invariato, `null` o
+  un istante nel passato converte subito la campagna in invio immediato
+  (stessa logica della creazione).
+- `GET /blogs/{slug}/newsletter/settings` / `PATCH .../newsletter/settings`
+  — `{newsletter_auto_notify_enabled, newsletter_sender_name,
+  newsletter_banner_url, newsletter_banner_alt_text}`. Il primo campo
+  disattiva/riattiva la notifica automatica ad ogni post pubblicato per
+  questo blog (attivo di default, `Blog.newsletter_auto_notify_enabled`),
+  un solo invio automatico per post anche in caso di ripubblicazione
+  (vincolo unique su `post_id`). Gli altri tre personalizzano l'email delle
+  campagne: nome visualizzato nell'header `From` (indirizzo resta sempre
+  `NOCT_SMTP_FROM_EMAIL`, mai un dominio arbitrario) e un banner mostrato in
+  cima al corpo HTML (`newsletter_banner_url` deve iniziare con `http://`
+  o `https://`, come i link nelle note/bibliografia). **PATCH è tri-state**:
+  un campo omesso nel body lascia il valore attuale invariato, `null` lo
+  azzera esplicitamente — vale anche per `newsletter_auto_notify_enabled`,
+  reso opzionale per questo. Default (tutti i campi assenti/vuoti): nome
+  mittente = titolo del blog, nessun banner.
+- Le email delle campagne (`app/workers/newsletter_consumer.py`) sono
+  `multipart/alternative`: un fallback testuale (client senza HTML, screen
+  reader) più una versione HTML con banner e `body_markdown` renderizzato
+  a HTML (`app/domain/markdown_render.py`, `markdown` + sanificazione
+  `nh3` — niente `<script>`/attributi `on*`/schema diverso da
+  `http`/`https`/`mailto` in `href`/`src`, stessa cautela delle note/
+  bibliografia). È l'unico punto del backend che renderizza Markdown lato
+  server: i post lo fanno solo lato frontend. Le altre email di piattaforma
+  (OTP, reset password) restano solo testo.
 
 **Digest di piattaforma** (Super Admin/Amministratore,
 `require_platform_admin`), stesse forme di sopra con `blog_id=None`:
 `GET /admin/newsletter/stats`, `GET /admin/newsletter/campaigns`,
-`POST /admin/newsletter/campaigns`.
+`POST /admin/newsletter/campaigns`, `PATCH`/`DELETE
+/admin/newsletter/campaigns/{id}` (stesse regole di editabilità/annullo di
+sopra), e `GET`/`PATCH /admin/newsletter/settings` — stesso schema
+tri-state di sopra ma senza `newsletter_auto_notify_enabled` (non
+applicabile a un digest non legato alla pubblicazione di un singolo blog),
+sorgente `platform_config` invece di `Blog`.
 
 ## CORS
 

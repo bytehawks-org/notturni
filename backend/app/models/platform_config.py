@@ -52,5 +52,11 @@ class PlatformConfig(Base):
     # coda a un elenco builtin, a differenza di reserved_blog_names: qui non
     # c'è un vincolo di sicurezza/namespace da preservare).
     interests: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, default=list)
+    # Personalizzazione delle email del digest di piattaforma (blog_id=None,
+    # app/workers/newsletter_consumer.py) — stesso schema delle colonne
+    # equivalenti su Blog per le campagne di un singolo blog.
+    newsletter_sender_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    newsletter_banner_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    newsletter_banner_alt_text: Mapped[str] = mapped_column(String(300), default="", nullable=False)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)

@@ -1107,5 +1107,37 @@ ALTER TABLE newsletter_campaigns ALTER COLUMN sent_to_subscriber_ids DROP DEFAUL
 
 UPDATE alembic_version SET version_num='c5d6e7f8a910' WHERE alembic_version.version_num = 'b4c5d6e7f809';
 
+-- Running upgrade c5d6e7f8a910 -> d6e7f8a9b021
+
+ALTER TABLE blogs ADD COLUMN newsletter_sender_name VARCHAR(120);
+
+ALTER TABLE blogs ADD COLUMN newsletter_banner_url VARCHAR(2048);
+
+ALTER TABLE blogs ADD COLUMN newsletter_banner_alt_text VARCHAR(300) DEFAULT '' NOT NULL;
+
+ALTER TABLE blogs ALTER COLUMN newsletter_banner_alt_text DROP DEFAULT;
+
+ALTER TABLE platform_config ADD COLUMN newsletter_sender_name VARCHAR(120);
+
+ALTER TABLE platform_config ADD COLUMN newsletter_banner_url VARCHAR(2048);
+
+ALTER TABLE platform_config ADD COLUMN newsletter_banner_alt_text VARCHAR(300) DEFAULT '' NOT NULL;
+
+ALTER TABLE platform_config ALTER COLUMN newsletter_banner_alt_text DROP DEFAULT;
+
+UPDATE alembic_version SET version_num='d6e7f8a9b021' WHERE alembic_version.version_num = 'c5d6e7f8a910';
+
+-- Running upgrade d6e7f8a9b021 -> e7f8a9b0c132
+
+ALTER TABLE posts ADD COLUMN cover_image_alt_text VARCHAR(300) DEFAULT '' NOT NULL;
+
+ALTER TABLE posts ALTER COLUMN cover_image_alt_text DROP DEFAULT;
+
+ALTER TABLE blogs ADD COLUMN cover_image_alt_text VARCHAR(300) DEFAULT '' NOT NULL;
+
+ALTER TABLE blogs ALTER COLUMN cover_image_alt_text DROP DEFAULT;
+
+UPDATE alembic_version SET version_num='e7f8a9b0c132' WHERE alembic_version.version_num = 'd6e7f8a9b021';
+
 COMMIT;
 

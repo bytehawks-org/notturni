@@ -102,6 +102,11 @@ export interface Blog {
   /** Invio automatico di una notifica newsletter ad ogni post pubblicato
    * (backend/app/api/v1/newsletter.py), gestito da PATCH .../newsletter/settings. */
   newsletter_auto_notify_enabled: boolean;
+  /** Come sopra, gestiti dallo stesso endpoint: nome mittente e banner
+   * mostrati nelle email di campagna (app/workers/newsletter_consumer.py). */
+  newsletter_sender_name: string | null;
+  newsletter_banner_url: string | null;
+  newsletter_banner_alt_text: string;
   default_locale: string;
   /** Lingue secondarie del blog (informative), oltre a default_locale. */
   extra_locales: string[];
@@ -120,6 +125,7 @@ export interface Blog {
   cover_image_url: string | null;
   cover_image_is_sensitive: boolean;
   cover_image_categories: SensitivityCategory[];
+  cover_image_alt_text: string;
   /** Favicon dedicata del blog (facoltativa): nessuna moderazione, icona di identità. */
   favicon_url: string | null;
   /** `null` per chiunque non sia il proprietario stesso (CLAUDE.md #8): non
@@ -239,6 +245,9 @@ export interface Post {
   cover_image_is_sensitive: boolean;
   /** Categorie di avviso scelte manualmente dal modal stile Bluesky (CLAUDE.md #3). */
   cover_image_categories: SensitivityCategory[];
+  /** Testo alternativo della cover (accessibilità), indipendente dall'eventuale
+   * alt text della stessa immagine in libreria media. */
+  cover_image_alt_text: string;
   status: PostStatus;
   published_at: string | null;
   created_at: string;
@@ -987,6 +996,48 @@ export interface NewsletterStats {
   confirmed: number;
   unsubscribed: number;
 }
+
+/** Configurazione delle campagne (backend/app/api/v1/newsletter.py): nome
+ * mittente e banner mostrati nell'email HTML, oltre all'avviso automatico
+ * per blog. PATCH è tri-state: un campo omesso lascia il valore invariato,
+ * `null` lo azzera esplicitamente. */
+export interface NewsletterSettings {
+  newsletter_auto_notify_enabled: boolean;
+  newsletter_sender_name: string | null;
+  newsletter_banner_url: string | null;
+  newsletter_banner_alt_text: string;
+}
+
+export type NewsletterSettingsUpdate = Partial<{
+  newsletter_auto_notify_enabled: boolean | null;
+  newsletter_sender_name: string | null;
+  newsletter_banner_url: string | null;
+  newsletter_banner_alt_text: string | null;
+}>;
+
+/** Come NewsletterSettings, per il digest di piattaforma (blog_id=None):
+ * nessun newsletter_auto_notify_enabled. */
+export interface AdminNewsletterSettings {
+  newsletter_sender_name: string | null;
+  newsletter_banner_url: string | null;
+  newsletter_banner_alt_text: string;
+}
+
+export type AdminNewsletterSettingsUpdate = Partial<{
+  newsletter_sender_name: string | null;
+  newsletter_banner_url: string | null;
+  newsletter_banner_alt_text: string | null;
+}>;
+
+/** Modificabile/annullabile solo mentre `status === "scheduled"` (backend
+ * app/api/v1/newsletter.py::_require_editable_campaign) — tri-state solo su
+ * `scheduled_at`: omesso lascia invariato, `null` o nel passato converte la
+ * campagna in invio immediato. */
+export type NewsletterCampaignUpdate = Partial<{
+  subject: string;
+  body_markdown: string;
+  scheduled_at: string | null;
+}>;
 
 export interface NewsletterCampaign {
   id: string;

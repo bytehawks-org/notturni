@@ -990,7 +990,9 @@
     "addWarning": "Aggiungi un avviso",
     "coverAlt": "Copertina del post",
     "uploading": "Caricamento…",
-    "uploadCta": "Carica immagine di copertina (16:9, 800 × 450 px)"
+    "uploadCta": "Carica immagine di copertina (16:9, 800 × 450 px)",
+    "altTextLabel": "Testo alternativo",
+    "altTextPlaceholder": "Descrivi l'immagine per chi non la vede"
   },
   "Editor": {
     "status": "Stato",
@@ -1627,10 +1629,12 @@
   },
   "NewsletterCampaignModal": {
     "title": "Nuova campagna",
+    "editTitle": "Modifica campagna",
     "subject": "Oggetto",
     "body": "Contenuto",
     "bodyHint": "Markdown supportato",
     "bodyPlaceholder": "Scrivi il contenuto dell'email…",
+    "bodyRequired": "Il contenuto dell'email non può essere vuoto.",
     "scheduledAt": "Pianifica per (facoltativo)",
     "scheduledAtHint": "lasciando vuoto, l'invio parte subito",
     "creating": "Creazione…",
@@ -1648,7 +1652,25 @@
     "recipients": "{count} destinatari",
     "failed": "{count} falliti",
     "sentAt": "inviata il {date}",
-    "scheduledAt": "pianificata per il {date}"
+    "scheduledAt": "pianificata per il {date}",
+    "cancelCampaign": "Annulla",
+    "confirmCancelCampaign": "Annullare questa campagna pianificata? Non verrà inviata."
+  },
+  "NewsletterSettingsCard": {
+    "title": "Configurazione email",
+    "hint": "Nome mittente e banner mostrati nelle email di campagna. Lasciali vuoti per usare i valori di default.",
+    "senderNameLabel": "Nome mittente",
+    "senderNamePlaceholder": "es. Redazione del blog",
+    "bannerLabel": "Banner",
+    "bannerPlaceholder": "https://...",
+    "bannerPreviewAlt": "Anteprima banner",
+    "uploadCta": "Carica",
+    "uploading": "Caricamento…",
+    "bannerAltLabel": "Testo alternativo del banner",
+    "bannerAltHint": "Per chi non vede l'immagine",
+    "bannerAltPlaceholder": "Descrivi il banner",
+    "uploadFailed": "Caricamento non riuscito.",
+    "saved": "Impostazioni salvate."
   },
   "AdminNewsletter": {
     "title": "Newsletter di piattaforma",
@@ -1660,7 +1682,9 @@
     "noCampaigns": "Nessuna campagna ancora inviata.",
     "recipients": "{count} destinatari",
     "sentAt": "inviata il {date}",
-    "scheduledAt": "pianificata per il {date}"
+    "scheduledAt": "pianificata per il {date}",
+    "cancelCampaign": "Annulla",
+    "confirmCancelCampaign": "Annullare questa campagna pianificata? Non verrà inviata."
   },
   "MyPostsPage": {
     "title": "Post",

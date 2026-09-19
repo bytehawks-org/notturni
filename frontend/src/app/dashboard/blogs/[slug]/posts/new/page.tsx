@@ -45,6 +45,7 @@ export default function NewPostPage() {
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
   const [coverImageIsSensitive, setCoverImageIsSensitive] = useState(false);
   const [coverImageCategories, setCoverImageCategories] = useState<SensitivityCategory[]>([]);
+  const [coverImageAltText, setCoverImageAltText] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [publicationId, setPublicationId] = useState<string | null>(null);
@@ -74,6 +75,7 @@ export default function NewPostPage() {
           cover_image_url: coverImageUrl,
           cover_image_is_sensitive: coverImageIsSensitive,
           cover_image_categories: coverImageCategories,
+          cover_image_alt_text: coverImageAltText,
           tags,
           category_id: categoryId,
           publication_id: publicationId,
@@ -147,6 +149,8 @@ export default function NewPostPage() {
               value={coverImageUrl}
               isSensitive={coverImageIsSensitive}
               categories={coverImageCategories}
+              altText={coverImageAltText}
+              onAltTextChange={setCoverImageAltText}
               onChange={(url, sensitive, categories) => {
                 setCoverImageUrl(url);
                 setCoverImageIsSensitive(sensitive);

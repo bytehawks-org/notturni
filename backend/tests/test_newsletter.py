@@ -265,4 +265,188 @@ async def test_blog_newsletter_settings_toggle(client: AsyncClient, make_user: C
         headers=owner.headers,
     )
     assert res.status_code == 200
-    assert res.json() == {"newsletter_auto_notify_enabled": False}
+    assert res.json() == {
+        "newsletter_auto_notify_enabled": False,
+        "newsletter_sender_name": None,
+        "newsletter_banner_url": None,
+        "newsletter_banner_alt_text": "",
+    }
+
+
+async def test_blog_newsletter_settings_sender_and_banner(client: AsyncClient, make_user: Callable) -> None:
+    owner: AuthedUser = await make_user("newsletter-owner-9")
+    slug = await _create_blog(client, owner, "blog-newsletter-9")
+
+    res = await client.patch(
+        f"/api/v1/blogs/{slug}/newsletter/settings",
+        json={
+            "newsletter_sender_name": "Redazione",
+            "newsletter_banner_url": "https://example.com/banner.png",
+            "newsletter_banner_alt_text": "Banner del blog",
+        },
+        headers=owner.headers,
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["newsletter_sender_name"] == "Redazione"
+    assert body["newsletter_banner_url"] == "https://example.com/banner.png"
+    assert body["newsletter_banner_alt_text"] == "Banner del blog"
+    # auto_notify_enabled omesso: resta invariato (default True), non azzerato
+    assert body["newsletter_auto_notify_enabled"] is True
+
+    # null esplicito azzera; il campo omesso lascia invariato (tri-state)
+    res = await client.patch(
+        f"/api/v1/blogs/{slug}/newsletter/settings",
+        json={"newsletter_sender_name": None},
+        headers=owner.headers,
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["newsletter_sender_name"] is None
+    assert body["newsletter_banner_url"] == "https://example.com/banner.png"
+
+
+async def test_blog_newsletter_settings_rejects_bad_banner_scheme(client: AsyncClient, make_user: Callable) -> None:
+    owner: AuthedUser = await make_user("newsletter-owner-10")
+    slug = await _create_blog(client, owner, "blog-newsletter-10")
+
+    res = await client.patch(
+        f"/api/v1/blogs/{slug}/newsletter/settings",
+        json={"newsletter_banner_url": "javascript:alert(1)"},
+        headers=owner.headers,
+    )
+    assert res.status_code == 422
+
+
+async def test_scheduled_campaign_can_be_edited_and_canceled(client: AsyncClient, make_user: Callable) -> None:
+    owner: AuthedUser = await make_user("newsletter-owner-11")
+    slug = await _create_blog(client, owner, "blog-newsletter-11")
+
+    create_res = await client.post(
+        f"/api/v1/blogs/{slug}/newsletter/campaigns",
+        json={"subject": "Prima versione", "body_markdown": "Corpo", "scheduled_at": "2099-01-01T10:00:00Z"},
+        headers=owner.headers,
+    )
+    assert create_res.status_code == 201, create_res.text
+    campaign = create_res.json()
+    assert campaign["status"] == "scheduled"
+
+    edit_res = await client.patch(
+        f"/api/v1/blogs/{slug}/newsletter/campaigns/{campaign['id']}",
+        json={"subject": "Versione corretta"},
+        headers=owner.headers,
+    )
+    assert edit_res.status_code == 200, edit_res.text
+    assert edit_res.json()["subject"] == "Versione corretta"
+    assert edit_res.json()["status"] == "scheduled"
+
+    cancel_res = await client.delete(
+        f"/api/v1/blogs/{slug}/newsletter/campaigns/{campaign['id']}",
+        headers=owner.headers,
+    )
+    assert cancel_res.status_code == 200, cancel_res.text
+    assert cancel_res.json()["status"] == "canceled"
+
+    # una campagna già annullata non è più modificabile
+    reedit_res = await client.patch(
+        f"/api/v1/blogs/{slug}/newsletter/campaigns/{campaign['id']}",
+        json={"subject": "Non dovrebbe passare"},
+        headers=owner.headers,
+    )
+    assert reedit_res.status_code == 409
+
+
+async def test_editing_scheduled_at_to_past_sends_immediately(
+    client: AsyncClient, make_user: Callable, captured_newsletter_campaigns: list[str]
+) -> None:
+    owner: AuthedUser = await make_user("newsletter-owner-12")
+    slug = await _create_blog(client, owner, "blog-newsletter-12")
+
+    create_res = await client.post(
+        f"/api/v1/blogs/{slug}/newsletter/campaigns",
+        json={"subject": "Pianificata", "body_markdown": "Corpo", "scheduled_at": "2099-01-01T10:00:00Z"},
+        headers=owner.headers,
+    )
+    campaign_id = create_res.json()["id"]
+    assert len(captured_newsletter_campaigns) == 0
+
+    edit_res = await client.patch(
+        f"/api/v1/blogs/{slug}/newsletter/campaigns/{campaign_id}",
+        json={"scheduled_at": None},
+        headers=owner.headers,
+    )
+    assert edit_res.status_code == 200, edit_res.text
+    assert edit_res.json()["status"] == "sending"
+    assert len(captured_newsletter_campaigns) == 1
+
+
+async def test_sending_campaign_cannot_be_edited_or_canceled(
+    client: AsyncClient, make_user: Callable, captured_newsletter_campaigns: list[str]
+) -> None:
+    owner: AuthedUser = await make_user("newsletter-owner-13")
+    slug = await _create_blog(client, owner, "blog-newsletter-13")
+
+    create_res = await client.post(
+        f"/api/v1/blogs/{slug}/newsletter/campaigns",
+        json={"subject": "Immediata", "body_markdown": "Corpo"},
+        headers=owner.headers,
+    )
+    campaign_id = create_res.json()["id"]
+    assert create_res.json()["status"] == "sending"
+
+    edit_res = await client.patch(
+        f"/api/v1/blogs/{slug}/newsletter/campaigns/{campaign_id}",
+        json={"subject": "Troppo tardi"},
+        headers=owner.headers,
+    )
+    assert edit_res.status_code == 409
+
+    cancel_res = await client.delete(
+        f"/api/v1/blogs/{slug}/newsletter/campaigns/{campaign_id}",
+        headers=owner.headers,
+    )
+    assert cancel_res.status_code == 409
+
+
+async def test_admin_can_edit_and_cancel_digest_campaign(client: AsyncClient, make_admin: Callable) -> None:
+    admin: AuthedUser = await make_admin("newsletter-admin-1")
+
+    create_res = await client.post(
+        "/api/v1/admin/newsletter/campaigns",
+        json={"subject": "Digest", "body_markdown": "Corpo", "scheduled_at": "2099-01-01T10:00:00Z"},
+        headers=admin.headers,
+    )
+    assert create_res.status_code == 201, create_res.text
+    campaign_id = create_res.json()["id"]
+
+    edit_res = await client.patch(
+        f"/api/v1/admin/newsletter/campaigns/{campaign_id}",
+        json={"subject": "Digest corretto"},
+        headers=admin.headers,
+    )
+    assert edit_res.status_code == 200
+    assert edit_res.json()["subject"] == "Digest corretto"
+
+    cancel_res = await client.delete(f"/api/v1/admin/newsletter/campaigns/{campaign_id}", headers=admin.headers)
+    assert cancel_res.status_code == 200
+    assert cancel_res.json()["status"] == "canceled"
+
+
+async def test_stranger_cannot_edit_blog_campaign(client: AsyncClient, make_user: Callable) -> None:
+    owner: AuthedUser = await make_user("newsletter-owner-14")
+    stranger: AuthedUser = await make_user("newsletter-stranger-1")
+    slug = await _create_blog(client, owner, "blog-newsletter-14")
+
+    create_res = await client.post(
+        f"/api/v1/blogs/{slug}/newsletter/campaigns",
+        json={"subject": "Privata", "body_markdown": "Corpo", "scheduled_at": "2099-01-01T10:00:00Z"},
+        headers=owner.headers,
+    )
+    campaign_id = create_res.json()["id"]
+
+    edit_res = await client.patch(
+        f"/api/v1/blogs/{slug}/newsletter/campaigns/{campaign_id}",
+        json={"subject": "Intrusione"},
+        headers=stranger.headers,
+    )
+    assert edit_res.status_code == 403

@@ -12,9 +12,10 @@ import { Pill } from "@/components/ui/Pill";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { formatDateTime } from "@/lib/format";
-import type { NewsletterCampaign, NewsletterCampaignStatus, NewsletterStats } from "@/lib/types";
+import type { NewsletterCampaign, NewsletterCampaignStatus, NewsletterSettings, NewsletterStats } from "@/lib/types";
 
 import { NewsletterCampaignModal } from "./NewsletterCampaignModal";
+import { NewsletterSettingsCard } from "./NewsletterSettingsCard";
 import { errorMessage } from "./shared";
 
 const STATUS_TONE: Record<NewsletterCampaignStatus, "neutral" | "ok" | "warn" | "info" | "danger"> = {
@@ -31,10 +32,10 @@ const STATUS_TONE: Record<NewsletterCampaignStatus, "neutral" | "ok" | "warn" | 
  * backend/app/api/v1/newsletter.py. */
 export function NewsletterTab({
   blogSlug,
-  initialAutoNotify,
+  initialSettings,
 }: {
   blogSlug: string;
-  initialAutoNotify: boolean;
+  initialSettings: NewsletterSettings;
 }) {
   const { authFetch } = useAuth();
   const t = useTranslations("NewsletterTab");
@@ -45,9 +46,11 @@ export function NewsletterTab({
 
   const [stats, setStats] = useState<NewsletterStats | null>(null);
   const [campaigns, setCampaigns] = useState<NewsletterCampaign[] | null>(null);
-  const [autoNotify, setAutoNotify] = useState(initialAutoNotify);
+  const [autoNotify, setAutoNotify] = useState(initialSettings.newsletter_auto_notify_enabled);
+  const [settings, setSettings] = useState(initialSettings);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [editingCampaign, setEditingCampaign] = useState<NewsletterCampaign | null>(null);
 
   const load = useCallback(() => {
     authFetch((token) => api.newsletter.blogStats(token, blogSlug))
@@ -66,6 +69,21 @@ export function NewsletterTab({
       await authFetch((token) => api.newsletter.updateBlogSettings(token, blogSlug, { newsletter_auto_notify_enabled: value }));
     } catch (err) {
       setAutoNotify(!value);
+      setError(errorMessage(err, tc("unexpectedError")));
+    }
+  }
+
+  async function handleSaveBranding(patch: Partial<NewsletterSettings>) {
+    const updated = await authFetch((token) => api.newsletter.updateBlogSettings(token, blogSlug, patch));
+    setSettings(updated);
+  }
+
+  async function handleCancelCampaign(campaignId: string) {
+    if (!window.confirm(t("confirmCancelCampaign"))) return;
+    try {
+      await authFetch((token) => api.newsletter.cancelBlogCampaign(token, blogSlug, campaignId));
+      load();
+    } catch (err) {
       setError(errorMessage(err, tc("unexpectedError")));
     }
   }
@@ -94,6 +112,12 @@ export function NewsletterTab({
         <Toggle checked={autoNotify} onChange={handleToggleAutoNotify} label={t("autoNotifyLabel")} />
         <p className="text-[13px] leading-relaxed text-muted">{t("autoNotifyHint")}</p>
       </Card>
+
+      <NewsletterSettingsCard
+        value={settings}
+        onSave={handleSaveBranding}
+        onUpload={(file) => authFetch((token) => api.blogs.uploadMedia(token, blogSlug, file))}
+      />
 
       <Card className="flex flex-col gap-3">
         <div className="flex items-baseline justify-between">
@@ -126,6 +150,16 @@ export function NewsletterTab({
                     {c.failed_count > 0 && ` · ${t("failed", { count: c.failed_count })}`}
                   </span>
                   <Pill tone={STATUS_TONE[c.status]}>{tStatus(c.status)}</Pill>
+                  {c.status === "scheduled" && (
+                    <>
+                      <Button variant="secondary" size="sm" onClick={() => setEditingCampaign(c)}>
+                        {tc("edit")}
+                      </Button>
+                      <Button variant="secondary" size="sm" onClick={() => handleCancelCampaign(c.id)}>
+                        {t("cancelCampaign")}
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}
@@ -134,11 +168,16 @@ export function NewsletterTab({
       </Card>
 
       <NewsletterCampaignModal
-        open={showModal}
+        open={showModal || editingCampaign !== null}
         blogSlug={blogSlug}
-        onCancel={() => setShowModal(false)}
+        editingCampaign={editingCampaign}
+        onCancel={() => {
+          setShowModal(false);
+          setEditingCampaign(null);
+        }}
         onCreated={() => {
           setShowModal(false);
+          setEditingCampaign(null);
           load();
         }}
       />

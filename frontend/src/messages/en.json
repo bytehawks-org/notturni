@@ -990,7 +990,9 @@
     "addWarning": "Add a warning",
     "coverAlt": "Post cover image",
     "uploading": "Uploading…",
-    "uploadCta": "Upload a cover image (16:9, 800 × 450 px)"
+    "uploadCta": "Upload a cover image (16:9, 800 × 450 px)",
+    "altTextLabel": "Alt text",
+    "altTextPlaceholder": "Describe the image for people who can't see it"
   },
   "Editor": {
     "status": "Status",
@@ -1627,10 +1629,12 @@
   },
   "NewsletterCampaignModal": {
     "title": "New campaign",
+    "editTitle": "Edit campaign",
     "subject": "Subject",
     "body": "Content",
     "bodyHint": "Markdown supported",
     "bodyPlaceholder": "Write the email content…",
+    "bodyRequired": "The email content can't be empty.",
     "scheduledAt": "Schedule for (optional)",
     "scheduledAtHint": "leave empty to send right away",
     "creating": "Creating…",
@@ -1648,7 +1652,25 @@
     "recipients": "{count} recipients",
     "failed": "{count} failed",
     "sentAt": "sent on {date}",
-    "scheduledAt": "scheduled for {date}"
+    "scheduledAt": "scheduled for {date}",
+    "cancelCampaign": "Cancel",
+    "confirmCancelCampaign": "Cancel this scheduled campaign? It won't be sent."
+  },
+  "NewsletterSettingsCard": {
+    "title": "Email configuration",
+    "hint": "Sender name and banner shown in campaign emails. Leave blank to use the defaults.",
+    "senderNameLabel": "Sender name",
+    "senderNamePlaceholder": "e.g. Blog editors",
+    "bannerLabel": "Banner",
+    "bannerPlaceholder": "https://...",
+    "bannerPreviewAlt": "Banner preview",
+    "uploadCta": "Upload",
+    "uploading": "Uploading…",
+    "bannerAltLabel": "Banner alt text",
+    "bannerAltHint": "For people who can't see the image",
+    "bannerAltPlaceholder": "Describe the banner",
+    "uploadFailed": "Upload failed.",
+    "saved": "Settings saved."
   },
   "AdminNewsletter": {
     "title": "Platform newsletter",
@@ -1660,7 +1682,9 @@
     "noCampaigns": "No campaign sent yet.",
     "recipients": "{count} recipients",
     "sentAt": "sent on {date}",
-    "scheduledAt": "scheduled for {date}"
+    "scheduledAt": "scheduled for {date}",
+    "cancelCampaign": "Cancel",
+    "confirmCancelCampaign": "Cancel this scheduled campaign? It won't be sent."
   },
   "MyPostsPage": {
     "title": "Posts",
