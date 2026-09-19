@@ -523,7 +523,11 @@ async def change_my_password(
     current_user.hashed_password = hash_password(payload.new_password)
     # Come il reset "password dimenticata" (app/domain/password_reset.py):
     # una password cambiata invalida ogni sessione già aperta altrove, non
-    # solo il refresh token della richiesta corrente.
+    # solo il refresh token della richiesta corrente. Le UserSession coprono
+    # solo i refresh token; gli access token JWT sono stateless e restano
+    # validi fino al loro exp naturale se non si aggiorna anche questo campo
+    # (controllato in app/api/deps.py::get_current_user contro l'iat del token).
+    current_user.credentials_changed_at = datetime.now(timezone.utc)
     await session.execute(delete(UserSession).where(UserSession.user_id == current_user.id))
     await session.commit()
     return StatusOut()

@@ -15,7 +15,16 @@ from app.models.post import Post
 # su quello dinamico). "pub" era mancante da B9 (todo/UX_REDESIGN.md): un
 # post con questo slug sarebbe già stato catturato dalla route
 # `/[blogSlug]/pub`, corretto qui insieme all'aggiunta di feed.xml/atom.xml.
-RESERVED_POST_SLUGS = {"bibliografia", "link", "media", "pagina", "pub", "feed.xml", "atom.xml"}
+RESERVED_POST_SLUGS = {
+    "bibliografia",
+    "link",
+    "media",
+    "pagina",
+    "pub",
+    "search",
+    "feed.xml",
+    "atom.xml",
+}
 
 
 def build_permalink(blog_slug: str, post: Post) -> str:

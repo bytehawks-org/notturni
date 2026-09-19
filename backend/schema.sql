@@ -6,6 +6,7 @@
 -- (vedi backend/README.md). Se lo schema cambia, questo file va rigenerato con
 -- lo stesso comando e ricommittato — non modificarlo a mano.
 
+
 BEGIN;
 
 CREATE TABLE alembic_version (
@@ -1091,6 +1092,20 @@ UPDATE alembic_version SET version_num='4d23cdb0ccc3' WHERE alembic_version.vers
 DELETE FROM alembic_version WHERE alembic_version.version_num = '4d23cdb0ccc3';
 
 UPDATE alembic_version SET version_num='a0579cc46db6' WHERE alembic_version.version_num = '769f5009bad5';
+
+-- Running upgrade a0579cc46db6 -> b4c5d6e7f809
+
+ALTER TABLE users ADD COLUMN credentials_changed_at TIMESTAMP WITH TIME ZONE;
+
+UPDATE alembic_version SET version_num='b4c5d6e7f809' WHERE alembic_version.version_num = 'a0579cc46db6';
+
+-- Running upgrade b4c5d6e7f809 -> c5d6e7f8a910
+
+ALTER TABLE newsletter_campaigns ADD COLUMN sent_to_subscriber_ids UUID[] DEFAULT '{}' NOT NULL;
+
+ALTER TABLE newsletter_campaigns ALTER COLUMN sent_to_subscriber_ids DROP DEFAULT;
+
+UPDATE alembic_version SET version_num='c5d6e7f8a910' WHERE alembic_version.version_num = 'b4c5d6e7f809';
 
 COMMIT;
 

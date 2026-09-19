@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
-from app.core.security import decode_access_token
+from app.core.security import decode_access_token_with_issued_at
 from app.domain.api_tokens import TOKEN_PREFIX, hash_token
 from app.models.api_token import ApiToken, ApiTokenOwnerType
 from app.models.audit_log import AuditActorType
@@ -45,13 +45,15 @@ async def get_current_user(
     (password o SSO) — distinto da get_current_token, che valida gli API
     token opachi del motore core / accesso diretto degli utenti."""
     try:
-        user_id = decode_access_token(credentials.credentials)
+        user_id, issued_at = decode_access_token_with_issued_at(credentials.credentials)
     except ValueError as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
 
     user = await session.get(User, user_id)
     if user is None or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Utente non valido.")
+    if user.credentials_changed_at is not None and issued_at < user.credentials_changed_at:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sessione non più valida: la password è stata cambiata.")
     return user
 
 
@@ -64,11 +66,13 @@ async def get_optional_current_user(
     if credentials is None:
         return None
     try:
-        user_id = decode_access_token(credentials.credentials)
+        user_id, issued_at = decode_access_token_with_issued_at(credentials.credentials)
     except ValueError:
         return None
     user = await session.get(User, user_id)
     if user is None or not user.is_active:
+        return None
+    if user.credentials_changed_at is not None and issued_at < user.credentials_changed_at:
         return None
     return user
 

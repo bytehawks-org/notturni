@@ -73,6 +73,14 @@ via `Authorization: Bearer` con l'access token, di per sé immune a CSRF —
 un'origine estranea non può impostare quell'header su una richiesta
 cross-site.
 
+Un cambio password (`POST /users/me/password`, reset "password dimenticata")
+cancella le sessioni (`UserSession`, quindi i refresh token) ma un access
+token JWT già emesso resterebbe altrimenti valido fino al suo `exp` naturale
+(15 minuti), essendo stateless. `User.credentials_changed_at` chiude questa
+finestra: `get_current_user`/`get_current_user_optional` confrontano l'`iat`
+del token con questo campo e rifiutano (401) ogni token emesso prima
+dell'ultimo cambio password.
+
 ## Autenticazione utente (password, MFA, SSO)
 
 ### Registrazione e login con password
@@ -1999,7 +2007,9 @@ almeno una traduzione non vuota per voce, massimo 200 voci; seminato alla
 creazione della riga da `NOCT_DEFAULT_INTERESTS` (JSON, stesso schema) se
 valorizzata, altrimenti da un elenco builtin curato
 (`app/domain/interests.py::DEFAULT_INTERESTS`) — vedi `GET /api/v1/interests`
-sotto per l'elenco pubblico e `PATCH /users/me` per la scelta dell'utente).
+sotto per l'elenco pubblico e `PATCH /users/me` per la scelta dell'utente;
+rimuovere una chiave qui ripulisce anche `User.interests` di ogni utente che
+l'aveva selezionata, non solo l'elenco di piattaforma).
 Ogni modifica va nel registro (`platform.config_updated`, con
 `changes: {campo: {from, to}}`) e, se cambia un campo `footer_*`, invalida la
 cache del frontend sul tag condiviso `platform-footer` (tutte le pagine
@@ -2290,7 +2300,13 @@ stessa logica di `can_write_posts`):
   scheduled_at?}`. Senza `scheduled_at` (o nel passato): invio immediato
   (`status=sending`, accodato su RabbitMQ). Con `scheduled_at` futuro:
   resta `status=scheduled` — **nessuno scheduler la invia ancora
-  automaticamente**, è solo lo stato persistito.
+  automaticamente**, è solo lo stato persistito. `scheduled_at` deve
+  includere il fuso orario (es. suffisso `Z` o `+00:00`): un valore naive
+  è rifiutato con 422, non confrontabile con l'istante corrente. L'invio
+  (`app/workers/newsletter_consumer.py`) è idempotente su ridelivery del
+  messaggio (`NewsletterCampaign.sent_to_subscriber_ids`): un iscritto già
+  notificato non riceve una seconda email se il worker viene interrotto a
+  metà invio e il messaggio torna in coda.
 - `PATCH /blogs/{slug}/newsletter/settings` — body
   `{newsletter_auto_notify_enabled}`. Disattiva/riattiva la notifica
   automatica ad ogni post pubblicato per questo blog (attiva di default,

@@ -131,6 +131,12 @@ async def _process_campaign(session: AsyncSession, campaign_id: str) -> None:
     if campaign.status == NewsletterCampaignStatus.CANCELED:
         logger.info("Campagna %s annullata, non invio nulla", campaign_id)
         return
+    if campaign.status == NewsletterCampaignStatus.SENT:
+        # Ridelivery del messaggio dopo un invio già completato con successo
+        # (nack/requeue arrivato dopo il commit finale ma prima dell'ack, o
+        # più messaggi in coda per la stessa campagna): non rispedire nulla.
+        logger.info("Campagna %s già inviata, ignoro la ridelivery", campaign_id)
+        return
 
     campaign.status = NewsletterCampaignStatus.SENDING
     await session.commit()
@@ -146,8 +152,13 @@ async def _process_campaign(session: AsyncSession, campaign_id: str) -> None:
         return
     subject, body = content
 
-    recipients = await _recipients(session, campaign)
-    sent_count = 0
+    # sent_to_subscriber_ids copre il caso di ridelivery a metà: il worker
+    # interrotto tra un invio e l'altro fa ripartire _process_campaign da
+    # capo (status resta SENDING), ma senza rispedire a chi ha già ricevuto
+    # l'email nel tentativo precedente.
+    already_sent = set(campaign.sent_to_subscriber_ids)
+    recipients = [s for s in await _recipients(session, campaign) if s.id not in already_sent]
+    sent_ids = list(campaign.sent_to_subscriber_ids)
     failed_count = 0
     for subscriber in recipients:
         try:
@@ -156,7 +167,6 @@ async def _process_campaign(session: AsyncSession, campaign_id: str) -> None:
                 subject=subject,
                 body=body + _footer(list_label=list_label, subscriber=subscriber),
             )
-            sent_count += 1
         except MailNotConfigured:
             # sviluppo locale senza SMTP: non è un fallimento del singolo
             # destinatario, ma dell'intera infrastruttura — stesso comportamento
@@ -164,17 +174,25 @@ async def _process_campaign(session: AsyncSession, campaign_id: str) -> None:
             logger.warning(
                 "NOCT_SMTP_HOST non configurato — invio a %s non effettuato (solo log).", subscriber.email
             )
+            continue
         except Exception:
             logger.exception("Invio newsletter fallito per %s (campagna %s)", subscriber.email, campaign_id)
             failed_count += 1
+            continue
+        sent_ids.append(subscriber.id)
+        # Commit per destinatario, non solo a fine ciclo: se il worker viene
+        # interrotto qui, la ridelivery successiva riparte dal destinatario
+        # giusto invece di rispedire a chi è già in sent_ids.
+        campaign.sent_to_subscriber_ids = list(sent_ids)
+        await session.commit()
 
-    campaign.recipient_count = sent_count
+    campaign.recipient_count = len(sent_ids)
     campaign.failed_count = failed_count
     campaign.status = NewsletterCampaignStatus.SENT
     campaign.sent_at = datetime.now(timezone.utc)
     await session.commit()
     logger.info(
-        "Campagna %s inviata: %d destinatari, %d falliti", campaign_id, sent_count, failed_count
+        "Campagna %s inviata: %d destinatari, %d falliti", campaign_id, len(sent_ids), failed_count
     )
 
 

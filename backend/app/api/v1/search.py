@@ -4,8 +4,6 @@ per singolo blog (`GET /blogs/{blog_slug}/search`, app/api/v1/posts.py) che
 resta ristretta al sottodominio del blog. Router separato dagli altri per lo
 stesso motivo di feed.py: attraversa blog diversi, non uno scoped da slug."""
 
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,9 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_optional_current_user
 from app.api.v1.posts import PostOut, _posts_out
 from app.core.database import get_session
-from app.domain.authorization import blog_publicly_listable_clause
+from app.domain.authorization import blog_publicly_listable_clause, publicly_visible_clause
 from app.models.blog import Blog
-from app.models.post import Post, PostStatus
+from app.models.post import Post
 from app.models.user import User
 
 router = APIRouter()
@@ -50,9 +48,7 @@ async def search_posts(
         select(Post, Blog)
         .join(Blog, Post.blog_id == Blog.id)
         .where(
-            Post.status == PostStatus.PUBLISHED,
-            Post.published_at <= datetime.now(timezone.utc),
-            Post.is_hidden.is_(False),
+            publicly_visible_clause(),
             blog_publicly_listable_clause(),
             or_(Post.title.ilike(needle), Post.content.ilike(needle)),
         )

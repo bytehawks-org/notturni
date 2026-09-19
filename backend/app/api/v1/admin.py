@@ -1070,12 +1070,28 @@ async def update_admin_config(
                     f"Il testo del footer supera i {MAX_FOOTER_MARKDOWN_LENGTH} caratteri.",
                 )
             apply(field, value or None)
+    removed_interest_keys: set[str] = set()
     if payload.interests is not None:
         try:
             cleaned_interests = validate_interest_list(payload.interests)
         except ValueError as exc:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        removed_interest_keys = {i["key"] for i in config.interests} - {i["key"] for i in cleaned_interests}
         apply("interests", cleaned_interests)
+
+    if removed_interest_keys:
+        # Le chiavi rimosse dall'elenco di piattaforma non sono più valide per
+        # PATCH /users/me (validate_user_interest_keys), ma le selezioni già
+        # salvate su User.interests non vengono toccate da sole: andrebbero
+        # orfane (una chiave che non esiste più in nessuna traduzione).
+        # User.interests è un ARRAY "core" (sqlalchemy.ARRAY, non il tipo
+        # dialect-specific postgresql.ARRAY): niente comparator .overlap(),
+        # serve l'operatore "&&" esplicito.
+        affected = await session.execute(
+            select(User).where(User.interests.op("&&")(list(removed_interest_keys)))
+        )
+        for user in affected.scalars():
+            user.interests = [k for k in user.interests if k not in removed_interest_keys]
 
     if changes:
         touch(config, by_id=current_user.id)

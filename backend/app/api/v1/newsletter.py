@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -92,6 +92,16 @@ class CampaignCreateRequest(BaseModel):
     subject: str
     body_markdown: str
     scheduled_at: datetime | None = None
+
+    @field_validator("scheduled_at")
+    @classmethod
+    def _scheduled_at_must_be_aware(cls, value: datetime | None) -> datetime | None:
+        # confrontato con datetime.now(timezone.utc) più sotto: un valore
+        # naive (senza offset, es. "2026-01-01T10:00:00") solleverebbe
+        # TypeError a runtime invece di un 422 leggibile per il client.
+        if value is not None and value.tzinfo is None:
+            raise ValueError("scheduled_at deve includere il fuso orario (es. suffisso 'Z' o '+00:00').")
+        return value
 
 
 class NewsletterSettingsRequest(BaseModel):
