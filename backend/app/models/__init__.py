@@ -22,6 +22,13 @@ from app.models.gdpr_request import GdprRequest, GdprRequestStatus, GdprRequestT
 from app.models.link_preview import LinkPreviewCache
 from app.models.media_file import MediaFile
 from app.models.mfa_email_code import MfaEmailCode
+from app.models.newsletter import (
+    NewsletterCampaign,
+    NewsletterCampaignKind,
+    NewsletterCampaignStatus,
+    NewsletterSubscriber,
+    NewsletterSubscriberStatus,
+)
 from app.models.page import Page
 from app.models.password_reset_code import PasswordResetCode
 from app.models.platform_config import PlatformConfig
@@ -94,4 +101,9 @@ __all__ = [
     "BlogFollow",
     "SocialLink",
     "Tag",
+    "NewsletterSubscriber",
+    "NewsletterSubscriberStatus",
+    "NewsletterCampaign",
+    "NewsletterCampaignKind",
+    "NewsletterCampaignStatus",
 ]

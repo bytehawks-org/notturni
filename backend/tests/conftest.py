@@ -301,3 +301,31 @@ def captured_post_backups(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
 
     monkeypatch.setattr("app.api.v1.posts.publish_post_backup", _fake_publish)
     return sent
+
+
+@pytest.fixture
+def captured_newsletter_confirmations(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
+    """Cattura le email di conferma iscrizione newsletter che verrebbero
+    accodate su RabbitMQ, senza richiedere RabbitMQ in esecuzione durante i test."""
+    sent: list[dict] = []
+
+    def _fake_publish(email: str, token: str, list_label: str, locale: str | None) -> None:
+        sent.append({"email": email, "token": token, "list_label": list_label, "locale": locale})
+
+    monkeypatch.setattr("app.api.v1.newsletter.publish_newsletter_confirmation", _fake_publish)
+    return sent
+
+
+@pytest.fixture
+def captured_newsletter_campaigns(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Cattura gli id delle campagne newsletter accodate per l'invio (dalla
+    creazione di una campagna manuale o dall'hook di post-pubblicazione),
+    senza richiedere RabbitMQ in esecuzione durante i test."""
+    sent: list[str] = []
+
+    def _fake_publish(campaign_id: str) -> None:
+        sent.append(campaign_id)
+
+    monkeypatch.setattr("app.api.v1.newsletter.publish_newsletter_campaign", _fake_publish)
+    monkeypatch.setattr("app.api.v1.posts.publish_newsletter_campaign", _fake_publish)
+    return sent

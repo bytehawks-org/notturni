@@ -94,6 +94,11 @@ class Blog(Base, UUIDPKMixin, TimestampMixin):
     # app/domain/seo.py::effective_search_indexing/effective_ai_crawling).
     search_indexing_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     ai_crawling_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Newsletter (app/models/newsletter.py): invio automatico di una
+    # campagna agli iscritti confermati del blog ad ogni pubblicazione di un
+    # post (vedi app/api/v1/posts.py:publish_post). Attivo di default,
+    # disattivabile dal proprietario.
+    newsletter_auto_notify_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # Sospensione da parte di un admin di piattaforma (dashboard/blog): blog
     # irraggiungibile pubblicamente e non scrivibile finché non viene
     # riattivato, indipendentemente da `visibility` — vedi app/domain/authorization.py.
