@@ -105,7 +105,10 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
 - **Profilo utente:** bio estesa (nome, cognome, paese, lingua madre e lingue
   di fallback), username modificabile (al massimo un cambio ogni 5 giorni;
   citato ovunque per id, non per stringa: un cambio consentito si riflette
-  subito su post, commenti e autocomplete `@menzioni`), cambio email con
+  subito su post, commenti e autocomplete `@menzioni`, verificato in tempo
+  reale in fase di registrazione), cambio password da loggati (vecchia +
+  nuova password, revoca tutte le sessioni attive, oltre al recupero via
+  email già esistente), cambio email con
   doppia verifica (codice alla vecchia casella e poi alla nuova), alias
   pubblico globale alternativo allo username, scelta di cosa mostrare come
   nome autore sui propri post (username, nome e cognome, o alias), avatar
@@ -159,7 +162,10 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
 - **Gestione del blog:** panoramica con letture aggregate (senza cookie),
   libreria media e libreria note (tipo, DOI, duplicati, BibTeX), coda
   commenti con bloccati e segnalazioni, pausa/trasferimento/export ZIP/
-  cancellazione con 30 giorni di tolleranza.
+  cancellazione con 30 giorni di tolleranza. Viste aggregate nella sidebar
+  della dashboard (Post, Media, Pubblicazioni, Link, Bibliografia) su
+  **tutti** i blog dell'utente insieme, ciascun elemento etichettato con il
+  blog di provenienza.
 - **Amministrazione estesa:** segnalazioni dai lettori con pannello e nota di
   audit obbligatoria, impostazioni di piattaforma persistite, coda richieste
   GDPR con seconda approvazione, lingua dell'interfaccia (it/en).

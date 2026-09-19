@@ -154,6 +154,42 @@ se la sessione era già revocata o il cookie assente). `403` senza
 **`GET /api/v1/auth/me`** — richiede sessione. Ritorna
 `{id, username, email, mfa_enabled}`.
 
+**`GET /api/v1/auth/username-available?username=...`** — pubblico, nessuna
+sessione richiesta. Rate limit 30 richieste/minuto per IP. Verifica formato
+(`app/domain/usernames.py::validate_username` — lunghezza, caratteri
+ammessi, parole riservate) e unicità con la stessa query di
+`register_user`:
+
+```json
+{"available": true, "reason": null}
+{"available": false, "reason": "invalid_format"}
+{"available": false, "reason": "taken"}
+```
+
+Pensato per il controllo dal vivo mentre l'utente digita in fase di
+registrazione — non sostituisce la validazione di unicità fatta comunque a
+`POST /auth/register` (race condition tra il check e il submit sempre
+possibile, gestita lì).
+
+### Cambio password da loggati
+
+**`POST /api/v1/users/me/password`** — richiede sessione.
+
+```json
+{"current_password": "...", "new_password": "..."}
+```
+
+→ `200 {"status": "ok"}`. Verifica `current_password` contro l'hash
+esistente (stessa funzione del login), applica la policy minima di 10
+caratteri, e **revoca tutte le sessioni attive** dell'utente — stesso
+principio di `POST /auth/password/reset` sopra (`app/domain/password_reset.py`),
+qui applicato esplicitamente perché prima d'ora non esisteva alcun modo di
+cambiare la password restando loggati, solo il reset via email (senza
+vecchia password). La sessione corrente viene chiusa anch'essa: il client
+deve rifare login con la nuova password. `400` se `current_password` è
+sbagliata, se `new_password` non rispetta la policy minima, o se l'account
+non ha una password impostata (utente collegato solo via SSO).
+
 ### Password dimenticata
 
 **`POST /api/v1/auth/password/forgot`**
@@ -1396,6 +1432,62 @@ questa vista derivata.
 proprietario del frammento (`404` altrimenti, non `403`: non rivela
 l'esistenza del frammento a chi non è suo). `204` se rimosso.
 
+### Viste aggregate su tutti i blog dell'utente
+
+Cinque endpoint, tutti `GET /api/v1/users/me/...`, richiedono sessione,
+nessuna paginazione (come le liste per-singolo-blog che generalizzano).
+Ambito comune: **tutti i blog di cui l'utente è proprietario o
+collaboratore** (`app/domain/blog_scope.py::my_blog_ids`, union tra
+`Blog.owner_id` e `BlogMembership.user_id`, blog cancellati esclusi) — non
+un solo blog per volta come le rispettive tab in `dashboard/blogs/{slug}`,
+che restano l'unico modo per modificare/caricare/eliminare questi
+contenuti (queste viste sono di sola lettura). Ogni elemento porta
+`blog_slug`/`blog_title` per sapere da quale blog proviene.
+
+**`GET /api/v1/users/me/posts`** — tutti i post (qualunque stato: bozza,
+revisione, pubblicato, pianificato) di tutti i blog dell'utente, dal più
+recente. Stesso schema di risposta di `GET /blogs/{slug}/posts` (`PostOut`,
+già include `blog_slug`/`permalink`), generalizzato a più blog.
+
+**`GET /api/v1/users/me/media`** — generalizza `GET /blogs/{slug}/media`
+(sezione "Libreria media del blog" sotto), stesso schema per riga (alt,
+didascalia, categorie, sensibilità, "usato in") più `blog_slug`/`blog_title`:
+
+```json
+[{
+  "id": "...", "url": "...", "content_type": "image/jpeg", "size_bytes": 12345,
+  "alt_text": "...", "caption": null, "categories": [], "is_sensitive": false,
+  "uploader_username": "mario", "created_at": "...",
+  "used_in": [{"post_id": "...", "post_slug": "...", "post_title": "...", "permalink": "/blog/post"}],
+  "blog_slug": "...", "blog_title": "..."
+}]
+```
+
+**`GET /api/v1/users/me/publications`** — generalizza `GET
+/blogs/{slug}/publications` (sezione "Pubblicazioni" sotto), stessi
+conteggi capitoli totali/pubblicati per pubblicazione, più
+`blog_slug`/`blog_title`.
+
+**`GET /api/v1/users/me/links`** — generalizza `GET
+/blogs/{slug}/links-bibliography` (sezione "Anteprima di un link"/
+bibliografia sotto) a più blog, raggruppato per URL identico su tutti i
+post. **Vista autore**: a differenza dell'endpoint pubblico che generalizza,
+non applica il filtro di visibilità pubblica — un autore vede qui anche i
+link nelle proprie bozze. Ogni citazione porta `blog_slug`/`blog_title`.
+
+```json
+[{"url": "...", "link_text": "...", "citations": [
+  {"post_title": "...", "post_slug": "...", "permalink": "...", "locale": "it", "used_at": "...", "blog_slug": "...", "blog_title": "..."}
+]}]
+```
+
+**`GET /api/v1/users/me/bibliography`** — generalizza la bibliografia delle
+note a piè di pagina (sezione "Libreria note del blog" sotto) a più blog,
+raggruppate per testo nota identico, stessa vista-autore (nessun filtro di
+visibilità pubblica) e stessa cautela sugli URL non http(s) su note create
+prima della validazione di schema. Ogni citazione porta
+`blog_slug`/`blog_title`.
+
 ## Pagine statiche (sito principale)
 
 Pagine come Chi siamo, Contatti, Privacy — non legate a un blog utente
@@ -2127,6 +2219,13 @@ giorni (default 7, massimo 90), dal più frequente:
 param opzionali: `days`, `limit` (default 10, massimo 30). Non esistono
 ancora contatori di like/condivisioni in piattaforma (vedi ROADMAP.md): è
 l'unica base disponibile oggi per una sezione "di tendenza".
+
+**`GET /api/v1/feed/locales`** — pubblico, nessuna autenticazione. Conteggio
+post per lingua, stessi filtri di visibilità di `GET /feed/posts`, dal più
+usato, **massimo 5 risultati**, solo lingue con almeno un post:
+`[{"locale": "it", "count": 42}, {"locale": "en", "count": 7}]`. Pensato
+per i pill del filtro lingua sulla homepage — sostituisce un elenco statico
+di lingue hardcoded che poteva mostrare lingue senza alcun post.
 
 ## Ricerca
 
