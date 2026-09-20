@@ -12,6 +12,7 @@ import { FieldGroup, Input, Label, TextArea } from "@/components/ui/Field";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { formatDate } from "@/lib/format";
+import { useNonce } from "@/lib/nonce-context";
 import type { Comment, CommentsMode } from "@/lib/types";
 
 interface CommentFormProps {
@@ -196,6 +197,7 @@ function CommentItem({
  * form/inviti ad accedere, elenco con risposte a un livello. */
 export function CommentsSection({ postId, mode }: { postId: string; mode: CommentsMode }) {
   const { user } = useAuth();
+  const nonce = useNonce();
   const t = useTranslations("CommentsSection");
   const tc = useTranslations("Common");
   const [comments, setComments] = useState<Comment[] | null>(null);
@@ -252,7 +254,13 @@ export function CommentsSection({ postId, mode }: { postId: string; mode: Commen
         <span className="text-[13px] text-muted">{policy}</span>
       </div>
       {mode === "everyone" && (
-        <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="lazyOnload" async defer />
+        <Script
+          src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+          strategy="lazyOnload"
+          async
+          defer
+          nonce={nonce ?? undefined}
+        />
       )}
       {error && <Alert kind="error">{error}</Alert>}
 
