@@ -3,6 +3,7 @@ import uuid
 
 from authlib.integrations.starlette_client import OAuthError
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -518,18 +519,32 @@ async def sso_login(provider: str, request: Request, session: AsyncSession = Dep
     return await client.authorize_redirect(request, redirect_uri)
 
 
-@router.get("/sso/{provider}/callback", response_model=SessionResponse | MfaRequiredResponse)
-async def sso_callback(
-    provider: str, request: Request, response: Response, session: AsyncSession = Depends(get_session)
-):
+def _sso_frontend_base_url() -> str:
+    """Origine pubblica del frontend per i redirect di fine flow SSO — questo
+    endpoint è raggiunto da una navigazione vera del browser (redirect
+    OAuth), mai da una fetch: non può restituire JSON perché nessun codice
+    JS è lì a leggerlo, deve sempre chiudere con un redirect verso una
+    pagina reale. cors_origins è già l'origine pubblica esatta del frontend
+    (in produzione coincide con oauth_redirect_base_url perché frontend e
+    backend condividono lo stesso host tramite il routing path-based di
+    k8s/ingress.yaml, ma in sviluppo locale sono porte diverse — 3000 vs
+    8000 — da cui la necessità di un valore a sé)."""
+    origins = settings.cors_allowed_origins
+    return origins[0] if origins else settings.oauth_redirect_base_url
+
+
+@router.get("/sso/{provider}/callback")
+async def sso_callback(provider: str, request: Request, session: AsyncSession = Depends(get_session)):
+    frontend_url = _sso_frontend_base_url()
+
     if provider not in configured_providers():
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, f"Provider '{provider}' non configurato.")
+        return RedirectResponse(f"{frontend_url}/login?sso_error=1", status_code=status.HTTP_303_SEE_OTHER)
 
     client = oauth.create_client(provider)
     try:
         token = await client.authorize_access_token(request)
-    except OAuthError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    except OAuthError:
+        return RedirectResponse(f"{frontend_url}/login?sso_error=1", status_code=status.HTTP_303_SEE_OTHER)
 
     if provider == "github":
         profile_data = (await client.get("user", token=token)).json()
@@ -545,7 +560,7 @@ async def sso_callback(
         email = profile_data.get("email")
 
     if not email:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Email non disponibile dal provider.")
+        return RedirectResponse(f"{frontend_url}/login?sso_error=1", status_code=status.HTTP_303_SEE_OTHER)
 
     ext_profile = ExternalProfile(
         provider=SsoProvider(provider), provider_user_id=provider_user_id, email=email
@@ -565,11 +580,15 @@ async def sso_callback(
         )
         if pending.user.mfa_method == MfaMethod.EMAIL:
             await send_email_otp(session, pending.user)
-        return MfaRequiredResponse(method=pending.user.mfa_method.value, challenge=challenge)
+        return RedirectResponse(
+            f"{frontend_url}/login?mfa_challenge={challenge}&mfa_method={pending.user.mfa_method.value}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
 
     await audit.record(
         session, action="auth.login", actor=user, request=request, payload={"method": f"sso_{provider}"}
     )
-    access_token, refresh_token = await issue_session(session, user)
-    _set_session_cookies(response, refresh_token)
-    return SessionResponse(access_token=access_token)
+    _, refresh_token = await issue_session(session, user)
+    redirect = RedirectResponse(f"{frontend_url}/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+    _set_session_cookies(redirect, refresh_token)
+    return redirect

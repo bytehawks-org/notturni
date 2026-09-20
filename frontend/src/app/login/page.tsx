@@ -2,8 +2,8 @@
 
 import { useTranslations } from "next-intl";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
 
 import { OtpInput, OTP_INPUT_LENGTH } from "@/components/auth/OtpInput";
 import { SsoButtons } from "@/components/auth/SsoButtons";
@@ -17,26 +17,53 @@ import { isMfaRequired } from "@/lib/types";
 const OTP_LENGTH = OTP_INPUT_LENGTH;
 
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login, verifyMfa } = useAuth();
   const t = useTranslations("Auth");
   const tc = useTranslations("Common");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  const [challenge, setChallenge] = useState<string | null>(null);
-  const [mfaMethod, setMfaMethod] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [ssoProviders, setSsoProviders] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Arrivo da un redirect del backend dopo un login SSO (navigazione vera
+  // del browser, non una fetch — backend/app/api/v1/auth.py::sso_callback
+  // non può restituire il challenge nel corpo di una risposta letta da JS,
+  // lo passa in query string): stato iniziale letto direttamente da
+  // useSearchParams(), disponibile già al primo render, non da un effect
+  // che chiamerebbe setState sincronicamente. `mfa_challenge`/`mfa_method`
+  // arrivano quando l'account ha già l'MFA attivo (collegamento del
+  // provider in sospeso); `sso_error` per un provider non configurato,
+  // negato dall'utente o senza email disponibile.
+  const [challenge, setChallenge] = useState<string | null>(() => searchParams.get("mfa_challenge"));
+  const [mfaMethod, setMfaMethod] = useState<string | null>(() => searchParams.get("mfa_method"));
+  const [error, setError] = useState<string | null>(() => (searchParams.get("sso_error") ? t("ssoError") : null));
 
   useEffect(() => {
     api.config
       .get()
       .then((c) => setSsoProviders(c.sso_providers ?? []))
       .catch(() => undefined);
+  }, []);
+
+  // Ripulisce la query string letta sopra, non lasciarla visibile/
+  // ricaricabile dalla history del browser.
+  useEffect(() => {
+    if (searchParams.get("mfa_challenge") || searchParams.get("sso_error")) {
+      router.replace("/login");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleLogin(event: FormEvent) {

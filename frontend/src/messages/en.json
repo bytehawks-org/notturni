@@ -619,6 +619,7 @@
   "Auth": {
     "ssoDivider": "or",
     "ssoContinueWith": "Continue with {provider}",
+    "ssoError": "Sign-in with this provider failed. Try again or use email and password.",
     "welcomeBack": "Welcome back",
     "loginIntro": "Sign in with your email. The username is never used to sign in.",
     "email": "Email",

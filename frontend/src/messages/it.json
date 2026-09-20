@@ -619,6 +619,7 @@
   "Auth": {
     "ssoDivider": "oppure",
     "ssoContinueWith": "Continua con {provider}",
+    "ssoError": "Accesso con questo provider non riuscito. Riprova o usa email e password.",
     "welcomeBack": "Bentornato/a",
     "loginIntro": "Accedi con la tua email. Lo username non serve mai per l'accesso.",
     "email": "Email",

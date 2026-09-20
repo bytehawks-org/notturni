@@ -273,13 +273,23 @@ provider, scambia il code, recupera l'userinfo e applica l'account linking:
 - utente esistente con la stessa email, **senza** MFA → collegamento
   immediato e login;
 - utente esistente con la stessa email, **con** MFA attiva → non collega
-  subito: ritorna `{"mfa_required": true, "method": ..., "challenge": ...}`
-  come nel login normale. Il completamento del collegamento avviene dentro
-  `/auth/mfa/verify`, che riconosce il challenge come "collegamento SSO in
-  sospeso" e lo finalizza dopo la verifica del codice.
+  subito, richiede la verifica del codice. Il completamento del
+  collegamento avviene dentro `/auth/mfa/verify`, che riconosce il
+  challenge come "collegamento SSO in sospeso" e lo finalizza dopo la
+  verifica del codice.
 
-Risposta finale (login riuscito, senza MFA da verificare): stesso formato di
-`/auth/login` (`access_token` nel corpo, refresh token nel cookie).
+**Risposta: sempre un redirect (`303`) verso il frontend, mai JSON** — a
+differenza di ogni altro endpoint di questa sezione, questo è raggiunto da
+una navigazione vera del browser (redirect OAuth), non da una fetch: nessun
+codice JS è lì a leggere un corpo JSON, deve chiudere su una pagina reale
+(bug corretto: prima restituiva JSON grezzo, mostrato a schermo invece che
+gestito dall'app). Login riuscito → `{frontend}/dashboard` (cookie di
+sessione già impostati sulla risposta di redirect, il refresh silenzioso
+del frontend al mount recupera l'access token). MFA da verificare →
+`{frontend}/login?mfa_challenge=...&mfa_method=...` (stesso form OTP del
+login via password). Errore (provider non configurato, OAuth fallito, email
+non disponibile dal provider) → `{frontend}/login?sso_error=1`. `{frontend}`
+è la prima origine di `NOCT_CORS_ORIGINS`.
 
 **Limitazione nota:** senza credenziali OAuth reali (client id/secret per
 ciascun provider) il flow non è testabile end-to-end in questo ambiente di
