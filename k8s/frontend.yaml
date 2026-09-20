@@ -5,7 +5,7 @@ metadata:
   name: frontend
   namespace: notturni
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: frontend
@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: ghcr.io/bytehawks-org/notturni-frontend:sha-d559a82
+          image: ghcr.io/bytehawks-org/notturni-frontend:sha-fd6ce11
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000

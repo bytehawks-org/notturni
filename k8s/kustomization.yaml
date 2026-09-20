@@ -24,3 +24,18 @@ resources:
   - middleware-security-headers.yaml
   - ingressroute.yaml
   - ingressroute-minio.yaml
+
+# Tag delle immagini in un solo posto invece che in ogni singolo manifest:
+# kustomize sostituisce il tag di *ogni* image: che referenzia quel nome
+# esatto (ripetuto identico in più file — es. "notturni-backend" compare in
+# backend.yaml + i 3 worker + i 2 CronJob) su tutta la Kustomization. Al
+# prossimo rilascio basta cambiare i tre newTag qui sotto, non toccare i
+# singoli manifest. Il tag nei manifest stessi resta comunque un riferimento
+# valido (l'ultimo pubblicato) per chi li applica senza passare da kustomize.
+images:
+  - name: ghcr.io/bytehawks-org/notturni-backend
+    newTag: sha-fd6ce11
+  - name: ghcr.io/bytehawks-org/notturni-frontend
+    newTag: sha-fd6ce11
+  - name: ghcr.io/bytehawks-org/notturni-moderation
+    newTag: sha-fd6ce11

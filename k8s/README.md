@@ -56,24 +56,31 @@ cp secret.example.yaml secret.yaml
 kubectl apply -k .
 ```
 
-Per un primo test senza registro (immagini `notturni-backend:latest`/
-`notturni-frontend:latest` costruite localmente, vedi nota sotto): buildarle
-sulla stessa macchina del nodo K3s (o importarle con `k3s ctr images
-import` se costruite altrove), poi in `configmap.yaml` sostituire
+**Aggiornare il tag delle immagini** (dopo un nuovo push su GHCR): un solo
+posto, i tre `newTag` sotto `images:` in fondo a `kustomization.yaml` — non
+i singoli manifest. `notturni-backend` copre da solo `backend.yaml` **e** i
+tre worker **e** i due `CronJob` (`audit-maintenance.yaml`/`backup.yaml`),
+tutti sullo stesso tag: kustomize sostituisce ogni `image:` che referenzia
+quel nome esatto, ripetuto identico in più file. Poi `kubectl apply -k .`.
+
+Per un primo test senza registro (immagini costruite localmente sul nodo
+invece che pubblicate su GHCR): buildarle sulla stessa macchina del nodo
+K3s (o importarle con `k3s ctr images import` se costruite altrove),
+aggiornare i tre `newTag`/eventualmente `newName` in `kustomization.yaml`
+di conseguenza, poi in `configmap.yaml` sostituire
 `NOCT_CORS_ORIGINS`/`NOCT_OAUTH_REDIRECT_BASE_URL` con l'indirizzo davvero
-raggiungibile stasera (es. `http://<ip-nodo>`, vedi i commenti accanto a
-quelle variabili) — e ricostruire l'immagine frontend con
+raggiungibile (es. `http://<ip-nodo>`, vedi i commenti accanto a quelle
+variabili) — e ricostruire l'immagine frontend con
 `--build-arg NEXT_PUBLIC_API_URL=http://<ip-nodo>` (letto solo in fase di
 build, non a runtime — vedi nota più sotto).
 
 ## Note
 
-- `backend.yaml` / `frontend.yaml` referenziano immagini locali
-  (`notturni-backend:latest`, `notturni-frontend:latest`); vanno sostituite
-  con un riferimento a registro una volta disponibile un flusso di
-  build/push. Fino ad allora, `imagePullPolicy: IfNotPresent` richiede che
-  l'immagine sia già presente sul nodo (buildata lì o importata) — senza,
-  il pod resta in `ImagePullBackOff`.
+- Le immagini pubblicate su GHCR dal flusso di build/push in CI (vedi
+  sezione "Setup" sopra per come aggiornarne il tag). `imagePullPolicy:
+  IfNotPresent`: se il tag referenziato non è mai stato pubblicato (o non è
+  presente localmente sul nodo per un test senza registro), il pod resta in
+  `ImagePullBackOff`.
 - `postgres.yaml` imposta `PGDATA` su una sottodirectory del volume
   (`/var/lib/postgresql/data/pgdata`) invece della radice del mount: un
   volume Longhorn (ext4) arriva con un `lost+found` creato dal filesystem, e

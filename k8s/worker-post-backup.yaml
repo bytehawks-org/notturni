@@ -24,7 +24,7 @@ spec:
     spec:
       containers:
         - name: worker-post-backup
-          image: ghcr.io/bytehawks-org/notturni-backend:sha-d559a82
+          image: ghcr.io/bytehawks-org/notturni-backend:sha-fd6ce11
           imagePullPolicy: IfNotPresent
           command: ["python", "-m", "app.workers.post_backup_consumer"]
           envFrom:

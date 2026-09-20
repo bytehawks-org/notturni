@@ -57,9 +57,9 @@ data:
   # SMTP per l'invio del codice MFA via email (app/core/mail.py) — placeholder,
   # da sostituire con un provider SMTP/transazionale reale prima della
   # produzione (credenziali in secret.yaml: NOCT_SMTP_USER/_PASSWORD).
-  NOCT_SMTP_HOST: "smtps.aruba.it"
+  NOCT_SMTP_HOST: "smtp.notturni.eu"
   NOCT_SMTP_PORT: "587"
-  NOCT_SMTP_USE_TLS: "true"
+  NOCT_SMTP_USE_TLS: "false"
   NOCT_SMTP_FROM_EMAIL: "info@notturni.eu"
 
   # Servizio SMTP containerizzato alternativo (smtp-relay.yaml) — un'opzione
