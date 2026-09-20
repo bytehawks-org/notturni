@@ -17,6 +17,7 @@ from app.domain.authorization import get_membership_role
 from app.domain.content_media import SENSITIVITY_CATEGORIES
 from app.domain.moderation import classify_image
 from app.domain.platform_config import get_platform_config
+from app.domain.storage_quota import assert_blog_storage_quota
 from app.models.blog import Blog, BlogMembership
 from app.models.follow import BlogFollow
 from app.models.media_file import MediaFile
@@ -48,6 +49,8 @@ async def upload_blog_media(
     await _require_blog_write_access(session, current_user, blog)
 
     content = await file.read()
+    platform = await get_platform_config(session)
+    await assert_blog_storage_quota(session, blog=blog, config=platform, extra_bytes=len(content))
     try:
         object_key = upload_media(
             user_id=blog.owner_id,
@@ -58,7 +61,6 @@ async def upload_blog_media(
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
-    platform = await get_platform_config(session)
     is_sensitive = await classify_image(
         content, file.filename or "image", file.content_type or "", threshold=platform.moderation_threshold
     )

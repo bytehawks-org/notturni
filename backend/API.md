@@ -369,10 +369,12 @@ Conteggi per la tab Panoramica del blog (todo/UX_REDESIGN.md B1, mockup 5a):
 `posts_scheduled` sono i `published` con `published_at` futuro; `media` è il
 numero di immagini citate nei post (tabella `post_media`). In più (B2):
 `reads_30d` — 30 voci `{day, reads}` (giorni UTC, quelli senza letture a 0),
-`reads_total_30d`, e `storage_bytes` — byte occupati su storage da media e
+`reads_total_30d`, `storage_bytes` — byte occupati su storage da media e
 backup Markdown del blog (prefissi `userdata/{utente}/{blog}/` di
 proprietario e collaboratori; `null` se lo storage non risponde, `0` se il
-bucket non è mai stato creato).
+bucket non è mai stato creato) — e `storage_limit_mb`, il limite impostato
+da un Super Admin (`platform_config.max_blog_storage_mb`), `null` se nessun
+limite.
 
 **`POST /api/v1/posts/{post_id}/read`** — pubblico, `204`, nessun corpo.
 Conteggio letture aggregato per giorno (tabella `post_reads_daily`, mockup
@@ -525,7 +527,9 @@ Altre chiavi restano libere.
 proprietario (`403` altrimenti). `multipart/form-data`, campo `file`.
 Immagine di copertina del blog (banner della home pubblica, facoltativa):
 stessi formati/limite di dimensione e stessa moderazione automatica di
-`POST .../media` sotto — l'upload aggiorna `cover_image_url` e
+`POST .../media` sotto (incluso il controllo dello spazio massimo per blog,
+`413` se superato — vedi `platform_config.max_blog_storage_mb`) — l'upload
+aggiorna `cover_image_url` e
 `cover_image_is_sensitive` (risultato della moderazione), azzera
 `cover_image_categories`/`cover_image_alt_text`. Sostituire una cover
 esistente non cancella l'oggetto precedente su storage (stessa scelta di
@@ -567,7 +571,11 @@ l'oggetto su storage e azzera `favicon_url`. Ritorna il `Blog` aggiornato.
 scrittura al blog (proprietario/autore/co-autore). `multipart/form-data`,
 campo `file`. Formati ammessi: PNG, JPEG, WEBP, GIF; max 10 MiB (`400`
 altrimenti). Immagine da incorporare nel Markdown di un post (es.
-`![alt](url)`). Vedi "Media e backup" sotto per il path S3.
+`![alt](url)`). Vedi "Media e backup" sotto per il path S3. Se un Super
+Admin ha impostato uno spazio massimo per blog
+(`platform_config.max_blog_storage_mb`, `PATCH /admin/config`), l'upload
+che lo supererebbe risponde `413` invece di essere accettato — nessun
+controllo (comportamento invariato) se il limite non è impostato.
 
 ```json
 {"url": "https://.../notturni/userdata/{user_uuid}/{blog_uuid}/media/{uuid}.png"}
@@ -1580,7 +1588,10 @@ corrente da sé (fallback `en`, poi la prima disponibile, poi `key`).
 pubblica degli utenti (blocco "directory di utenti", stesso schema di
 `GET /blogs`): solo account attivi (non anonimizzati/cancellati) che non
 hanno scelto l'opt-out (`User.directory_listed`, vedi `PATCH /users/me`
-sotto). `q` cerca in username/alias pubblico/bio (`ILIKE`), `locale` filtra
+sotto). Il Super Admin è **sempre** escluso, a prescindere dal proprio
+`directory_listed` — non un'opzione dell'utente, per sicurezza (evitare che
+l'account con i privilegi più ampi sia individuabile dalla directory
+pubblica). `q` cerca in username/alias pubblico/bio (`ILIKE`), `locale` filtra
 per lingua madre (`native_language`), `interest` filtra per chiave canonica
 di interesse (per trovare persone con cui condividerlo e seguirle), `sort`
 è `new` (registrazione, default) o `followers`, `limit` (default 30,
@@ -2028,7 +2039,29 @@ valorizzata, altrimenti da un elenco builtin curato
 (`app/domain/interests.py::DEFAULT_INTERESTS`) — vedi `GET /api/v1/interests`
 sotto per l'elenco pubblico e `PATCH /users/me` per la scelta dell'utente;
 rimuovere una chiave qui ripulisce anche `User.interests` di ogni utente che
-l'aveva selezionata, non solo l'elenco di piattaforma).
+l'aveva selezionata, non solo l'elenco di piattaforma), `max_blog_storage_mb`
+(spazio massimo per blog — media + backup Markdown, stesso conteggio di
+`GET /blogs/{slug}/overview::storage_bytes` — in MB; `null`/`0` = nessun
+limite, default; superarlo risponde `413` su
+`POST /blogs/{slug}/media` e `POST /blogs/{slug}/cover-image`),
+`verification_gold_identifiers`/`verification_silver_identifiers`
+(array di email/username, confronto case-insensitive: assegnano
+rispettivamente il sigillo di verifica `gold` — sostenitori economici del
+progetto — e `silver` — entità verificate a mano dalla piattaforma, testate/
+agenzie/organizzazioni/personalità note; `verification_silver_identifiers`
+accetta anche un dominio email nudo, es. `"testata.it"`, non solo email/
+username interi) e `verification_blue_domains` (array di domini email,
+formato hostname validato: assegnano il sigillo `blue`, in aggiunta al
+dominio della piattaforma stessa — `NOCT_INSTANCE_FQDN` — già incluso
+automaticamente). `User.verification_tier` (vedi `GET /users/{username}`)
+è ricalcolato da `app/domain/verification.py` a ogni evento che può
+cambiarlo (registrazione, cambio email/username, verifica/rimozione del
+dominio custom, modifica di uno di questi tre elenchi — che ricalcola
+**tutti** gli utenti attivi in un colpo solo); priorità in caso di più
+criteri soddisfatti: `gold` > `silver` > `blue` > `bronze` (dominio custom
+verificato via DNS) > `none`, mai persa "per errore" (rimosso da un elenco
+più alto ricade sul tier immediatamente inferiore ancora valido, non su
+`none` a prescindere).
 Ogni modifica va nel registro (`platform.config_updated`, con
 `changes: {campo: {from, to}}`) e, se cambia un campo `footer_*`, invalida la
 cache del frontend sul tag condiviso `platform-footer` (tutte le pagine

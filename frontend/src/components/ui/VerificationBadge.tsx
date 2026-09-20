@@ -1,9 +1,10 @@
 import type { VerificationTier } from "@/lib/types";
 
 /** Sigillo di verifica del profilo (stile Bluesky/Instagram/Twitter),
- * CLAUDE.md #5: quattro colori previsti, ma solo "bronze" ha oggi una logica
- * che lo assegna (dominio custom verificato via DNS) — silver/gold/blue
- * restano riservati per future integrazioni. "none" non renderizza nulla. */
+ * CLAUDE.md #5: "bronze" da dominio custom verificato via DNS, "gold"/
+ * "silver"/"blue" da elenchi ed elenchi di domini gestiti a mano da un
+ * Super Admin (/admin/impostazioni, sezione Verifica — vedi backend
+ * app/domain/verification.py). "none" non renderizza nulla. */
 const TIER_COLORS: Record<Exclude<VerificationTier, "none">, string> = {
   bronze: "#B08D57",
   silver: "#A8A9AD",

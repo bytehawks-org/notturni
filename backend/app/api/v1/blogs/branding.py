@@ -21,6 +21,7 @@ from app.core.storage import (
 from app.domain.content_media import SENSITIVITY_CATEGORIES
 from app.domain.moderation import classify_image
 from app.domain.platform_config import get_platform_config
+from app.domain.storage_quota import assert_blog_storage_quota
 from app.models.media_file import MediaFile
 from app.models.user import User
 
@@ -47,6 +48,8 @@ async def upload_blog_cover_image(
     blog = await _require_blog_owner(session, current_user, slug)
 
     content = await file.read()
+    platform = await get_platform_config(session)
+    await assert_blog_storage_quota(session, blog=blog, config=platform, extra_bytes=len(content))
     try:
         object_key = upload_media(
             user_id=blog.owner_id, blog_id=blog.id, content=content, content_type=file.content_type or ""
@@ -54,7 +57,6 @@ async def upload_blog_cover_image(
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
-    platform = await get_platform_config(session)
     is_sensitive = await classify_image(
         content, file.filename or "image", file.content_type or "", threshold=platform.moderation_threshold
     )

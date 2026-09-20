@@ -58,5 +58,29 @@ class PlatformConfig(Base):
     newsletter_sender_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     newsletter_banner_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     newsletter_banner_alt_text: Mapped[str] = mapped_column(String(300), default="", nullable=False)
+    # Spazio massimo (media + backup Markdown, app/core/storage.py::blog_storage_bytes)
+    # consentito per ogni singolo blog, in MB. NULL = nessun limite (default,
+    # comportamento invariato per le installazioni esistenti). Applicato in
+    # app/domain/storage_quota.py, controllato prima di ogni upload di media/
+    # cover image di un blog.
+    max_blog_storage_mb: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Sigilli di verifica del profilo (User.verification_tier,
+    # app/domain/verification.py) gestiti a mano dal Super Admin, in aggiunta
+    # al BRONZE automatico da dominio custom verificato:
+    # - GOLD: sostenitori economici del progetto, elenco esplicito di email/
+    #   username inserito a mano (nessuna integrazione con un sistema di
+    #   pagamento, solo l'elenco).
+    # - SILVER: entità verificate manualmente dalla piattaforma (testate
+    #   giornalistiche, agenzie, organizzazioni, personalità note), elenco di
+    #   username, domini email o singole caselle email.
+    # - BLUE: chiunque si registri con un'email il cui dominio è quello della
+    #   piattaforma stessa (NOCT_PLATFORM_DOMAIN) o uno di questi domini
+    #   aggiuntivi, tipicamente per organizzazioni/aziende partner.
+    # Voci confrontate case-insensitive; un'email intera o un username in
+    # queste liste è considerata match esatto, una voce senza "@" con un "."
+    # è trattata come dominio (matcha il dominio dell'email dell'utente).
+    verification_gold_identifiers: Mapped[list[str]] = mapped_column(ARRAY(String(255)), nullable=False, default=list)
+    verification_silver_identifiers: Mapped[list[str]] = mapped_column(ARRAY(String(255)), nullable=False, default=list)
+    verification_blue_domains: Mapped[list[str]] = mapped_column(ARRAY(String(255)), nullable=False, default=list)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)

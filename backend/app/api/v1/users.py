@@ -28,6 +28,7 @@ from app.domain.platform_config import SUPPORTED_LOCALES, get_platform_config
 from app.domain.profile import validate_country_code, validate_fallback_languages
 from app.domain.rate_limit import enforce_rate_limit
 from app.domain.usernames import USERNAME_CHANGE_COOLDOWN_DAYS, validate_username
+from app.domain.verification import sync_verification_tier
 from app.models.blog import Blog, BlogVisibility
 from app.models.comment import Comment, CommentStatus
 from app.models.custom_domain import CustomDomain, CustomDomainStatus
@@ -35,7 +36,7 @@ from app.models.email_change_request import EmailChangeRequest
 from app.models.post import Post, PostStatus
 from app.models.follow import BlogFollow, UserFollow
 from app.models.social_link import SocialLink
-from app.models.user import PostAuthorNameStyle, User, VerificationTier
+from app.models.user import PlatformRole, PostAuthorNameStyle, User, VerificationTier
 from app.models.user_session import UserSession
 
 router = APIRouter()
@@ -329,7 +330,11 @@ async def list_public_users(
     cancellati, `is_active`) che non hanno scelto l'opt-out
     (`User.directory_listed`) — stesso principio di `GET /blogs` per i blog,
     ma qui il criterio di esclusione è impostabile dall'utente stesso, non
-    derivato da stato dell'account. `q` cerca in username/nome
+    derivato da stato dell'account. Eccezione: il Super Admin è **sempre**
+    escluso, indipendentemente da `directory_listed` — non è un'opzione
+    dell'utente, per sicurezza (evitare che l'account con i privilegi più
+    ampi sia individuabile dalla directory pubblica, superficie utile per un
+    attacco a forza bruta sulle credenziali). `q` cerca in username/nome
     pubblico/bio, `locale` filtra per lingua madre, `interest` filtra per
     chiave canonica di interesse (blocco "interessi utente", per trovare
     persone con lo stesso interesse da seguire), `sort` è `new`
@@ -343,7 +348,9 @@ async def list_public_users(
         .scalar_subquery()
     )
     stmt = select(User, follower_count).where(
-        User.is_active.is_(True), User.directory_listed.is_(True)
+        User.is_active.is_(True),
+        User.directory_listed.is_(True),
+        User.platform_role != PlatformRole.SUPER_ADMIN,
     )
     if q:
         needle = f"%{q.strip()}%"
@@ -430,6 +437,9 @@ async def update_profile(
             old_username = current_user.username
             current_user.username = new_username
             current_user.username_changed_at = datetime.now(timezone.utc)
+            # Il nuovo username può comparire/non comparire più negli
+            # elenchi GOLD/SILVER di verifica (app/domain/verification.py).
+            sync_verification_tier(current_user, await get_platform_config(session))
             await audit.record(
                 session,
                 action="user.username_changed",
@@ -661,6 +671,9 @@ async def verify_new_email(
         old_email = await email_change_domain.confirm_new_email(session, current_user, payload.code)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    # La nuova email può cambiare dominio: ricalcola il sigillo BLU/ORO/
+    # ARGENTO (app/domain/verification.py).
+    sync_verification_tier(current_user, await get_platform_config(session))
     await audit.record(
         session,
         action="user.email_changed",
@@ -732,8 +745,7 @@ async def set_my_domain(
         # pulizia di delete_my_domain sotto.
         if was_verified:
             current_user.verified_domain = None
-            if current_user.verification_tier == VerificationTier.BRONZE:
-                current_user.verification_tier = VerificationTier.NONE
+            sync_verification_tier(current_user, await get_platform_config(session))
     else:
         record = CustomDomain(
             user_id=current_user.id,
@@ -794,9 +806,10 @@ async def verify_my_domain(
 
     record.status = CustomDomainStatus.VERIFIED
     record.verified_at = datetime.now(timezone.utc)
-    if current_user.verification_tier == VerificationTier.NONE:
-        current_user.verification_tier = VerificationTier.BRONZE
     current_user.verified_domain = record.domain
+    # BRONZE solo se non c'è già un tier superiore da GOLD/SILVER/BLU
+    # (app/domain/verification.py: la priorità è gestita lì, non qui).
+    sync_verification_tier(current_user, await get_platform_config(session))
     await audit.record(
         session,
         action="user.domain_verified",
@@ -830,8 +843,7 @@ async def delete_my_domain(
     await session.delete(record)
     if was_verified:
         current_user.verified_domain = None
-        if current_user.verification_tier == VerificationTier.BRONZE:
-            current_user.verification_tier = VerificationTier.NONE
+        sync_verification_tier(current_user, await get_platform_config(session))
     await session.commit()
 
 

@@ -103,6 +103,51 @@ function InterestTranslationsEditor({
   );
 }
 
+/** Elenco di stringhe (email/username/domini) modificabile a chip, stesso
+ * pattern di `reserved_blog_names`: usato per i tre elenchi di verifica
+ * manuale (GOLD/SILVER/BLU, app/domain/verification.py). */
+function ChipListEditor({
+  values,
+  onChange,
+  placeholder,
+  removeLabel,
+  addLabel,
+}: {
+  values: string[];
+  onChange: (next: string[]) => void;
+  placeholder: string;
+  removeLabel: string;
+  addLabel: string;
+}) {
+  const [input, setInput] = useState("");
+  return (
+    <div className="flex flex-wrap gap-2">
+      {values.map((v) => (
+        <span key={v} className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1 font-mono text-xs">
+          {v}
+          <button type="button" onClick={() => onChange(values.filter((x) => x !== v))} className="text-muted hover:text-danger" aria-label={removeLabel}>
+            ×
+          </button>
+        </span>
+      ))}
+      <form
+        className="flex items-center gap-1"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const v = input.trim().toLowerCase();
+          if (v && !values.includes(v)) onChange([...values, v]);
+          setInput("");
+        }}
+      >
+        <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder={placeholder} className="h-7 w-44 px-2 py-1 text-xs" />
+        <Button type="submit" size="sm" variant="secondary">
+          {addLabel}
+        </Button>
+      </form>
+    </div>
+  );
+}
+
 /** Impostazioni di piattaforma (mockup 5f), solo super admin: accesso,
  * blog e moderazione, infrastruttura in sola lettura. */
 export default function PlatformSettingsPage() {
@@ -157,6 +202,10 @@ export default function PlatformSettingsPage() {
           footer_column3_markdown: draft.footer_column3_markdown ?? "",
           footer_bottom_bar_markdown: draft.footer_bottom_bar_markdown ?? "",
           interests: draft.interests,
+          max_blog_storage_mb: draft.max_blog_storage_mb ?? 0,
+          verification_gold_identifiers: draft.verification_gold_identifiers,
+          verification_silver_identifiers: draft.verification_silver_identifiers,
+          verification_blue_domains: draft.verification_blue_domains,
         })
       );
       setConfig(updated);
@@ -300,6 +349,20 @@ export default function PlatformSettingsPage() {
             <Input id="max-blogs" type="number" min={1} max={100} value={draft.max_blogs_per_user} onChange={(e) => patch({ max_blogs_per_user: Number(e.target.value) })} className="w-24" />
           </div>
           <div className="flex flex-col gap-1.5">
+            <Label htmlFor="max-blog-storage" hint={t("maxBlogStorageHint")}>
+              {t("maxBlogStorage")}
+            </Label>
+            <Input
+              id="max-blog-storage"
+              type="number"
+              min={0}
+              max={1048576}
+              value={draft.max_blog_storage_mb ?? 0}
+              onChange={(e) => patch({ max_blog_storage_mb: Number(e.target.value) || null })}
+              className="w-28"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
             <Label htmlFor="audit-retention">{t("auditRetention")}</Label>
             <Input
               id="audit-retention"
@@ -437,6 +500,46 @@ export default function PlatformSettingsPage() {
             onChange={(e) => patch({ footer_bottom_bar_markdown: e.target.value })}
             placeholder={t("footerMarkdownPlaceholder")}
           />
+        </div>
+      </Card>
+
+      <Card className="flex flex-col gap-5">
+        <div className="flex flex-col gap-1">
+          <CardTitle>{t("verification")}</CardTitle>
+          <p className="text-[13px] text-muted">{t("verificationNote")}</p>
+        </div>
+        <div className="flex flex-col gap-2">
+          <SectionLabel>{t("verificationGold")}</SectionLabel>
+          <ChipListEditor
+            values={draft.verification_gold_identifiers}
+            onChange={(v) => patch({ verification_gold_identifiers: v })}
+            placeholder={t("verificationIdentifierPlaceholder")}
+            addLabel={tc("add")}
+            removeLabel={tc("remove")}
+          />
+          <span className="text-[13px] text-muted">{t("verificationGoldHint")}</span>
+        </div>
+        <div className="flex flex-col gap-2">
+          <SectionLabel>{t("verificationSilver")}</SectionLabel>
+          <ChipListEditor
+            values={draft.verification_silver_identifiers}
+            onChange={(v) => patch({ verification_silver_identifiers: v })}
+            placeholder={t("verificationIdentifierPlaceholder")}
+            addLabel={tc("add")}
+            removeLabel={tc("remove")}
+          />
+          <span className="text-[13px] text-muted">{t("verificationSilverHint")}</span>
+        </div>
+        <div className="flex flex-col gap-2">
+          <SectionLabel>{t("verificationBlue")}</SectionLabel>
+          <ChipListEditor
+            values={draft.verification_blue_domains}
+            onChange={(v) => patch({ verification_blue_domains: v })}
+            placeholder={t("verificationDomainPlaceholder")}
+            addLabel={tc("add")}
+            removeLabel={tc("remove")}
+          />
+          <span className="text-[13px] text-muted">{t("verificationBlueHint", { domain: String(config.infrastructure.instance_fqdn) })}</span>
         </div>
       </Card>
 

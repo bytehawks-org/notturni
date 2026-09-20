@@ -173,6 +173,8 @@ export interface BlogOverview {
   reads_total_30d: number;
   /** Byte su storage (media + backup); `null` se non calcolabile. */
   storage_bytes: number | null;
+  /** Limite impostato da un Super Admin, in MB; `null` = nessun limite. */
+  storage_limit_mb: number | null;
 }
 
 export interface MembershipBlog {
@@ -851,6 +853,14 @@ export interface PlatformConfig {
   footer_bottom_bar_markdown: string | null;
   /** Elenco completo (sostituisce, non aggiunge) — vedi `Interest` sotto. */
   interests: Interest[];
+  /** Spazio massimo per blog (media + backup), in MB; `null` = nessun limite. */
+  max_blog_storage_mb: number | null;
+  /** Email/username che assegnano il sigillo ORO (sostenitori). */
+  verification_gold_identifiers: string[];
+  /** Email/username/domini che assegnano il sigillo ARGENTO (verificati a mano). */
+  verification_silver_identifiers: string[];
+  /** Domini email che assegnano il sigillo BLU, in aggiunta a quello della piattaforma stessa. */
+  verification_blue_domains: string[];
   updated_at: string | null;
   infrastructure: Record<string, string | boolean | null>;
 }

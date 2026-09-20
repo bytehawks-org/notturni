@@ -1110,15 +1110,22 @@ export default function ProfilePage() {
           <section id="privacy" className="flex scroll-mt-6 flex-col gap-4">
             <h2 className="font-serif text-lg text-foreground">{t("nav.privacy")}</h2>
             <div className="overflow-hidden rounded-lg border border-border">
-              {profile && (
+              {profile && user?.platform_role === "super_admin" ? (
                 <div className="border-b border-border px-4 py-4">
-                  <Toggle
-                    checked={profile.directory_listed}
-                    onChange={handleToggleDirectoryListed}
-                    label={t("directoryListed")}
-                  />
-                  <p className="mt-1 text-[13px] text-muted">{t("directoryListedSub")}</p>
+                  <Toggle checked={false} onChange={() => {}} label={t("directoryListed")} disabled />
+                  <p className="mt-1 text-[13px] text-muted">{t("directoryListedSuperAdminSub")}</p>
                 </div>
+              ) : (
+                profile && (
+                  <div className="border-b border-border px-4 py-4">
+                    <Toggle
+                      checked={profile.directory_listed}
+                      onChange={handleToggleDirectoryListed}
+                      label={t("directoryListed")}
+                    />
+                    <p className="mt-1 text-[13px] text-muted">{t("directoryListedSub")}</p>
+                  </div>
+                )
               )}
               <div className="flex items-center justify-between gap-5 border-b border-border px-4 py-4 last:border-0">
                 <div className="flex flex-col gap-0.5">
