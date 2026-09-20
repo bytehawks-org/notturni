@@ -103,10 +103,19 @@ build, non a runtime — vedi nota più sotto).
   parti) — bug scoperto in produzione: pagina servita (200) ma nessun
   form/bottone rispondeva, login e registrazione inclusi. La CSP è ora
   generata per-richiesta con un nonce fresco in `frontend/src/proxy.ts`.
-- MinIO non è esposto pubblicamente da questi manifest (nessuna regola Ingress
-  dedicata): `NOCT_S3_PUBLIC_URL` in `configmap.yaml` è un placeholder,
-  senza un'esposizione reale gli avatar caricati non saranno raggiungibili
-  dall'esterno del cluster.
+- MinIO è esposto pubblicamente in lettura da `ingressroute-minio.yaml`
+  (`IngressRoute` Traefik, solo la porta 9000/API S3, mai la 9001/console
+  admin) sull'host configurato in `NOCT_S3_PUBLIC_URL` (`configmap.yaml`,
+  di default `s3.notturni.eu`) — priorità esplicita più alta del match
+  jolly di `ingressroute.yaml`, altrimenti quell'host ricadrebbe sul
+  frontend (404, bug osservato in produzione: upload riuscito ma media
+  irraggiungibili). Sicuro perché le policy dei bucket
+  (`app/core/storage.py::ensure_public_bucket`/`ensure_content_bucket`)
+  concedono solo `s3:GetObject` anonimo, mai scrittura — quella resta dietro
+  le credenziali `NOCT_S3_ACCESS_KEY_ID`/`_SECRET_ACCESS_KEY`, solo
+  server-side. `s3` è anche in `RESERVED_SUBDOMAINS`/`RESERVED_BLOG_SLUGS`
+  (`frontend/src/proxy.ts`, `backend/app/domain/blog_rules.py`): un utente
+  non può registrare un blog con quello slug.
 - Il backend di storage alternativo (`NOCT_STORAGE_BACKEND=localstorage`,
   vedi [ROADMAP.md](../ROADMAP.md#3-architettura-stack-e-infrastruttura)) non
   è cablato in questi manifest: richiederebbe un volume dedicato sul
