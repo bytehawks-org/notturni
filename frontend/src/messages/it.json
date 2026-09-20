@@ -55,7 +55,9 @@
     "media": "Media",
     "publications": "Pubblicazioni",
     "links": "Link",
-    "bibliography": "Bibliografia"
+    "bibliography": "Bibliografia",
+    "backToPlatform": "Torna alla piattaforma",
+    "viewCurrentBlog": "Vedi {slug}"
   },
   "BlogNav": {
     "posts": "Post",
@@ -587,8 +589,11 @@
     "reservedPlaceholder": "nome",
     "savedToast": "Impostazioni salvate",
     "interests": "Interessi utente",
-    "interestsNote": "Elenco selezionabile dagli utenti nel profilo (massimo 5 a testa) — chiave canonica non modificabile dopo la creazione, etichette in italiano/inglese qui; altre lingue solo via NOCT_DEFAULT_INTERESTS.",
-    "interestKeyPlaceholder": "chiave"
+    "interestsNote": "Elenco selezionabile dagli utenti nel profilo (massimo 5 a testa) — chiave canonica non modificabile dopo la creazione, etichetta per ogni lingua aggiunta qui sotto.",
+    "interestKeyPlaceholder": "chiave",
+    "interestLocalePlaceholder": "lingua (it, en, de…)",
+    "interestLabelPlaceholder": "etichetta",
+    "interestAdd": "Aggiungi interesse"
   },
   "Theme": {
     "light": "Chiaro",
@@ -922,12 +927,16 @@
     "bold": "Grassetto",
     "italic": "Corsivo",
     "strike": "Barrato",
+    "underline": "Sottolineato",
     "code": "Codice",
     "link": "Link",
     "note": "Nota a piè di pagina",
     "quote": "Citazione",
     "bulletList": "Elenco puntato",
     "orderedList": "Elenco numerato",
+    "alignLeft": "Allinea a sinistra",
+    "alignCenter": "Allinea al centro",
+    "alignRight": "Allinea a destra",
     "image": "Immagine",
     "table": "Tabella",
     "addColumn": "+col",

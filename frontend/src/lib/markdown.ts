@@ -4,6 +4,7 @@ import DOMPurify from "isomorphic-dompurify";
 import { JSDOM } from "jsdom";
 import MarkdownIt from "markdown-it";
 
+import { textAlignMarkdownPlugin, underlineMarkdownPlugin } from "./markdown-format-extensions";
 import { REVALIDATE_SECONDS } from "./revalidate";
 import type { PostNote } from "./types";
 
@@ -25,7 +26,9 @@ const LINK_PREVIEW_TIMEOUT_MS = 2000;
 // lasciar passare tag HTML scritti a mano nel sorgente; DOMPurify è comunque
 // una seconda barriera sull'HTML che markdown-it stesso genera (es. src di
 // immagini/link), difesa in profondità più che ridondanza.
-const renderer = new MarkdownIt({ html: false, linkify: true, breaks: false });
+const renderer = new MarkdownIt({ html: false, linkify: true, breaks: false })
+  .use(underlineMarkdownPlugin)
+  .use(textAlignMarkdownPlugin);
 
 /** Un'immagine segnalata sensibile dalla moderazione automatica (vedi
  * API.md) viene inserita dall'editor come `![alt](url "sensitive")`: il

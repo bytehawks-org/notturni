@@ -55,7 +55,9 @@
     "media": "Media",
     "publications": "Publications",
     "links": "Links",
-    "bibliography": "Bibliography"
+    "bibliography": "Bibliography",
+    "backToPlatform": "Back to platform",
+    "viewCurrentBlog": "View {slug}"
   },
   "BlogNav": {
     "posts": "Posts",
@@ -587,8 +589,11 @@
     "reservedPlaceholder": "name",
     "savedToast": "Settings saved",
     "interests": "User interests",
-    "interestsNote": "Selectable by users on their profile (max 5 each) — canonical key not editable after creation, Italian/English labels here; other languages only via NOCT_DEFAULT_INTERESTS.",
-    "interestKeyPlaceholder": "key"
+    "interestsNote": "Selectable by users on their profile (max 5 each) — canonical key not editable after creation, one label per language added below.",
+    "interestKeyPlaceholder": "key",
+    "interestLocalePlaceholder": "language (it, en, de…)",
+    "interestLabelPlaceholder": "label",
+    "interestAdd": "Add interest"
   },
   "Theme": {
     "light": "Light",
@@ -922,12 +927,16 @@
     "bold": "Bold",
     "italic": "Italic",
     "strike": "Strikethrough",
+    "underline": "Underline",
     "code": "Code",
     "link": "Link",
     "note": "Footnote",
     "quote": "Quote",
     "bulletList": "Bullet list",
     "orderedList": "Numbered list",
+    "alignLeft": "Align left",
+    "alignCenter": "Align center",
+    "alignRight": "Align right",
     "image": "Image",
     "table": "Table",
     "addColumn": "+col",

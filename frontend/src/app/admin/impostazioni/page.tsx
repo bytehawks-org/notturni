@@ -17,6 +17,92 @@ import type { PlatformConfig } from "@/lib/types";
 
 const SSO_ALL = ["google", "microsoft", "github", "linkedin"];
 
+/** Traduzioni di un interesso (chiave lingua libera, non solo it/en — prima
+ * di questo componente l'unico modo per aggiungere lingue oltre
+ * italiano/inglese era `NOCT_DEFAULT_INTERESTS` all'avvio, il backend le
+ * supportava già tutte — `app/domain/interests.py::validate_interest_list`
+ * non limita `translations` a nessun set di lingue). Riusato sia per gli
+ * interessi già esistenti sia per il form "nuovo interesse" sotto. */
+function InterestTranslationsEditor({
+  translations,
+  onChange,
+  ariaPrefix,
+  localePlaceholder,
+  labelPlaceholder,
+  addLabel,
+  removeLabel,
+}: {
+  translations: Record<string, string>;
+  onChange: (next: Record<string, string>) => void;
+  ariaPrefix: string;
+  localePlaceholder: string;
+  labelPlaceholder: string;
+  addLabel: string;
+  removeLabel: string;
+}) {
+  const [newLocale, setNewLocale] = useState("");
+  const [newLabel, setNewLabel] = useState("");
+  const entries = Object.entries(translations);
+
+  return (
+    <div className="flex flex-col gap-2">
+      {entries.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {entries.map(([locale, label]) => (
+            <div key={locale} className="flex items-center gap-1 rounded-md border border-border py-0.5 pl-2 pr-1">
+              <span className="font-mono text-[11px] uppercase text-muted">{locale}</span>
+              <Input
+                aria-label={`${ariaPrefix} (${locale})`}
+                value={label}
+                onChange={(e) => onChange({ ...translations, [locale]: e.target.value })}
+                className="h-7 w-32 border-0 bg-transparent px-1 py-0 text-sm"
+              />
+              {entries.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = { ...translations };
+                    delete next[locale];
+                    onChange(next);
+                  }}
+                  className="text-muted hover:text-danger"
+                  aria-label={removeLabel}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      <form
+        className="flex items-center gap-1.5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const locale = newLocale.trim().toLowerCase();
+          const label = newLabel.trim();
+          if (!locale || !label) return;
+          onChange({ ...translations, [locale]: label });
+          setNewLocale("");
+          setNewLabel("");
+        }}
+      >
+        <Input
+          value={newLocale}
+          onChange={(e) => setNewLocale(e.target.value)}
+          placeholder={localePlaceholder}
+          className="h-7 w-20 px-2 py-1 text-xs"
+          maxLength={8}
+        />
+        <Input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder={labelPlaceholder} className="h-7 w-40 px-2 py-1 text-sm" />
+        <Button type="submit" size="sm" variant="secondary">
+          {addLabel}
+        </Button>
+      </form>
+    </div>
+  );
+}
+
 /** Impostazioni di piattaforma (mockup 5f), solo super admin: accesso,
  * blog e moderazione, infrastruttura in sola lettura. */
 export default function PlatformSettingsPage() {
@@ -29,8 +115,7 @@ export default function PlatformSettingsPage() {
   const [draft, setDraft] = useState<PlatformConfig | null>(null);
   const [reservedInput, setReservedInput] = useState("");
   const [newInterestKey, setNewInterestKey] = useState("");
-  const [newInterestIt, setNewInterestIt] = useState("");
-  const [newInterestEn, setNewInterestEn] = useState("");
+  const [newInterestTranslations, setNewInterestTranslations] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -236,68 +321,66 @@ export default function PlatformSettingsPage() {
           <CardTitle>{t("interests")}</CardTitle>
           <p className="text-[13px] text-muted">{t("interestsNote")}</p>
         </div>
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-3">
           {draft.interests.map((interest) => (
-            <div key={interest.key} className="grid grid-cols-[100px_1fr_1fr_auto] items-center gap-2">
-              <span className="truncate font-mono text-xs text-muted">{interest.key}</span>
-              <Input
-                aria-label={`${interest.key} (it)`}
-                value={interest.translations.it ?? ""}
-                onChange={(e) =>
-                  patch({
-                    interests: draft.interests.map((i) =>
-                      i.key === interest.key ? { ...i, translations: { ...i.translations, it: e.target.value } } : i
-                    ),
-                  })
+            <div key={interest.key} className="flex flex-col gap-2 rounded-lg border border-border p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate font-mono text-xs text-muted">{interest.key}</span>
+                <button
+                  type="button"
+                  onClick={() => patch({ interests: draft.interests.filter((i) => i.key !== interest.key) })}
+                  className="text-muted hover:text-danger"
+                  aria-label={tc("remove")}
+                >
+                  ×
+                </button>
+              </div>
+              <InterestTranslationsEditor
+                ariaPrefix={interest.key}
+                translations={interest.translations}
+                onChange={(translations) =>
+                  patch({ interests: draft.interests.map((i) => (i.key === interest.key ? { ...i, translations } : i)) })
                 }
-                className="h-8 px-2 py-1 text-sm"
+                localePlaceholder={t("interestLocalePlaceholder")}
+                labelPlaceholder={t("interestLabelPlaceholder")}
+                addLabel={tc("add")}
+                removeLabel={tc("remove")}
               />
-              <Input
-                aria-label={`${interest.key} (en)`}
-                value={interest.translations.en ?? ""}
-                onChange={(e) =>
-                  patch({
-                    interests: draft.interests.map((i) =>
-                      i.key === interest.key ? { ...i, translations: { ...i.translations, en: e.target.value } } : i
-                    ),
-                  })
-                }
-                className="h-8 px-2 py-1 text-sm"
-              />
-              <button
-                type="button"
-                onClick={() => patch({ interests: draft.interests.filter((i) => i.key !== interest.key) })}
-                className="text-muted hover:text-danger"
-                aria-label={tc("remove")}
-              >
-                ×
-              </button>
             </div>
           ))}
         </div>
-        <form
-          className="grid grid-cols-[100px_1fr_1fr_auto] items-center gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const key = newInterestKey.trim().toLowerCase();
-            if (!key || draft.interests.some((i) => i.key === key)) return;
-            const translations: Record<string, string> = {};
-            if (newInterestIt.trim()) translations.it = newInterestIt.trim();
-            if (newInterestEn.trim()) translations.en = newInterestEn.trim();
-            if (Object.keys(translations).length === 0) return;
-            patch({ interests: [...draft.interests, { key, translations }] });
-            setNewInterestKey("");
-            setNewInterestIt("");
-            setNewInterestEn("");
-          }}
-        >
-          <Input value={newInterestKey} onChange={(e) => setNewInterestKey(e.target.value)} placeholder={t("interestKeyPlaceholder")} className="h-8 px-2 py-1 text-xs" />
-          <Input value={newInterestIt} onChange={(e) => setNewInterestIt(e.target.value)} placeholder="it" className="h-8 px-2 py-1 text-sm" />
-          <Input value={newInterestEn} onChange={(e) => setNewInterestEn(e.target.value)} placeholder="en" className="h-8 px-2 py-1 text-sm" />
-          <Button type="submit" size="sm" variant="secondary">
-            {tc("add")}
+        <div className="flex flex-col gap-2 rounded-lg border border-dashed border-border p-3">
+          <Input
+            value={newInterestKey}
+            onChange={(e) => setNewInterestKey(e.target.value)}
+            placeholder={t("interestKeyPlaceholder")}
+            className="h-8 w-40 px-2 py-1 text-xs"
+          />
+          <InterestTranslationsEditor
+            ariaPrefix={t("interestKeyPlaceholder")}
+            translations={newInterestTranslations}
+            onChange={setNewInterestTranslations}
+            localePlaceholder={t("interestLocalePlaceholder")}
+            labelPlaceholder={t("interestLabelPlaceholder")}
+            addLabel={tc("add")}
+            removeLabel={tc("remove")}
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="self-start"
+            onClick={() => {
+              const key = newInterestKey.trim().toLowerCase();
+              if (!key || draft.interests.some((i) => i.key === key) || Object.keys(newInterestTranslations).length === 0) return;
+              patch({ interests: [...draft.interests, { key, translations: newInterestTranslations }] });
+              setNewInterestKey("");
+              setNewInterestTranslations({});
+            }}
+          >
+            {t("interestAdd")}
           </Button>
-        </form>
+        </div>
       </Card>
 
       <Card className="flex flex-col gap-4">

@@ -20,6 +20,9 @@ import { ApiClientError, api } from "@/lib/api";
 import { MAX_NOTE_LENGTH, type PostNote } from "@/lib/types";
 
 import {
+  AlignCenterIcon,
+  AlignLeftIcon,
+  AlignRightIcon,
   BulletListIcon,
   ImageIcon,
   LinkIcon,
@@ -28,9 +31,11 @@ import {
   QuoteIcon,
   RedoIcon,
   TableIcon,
+  UnderlineIcon,
   UndoIcon,
 } from "./icons";
 import { LinkPreviewCard } from "./LinkPreviewCard";
+import { HeadingNode, ParagraphNode, TextAlignExtension, UnderlineMark } from "./markdownFormatting";
 import { NoteModal, type NoteModalValue } from "./NoteModal";
 import { sensitiveImageNodeView } from "./SensitiveImageNodeView";
 
@@ -278,6 +283,7 @@ const DEFAULT_TOOLBAR_STATE = {
   bold: false,
   italic: false,
   strike: false,
+  underline: false,
   code: false,
   link: false,
   heading1: false,
@@ -287,6 +293,9 @@ const DEFAULT_TOOLBAR_STATE = {
   bulletList: false,
   orderedList: false,
   inTable: false,
+  alignLeft: false,
+  alignCenter: false,
+  alignRight: false,
   canUndo: false,
   canRedo: false,
 };
@@ -319,7 +328,11 @@ export function RichTextEditor({
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      StarterKit.configure({ link: false }),
+      StarterKit.configure({ link: false, underline: false, paragraph: false, heading: false }),
+      ParagraphNode,
+      HeadingNode,
+      UnderlineMark,
+      TextAlignExtension,
       LinkExtension.configure({ openOnClick: false, autolink: true }),
       ImageExtension.extend({ addNodeView: sensitiveImageNodeView }),
       Placeholder.configure({ placeholder: placeholder ?? t("placeholder") }),
@@ -401,6 +414,7 @@ export function RichTextEditor({
             bold: ctx.editor.isActive("bold"),
             italic: ctx.editor.isActive("italic"),
             strike: ctx.editor.isActive("strike"),
+            underline: ctx.editor.isActive("underline"),
             code: ctx.editor.isActive("code"),
             link: ctx.editor.isActive("link"),
             heading1: ctx.editor.isActive("heading", { level: 1 }),
@@ -410,6 +424,9 @@ export function RichTextEditor({
             bulletList: ctx.editor.isActive("bulletList"),
             orderedList: ctx.editor.isActive("orderedList"),
             inTable: ctx.editor.isActive("table"),
+            alignLeft: ctx.editor.isActive({ textAlign: "left" }),
+            alignCenter: ctx.editor.isActive({ textAlign: "center" }),
+            alignRight: ctx.editor.isActive({ textAlign: "right" }),
             canUndo: ctx.editor.can().undo(),
             canRedo: ctx.editor.can().redo(),
           }
@@ -572,6 +589,13 @@ export function RichTextEditor({
         >
           <span className="line-through">S</span>
         </ToolbarButton>
+        <ToolbarButton
+          title={t("underline")}
+          active={state.underline}
+          onClick={() => editor.chain().focus().toggleUnderline().run()}
+        >
+          <UnderlineIcon />
+        </ToolbarButton>
         <ToolbarButton title={t("code")} active={state.code} onClick={() => editor.chain().focus().toggleCode().run()}>
           <span className="font-mono text-xs">{"</>"}</span>
         </ToolbarButton>
@@ -607,6 +631,33 @@ export function RichTextEditor({
         >
           <OrderedListIcon />
         </ToolbarButton>
+
+        <ToolbarDivider />
+
+        <ToolbarButton
+          title={t("alignLeft")}
+          active={state.alignLeft}
+          onClick={() => editor.chain().focus().setTextAlign("left").run()}
+        >
+          <AlignLeftIcon />
+        </ToolbarButton>
+        <ToolbarButton
+          title={t("alignCenter")}
+          active={state.alignCenter}
+          onClick={() => editor.chain().focus().setTextAlign("center").run()}
+        >
+          <AlignCenterIcon />
+        </ToolbarButton>
+        <ToolbarButton
+          title={t("alignRight")}
+          active={state.alignRight}
+          onClick={() => editor.chain().focus().setTextAlign("right").run()}
+        >
+          <AlignRightIcon />
+        </ToolbarButton>
+
+        <ToolbarDivider />
+
         {blogSlug && (
           <ToolbarButton title={t("image")} onClick={() => fileInputRef.current?.click()}>
             <ImageIcon />

@@ -142,6 +142,39 @@ export function ExpandIcon() {
   );
 }
 
+export function UnderlineIcon() {
+  return (
+    <Icon>
+      <path d="M5 3.5v5.5a4 4 0 0 0 8 0V3.5" />
+      <path d="M4 14.5h10" />
+    </Icon>
+  );
+}
+
+export function AlignLeftIcon() {
+  return (
+    <Icon>
+      <path d="M3 5h12M3 9h8M3 13h10" />
+    </Icon>
+  );
+}
+
+export function AlignCenterIcon() {
+  return (
+    <Icon>
+      <path d="M3 5h12M5 9h8M4 13h10" />
+    </Icon>
+  );
+}
+
+export function AlignRightIcon() {
+  return (
+    <Icon>
+      <path d="M3 5h12M7 9h8M5 13h10" />
+    </Icon>
+  );
+}
+
 export function PencilIcon() {
   return (
     <Icon>
