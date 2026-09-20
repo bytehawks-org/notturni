@@ -157,6 +157,8 @@ export default function NewPostPage() {
                 setCoverImageCategories(categories);
               }}
               onUpload={(file) => authFetch((token) => api.blogs.uploadMedia(token, params.slug, file))}
+              blogSlug={params.slug}
+              authFetch={authFetch}
             />
           </div>
 

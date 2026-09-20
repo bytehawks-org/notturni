@@ -1001,7 +1001,22 @@
     "uploading": "Caricamento…",
     "uploadCta": "Carica immagine di copertina (16:9, 800 × 450 px)",
     "altTextLabel": "Testo alternativo",
-    "altTextPlaceholder": "Descrivi l'immagine per chi non la vede"
+    "altTextPlaceholder": "Descrivi l'immagine per chi non la vede",
+    "changeFromLibrary": "Scegli dalla libreria",
+    "orChooseFromLibrary": "oppure scegli dalla libreria"
+  },
+  "ImagePickerModal": {
+    "title": "Inserisci immagine",
+    "tabUpload": "Carica",
+    "tabBlogLibrary": "Libreria del blog",
+    "tabMyLibrary": "Tutti i miei blog",
+    "uploadCta": "Carica un'immagine",
+    "uploading": "Caricamento…",
+    "uploadFailed": "Caricamento immagine non riuscito.",
+    "loadFailed": "Caricamento della libreria non riuscito.",
+    "loading": "Caricamento…",
+    "empty": "Nessuna immagine qui per ora.",
+    "cancel": "Annulla"
   },
   "Editor": {
     "status": "Stato",

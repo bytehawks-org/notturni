@@ -16,7 +16,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Markdown, type MarkdownStorage } from "tiptap-markdown";
 
-import { ApiClientError, api } from "@/lib/api";
+import { api } from "@/lib/api";
 import { MAX_NOTE_LENGTH, type PostNote } from "@/lib/types";
 
 import {
@@ -34,6 +34,7 @@ import {
   UnderlineIcon,
   UndoIcon,
 } from "./icons";
+import { ImagePickerModal, type PickedImage } from "./ImagePickerModal";
 import { LinkPreviewCard } from "./LinkPreviewCard";
 import { HeadingNode, ParagraphNode, TextAlignExtension, UnderlineMark } from "./markdownFormatting";
 import { NoteModal, type NoteModalValue } from "./NoteModal";
@@ -312,8 +313,8 @@ export function RichTextEditor({
   stickyToolbar = true,
 }: RichTextEditorProps) {
   const t = useTranslations("RichTextEditor");
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [imagePickerOpen, setImagePickerOpen] = useState(false);
   // "create": nuova nota inserita al cursore. "edit": modifica dei campi
   // bibliografici di una nota già presente nell'elenco sotto l'editor
   // (idx valorizzato, nessun nuovo marcatore da inserire nel testo).
@@ -517,27 +518,21 @@ export function RichTextEditor({
     }
   }
 
-  async function handleImagePicked(file: File) {
-    if (!blogSlug) return;
-    setUploadError(null);
-    try {
-      const media = await authFetch((token) => api.blogs.uploadMedia(token, blogSlug, file));
-      // ALT text e categorie di avviso si impostano dopo l'inserimento,
-      // tramite le pillole in sovraimpressione sull'immagine (stile
-      // Bluesky, CLAUDE.md #2/#3) — niente più window.prompt bloccante.
-      // Un paragrafo vuoto subito dopo permette di continuare a scrivere
-      // senza doverlo creare a mano.
-      editor!
-        .chain()
-        .focus()
-        .insertContent([
-          { type: "image", attrs: { src: media.url, title: media.is_sensitive ? "sensitive" : null } },
-          { type: "paragraph" },
-        ])
-        .run();
-    } catch (err) {
-      setUploadError(err instanceof ApiClientError ? err.message : t("uploadFailed"));
-    }
+  /** Inserisce un'immagine già caricata (upload diretto o scelta dalla
+   * libreria del blog/di tutti i propri blog, ImagePickerModal) al cursore.
+   * ALT text e categorie di avviso si impostano dopo l'inserimento, tramite
+   * le pillole in sovraimpressione sull'immagine (stile Bluesky, CLAUDE.md
+   * #2/#3) — niente più window.prompt bloccante. Un paragrafo vuoto subito
+   * dopo permette di continuare a scrivere senza doverlo creare a mano. */
+  function insertImage(media: PickedImage) {
+    editor!
+      .chain()
+      .focus()
+      .insertContent([
+        { type: "image", attrs: { src: media.url, title: media.is_sensitive ? "sensitive" : null } },
+        { type: "paragraph" },
+      ])
+      .run();
   }
 
   return (
@@ -659,7 +654,7 @@ export function RichTextEditor({
         <ToolbarDivider />
 
         {blogSlug && (
-          <ToolbarButton title={t("image")} onClick={() => fileInputRef.current?.click()}>
+          <ToolbarButton title={t("image")} onClick={() => setImagePickerOpen(true)}>
             <ImageIcon />
           </ToolbarButton>
         )}
@@ -697,17 +692,12 @@ export function RichTextEditor({
         </div>
       </div>
 
-      {blogSlug && (
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/png,image/jpeg,image/webp,image/gif"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void handleImagePicked(file);
-            e.target.value = "";
-          }}
+      {imagePickerOpen && blogSlug && (
+        <ImagePickerModal
+          blogSlug={blogSlug}
+          authFetch={authFetch}
+          onSelect={insertImage}
+          onClose={() => setImagePickerOpen(false)}
         />
       )}
 

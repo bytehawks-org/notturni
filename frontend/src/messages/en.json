@@ -1001,7 +1001,22 @@
     "uploading": "Uploading…",
     "uploadCta": "Upload a cover image (16:9, 800 × 450 px)",
     "altTextLabel": "Alt text",
-    "altTextPlaceholder": "Describe the image for people who can't see it"
+    "altTextPlaceholder": "Describe the image for people who can't see it",
+    "changeFromLibrary": "Choose from library",
+    "orChooseFromLibrary": "or choose from library"
+  },
+  "ImagePickerModal": {
+    "title": "Insert image",
+    "tabUpload": "Upload",
+    "tabBlogLibrary": "Blog library",
+    "tabMyLibrary": "All my blogs",
+    "uploadCta": "Upload an image",
+    "uploading": "Uploading…",
+    "uploadFailed": "Image upload failed.",
+    "loadFailed": "Couldn't load the library.",
+    "loading": "Loading…",
+    "empty": "No images here yet.",
+    "cancel": "Cancel"
   },
   "Editor": {
     "status": "Status",
