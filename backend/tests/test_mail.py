@@ -50,3 +50,47 @@ def test_send_email_sends_via_smtp(monkeypatch: pytest.MonkeyPatch) -> None:
     assert message["To"] == "mario@example.com"
     assert message["Subject"] == "Codice"
     assert message.get_content().strip() == "123456"
+
+
+def test_send_email_uses_implicit_tls_on_port_465(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Porta 465 ("smtps"): TLS implicito, non STARTTLS — protocolli
+    incompatibili (bug osservato in produzione passando da 587 a 465 senza
+    questo branch: la connessione veniva chiusa dal server, timeout)."""
+    sent: dict[str, object] = {}
+
+    class _FakeSmtpSsl:
+        def __init__(self, host: str, port: int, timeout: int) -> None:
+            sent["host"] = host
+            sent["port"] = port
+
+        def __enter__(self) -> "_FakeSmtpSsl":
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            return None
+
+        def starttls(self) -> None:
+            sent["starttls_called"] = True
+
+        def login(self, user: str, password: str) -> None:
+            sent["login"] = (user, password)
+
+        def send_message(self, message: object) -> None:
+            sent["message"] = message
+
+    def _unexpected_smtp(*args: object, **kwargs: object) -> None:
+        raise AssertionError("smtplib.SMTP (STARTTLS) non va usato sulla porta 465")
+
+    monkeypatch.setattr(settings, "smtp_host", "smtps.example.com")
+    monkeypatch.setattr(settings, "smtp_port", 465)
+    monkeypatch.setattr(settings, "smtp_use_tls", True)
+    monkeypatch.setattr(settings, "smtp_user", "utente")
+    monkeypatch.setattr(settings, "smtp_password", "segreto")
+    monkeypatch.setattr("app.core.mail.smtplib.SMTP_SSL", _FakeSmtpSsl)
+    monkeypatch.setattr("app.core.mail.smtplib.SMTP", _unexpected_smtp)
+
+    send_email(to="mario@example.com", subject="Codice", body="123456")
+
+    assert sent["port"] == 465
+    assert "starttls_called" not in sent
+    assert sent["login"] == ("utente", "segreto")

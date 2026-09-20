@@ -41,8 +41,16 @@ def send_email(*, to: str, subject: str, body: str, html_body: str | None = None
     if html_body is not None:
         message.add_alternative(html_body, subtype="html")
 
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as client:
-        if settings.smtp_use_tls:
+    # Porta 465 ("smtps"): TLS implicito fin dal primo byte, protocollo
+    # incompatibile con STARTTLS (che invece parla in chiaro fino al comando
+    # STARTTLS, tipico delle porte 587/25) — usare smtplib.SMTP() +
+    # .starttls() su 465 fa fallire la connessione (il server si aspetta
+    # subito un ClientHello TLS, riceve testo in chiaro e chiude la
+    # connessione). NOCT_SMTP_USE_TLS resta rilevante solo per le altre
+    # porte: su 465 il TLS è implicito, non opzionale.
+    smtp_client_cls = smtplib.SMTP_SSL if settings.smtp_port == 465 else smtplib.SMTP
+    with smtp_client_cls(settings.smtp_host, settings.smtp_port, timeout=10) as client:
+        if settings.smtp_port != 465 and settings.smtp_use_tls:
             client.starttls()
         if settings.smtp_user and settings.smtp_password:
             client.login(settings.smtp_user, settings.smtp_password)
