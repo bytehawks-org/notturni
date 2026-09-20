@@ -971,6 +971,70 @@ DELETE FROM alembic_version WHERE alembic_version.version_num = 'c1d2e3f4a5b6';
 
 UPDATE alembic_version SET version_num='cf49d59f6471' WHERE alembic_version.version_num = 'c4d6e7f8a9b0';
 
+-- Running upgrade cf49d59f6471 -> 769f5009bad5
+
+ALTER TABLE blogs ADD COLUMN newsletter_auto_notify_enabled BOOLEAN DEFAULT true NOT NULL;
+
+ALTER TABLE blogs ALTER COLUMN newsletter_auto_notify_enabled DROP DEFAULT;
+
+CREATE TYPE newsletter_subscriber_status AS ENUM ('pending', 'confirmed', 'unsubscribed');
+
+CREATE TABLE newsletter_subscribers (
+    blog_id UUID, 
+    email VARCHAR(255) NOT NULL, 
+    locale VARCHAR(2), 
+    status newsletter_subscriber_status NOT NULL, 
+    user_id UUID, 
+    confirm_token_hash VARCHAR(64), 
+    confirm_token_expires_at TIMESTAMP WITH TIME ZONE, 
+    consent_ip VARCHAR(64), 
+    consent_user_agent VARCHAR(512), 
+    confirmed_at TIMESTAMP WITH TIME ZONE, 
+    unsubscribed_at TIMESTAMP WITH TIME ZONE, 
+    unsubscribe_reason VARCHAR(500), 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    FOREIGN KEY(blog_id) REFERENCES blogs (id) ON DELETE CASCADE, 
+    FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE SET NULL
+);
+
+CREATE INDEX ix_newsletter_subscribers_confirm_token_hash ON newsletter_subscribers (confirm_token_hash);
+
+CREATE UNIQUE INDEX uq_newsletter_subscriber_blog_email ON newsletter_subscribers (blog_id, lower(email)) WHERE blog_id IS NOT NULL;
+
+CREATE UNIQUE INDEX uq_newsletter_subscriber_platform_email ON newsletter_subscribers (lower(email)) WHERE blog_id IS NULL;
+
+CREATE TYPE newsletter_campaign_kind AS ENUM ('post_notification', 'manual');
+
+CREATE TYPE newsletter_campaign_status AS ENUM ('draft', 'scheduled', 'sending', 'sent', 'canceled', 'failed');
+
+CREATE TABLE newsletter_campaigns (
+    blog_id UUID, 
+    kind newsletter_campaign_kind NOT NULL, 
+    post_id UUID, 
+    created_by_id UUID, 
+    subject VARCHAR(255) NOT NULL, 
+    body_markdown TEXT, 
+    status newsletter_campaign_status NOT NULL, 
+    scheduled_at TIMESTAMP WITH TIME ZONE, 
+    sent_at TIMESTAMP WITH TIME ZONE, 
+    recipient_count INTEGER NOT NULL, 
+    failed_count INTEGER NOT NULL, 
+    id UUID NOT NULL, 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL, 
+    PRIMARY KEY (id), 
+    FOREIGN KEY(blog_id) REFERENCES blogs (id) ON DELETE CASCADE, 
+    FOREIGN KEY(post_id) REFERENCES posts (id) ON DELETE CASCADE, 
+    FOREIGN KEY(created_by_id) REFERENCES users (id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX uq_newsletter_campaign_post ON newsletter_campaigns (post_id) WHERE post_id IS NOT NULL;
+
+UPDATE alembic_version SET version_num='769f5009bad5' WHERE alembic_version.version_num = 'cf49d59f6471';
+
 -- Running upgrade cf49d59f6471 -> a1c2b3d4e5f6
 
 CREATE TABLE password_reset_codes (
@@ -987,7 +1051,7 @@ CREATE TABLE password_reset_codes (
 
 CREATE INDEX ix_password_reset_codes_user_id ON password_reset_codes (user_id);
 
-UPDATE alembic_version SET version_num='a1c2b3d4e5f6' WHERE alembic_version.version_num = 'cf49d59f6471';
+INSERT INTO alembic_version (version_num) VALUES ('a1c2b3d4e5f6') RETURNING alembic_version.version_num;
 
 -- Running upgrade a1c2b3d4e5f6 -> b2c3d4e5f6a7
 
@@ -1022,6 +1086,58 @@ ALTER TABLE users ADD COLUMN interests VARCHAR(40)[] DEFAULT '{}' NOT NULL;
 ALTER TABLE users ALTER COLUMN interests DROP DEFAULT;
 
 UPDATE alembic_version SET version_num='4d23cdb0ccc3' WHERE alembic_version.version_num = 'c9839d73bf05';
+
+-- Running upgrade 4d23cdb0ccc3, 769f5009bad5 -> a0579cc46db6
+
+DELETE FROM alembic_version WHERE alembic_version.version_num = '4d23cdb0ccc3';
+
+UPDATE alembic_version SET version_num='a0579cc46db6' WHERE alembic_version.version_num = '769f5009bad5';
+
+-- Running upgrade a0579cc46db6 -> b4c5d6e7f809
+
+ALTER TABLE users ADD COLUMN credentials_changed_at TIMESTAMP WITH TIME ZONE;
+
+UPDATE alembic_version SET version_num='b4c5d6e7f809' WHERE alembic_version.version_num = 'a0579cc46db6';
+
+-- Running upgrade b4c5d6e7f809 -> c5d6e7f8a910
+
+ALTER TABLE newsletter_campaigns ADD COLUMN sent_to_subscriber_ids UUID[] DEFAULT '{}' NOT NULL;
+
+ALTER TABLE newsletter_campaigns ALTER COLUMN sent_to_subscriber_ids DROP DEFAULT;
+
+UPDATE alembic_version SET version_num='c5d6e7f8a910' WHERE alembic_version.version_num = 'b4c5d6e7f809';
+
+-- Running upgrade c5d6e7f8a910 -> d6e7f8a9b021
+
+ALTER TABLE blogs ADD COLUMN newsletter_sender_name VARCHAR(120);
+
+ALTER TABLE blogs ADD COLUMN newsletter_banner_url VARCHAR(2048);
+
+ALTER TABLE blogs ADD COLUMN newsletter_banner_alt_text VARCHAR(300) DEFAULT '' NOT NULL;
+
+ALTER TABLE blogs ALTER COLUMN newsletter_banner_alt_text DROP DEFAULT;
+
+ALTER TABLE platform_config ADD COLUMN newsletter_sender_name VARCHAR(120);
+
+ALTER TABLE platform_config ADD COLUMN newsletter_banner_url VARCHAR(2048);
+
+ALTER TABLE platform_config ADD COLUMN newsletter_banner_alt_text VARCHAR(300) DEFAULT '' NOT NULL;
+
+ALTER TABLE platform_config ALTER COLUMN newsletter_banner_alt_text DROP DEFAULT;
+
+UPDATE alembic_version SET version_num='d6e7f8a9b021' WHERE alembic_version.version_num = 'c5d6e7f8a910';
+
+-- Running upgrade d6e7f8a9b021 -> e7f8a9b0c132
+
+ALTER TABLE posts ADD COLUMN cover_image_alt_text VARCHAR(300) DEFAULT '' NOT NULL;
+
+ALTER TABLE posts ALTER COLUMN cover_image_alt_text DROP DEFAULT;
+
+ALTER TABLE blogs ADD COLUMN cover_image_alt_text VARCHAR(300) DEFAULT '' NOT NULL;
+
+ALTER TABLE blogs ALTER COLUMN cover_image_alt_text DROP DEFAULT;
+
+UPDATE alembic_version SET version_num='e7f8a9b0c132' WHERE alembic_version.version_num = 'd6e7f8a9b021';
 
 COMMIT;
 

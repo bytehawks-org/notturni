@@ -122,4 +122,8 @@ quante volte serve, non lascia stato tra un run e l'altro. Copre: auth
 linking SSO (logica di dominio, non l'HTTP — vedi limitazione in `API.md`),
 API token, blog/post (incluse le regole di dominio e le traduzioni i18n),
 commenti (moderazione), pagine statiche, profilo utente (bio, social link,
-avatar) e follow.
+avatar) e follow, impostazioni di piattaforma (inclusi spazio massimo per
+blog e sigilli di verifica GOLD/SILVER/BLU con priorità e cascata di
+ricalcolo), directory pubblica degli utenti (opt-out ed esclusione del
+Super Admin), personalizzazione tipografica del blog (elenco curato di font
+per titoli/corpo/monospace).

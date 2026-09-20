@@ -73,6 +73,14 @@ via `Authorization: Bearer` con l'access token, di per sé immune a CSRF —
 un'origine estranea non può impostare quell'header su una richiesta
 cross-site.
 
+Un cambio password (`POST /users/me/password`, reset "password dimenticata")
+cancella le sessioni (`UserSession`, quindi i refresh token) ma un access
+token JWT già emesso resterebbe altrimenti valido fino al suo `exp` naturale
+(15 minuti), essendo stateless. `User.credentials_changed_at` chiude questa
+finestra: `get_current_user`/`get_current_user_optional` confrontano l'`iat`
+del token con questo campo e rifiutano (401) ogni token emesso prima
+dell'ultimo cambio password.
+
 ## Autenticazione utente (password, MFA, SSO)
 
 ### Registrazione e login con password
@@ -361,10 +369,12 @@ Conteggi per la tab Panoramica del blog (todo/UX_REDESIGN.md B1, mockup 5a):
 `posts_scheduled` sono i `published` con `published_at` futuro; `media` è il
 numero di immagini citate nei post (tabella `post_media`). In più (B2):
 `reads_30d` — 30 voci `{day, reads}` (giorni UTC, quelli senza letture a 0),
-`reads_total_30d`, e `storage_bytes` — byte occupati su storage da media e
+`reads_total_30d`, `storage_bytes` — byte occupati su storage da media e
 backup Markdown del blog (prefissi `userdata/{utente}/{blog}/` di
 proprietario e collaboratori; `null` se lo storage non risponde, `0` se il
-bucket non è mai stato creato).
+bucket non è mai stato creato) — e `storage_limit_mb`, il limite impostato
+da un Super Admin (`platform_config.max_blog_storage_mb`), `null` se nessun
+limite.
 
 **`POST /api/v1/posts/{post_id}/read`** — pubblico, `204`, nessun corpo.
 Conteggio letture aggregato per giorno (tabella `post_reads_daily`, mockup
@@ -468,18 +478,19 @@ segue il blog.
 presentazione del blog (palette/tipografia/layout — vedi
 [ROADMAP.md](../ROADMAP.md#2-estetica) per i vincoli), applicata dal frontend
 a tutte le pagine pubbliche del blog (`BlogPageShell`, todo/UX_REDESIGN.md
-B10): palette come variabili CSS, `typography.heading_font`/`body_font` come
-`--font-heading`/`--font-body` (font self-hostati al build, nessuna
-richiesta a Google a runtime), `body_size`/`measure` per dimensione del
-corpo e larghezza della colonna di lettura del post, `layout` per la
-disposizione del feed della home del blog. JSON libero; se il proprietario
-non ha ancora salvato nulla, ritorna il default della piattaforma (identico
-allo shell non personalizzato):
+B10): palette come variabili CSS, `typography.heading_font`/`body_font`/
+`monospace_font` come `--font-heading`/`--font-body`/`--font-monospace` (font
+self-hostati al build, nessuna richiesta a Google a runtime — quest'ultimo
+usato per i blocchi di codice, blocco "evidenziazione sintassi"),
+`body_size`/`measure` per dimensione del corpo e larghezza della colonna di
+lettura del post, `layout` per la disposizione del feed della home del blog.
+JSON libero; se il proprietario non ha ancora salvato nulla, ritorna il
+default della piattaforma (identico allo shell non personalizzato):
 
 ```json
 {
   "palette": {"background": "#fbf9f6", "foreground": "#2b2a28", "primary": "#3e6259", "muted": "#a8a29a", "border": "#e7e2da"},
-  "typography": {"heading_font": "Lora", "body_font": "Source Sans 3"},
+  "typography": {"heading_font": "Lora", "body_font": "Source Sans 3", "monospace_font": "JetBrains Mono"},
   "layout": "standard"
 }
 ```
@@ -494,16 +505,18 @@ e qualsiasi altra chiave) libero:
 - `palette_dark` (opzionale): stessi vincoli di `palette`; è la variante
   scura applicata alle pagine pubbliche del blog quando il lettore usa il
   tema scuro. Assente, in tema scuro vale la palette scura di piattaforma.
-- `typography`: al massimo 3 font distinti tra `heading_font`/`body_font`
-  (`body_size`/`measure`, pur essendo anch'esse stringhe, non contano verso
-  questo limite); se presenti, `heading_font` deve essere uno dei font serif
-  curati (`Lora`, `Merriweather`, `Playfair Display`, `Source Serif 4`,
-  `Crimson Pro`) e `body_font` uno dei font sans-serif curati (`Inter`,
-  `Nunito Sans`, `Work Sans`, `Source Sans 3`, `Karla`) — vedi
-  `backend/app/domain/blog_config.py`. `body_size` (`"17"`/`"18"`/`"19"`) e
-  `measure` (`"narrow"`/`"normal"`) non sono validati lato backend (solo
-  accettati); un valore diverso da quelli attesi è ignorato dal frontend, che
-  ricade sul default.
+- `typography`: al massimo 3 font distinti tra `heading_font`/`body_font`/
+  `monospace_font` (`body_size`/`measure`, pur essendo anch'esse stringhe, non
+  contano verso questo limite); se presenti, `heading_font` deve essere uno
+  dei font serif curati (`Lora`, `Merriweather`, `Playfair Display`,
+  `Source Serif 4`, `Crimson Pro`), `body_font` uno dei font sans-serif curati
+  (`Inter`, `Nunito Sans`, `Work Sans`, `Source Sans 3`, `Karla`) e
+  `monospace_font` uno dei font monospace curati (`JetBrains Mono`,
+  `Fira Code`, `IBM Plex Mono`, `Source Code Pro`, `Space Mono`; default di
+  piattaforma `JetBrains Mono`) — vedi `backend/app/domain/blog_config.py`.
+  `body_size` (`"17"`/`"18"`/`"19"`) e `measure` (`"narrow"`/`"normal"`) non
+  sono validati lato backend (solo accettati); un valore diverso da quelli
+  attesi è ignorato dal frontend, che ricade sul default.
 - `footer` (opzionale): override per questo blog delle sole colonne 1/2 del
   footer di piattaforma (`GET /api/v1/footer`) — `{"column1": "...",
   "column2": "..."}`, Markdown libero, max 5000 caratteri ciascuna, nessun'altra
@@ -517,23 +530,31 @@ Altre chiavi restano libere.
 proprietario (`403` altrimenti). `multipart/form-data`, campo `file`.
 Immagine di copertina del blog (banner della home pubblica, facoltativa):
 stessi formati/limite di dimensione e stessa moderazione automatica di
-`POST .../media` sotto — l'upload aggiorna `cover_image_url` e
+`POST .../media` sotto (incluso il controllo dello spazio massimo per blog,
+`413` se superato — vedi `platform_config.max_blog_storage_mb`) — l'upload
+aggiorna `cover_image_url` e
 `cover_image_is_sensitive` (risultato della moderazione), azzera
-`cover_image_categories`. Sostituire una cover esistente non cancella
-l'oggetto precedente su storage (stessa scelta di `Post.cover_image_url`).
-Ritorna il `Blog` aggiornato (`BlogOut`).
+`cover_image_categories`/`cover_image_alt_text`. Sostituire una cover
+esistente non cancella l'oggetto precedente su storage (stessa scelta di
+`Post.cover_image_url`). Ritorna il `Blog` aggiornato (`BlogOut`).
+Crea anche una riga nella libreria media del blog (`GET .../media` sotto,
+`used_as_blog_cover=true` finché resta la cover corrente) — prima non ci
+finiva mai, a differenza della cover di un post (che passa dallo stesso
+endpoint di `POST .../media`).
 
 **`PATCH /api/v1/blogs/{slug}/cover-image`** — solo il proprietario, `400`
-se il blog non ha ancora una cover. `{"categories": ["nudity", ...]}`
-(vocabolario in `backend/app/domain/content_media.py::SENSITIVITY_CATEGORIES`):
-aggiorna l'avviso manuale sui contenuti senza ricaricare l'immagine, stesso
+se il blog non ha ancora una cover. `{"categories": ["nudity", ...],
+"alt_text"?}` (vocabolario categorie in
+`backend/app/domain/content_media.py::SENSITIVITY_CATEGORIES`): aggiorna
+l'avviso manuale sui contenuti senza ricaricare l'immagine, stesso
 principio del `PATCH /posts/{id}` quando cambia solo `cover_image_categories`
-— categorie non vuote forzano `cover_image_is_sensitive=true`. Ritorna il
-`Blog` aggiornato.
+— categorie non vuote forzano `cover_image_is_sensitive=true`. `alt_text`
+assente lascia invariato, presente (anche `null`/`""`) lo azzera o
+sostituisce. Ritorna il `Blog` aggiornato.
 
 **`DELETE /api/v1/blogs/{slug}/cover-image`** — solo il proprietario. Azzera
-cover/avviso/categorie (l'oggetto su storage non viene cancellato, stessa
-scelta di cui sopra). Ritorna il `Blog` aggiornato.
+cover/avviso/categorie/alt text (l'oggetto su storage non viene cancellato,
+stessa scelta di cui sopra). Ritorna il `Blog` aggiornato.
 
 **`POST /api/v1/blogs/{slug}/favicon`** — richiede sessione, solo il
 proprietario. `multipart/form-data`, campo `file`. Favicon dedicata del blog
@@ -553,7 +574,11 @@ l'oggetto su storage e azzera `favicon_url`. Ritorna il `Blog` aggiornato.
 scrittura al blog (proprietario/autore/co-autore). `multipart/form-data`,
 campo `file`. Formati ammessi: PNG, JPEG, WEBP, GIF; max 10 MiB (`400`
 altrimenti). Immagine da incorporare nel Markdown di un post (es.
-`![alt](url)`). Vedi "Media e backup" sotto per il path S3.
+`![alt](url)`). Vedi "Media e backup" sotto per il path S3. Se un Super
+Admin ha impostato uno spazio massimo per blog
+(`platform_config.max_blog_storage_mb`, `PATCH /admin/config`), l'upload
+che lo supererebbe risponde `413` invece di essere accettato — nessun
+controllo (comportamento invariato) se il limite non è impostato.
 
 ```json
 {"url": "https://.../notturni/userdata/{user_uuid}/{blog_uuid}/media/{uuid}.png"}
@@ -871,8 +896,10 @@ sezione "Moderazione automatica delle immagini" più sotto; non viene
 ricalcolato qui. `cover_image_categories` (default `[]`) sono le categorie
 di avviso sui contenuti scelte manualmente dall'autore (vedi "Avviso sui
 contenuti" più sotto): non vuoto forza anche `cover_image_is_sensitive` a
-`true`, indipendentemente dal valore passato per quel campo. `tags` è
-opzionale (vedi sezione "Tag" sotto).
+`true`, indipendentemente dal valore passato per quel campo.
+`cover_image_alt_text` (default `""`) è il testo alternativo della cover
+(accessibilità), indipendente dall'eventuale alt text della stessa immagine
+in libreria media. `tags` è opzionale (vedi sezione "Tag" sotto).
 `category_id` è opzionale: l'UUID di una categoria esistente del blog (vedi
 sezione "Categorie" sopra) — `404` se non appartiene a questo blog. `409` se
 lo slug è già in uso su quel blog per quella lingua. `notes` è opzionale
@@ -956,8 +983,11 @@ esporre l'UUID nell'URL. `404` se blog/slug non corrispondono a nessun post
 
 **`PATCH /api/v1/posts/{post_id}`** — stessa autorizzazione della creazione.
 Aggiorna
-`title`/`content`/`cover_image_url`/`cover_image_is_sensitive`/`cover_image_categories`/`tags`/`category_id`/`notes`
-(tutti opzionali). Se `content` cambia, accoda di nuovo il backup su S3 e
+`title`/`content`/`cover_image_url`/`cover_image_is_sensitive`/`cover_image_categories`/`cover_image_alt_text`/`tags`/`category_id`/`notes`
+(tutti opzionali). `cover_image_alt_text` è indipendente da `cover_image_url`
+(stesso principio di `cover_image_categories` sotto): campo assente lascia
+l'alt text invariato, presente (anche `null`/`""`) lo azzera o sostituisce.
+Se `content` cambia, accoda di nuovo il backup su S3 e
 ricalcola anche i media/link citati (vedi "Avviso sui contenuti" e
 "Media e link citati" più sotto). Per `notes`: campo assente lascia le note
 invariate, una lista (anche vuota `[]`) le sostituisce. Per
@@ -1189,8 +1219,15 @@ immagine in `media_files` e risponde anche con `media_id`.
 **`GET /api/v1/blogs/{slug}/media`** — proprietario e collaboratori
 (`403` altrimenti). `{items: [{id, url, content_type, size_bytes, alt_text,
 caption, categories, is_sensitive, uploader_username, created_at, used_in:
-[{post_id, post_slug, post_title, permalink}]}], total_bytes}`, dal più
-recente. `used_in` viene da `post_media` (immagini citate nei post).
+[{post_id, post_slug, post_title, permalink}], used_as_blog_cover}],
+total_bytes}`, dal più recente. `used_in` copre sia le immagini citate nel
+contenuto (`post_media`) sia quelle usate come cover di un post
+(`Post.cover_image_url`) — prima tracciava solo le prime, quindi
+un'immagine usata solo come cover risultava "non usata da nessuno" e
+cancellabile mentre era ancora la cover live del post (bug corretto).
+`used_as_blog_cover` è `true` se l'immagine è l'attuale cover del blog
+(`Blog.cover_image_url`, sezione cover-image sopra) — anch'essa ora sempre
+registrata qui all'upload.
 
 **`POST /api/v1/blogs/{slug}/media/sync`** — accesso in scrittura. Importa
 nella libreria le immagini citate nei post che non hanno ancora una riga
@@ -1204,8 +1241,9 @@ non vengono riscritti: i valori della libreria sono il default per gli usi
 futuri.
 
 **`DELETE /api/v1/blogs/{slug}/media/{media_id}`** — `204`; `409` se
-l'immagine è ancora citata in un post. Rimuove la riga e, se caricata via
-libreria, l'oggetto su storage.
+l'immagine è ancora citata in un post (contenuto o cover) o è l'attuale
+cover del blog. Rimuove la riga e, se caricata via libreria, l'oggetto su
+storage.
 
 ## Anteprima di un link
 
@@ -1553,7 +1591,10 @@ corrente da sé (fallback `en`, poi la prima disponibile, poi `key`).
 pubblica degli utenti (blocco "directory di utenti", stesso schema di
 `GET /blogs`): solo account attivi (non anonimizzati/cancellati) che non
 hanno scelto l'opt-out (`User.directory_listed`, vedi `PATCH /users/me`
-sotto). `q` cerca in username/alias pubblico/bio (`ILIKE`), `locale` filtra
+sotto). Il Super Admin è **sempre** escluso, a prescindere dal proprio
+`directory_listed` — non un'opzione dell'utente, per sicurezza (evitare che
+l'account con i privilegi più ampi sia individuabile dalla directory
+pubblica). `q` cerca in username/alias pubblico/bio (`ILIKE`), `locale` filtra
 per lingua madre (`native_language`), `interest` filtra per chiave canonica
 di interesse (per trovare persone con cui condividerlo e seguirle), `sort`
 è `new` (registrazione, default) o `followers`, `limit` (default 30,
@@ -1584,10 +1625,11 @@ massimo 100), `offset`. Voce:
 ```
 
 `verification_tier` (`none`|`bronze`|`silver`|`gold`|`blue`): sigillo di
-verifica del profilo, stile Bluesky/Instagram/Twitter. Solo
-`bronze` è oggi assegnato da una logica reale (dominio custom verificato via
-DNS, vedi sotto) — `silver`/`gold`/`blue` sono riservati per future
-integrazioni, nessun endpoint li assegna. `custom_domain` è valorizzato solo
+verifica del profilo, stile Bluesky/Instagram/Twitter — `bronze` da dominio
+custom verificato via DNS (vedi sotto), `gold`/`silver`/`blue` da elenchi/
+domini gestiti a mano da un Super Admin (`PATCH /admin/config`, vedi
+sezione Amministrazione), ricalcolati da `app/domain/verification.py`.
+`custom_domain` è valorizzato solo
 se un dominio custom è stato verificato con successo (mai per uno stato
 `pending`/`failed`) — lo username di piattaforma resta comunque sempre
 citabile/risolvibile, il dominio è un'aggiunta, non una sostituzione a
@@ -1999,7 +2041,31 @@ almeno una traduzione non vuota per voce, massimo 200 voci; seminato alla
 creazione della riga da `NOCT_DEFAULT_INTERESTS` (JSON, stesso schema) se
 valorizzata, altrimenti da un elenco builtin curato
 (`app/domain/interests.py::DEFAULT_INTERESTS`) — vedi `GET /api/v1/interests`
-sotto per l'elenco pubblico e `PATCH /users/me` per la scelta dell'utente).
+sotto per l'elenco pubblico e `PATCH /users/me` per la scelta dell'utente;
+rimuovere una chiave qui ripulisce anche `User.interests` di ogni utente che
+l'aveva selezionata, non solo l'elenco di piattaforma), `max_blog_storage_mb`
+(spazio massimo per blog — media + backup Markdown, stesso conteggio di
+`GET /blogs/{slug}/overview::storage_bytes` — in MB; `null`/`0` = nessun
+limite, default; superarlo risponde `413` su
+`POST /blogs/{slug}/media` e `POST /blogs/{slug}/cover-image`),
+`verification_gold_identifiers`/`verification_silver_identifiers`
+(array di email/username, confronto case-insensitive: assegnano
+rispettivamente il sigillo di verifica `gold` — entità verificate a mano
+dalla piattaforma, testate/agenzie/organizzazioni/personalità note — e
+`silver` — sostenitori economici del progetto; `verification_gold_identifiers`
+accetta anche un dominio email nudo, es. `"testata.it"`, non solo email/
+username interi) e `verification_blue_domains` (array di domini email,
+formato hostname validato: assegnano il sigillo `blue`, in aggiunta al
+dominio della piattaforma stessa — `NOCT_INSTANCE_FQDN` — già incluso
+automaticamente). `User.verification_tier` (vedi `GET /users/{username}`)
+è ricalcolato da `app/domain/verification.py` a ogni evento che può
+cambiarlo (registrazione, cambio email/username, verifica/rimozione del
+dominio custom, modifica di uno di questi tre elenchi — che ricalcola
+**tutti** gli utenti attivi in un colpo solo); priorità in caso di più
+criteri soddisfatti: `gold` > `silver` > `blue` > `bronze` (dominio custom
+verificato via DNS) > `none`, mai persa "per errore" (rimosso da un elenco
+più alto ricade sul tier immediatamente inferiore ancora valido, non su
+`none` a prescindere).
 Ogni modifica va nel registro (`platform.config_updated`, con
 `changes: {campo: {from, to}}`) e, se cambia un campo `footer_*`, invalida la
 cache del frontend sul tag condiviso `platform-footer` (tutte le pagine
@@ -2290,17 +2356,58 @@ stessa logica di `can_write_posts`):
   scheduled_at?}`. Senza `scheduled_at` (o nel passato): invio immediato
   (`status=sending`, accodato su RabbitMQ). Con `scheduled_at` futuro:
   resta `status=scheduled` — **nessuno scheduler la invia ancora
-  automaticamente**, è solo lo stato persistito.
-- `PATCH /blogs/{slug}/newsletter/settings` — body
-  `{newsletter_auto_notify_enabled}`. Disattiva/riattiva la notifica
-  automatica ad ogni post pubblicato per questo blog (attiva di default,
-  `Blog.newsletter_auto_notify_enabled`). Un solo invio automatico per
-  post, anche in caso di ripubblicazione (vincolo unique su `post_id`).
+  automaticamente**, è solo lo stato persistito. `scheduled_at` deve
+  includere il fuso orario (es. suffisso `Z` o `+00:00`): un valore naive
+  è rifiutato con 422, non confrontabile con l'istante corrente. L'invio
+  (`app/workers/newsletter_consumer.py`) è idempotente su ridelivery del
+  messaggio (`NewsletterCampaign.sent_to_subscriber_ids`): un iscritto già
+  notificato non riceve una seconda email se il worker viene interrotto a
+  metà invio e il messaggio torna in coda.
+- `PATCH /blogs/{slug}/newsletter/campaigns/{id}` / `DELETE .../campaigns/{id}`
+  — modifica (`{subject?, body_markdown?, scheduled_at?}`) o annulla una
+  campagna, **solo mentre `status=scheduled`** (409 altrimenti: una
+  campagna già `sending` può essere già stata presa in carico dal worker,
+  nessuna finestra sicura per intercettarla; le automatiche
+  `post_notification` nascono già `sending`, quindi non sono mai in questo
+  stato). `DELETE` non cancella la riga, la porta a `status=canceled` (il
+  worker la salta se il messaggio è già in coda). `scheduled_at` è
+  tri-state come le impostazioni sopra: omesso lascia invariato, `null` o
+  un istante nel passato converte subito la campagna in invio immediato
+  (stessa logica della creazione).
+- `GET /blogs/{slug}/newsletter/settings` / `PATCH .../newsletter/settings`
+  — `{newsletter_auto_notify_enabled, newsletter_sender_name,
+  newsletter_banner_url, newsletter_banner_alt_text}`. Il primo campo
+  disattiva/riattiva la notifica automatica ad ogni post pubblicato per
+  questo blog (attivo di default, `Blog.newsletter_auto_notify_enabled`),
+  un solo invio automatico per post anche in caso di ripubblicazione
+  (vincolo unique su `post_id`). Gli altri tre personalizzano l'email delle
+  campagne: nome visualizzato nell'header `From` (indirizzo resta sempre
+  `NOCT_SMTP_FROM_EMAIL`, mai un dominio arbitrario) e un banner mostrato in
+  cima al corpo HTML (`newsletter_banner_url` deve iniziare con `http://`
+  o `https://`, come i link nelle note/bibliografia). **PATCH è tri-state**:
+  un campo omesso nel body lascia il valore attuale invariato, `null` lo
+  azzera esplicitamente — vale anche per `newsletter_auto_notify_enabled`,
+  reso opzionale per questo. Default (tutti i campi assenti/vuoti): nome
+  mittente = titolo del blog, nessun banner.
+- Le email delle campagne (`app/workers/newsletter_consumer.py`) sono
+  `multipart/alternative`: un fallback testuale (client senza HTML, screen
+  reader) più una versione HTML con banner e `body_markdown` renderizzato
+  a HTML (`app/domain/markdown_render.py`, `markdown` + sanificazione
+  `nh3` — niente `<script>`/attributi `on*`/schema diverso da
+  `http`/`https`/`mailto` in `href`/`src`, stessa cautela delle note/
+  bibliografia). È l'unico punto del backend che renderizza Markdown lato
+  server: i post lo fanno solo lato frontend. Le altre email di piattaforma
+  (OTP, reset password) restano solo testo.
 
 **Digest di piattaforma** (Super Admin/Amministratore,
 `require_platform_admin`), stesse forme di sopra con `blog_id=None`:
 `GET /admin/newsletter/stats`, `GET /admin/newsletter/campaigns`,
-`POST /admin/newsletter/campaigns`.
+`POST /admin/newsletter/campaigns`, `PATCH`/`DELETE
+/admin/newsletter/campaigns/{id}` (stesse regole di editabilità/annullo di
+sopra), e `GET`/`PATCH /admin/newsletter/settings` — stesso schema
+tri-state di sopra ma senza `newsletter_auto_notify_enabled` (non
+applicabile a un digest non legato alla pubblicazione di un singolo blog),
+sorgente `platform_config` invece di `Blog`.
 
 ## CORS
 

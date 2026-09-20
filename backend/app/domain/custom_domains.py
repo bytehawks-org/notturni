@@ -2,8 +2,8 @@
 Bluesky): l'utente dimostra il possesso del dominio pubblicando un record
 `_notturni-challenge.<dominio>` con un token generato lato server. Verificato
 con successo assegna il sigillo di verifica "bronzo" (User.verification_tier,
-CLAUDE.md #5) — silver/gold/blue restano riservati per future integrazioni,
-nessuna logica li assegna oggi.
+CLAUDE.md #5) — priorità e assegnazione di silver/gold/blue (elenchi manuali/
+dominio email, gestiti da un Super Admin) sono in app/domain/verification.py.
 
 Nessuna dipendenza da HTTP/SSRF (solo lookup DNS): il rischio è al più un
 abuso della frequenza di query, mitigato con lo stesso rate limiting fail-open

@@ -204,6 +204,12 @@ export function SettingsTab({ blog, canEdit, onUpdated }: { blog: Blog; canEdit:
                   value={blog.cover_image_url}
                   isSensitive={blog.cover_image_is_sensitive}
                   categories={blog.cover_image_categories}
+                  altText={blog.cover_image_alt_text}
+                  onAltTextChange={(altText) => {
+                    void authFetch((tk) =>
+                      api.blogs.updateCoverImageCategories(tk, blog.slug, blog.cover_image_categories, altText)
+                    ).then(onUpdated);
+                  }}
                   onChange={(url, sensitive, categories) => {
                     if (url === null) {
                       void authFetch((tk) => api.blogs.deleteCoverImage(tk, blog.slug)).then(onUpdated);

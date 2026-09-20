@@ -115,6 +115,9 @@ class PostCreateRequest(BaseModel):
     # (CLAUDE.md #3, vocabolario in app/domain/content_media.py). Non vuoto
     # forza anche cover_image_is_sensitive a True.
     cover_image_categories: list[str] = []
+    # Testo alternativo della cover (accessibilità) — indipendente
+    # dall'eventuale alt text della stessa immagine in libreria media.
+    cover_image_alt_text: str = ""
     # Tag del campo dedicato (vedi app/domain/tags.py); si sommano agli
     # eventuali #hashtag scritti nel testo, massimo 5 in tutto.
     tags: list[str] | None = None
@@ -136,6 +139,7 @@ class PostTranslationRequest(BaseModel):
     cover_image_url: str | None = None
     cover_image_is_sensitive: bool = False
     cover_image_categories: list[str] = []
+    cover_image_alt_text: str = ""
     tags: list[str] | None = None
     category_id: uuid.UUID | None = None
     # B9: pubblicazione di appartenenza (stesso schema tri-state di category_id)
@@ -159,6 +163,10 @@ class PostUpdateRequest(BaseModel):
     # esistente. Assente: lascia invariate; lista (anche vuota `[]`): la
     # sostituisce — non vuota forza anche cover_image_is_sensitive a True.
     cover_image_categories: list[str] | None = None
+    # Come cover_image_categories: indipendente da un nuovo cover_image_url.
+    # Assente: lascia invariato; presente (anche `null`/`""`): lo azzera o
+    # sostituisce — usare model_fields_set in update_post, non "is not None".
+    cover_image_alt_text: str | None = None
     # assente: lascia invariati i tag del campo dedicato; lista (anche vuota
     # []): la sostituisce. Gli #hashtag nel testo sono comunque ricalcolati
     # ad ogni modifica del contenuto, a prescindere da questo campo.
@@ -220,6 +228,7 @@ class PostOut(BaseModel):
     cover_image_url: str | None
     cover_image_is_sensitive: bool
     cover_image_categories: list[str]
+    cover_image_alt_text: str
     status: PostStatus
     published_at: datetime | None
     created_at: datetime
@@ -475,6 +484,7 @@ async def _posts_out(
                 cover_image_url=post.cover_image_url,
                 cover_image_is_sensitive=post.cover_image_is_sensitive,
                 cover_image_categories=post.cover_image_categories,
+                cover_image_alt_text=post.cover_image_alt_text,
                 status=post.status,
                 published_at=post.published_at,
                 created_at=post.created_at,
@@ -705,6 +715,7 @@ async def create_post(
         cover_image_url=payload.cover_image_url,
         cover_image_is_sensitive=payload.cover_image_is_sensitive or bool(payload.cover_image_categories),
         cover_image_categories=payload.cover_image_categories,
+        cover_image_alt_text=payload.cover_image_alt_text,
         manual_tags=manual_tags,
         category_id=payload.category_id,
         publication_id=payload.publication_id,
@@ -787,6 +798,7 @@ async def add_post_translation(
         cover_image_url=payload.cover_image_url,
         cover_image_is_sensitive=payload.cover_image_is_sensitive or bool(payload.cover_image_categories),
         cover_image_categories=payload.cover_image_categories,
+        cover_image_alt_text=payload.cover_image_alt_text,
         manual_tags=manual_tags,
         category_id=category_id,
         publication_id=publication_id,
@@ -977,6 +989,8 @@ async def update_post(
         post.cover_image_categories = payload.cover_image_categories
         if post.cover_image_categories:
             post.cover_image_is_sensitive = True
+    if "cover_image_alt_text" in payload.model_fields_set:
+        post.cover_image_alt_text = payload.cover_image_alt_text or ""
 
     # i tag vanno ricalcolati se è cambiato il contenuto (gli #hashtag nel
     # testo potrebbero essere cambiati) o se il campo dedicato è stato

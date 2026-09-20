@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    ARRAY,
     DateTime,
     Enum,
     ForeignKey,
@@ -16,6 +17,7 @@ from sqlalchemy import (
     Text,
     func,
 )
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDPKMixin
@@ -149,6 +151,14 @@ class NewsletterCampaign(Base, UUIDPKMixin, TimestampMixin):
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     recipient_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Id degli iscritti già notificati per questa campagna: se il worker viene
+    # interrotto a metà invio (crash, riavvio) il broker riconsegna lo stesso
+    # messaggio da capo (app/workers/newsletter_consumer.py::_on_message,
+    # nack/requeue) — senza questo elenco, _process_campaign rispedirebbe
+    # l'email anche a chi l'ha già ricevuta.
+    sent_to_subscriber_ids: Mapped[list[uuid.UUID]] = mapped_column(
+        ARRAY(UUID(as_uuid=True)), default=list, nullable=False
+    )
 
     __table_args__ = (
         Index(

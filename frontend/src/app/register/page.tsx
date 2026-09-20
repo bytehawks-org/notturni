@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
+import { SsoButtons } from "@/components/auth/SsoButtons";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { FieldGroup, Input, Label } from "@/components/ui/Field";
@@ -39,11 +40,15 @@ export default function RegisterPage() {
   const [submitting, setSubmitting] = useState(false);
   const [registrationMode, setRegistrationMode] = useState<"open" | "invite" | "closed" | null>(null);
   const [usernameCheck, setUsernameCheck] = useState<UsernameCheckResult | null>(null);
+  const [ssoProviders, setSsoProviders] = useState<string[]>([]);
 
   useEffect(() => {
     api.config
       .get()
-      .then((c) => setRegistrationMode(c.registration_mode ?? "open"))
+      .then((c) => {
+        setRegistrationMode(c.registration_mode ?? "open");
+        setSsoProviders(c.sso_providers ?? []);
+      })
       .catch(() => setRegistrationMode("open"));
   }, []);
 
@@ -188,6 +193,8 @@ export default function RegisterPage() {
           <Button type="submit" size="lg" disabled={submitting || !canSubmit}>
             {submitting ? t("creating") : t("createAccount")}
           </Button>
+
+          <SsoButtons providers={ssoProviders} />
 
           <p className="text-center text-[13px] leading-relaxed text-muted">
             {t("haveAccount")}{" "}

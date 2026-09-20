@@ -16,13 +16,13 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_optional_current_user
-from app.domain.authorization import blog_publicly_listable_clause
+from app.domain.authorization import blog_publicly_listable_clause, publicly_visible_clause
 from app.api.v1.posts import PostOut, _posts_out
 from app.core.database import get_session
 from app.models.blog import Blog, BlogVisibility
 from app.models.follow import BlogFollow, UserFollow
 from app.models.category import Category
-from app.models.post import Post, PostStatus
+from app.models.post import Post
 from app.models.tag import Tag, post_tags
 from app.models.user import User
 
@@ -63,9 +63,7 @@ async def list_feed(
         select(Post, Blog)
         .join(Blog, Post.blog_id == Blog.id)
         .where(
-            Post.status == PostStatus.PUBLISHED,
-            Post.published_at <= datetime.now(timezone.utc),
-            Post.is_hidden.is_(False),
+            publicly_visible_clause(),
             # todo/BLOG.md #2: la raccolta della homepage mostra solo blog pubblici
             # (e non sospesi/in pausa/in cancellazione, B3).
             blog_publicly_listable_clause(),
@@ -110,9 +108,7 @@ async def list_feed_locales(session: AsyncSession = Depends(get_session)) -> lis
         select(Post.locale, post_count)
         .join(Blog, Post.blog_id == Blog.id)
         .where(
-            Post.status == PostStatus.PUBLISHED,
-            Post.published_at <= datetime.now(timezone.utc),
-            Post.is_hidden.is_(False),
+            publicly_visible_clause(),
             blog_publicly_listable_clause(),
         )
         .group_by(Post.locale)
@@ -149,10 +145,8 @@ async def list_trending_tags(
         .join(Post, Post.id == post_tags.c.post_id)
         .join(Blog, Blog.id == Post.blog_id)
         .where(
-            Post.status == PostStatus.PUBLISHED,
+            publicly_visible_clause(),
             Post.published_at >= since,
-            Post.published_at <= datetime.now(timezone.utc),
-            Post.is_hidden.is_(False),
             blog_publicly_listable_clause(),
         )
         .group_by(Tag.name)

@@ -84,6 +84,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         items={items}
         eyebrow={t("administration")}
         homeHref="/admin"
+        platformLink={{ href: "/", label: t("backToPlatform") }}
         footer={(collapsed) =>
           collapsed ? (
             <div className="flex flex-col items-center gap-2 px-1">

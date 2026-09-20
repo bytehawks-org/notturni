@@ -14,6 +14,7 @@ Uso (dalla directory backend/, con il venv attivo):
 """
 
 import asyncio
+import html as html_lib
 import json
 import logging
 import uuid
@@ -26,8 +27,10 @@ from app.core.broker import NEWSLETTER_SEND_QUEUE, connect_with_retry
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.mail import MailNotConfigured, send_email
+from app.domain.markdown_render import render_markdown_to_safe_html
 from app.domain.newsletter import CONFIRM_TOKEN_TTL_HOURS, sign_unsubscribe_token
 from app.domain.permalinks import build_permalink
+from app.domain.platform_config import get_platform_config
 from app.models.blog import Blog
 from app.models.newsletter import (
     NewsletterCampaign,
@@ -81,6 +84,43 @@ def _footer(*, list_label: str, subscriber: NewsletterSubscriber) -> str:
     )
 
 
+def _html_footer(*, list_label: str, subscriber: NewsletterSubscriber) -> str:
+    confirmed_label = (
+        subscriber.confirmed_at.strftime("%d/%m/%Y") if subscriber.confirmed_at else "recentemente"
+    )
+    return (
+        '<hr style="border:none;border-top:1px solid #ddd;margin:24px 0;">'
+        f'<p style="font-size:12px;color:#666;">'
+        f"Stai ricevendo questa email perché ti sei iscritto/a alla newsletter di "
+        f"{html_lib.escape(list_label)} il {confirmed_label}.<br>"
+        f'Per non ricevere più queste email, <a href="{html_lib.escape(_unsubscribe_link(subscriber.id))}">'
+        "disiscriviti qui</a>.</p>"
+    )
+
+
+def _html_body(
+    *,
+    body_markdown: str,
+    list_label: str,
+    subscriber: NewsletterSubscriber,
+    banner_url: str | None,
+    banner_alt: str,
+) -> str:
+    banner = (
+        f'<img src="{html_lib.escape(banner_url)}" alt="{html_lib.escape(banner_alt)}" '
+        'style="max-width:100%;display:block;margin-bottom:20px;">'
+        if banner_url
+        else ""
+    )
+    return (
+        '<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:600px;'
+        'margin:0 auto;color:#111;line-height:1.5;">'
+        f"{banner}{render_markdown_to_safe_html(body_markdown)}"
+        f"{_html_footer(list_label=list_label, subscriber=subscriber)}"
+        "</body></html>"
+    )
+
+
 def _send_confirmation(payload: dict) -> None:
     link = _confirm_link(payload["token"])
     send_email(
@@ -108,19 +148,27 @@ async def _recipients(session: AsyncSession, campaign: NewsletterCampaign) -> li
 
 async def _build_content(
     session: AsyncSession, campaign: NewsletterCampaign, blog: Blog | None
-) -> tuple[str, str] | None:
-    """(oggetto, corpo) dell'email, senza il footer per-iscritto (aggiunto
-    per ogni destinatario da `_footer`). None se il post di riferimento non
-    esiste più (post_notification orfana — nulla da inviare)."""
+) -> tuple[str, str, str] | None:
+    """(oggetto, corpo testuale, sorgente Markdown per il corpo HTML) —
+    separati perché il testuale della notifica automatica non è vero
+    Markdown (il link "Leggi tutto" resta un URL nudo, leggibile in un
+    client senza HTML), mentre la versione HTML lo rende un link cliccabile.
+    Nessun footer per-iscritto qui (aggiunto per ogni destinatario da
+    `_footer`/`_html_footer`). None se il post di riferimento non esiste più
+    (post_notification orfana — nulla da inviare)."""
     if campaign.kind == NewsletterCampaignKind.POST_NOTIFICATION:
         if campaign.post_id is None or blog is None:
             return None
         post = await session.get(Post, campaign.post_id)
         if post is None:
             return None
-        body = f"{post.title}\n\n{_excerpt(post.content)}\n\nLeggi tutto: {_post_url(blog, post)}"
-        return campaign.subject, body
-    return campaign.subject, campaign.body_markdown or ""
+        excerpt = _excerpt(post.content)
+        url = _post_url(blog, post)
+        text_body = f"{post.title}\n\n{excerpt}\n\nLeggi tutto: {url}"
+        markdown_body = f"### {post.title}\n\n{excerpt}\n\n[Leggi tutto]({url})"
+        return campaign.subject, text_body, markdown_body
+    body = campaign.body_markdown or ""
+    return campaign.subject, body, body
 
 
 async def _process_campaign(session: AsyncSession, campaign_id: str) -> None:
@@ -131,12 +179,29 @@ async def _process_campaign(session: AsyncSession, campaign_id: str) -> None:
     if campaign.status == NewsletterCampaignStatus.CANCELED:
         logger.info("Campagna %s annullata, non invio nulla", campaign_id)
         return
+    if campaign.status == NewsletterCampaignStatus.SENT:
+        # Ridelivery del messaggio dopo un invio già completato con successo
+        # (nack/requeue arrivato dopo il commit finale ma prima dell'ack, o
+        # più messaggi in coda per la stessa campagna): non rispedire nulla.
+        logger.info("Campagna %s già inviata, ignoro la ridelivery", campaign_id)
+        return
 
     campaign.status = NewsletterCampaignStatus.SENDING
     await session.commit()
 
     blog = await session.get(Blog, campaign.blog_id) if campaign.blog_id else None
     list_label = blog.title if blog is not None else "Notturni"
+    # B: configurazione newsletter (banner, nome mittente) — per blog se la
+    # campagna è di un blog, altrimenti quella di piattaforma per il digest.
+    if blog is not None:
+        sender_name = blog.newsletter_sender_name
+        banner_url = blog.newsletter_banner_url
+        banner_alt = blog.newsletter_banner_alt_text
+    else:
+        platform = await get_platform_config(session)
+        sender_name = platform.newsletter_sender_name
+        banner_url = platform.newsletter_banner_url
+        banner_alt = platform.newsletter_banner_alt_text
 
     content = await _build_content(session, campaign, blog)
     if content is None:
@@ -144,19 +209,31 @@ async def _process_campaign(session: AsyncSession, campaign_id: str) -> None:
         await session.commit()
         logger.warning("Campagna %s senza contenuto valido (post mancante?), segnata failed", campaign_id)
         return
-    subject, body = content
+    subject, text_body, markdown_body = content
 
-    recipients = await _recipients(session, campaign)
-    sent_count = 0
+    # sent_to_subscriber_ids copre il caso di ridelivery a metà: il worker
+    # interrotto tra un invio e l'altro fa ripartire _process_campaign da
+    # capo (status resta SENDING), ma senza rispedire a chi ha già ricevuto
+    # l'email nel tentativo precedente.
+    already_sent = set(campaign.sent_to_subscriber_ids)
+    recipients = [s for s in await _recipients(session, campaign) if s.id not in already_sent]
+    sent_ids = list(campaign.sent_to_subscriber_ids)
     failed_count = 0
     for subscriber in recipients:
         try:
             send_email(
                 to=subscriber.email,
                 subject=subject,
-                body=body + _footer(list_label=list_label, subscriber=subscriber),
+                body=text_body + _footer(list_label=list_label, subscriber=subscriber),
+                html_body=_html_body(
+                    body_markdown=markdown_body,
+                    list_label=list_label,
+                    subscriber=subscriber,
+                    banner_url=banner_url,
+                    banner_alt=banner_alt,
+                ),
+                from_name=sender_name or list_label,
             )
-            sent_count += 1
         except MailNotConfigured:
             # sviluppo locale senza SMTP: non è un fallimento del singolo
             # destinatario, ma dell'intera infrastruttura — stesso comportamento
@@ -164,17 +241,25 @@ async def _process_campaign(session: AsyncSession, campaign_id: str) -> None:
             logger.warning(
                 "NOCT_SMTP_HOST non configurato — invio a %s non effettuato (solo log).", subscriber.email
             )
+            continue
         except Exception:
             logger.exception("Invio newsletter fallito per %s (campagna %s)", subscriber.email, campaign_id)
             failed_count += 1
+            continue
+        sent_ids.append(subscriber.id)
+        # Commit per destinatario, non solo a fine ciclo: se il worker viene
+        # interrotto qui, la ridelivery successiva riparte dal destinatario
+        # giusto invece di rispedire a chi è già in sent_ids.
+        campaign.sent_to_subscriber_ids = list(sent_ids)
+        await session.commit()
 
-    campaign.recipient_count = sent_count
+    campaign.recipient_count = len(sent_ids)
     campaign.failed_count = failed_count
     campaign.status = NewsletterCampaignStatus.SENT
     campaign.sent_at = datetime.now(timezone.utc)
     await session.commit()
     logger.info(
-        "Campagna %s inviata: %d destinatari, %d falliti", campaign_id, sent_count, failed_count
+        "Campagna %s inviata: %d destinatari, %d falliti", campaign_id, len(sent_ids), failed_count
     )
 
 

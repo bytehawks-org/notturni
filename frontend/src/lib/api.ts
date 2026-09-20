@@ -44,7 +44,12 @@ import type {
   MyLinkBibliographyEntry,
   MyMediaFile,
   MyPublication,
+  AdminNewsletterSettings,
+  AdminNewsletterSettingsUpdate,
   NewsletterCampaign,
+  NewsletterCampaignUpdate,
+  NewsletterSettings,
+  NewsletterSettingsUpdate,
   NewsletterStats,
   NoteKind,
   Page,
@@ -288,9 +293,14 @@ export const api = {
       formData.append("file", file);
       return request<Blog>(`/api/v1/blogs/${slug}/cover-image`, { method: "POST", token, formData });
     },
-    /** Avviso manuale sui contenuti della cover già caricata, senza ricaricarla. */
-    updateCoverImageCategories: (token: string, slug: string, categories: string[]) =>
-      request<Blog>(`/api/v1/blogs/${slug}/cover-image`, { method: "PATCH", token, body: { categories } }),
+    /** Avviso manuale sui contenuti della cover già caricata, senza ricaricarla.
+     * `altText` assente: non tocca l'alt text attuale. */
+    updateCoverImageCategories: (token: string, slug: string, categories: string[], altText?: string) =>
+      request<Blog>(`/api/v1/blogs/${slug}/cover-image`, {
+        method: "PATCH",
+        token,
+        body: altText === undefined ? { categories } : { categories, alt_text: altText },
+      }),
     deleteCoverImage: (token: string, slug: string) =>
       request<Blog>(`/api/v1/blogs/${slug}/cover-image`, { method: "DELETE", token }),
     /** Favicon dedicata del blog (facoltativa): nessuna moderazione, icona di identità. */
@@ -450,6 +460,7 @@ export const api = {
         cover_image_url?: string | null;
         cover_image_is_sensitive?: boolean;
         cover_image_categories?: SensitivityCategory[];
+        cover_image_alt_text?: string;
         tags?: string[];
         category_id?: string | null;
         publication_id?: string | null;
@@ -468,6 +479,9 @@ export const api = {
          * — indipendente da cover_image_url, a differenza di
          * cover_image_is_sensitive (vedi backend/API.md). */
         cover_image_categories?: SensitivityCategory[];
+        /** assente: non tocca; presente (anche null/""): azzera o sostituisce
+         * — indipendente da cover_image_url, come cover_image_categories. */
+        cover_image_alt_text?: string | null;
         tags?: string[];
         /** assente: non tocca la categoria; null: la rimuove; id: la imposta. */
         category_id?: string | null;
@@ -509,6 +523,7 @@ export const api = {
         content: string;
         cover_image_url?: string | null;
         cover_image_categories?: SensitivityCategory[];
+        cover_image_alt_text?: string;
         tags?: string[];
         category_id?: string | null;
         notes?: PostNote[];
@@ -837,8 +852,23 @@ export const api = {
         token,
         body: payload,
       }),
-    updateBlogSettings: (token: string, slug: string, payload: { newsletter_auto_notify_enabled: boolean }) =>
-      request<{ newsletter_auto_notify_enabled: boolean }>(`/api/v1/blogs/${slug}/newsletter/settings`, {
+    /** Solo mentre `status === "scheduled"` (409 altrimenti, vedi
+     * NewsletterCampaignUpdate). */
+    updateBlogCampaign: (token: string, slug: string, campaignId: string, payload: NewsletterCampaignUpdate) =>
+      request<NewsletterCampaign>(`/api/v1/blogs/${slug}/newsletter/campaigns/${campaignId}`, {
+        method: "PATCH",
+        token,
+        body: payload,
+      }),
+    cancelBlogCampaign: (token: string, slug: string, campaignId: string) =>
+      request<NewsletterCampaign>(`/api/v1/blogs/${slug}/newsletter/campaigns/${campaignId}`, {
+        method: "DELETE",
+        token,
+      }),
+    blogSettings: (token: string, slug: string) =>
+      request<NewsletterSettings>(`/api/v1/blogs/${slug}/newsletter/settings`, { token }),
+    updateBlogSettings: (token: string, slug: string, payload: NewsletterSettingsUpdate) =>
+      request<NewsletterSettings>(`/api/v1/blogs/${slug}/newsletter/settings`, {
         method: "PATCH",
         token,
         body: payload,
@@ -849,5 +879,23 @@ export const api = {
       token: string,
       payload: { subject: string; body_markdown: string; scheduled_at?: string | null }
     ) => request<NewsletterCampaign>("/api/v1/admin/newsletter/campaigns", { method: "POST", token, body: payload }),
+    updateAdminCampaign: (token: string, campaignId: string, payload: NewsletterCampaignUpdate) =>
+      request<NewsletterCampaign>(`/api/v1/admin/newsletter/campaigns/${campaignId}`, {
+        method: "PATCH",
+        token,
+        body: payload,
+      }),
+    cancelAdminCampaign: (token: string, campaignId: string) =>
+      request<NewsletterCampaign>(`/api/v1/admin/newsletter/campaigns/${campaignId}`, {
+        method: "DELETE",
+        token,
+      }),
+    adminSettings: (token: string) => request<AdminNewsletterSettings>("/api/v1/admin/newsletter/settings", { token }),
+    updateAdminSettings: (token: string, payload: AdminNewsletterSettingsUpdate) =>
+      request<AdminNewsletterSettings>("/api/v1/admin/newsletter/settings", {
+        method: "PATCH",
+        token,
+        body: payload,
+      }),
   },
 };

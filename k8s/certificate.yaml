@@ -1,0 +1,19 @@
+# Un solo certificato SAN per l'apex (notturni.eu) e il wildcard
+# (*.notturni.eu, sottodomini per-blog — ingressroute.yaml), un solo Secret
+# TLS risultante (notturni-eu-tls) referenziato sia da ingress.yaml sia da
+# ingressroute.yaml. issuerRef punta a "letsencrypt-prod" di default — per
+# il primo test cambiarlo a "letsencrypt-staging" (vedi nota in
+# cert-manager-issuer.yaml), poi tornare qui e ricreare il Secret.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: notturni-eu-tls
+  namespace: notturni
+spec:
+  secretName: notturni-eu-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - notturni.eu
+    - "*.notturni.eu"

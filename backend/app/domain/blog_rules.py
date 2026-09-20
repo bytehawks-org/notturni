@@ -24,6 +24,8 @@ RESERVED_BLOG_SLUGS = {
     "monitor",
     "stats",
     "status",
+    "search",
+    "users",
 }
 
 SLUG_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")

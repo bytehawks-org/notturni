@@ -224,10 +224,10 @@ L'identity provider è gestito centralmente da FastAPI, fungendo da Master per l
   * Tabella `api_tokens`, valore opaco con prefisso `noct_`, solo l'hash sha256 è persistito.
   * `owner_type` distingue token del motore core (nessun utente associato, uso machine-to-machine) da token utente (previsti per il futuro: permettere di interfacciarsi con l'API senza passare da editor o admin del proprio blog).
 
-Stato di avanzamento (incluse le limitazioni note: SSO non testabile
-end-to-end senza credenziali OAuth reali, consumer email OTP ancora
-placeholder) ed endpoint: [ROADMAP.md § 4](ROADMAP.md#4-autenticazione-e-sso)
-e [backend/API.md](backend/API.md).
+Stato di avanzamento (inclusa la limitazione nota: SSO non testabile
+end-to-end senza credenziali OAuth reali) ed endpoint:
+[ROADMAP.md § 4](ROADMAP.md#4-autenticazione-e-sso) e
+[backend/API.md](backend/API.md).
 
 ## 8. Ambiente locale
 

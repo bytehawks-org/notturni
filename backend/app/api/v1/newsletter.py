@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +22,7 @@ from app.domain.newsletter import (
     generate_confirm_token,
     verify_unsubscribe_token,
 )
+from app.domain.platform_config import PlatformConfig, get_platform_config, touch
 from app.domain.rate_limit import enforce_rate_limit
 from app.models.blog import Blog
 from app.models.newsletter import (
@@ -88,18 +89,115 @@ class CampaignOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+def _clean_scheduled_at(value: datetime | None) -> datetime | None:
+    # confrontato con datetime.now(timezone.utc) più sotto: un valore
+    # naive (senza offset, es. "2026-01-01T10:00:00") solleverebbe
+    # TypeError a runtime invece di un 422 leggibile per il client.
+    if value is not None and value.tzinfo is None:
+        raise ValueError("scheduled_at deve includere il fuso orario (es. suffisso 'Z' o '+00:00').")
+    return value
+
+
 class CampaignCreateRequest(BaseModel):
     subject: str
     body_markdown: str
     scheduled_at: datetime | None = None
 
+    _clean_scheduled_at = field_validator("scheduled_at")(_clean_scheduled_at)
+
+
+class CampaignUpdateRequest(BaseModel):
+    """Solo per campagne `manual` con `status=scheduled` (vedi
+    _require_editable_campaign): una campagna già in invio/inviata non è più
+    modificabile, una automatica (`post_notification`) non ha un
+    subject/body propri da modificare (generati dal post al momento
+    dell'invio). Tri-state solo su `scheduled_at`: omesso lascia invariato,
+    `null` o nel passato converte la campagna in invio immediato (stessa
+    logica di creazione, `_create_manual_campaign::is_immediate`)."""
+
+    subject: str | None = None
+    body_markdown: str | None = None
+    scheduled_at: datetime | None = None
+
+    _clean_scheduled_at = field_validator("scheduled_at")(_clean_scheduled_at)
+
+
+MAX_NEWSLETTER_SENDER_NAME_LENGTH = 120
+MAX_NEWSLETTER_BANNER_ALT_LENGTH = 300
+
+
+def _clean_newsletter_sender_name(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = value.strip()
+    if len(text) > MAX_NEWSLETTER_SENDER_NAME_LENGTH:
+        raise ValueError(f"Il nome del mittente può avere al massimo {MAX_NEWSLETTER_SENDER_NAME_LENGTH} caratteri.")
+    return text or None
+
+
+def _clean_newsletter_banner_url(value: str | None) -> str | None:
+    """Come app/domain/notes.py::_clean_url: questo valore finisce in un
+    `<img src>` dell'email HTML della campagna (app/workers/newsletter_consumer.py)
+    — niente `javascript:`/schema arbitrario."""
+    if value is None:
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    if not (text.startswith("http://") or text.startswith("https://")):
+        raise ValueError("L'URL del banner deve iniziare con http:// o https://.")
+    return text
+
+
+def _clean_newsletter_banner_alt(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = value.strip()
+    if len(text) > MAX_NEWSLETTER_BANNER_ALT_LENGTH:
+        raise ValueError(f"L'alt text del banner può avere al massimo {MAX_NEWSLETTER_BANNER_ALT_LENGTH} caratteri.")
+    return text
+
 
 class NewsletterSettingsRequest(BaseModel):
-    newsletter_auto_notify_enabled: bool
+    """Tri-state (CLAUDE.md "insidie note"): un campo omesso lascia il valore
+    attuale invariato, `null` lo azzera esplicitamente — usare
+    `model_fields_set`, non basta il default `None`."""
+
+    newsletter_auto_notify_enabled: bool | None = None
+    newsletter_sender_name: str | None = None
+    newsletter_banner_url: str | None = None
+    newsletter_banner_alt_text: str | None = None
+
+    _clean_sender_name = field_validator("newsletter_sender_name")(_clean_newsletter_sender_name)
+    _clean_banner_url = field_validator("newsletter_banner_url")(_clean_newsletter_banner_url)
+    _clean_banner_alt = field_validator("newsletter_banner_alt_text")(_clean_newsletter_banner_alt)
 
 
 class NewsletterSettingsOut(BaseModel):
     newsletter_auto_notify_enabled: bool
+    newsletter_sender_name: str | None
+    newsletter_banner_url: str | None
+    newsletter_banner_alt_text: str
+
+
+class AdminNewsletterSettingsRequest(BaseModel):
+    """Come NewsletterSettingsRequest, per il digest di piattaforma
+    (blog_id=None): nessun newsletter_auto_notify_enabled, non ha senso per
+    un digest non legato alla pubblicazione di un singolo blog."""
+
+    newsletter_sender_name: str | None = None
+    newsletter_banner_url: str | None = None
+    newsletter_banner_alt_text: str | None = None
+
+    _clean_sender_name = field_validator("newsletter_sender_name")(_clean_newsletter_sender_name)
+    _clean_banner_url = field_validator("newsletter_banner_url")(_clean_newsletter_banner_url)
+    _clean_banner_alt = field_validator("newsletter_banner_alt_text")(_clean_newsletter_banner_alt)
+
+
+class AdminNewsletterSettingsOut(BaseModel):
+    newsletter_sender_name: str | None
+    newsletter_banner_url: str | None
+    newsletter_banner_alt_text: str
 
 
 async def _get_blog_or_404(session: AsyncSession, blog_slug: str) -> Blog:
@@ -168,6 +266,60 @@ async def _create_manual_campaign(
     await session.refresh(campaign)
     if is_immediate:
         publish_newsletter_campaign(str(campaign.id))
+    return CampaignOut.model_validate(campaign)
+
+
+async def _get_campaign_or_404(
+    session: AsyncSession, *, blog_id: uuid.UUID | None, campaign_id: uuid.UUID
+) -> NewsletterCampaign:
+    campaign = await session.get(NewsletterCampaign, campaign_id)
+    if campaign is None or campaign.blog_id != blog_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Campagna non trovata.")
+    return campaign
+
+
+def _require_editable_campaign(campaign: NewsletterCampaign) -> None:
+    """Solo una campagna manuale ancora `scheduled` può essere modificata o
+    annullata: una volta `sending` il worker può già averla presa in carico
+    (nessuna finestra sicura per intercettarla), `sent`/`failed`/`canceled`
+    sono stati finali. Le automatiche (`post_notification`) nascono già
+    `sending` (vedi app/api/v1/posts.py::_maybe_queue_post_notification),
+    quindi non sono mai in questo stato — di fatto mai editabili/annullabili
+    da qui, solo dalla dashboard del post che le genera."""
+    if campaign.status != NewsletterCampaignStatus.SCHEDULED:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Solo una campagna pianificata (non ancora in invio) può essere modificata o annullata.",
+        )
+
+
+async def _update_campaign(
+    session: AsyncSession, campaign: NewsletterCampaign, payload: CampaignUpdateRequest
+) -> CampaignOut:
+    _require_editable_campaign(campaign)
+    fields_set = payload.model_fields_set
+    if "subject" in fields_set and payload.subject is not None:
+        campaign.subject = payload.subject
+    if "body_markdown" in fields_set and payload.body_markdown is not None:
+        campaign.body_markdown = payload.body_markdown
+    is_immediate = False
+    if "scheduled_at" in fields_set:
+        campaign.scheduled_at = payload.scheduled_at
+        is_immediate = payload.scheduled_at is None or payload.scheduled_at <= datetime.now(timezone.utc)
+        if is_immediate:
+            campaign.status = NewsletterCampaignStatus.SENDING
+    await session.commit()
+    await session.refresh(campaign)
+    if is_immediate:
+        publish_newsletter_campaign(str(campaign.id))
+    return CampaignOut.model_validate(campaign)
+
+
+async def _cancel_campaign(session: AsyncSession, campaign: NewsletterCampaign) -> CampaignOut:
+    _require_editable_campaign(campaign)
+    campaign.status = NewsletterCampaignStatus.CANCELED
+    await session.commit()
+    await session.refresh(campaign)
     return CampaignOut.model_validate(campaign)
 
 
@@ -342,6 +494,53 @@ async def create_blog_newsletter_campaign(
     return await _create_manual_campaign(session, blog_id=blog.id, created_by=current_user, payload=payload)
 
 
+@router.patch("/blogs/{blog_slug}/newsletter/campaigns/{campaign_id}", response_model=CampaignOut)
+async def update_blog_newsletter_campaign(
+    blog_slug: str,
+    campaign_id: uuid.UUID,
+    payload: CampaignUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> CampaignOut:
+    blog = await _get_blog_or_404(session, blog_slug)
+    await _require_manage_access(session, current_user, blog)
+    campaign = await _get_campaign_or_404(session, blog_id=blog.id, campaign_id=campaign_id)
+    return await _update_campaign(session, campaign, payload)
+
+
+@router.delete("/blogs/{blog_slug}/newsletter/campaigns/{campaign_id}", response_model=CampaignOut)
+async def cancel_blog_newsletter_campaign(
+    blog_slug: str,
+    campaign_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> CampaignOut:
+    blog = await _get_blog_or_404(session, blog_slug)
+    await _require_manage_access(session, current_user, blog)
+    campaign = await _get_campaign_or_404(session, blog_id=blog.id, campaign_id=campaign_id)
+    return await _cancel_campaign(session, campaign)
+
+
+def _newsletter_settings_out(blog: Blog) -> NewsletterSettingsOut:
+    return NewsletterSettingsOut(
+        newsletter_auto_notify_enabled=blog.newsletter_auto_notify_enabled,
+        newsletter_sender_name=blog.newsletter_sender_name,
+        newsletter_banner_url=blog.newsletter_banner_url,
+        newsletter_banner_alt_text=blog.newsletter_banner_alt_text,
+    )
+
+
+@router.get("/blogs/{blog_slug}/newsletter/settings", response_model=NewsletterSettingsOut)
+async def get_blog_newsletter_settings(
+    blog_slug: str,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> NewsletterSettingsOut:
+    blog = await _get_blog_or_404(session, blog_slug)
+    await _require_manage_access(session, current_user, blog)
+    return _newsletter_settings_out(blog)
+
+
 @router.patch("/blogs/{blog_slug}/newsletter/settings", response_model=NewsletterSettingsOut)
 async def update_blog_newsletter_settings(
     blog_slug: str,
@@ -351,9 +550,18 @@ async def update_blog_newsletter_settings(
 ) -> NewsletterSettingsOut:
     blog = await _get_blog_or_404(session, blog_slug)
     await _require_manage_access(session, current_user, blog)
-    blog.newsletter_auto_notify_enabled = payload.newsletter_auto_notify_enabled
+    fields_set = payload.model_fields_set
+    if "newsletter_auto_notify_enabled" in fields_set and payload.newsletter_auto_notify_enabled is not None:
+        blog.newsletter_auto_notify_enabled = payload.newsletter_auto_notify_enabled
+    if "newsletter_sender_name" in fields_set:
+        blog.newsletter_sender_name = payload.newsletter_sender_name
+    if "newsletter_banner_url" in fields_set:
+        blog.newsletter_banner_url = payload.newsletter_banner_url
+    if "newsletter_banner_alt_text" in fields_set:
+        blog.newsletter_banner_alt_text = payload.newsletter_banner_alt_text or ""
     await session.commit()
-    return NewsletterSettingsOut(newsletter_auto_notify_enabled=blog.newsletter_auto_notify_enabled)
+    await session.refresh(blog)
+    return _newsletter_settings_out(blog)
 
 
 # --- Endpoint amministrazione di piattaforma (digest, blog_id=None) ---------
@@ -365,6 +573,44 @@ async def admin_newsletter_stats(
     session: AsyncSession = Depends(get_session),
 ) -> NewsletterStatsOut:
     return await _stats_for(session, None)
+
+
+def _admin_newsletter_settings_out(config: PlatformConfig) -> AdminNewsletterSettingsOut:
+    return AdminNewsletterSettingsOut(
+        newsletter_sender_name=config.newsletter_sender_name,
+        newsletter_banner_url=config.newsletter_banner_url,
+        newsletter_banner_alt_text=config.newsletter_banner_alt_text,
+    )
+
+
+@router.get("/admin/newsletter/settings", response_model=AdminNewsletterSettingsOut)
+async def get_admin_newsletter_settings(
+    current_user: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_session),
+) -> AdminNewsletterSettingsOut:
+    config = await get_platform_config(session)
+    return _admin_newsletter_settings_out(config)
+
+
+@router.patch("/admin/newsletter/settings", response_model=AdminNewsletterSettingsOut)
+async def update_admin_newsletter_settings(
+    payload: AdminNewsletterSettingsRequest,
+    current_user: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_session),
+) -> AdminNewsletterSettingsOut:
+    config = await get_platform_config(session)
+    fields_set = payload.model_fields_set
+    if "newsletter_sender_name" in fields_set:
+        config.newsletter_sender_name = payload.newsletter_sender_name
+    if "newsletter_banner_url" in fields_set:
+        config.newsletter_banner_url = payload.newsletter_banner_url
+    if "newsletter_banner_alt_text" in fields_set:
+        config.newsletter_banner_alt_text = payload.newsletter_banner_alt_text or ""
+    if fields_set:
+        touch(config, by_id=current_user.id)
+        await session.commit()
+        await session.refresh(config)
+    return _admin_newsletter_settings_out(config)
 
 
 @router.get("/admin/newsletter/campaigns", response_model=list[CampaignOut])
@@ -384,3 +630,24 @@ async def create_admin_newsletter_campaign(
     session: AsyncSession = Depends(get_session),
 ) -> CampaignOut:
     return await _create_manual_campaign(session, blog_id=None, created_by=current_user, payload=payload)
+
+
+@router.patch("/admin/newsletter/campaigns/{campaign_id}", response_model=CampaignOut)
+async def update_admin_newsletter_campaign(
+    campaign_id: uuid.UUID,
+    payload: CampaignUpdateRequest,
+    current_user: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_session),
+) -> CampaignOut:
+    campaign = await _get_campaign_or_404(session, blog_id=None, campaign_id=campaign_id)
+    return await _update_campaign(session, campaign, payload)
+
+
+@router.delete("/admin/newsletter/campaigns/{campaign_id}", response_model=CampaignOut)
+async def cancel_admin_newsletter_campaign(
+    campaign_id: uuid.UUID,
+    current_user: User = Depends(require_platform_admin),
+    session: AsyncSession = Depends(get_session),
+) -> CampaignOut:
+    campaign = await _get_campaign_or_404(session, blog_id=None, campaign_id=campaign_id)
+    return await _cancel_campaign(session, campaign)

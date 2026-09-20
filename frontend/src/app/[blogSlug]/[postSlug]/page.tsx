@@ -90,6 +90,8 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
     notes: post.notes,
     footnoteLabels: { title: tPost("notes"), backToText: tPost("backToText") },
     expandImageLabel: tPost("expandImage"),
+    copyCodeLabel: tPost("copyCode"),
+    copiedCodeLabel: tPost("copiedCode"),
   });
   const blogTitle = blog?.title ?? blogSlug;
   const minutes = readingMinutes(post.content);

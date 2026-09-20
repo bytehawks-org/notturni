@@ -13,7 +13,9 @@ from app.core.security import (
     verify_password,
 )
 from app.domain.passwords import validate_password_policy
+from app.domain.platform_config import get_platform_config
 from app.domain.usernames import validate_username
+from app.domain.verification import sync_verification_tier
 from app.models.user import PlatformRole, User
 from app.models.user_session import UserSession
 
@@ -59,6 +61,11 @@ async def register_user(session: AsyncSession, *, username: str, email: str, pas
         platform_role=platform_role,
     )
     session.add(user)
+    # Sigillo di verifica BLU/ORO/ARGENTO (app/domain/verification.py):
+    # può già applicarsi in registrazione, es. email con dominio di
+    # piattaforma o già inserita a mano nell'elenco sostenitori/verificati.
+    config = await get_platform_config(session)
+    sync_verification_tier(user, config)
     await session.commit()
     await session.refresh(user)
     return user

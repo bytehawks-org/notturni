@@ -88,6 +88,9 @@ async def reset_password(session: AsyncSession, *, email: str, code: str, new_pa
     # Una password compromessa al punto da richiedere il reset invalida
     # anche ogni sessione già aperta altrove (stesso principio della
     # cancellazione account, app/domain/gdpr.py) — non solo il refresh token
-    # eventualmente rubato, tutte.
+    # eventualmente rubato, tutte. Le UserSession coprono solo i refresh
+    # token: aggiornare anche credentials_changed_at revoca pure gli access
+    # token JWT stateless già emessi (vedi app/api/deps.py::get_current_user).
+    user.credentials_changed_at = now
     await session.execute(delete(UserSession).where(UserSession.user_id == user.id))
     await session.commit()

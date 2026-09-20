@@ -23,6 +23,7 @@ from app.domain.gdpr_queue import new_request
 from app.domain.interests import validate_interest_list
 from app.domain.password_reset import request_password_reset
 from app.domain.rate_limit import enforce_rate_limit
+from app.domain.verification import DOMAIN_PATTERN, sync_verification_tier
 from app.domain.platform_config import (
     MAX_AUDIT_RETENTION_DAYS,
     MAX_FOOTER_MARKDOWN_LENGTH,
@@ -935,6 +936,12 @@ class PlatformConfigOut(BaseModel):
     footer_column3_markdown: str | None
     footer_bottom_bar_markdown: str | None
     interests: list[dict]
+    # Sigilli di verifica manuali/dominio (app/domain/verification.py):
+    # max_blog_storage_mb null = nessun limite.
+    max_blog_storage_mb: int | None
+    verification_gold_identifiers: list[str]
+    verification_silver_identifiers: list[str]
+    verification_blue_domains: list[str]
     updated_at: datetime | None
     infrastructure: dict[str, str | bool | None]
 
@@ -960,6 +967,16 @@ class PlatformConfigUpdateRequest(BaseModel):
     # ogni voce `{"key": "...", "translations": {"it": "...", ...}}`,
     # validata da app/domain/interests.py::validate_interest_list.
     interests: list[dict] | None = None
+    # 0 = nessun limite (azzera), assente = non tocca; un valore positivo
+    # imposta il limite in MB. Stesso schema "0 = azzera" per non introdurre
+    # un tri-state solo per questo campo (nessun limite negativo o a 0 ha
+    # senso come valore reale).
+    max_blog_storage_mb: int | None = None
+    # Elenchi completi (sostituiscono, non aggiungono): email/username per
+    # GOLD e SILVER, domini per BLUE — vedi app/domain/verification.py.
+    verification_gold_identifiers: list[str] | None = None
+    verification_silver_identifiers: list[str] | None = None
+    verification_blue_domains: list[str] | None = None
 
 
 def _config_out(config: PlatformConfig) -> PlatformConfigOut:
@@ -980,6 +997,10 @@ def _config_out(config: PlatformConfig) -> PlatformConfigOut:
         footer_column3_markdown=config.footer_column3_markdown,
         footer_bottom_bar_markdown=config.footer_bottom_bar_markdown,
         interests=list(config.interests),
+        max_blog_storage_mb=config.max_blog_storage_mb,
+        verification_gold_identifiers=list(config.verification_gold_identifiers),
+        verification_silver_identifiers=list(config.verification_silver_identifiers),
+        verification_blue_domains=list(config.verification_blue_domains),
         updated_at=config.updated_at,
         # sola lettura: riepilogo dell'ambiente NOCT_* (mai segreti). La
         # retention dell'audit log non ci sta più: da B6+ è configurabile a
@@ -1070,12 +1091,62 @@ async def update_admin_config(
                     f"Il testo del footer supera i {MAX_FOOTER_MARKDOWN_LENGTH} caratteri.",
                 )
             apply(field, value or None)
+    removed_interest_keys: set[str] = set()
     if payload.interests is not None:
         try:
             cleaned_interests = validate_interest_list(payload.interests)
         except ValueError as exc:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        removed_interest_keys = {i["key"] for i in config.interests} - {i["key"] for i in cleaned_interests}
         apply("interests", cleaned_interests)
+
+    if payload.max_blog_storage_mb is not None:
+        if payload.max_blog_storage_mb == 0:
+            apply("max_blog_storage_mb", None)
+        elif not 1 <= payload.max_blog_storage_mb <= 1_048_576:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Lo spazio massimo per blog deve essere tra 1 MB e 1.048.576 MB (1 TB), oppure 0 per nessun limite.",
+            )
+        else:
+            apply("max_blog_storage_mb", payload.max_blog_storage_mb)
+    if payload.verification_gold_identifiers is not None:
+        apply("verification_gold_identifiers", sorted({v.strip().lower() for v in payload.verification_gold_identifiers if v.strip()}))
+    if payload.verification_silver_identifiers is not None:
+        apply(
+            "verification_silver_identifiers",
+            sorted({v.strip().lower() for v in payload.verification_silver_identifiers if v.strip()}),
+        )
+    if payload.verification_blue_domains is not None:
+        cleaned_domains = sorted({v.strip().lower() for v in payload.verification_blue_domains if v.strip()})
+        bad_domains = [d for d in cleaned_domains if not DOMAIN_PATTERN.match(d)]
+        if bad_domains:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Domini non validi: {', '.join(bad_domains)}.")
+        apply("verification_blue_domains", cleaned_domains)
+
+    if removed_interest_keys:
+        # Le chiavi rimosse dall'elenco di piattaforma non sono più valide per
+        # PATCH /users/me (validate_user_interest_keys), ma le selezioni già
+        # salvate su User.interests non vengono toccate da sole: andrebbero
+        # orfane (una chiave che non esiste più in nessuna traduzione).
+        # User.interests è un ARRAY "core" (sqlalchemy.ARRAY, non il tipo
+        # dialect-specific postgresql.ARRAY): niente comparator .overlap(),
+        # serve l'operatore "&&" esplicito.
+        affected = await session.execute(
+            select(User).where(User.interests.op("&&")(list(removed_interest_keys)))
+        )
+        for user in affected.scalars():
+            user.interests = [k for k in user.interests if k not in removed_interest_keys]
+
+    if {"verification_gold_identifiers", "verification_silver_identifiers", "verification_blue_domains"} & changes.keys():
+        # Un elenco può aggiungere o togliere chi ha diritto a GOLD/SILVER/
+        # BLU: a differenza degli interessi sopra (dove basta ripulire chi
+        # perde una chiave), qui serve ricalcolare da zero il tier di ogni
+        # utente attivo, perché una voce rimossa da GOLD potrebbe comunque
+        # avere diritto a SILVER/BLU/BRONZE (app/domain/verification.py).
+        all_active_users = (await session.execute(select(User).where(User.is_active.is_(True)))).scalars().all()
+        for user in all_active_users:
+            sync_verification_tier(user, config)
 
     if changes:
         touch(config, by_id=current_user.id)

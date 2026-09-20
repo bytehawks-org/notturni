@@ -159,7 +159,15 @@ export default function BlogDetailPage() {
       {tab === "notes" && <NotesTab blogSlug={blog.slug} canWrite={isWriter} />}
       {tab === "media" && <MediaTab blogSlug={blog.slug} canWrite={isWriter} />}
       {tab === "newsletter" && isWriter && (
-        <NewsletterTab blogSlug={blog.slug} initialAutoNotify={blog.newsletter_auto_notify_enabled} />
+        <NewsletterTab
+          blogSlug={blog.slug}
+          initialSettings={{
+            newsletter_auto_notify_enabled: blog.newsletter_auto_notify_enabled,
+            newsletter_sender_name: blog.newsletter_sender_name,
+            newsletter_banner_url: blog.newsletter_banner_url,
+            newsletter_banner_alt_text: blog.newsletter_banner_alt_text,
+          }}
+        />
       )}
       {tab === "comments" && <CommentsTab blog={blog} canModerate={isModerator} onBlogUpdated={setBlog} />}
       {tab === "appearance" && isOwner && <AppearanceTab blogSlug={blog.slug} canEdit={isOwner} />}

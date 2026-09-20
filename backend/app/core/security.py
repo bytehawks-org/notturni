@@ -60,9 +60,13 @@ def create_access_token(user_id: uuid.UUID) -> str:
     )
 
 
-def decode_access_token(token: str) -> uuid.UUID:
+def decode_access_token_with_issued_at(token: str) -> tuple[uuid.UUID, datetime]:
+    """Come decode_access_token, ma espone anche `iat` — usato da
+    get_current_user per rifiutare i token emessi prima dell'ultimo cambio
+    password (User.credentials_changed_at), dato che il token stesso resta
+    valido a livello di firma/scadenza fino al suo naturale exp."""
     payload = _decode(token, "access")
-    return uuid.UUID(payload["sub"])
+    return uuid.UUID(payload["sub"]), datetime.fromtimestamp(payload["iat"], tz=timezone.utc)
 
 
 def create_mfa_challenge_token(

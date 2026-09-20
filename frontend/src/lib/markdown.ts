@@ -4,7 +4,9 @@ import DOMPurify from "isomorphic-dompurify";
 import { JSDOM } from "jsdom";
 import MarkdownIt from "markdown-it";
 
+import { codeBlockMarkdownPlugin, textAlignMarkdownPlugin, underlineMarkdownPlugin } from "./markdown-format-extensions";
 import { REVALIDATE_SECONDS } from "./revalidate";
+import { ensureLanguagesLoaded, highlightCode } from "./shiki-highlighter";
 import type { PostNote } from "./types";
 
 // Stessa risoluzione di server-api.ts::BACKEND_INTERNAL_URL — endpoint
@@ -25,7 +27,10 @@ const LINK_PREVIEW_TIMEOUT_MS = 2000;
 // lasciar passare tag HTML scritti a mano nel sorgente; DOMPurify è comunque
 // una seconda barriera sull'HTML che markdown-it stesso genera (es. src di
 // immagini/link), difesa in profondità più che ridondanza.
-const renderer = new MarkdownIt({ html: false, linkify: true, breaks: false });
+const renderer = new MarkdownIt({ html: false, linkify: true, breaks: false })
+  .use(underlineMarkdownPlugin)
+  .use(textAlignMarkdownPlugin)
+  .use(codeBlockMarkdownPlugin);
 
 /** Un'immagine segnalata sensibile dalla moderazione automatica (vedi
  * API.md) viene inserita dall'editor come `![alt](url "sensitive")`: il
@@ -443,11 +448,38 @@ export interface RenderOptions {
    * chi chiama. Default in italiano per i chiamanti che non la passano
    * ancora (pagine statiche, `excerpt`). */
   expandImageLabel?: string;
+  /** Etichette del tasto "copia" sui blocchi di codice (blocco
+   * "evidenziazione sintassi"), stesso motivo/default di `expandImageLabel`. */
+  copyCodeLabel?: string;
+  copiedCodeLabel?: string;
 }
 
 export interface RenderedPost {
   html: string;
   headings: PostHeading[];
+}
+
+/** Tasto "copia" su ogni blocco di codice (blocco "evidenziazione
+ * sintassi"), a prescindere dal linguaggio/dall'evidenziazione essere
+ * riuscita: il testo da copiare è preso da `textContent` (già decodificato
+ * dalle entity HTML da JSDOM), mai dal sorgente Markdown grezzo — così
+ * copia esattamente ciò che Shiki ha effettivamente reso, spazi inclusi.
+ * Il click-to-clipboard è gestito client-side da CodeCopyProvider (delega
+ * globale, stesso principio di LightboxProvider): qui solo il markup. */
+function injectCopyButtons(document: Document, copyLabel: string, copiedLabel: string): void {
+  document.querySelectorAll("pre").forEach((pre) => {
+    const code = pre.querySelector("code");
+    if (!code) return;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "code-copy-button";
+    button.setAttribute("data-copy-text", code.textContent ?? "");
+    button.setAttribute("data-label-copy", copyLabel);
+    button.setAttribute("data-label-copied", copiedLabel);
+    button.setAttribute("aria-label", copyLabel);
+    button.textContent = copyLabel;
+    pre.appendChild(button);
+  });
 }
 
 /** Come `renderMarkdown`, ma restituisce anche l'indice dei titoli (con id
@@ -461,6 +493,15 @@ export async function renderMarkdown(markdown: string, options: RenderOptions = 
 }
 
 async function renderPipeline(markdown: string, options: RenderOptions, withHeadings: boolean): Promise<RenderedPost> {
+  // Deve restare sincrono a sincrono con renderer.render() sotto, senza
+  // nessun await in mezzo: markdown-it non supporta un highlight()
+  // asincrono, quindi i linguaggi citati nel documento vanno già caricati
+  // sull'highlighter condiviso *prima* di impostare l'opzione (vedi
+  // lib/shiki-highlighter.ts per il perché è comunque sicuro in
+  // concorrenza — l'highlighter condiviso cresce soltanto, non perde mai
+  // un linguaggio già caricato da un'altra richiesta).
+  const highlighter = await ensureLanguagesLoaded(markdown);
+  renderer.set({ highlight: (code: string, lang: string) => highlightCode(highlighter, code, lang) });
   const rawHtml = renderer.render(markdown);
   const cleanHtml = DOMPurify.sanitize(rawHtml);
 
@@ -501,6 +542,7 @@ async function renderPipeline(markdown: string, options: RenderOptions, withHead
     img.setAttribute("loading", "lazy");
     img.setAttribute("decoding", "async");
   });
+  injectCopyButtons(document, options.copyCodeLabel ?? "Copia", options.copiedCodeLabel ?? "Copiato");
   await resolveLinkCards(document);
   if (options.mentions !== false) linkifyMentions(document);
   const headings = withHeadings ? anchorHeadings(document) : [];

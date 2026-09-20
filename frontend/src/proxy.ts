@@ -15,6 +15,8 @@ const RESERVED_SUBDOMAINS = new Set([
   "monitor",
   "stats",
   "status",
+  "search",
+  "users",
 ]);
 
 /** Primo segmento dei path *di piattaforma* (non del blog) raggiungibili

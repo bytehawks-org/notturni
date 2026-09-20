@@ -58,6 +58,12 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     # nullable: un utente creato solo via SSO può non avere una password locale
     hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # confrontato con l'"iat" dei JWT access token (stateless, non tracciati in
+    # UserSession) per invalidarli al cambio password: cancellare le
+    # UserSession (POST /users/me/password) non basta a revocare un access
+    # token già emesso e ancora entro la sua scadenza. Null = mai cambiata,
+    # nessun access token pregresso da invalidare.
+    credentials_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     platform_role: Mapped[PlatformRole] = mapped_column(
         Enum(

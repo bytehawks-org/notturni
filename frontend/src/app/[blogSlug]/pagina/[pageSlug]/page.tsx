@@ -60,6 +60,8 @@ export default async function PublicBlogPagePage({
   const html = await renderMarkdown(page.content, {
     mentions: page.mentions_enabled,
     expandImageLabel: tPost("expandImage"),
+    copyCodeLabel: tPost("copyCode"),
+    copiedCodeLabel: tPost("copiedCode"),
   });
 
   return (

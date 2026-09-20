@@ -3,13 +3,14 @@
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { OtpInput, OTP_INPUT_LENGTH } from "@/components/auth/OtpInput";
+import { SsoButtons } from "@/components/auth/SsoButtons";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { FieldGroup, Input, Label } from "@/components/ui/Field";
-import { ApiClientError } from "@/lib/api";
+import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { isMfaRequired } from "@/lib/types";
 
@@ -29,6 +30,14 @@ export default function LoginPage() {
   const [challenge, setChallenge] = useState<string | null>(null);
   const [mfaMethod, setMfaMethod] = useState<string | null>(null);
   const [code, setCode] = useState("");
+  const [ssoProviders, setSsoProviders] = useState<string[]>([]);
+
+  useEffect(() => {
+    api.config
+      .get()
+      .then((c) => setSsoProviders(c.sso_providers ?? []))
+      .catch(() => undefined);
+  }, []);
 
   async function handleLogin(event: FormEvent) {
     event.preventDefault();
@@ -118,6 +127,8 @@ export default function LoginPage() {
             <Button type="submit" size="lg" disabled={submitting}>
               {submitting ? t("signingIn") : t("continue")}
             </Button>
+
+            <SsoButtons providers={ssoProviders} />
 
             <p className="text-center text-[13px] leading-relaxed text-muted">
               {t("noAccount")}{" "}

@@ -95,6 +95,12 @@ class Post(Base, UUIDPKMixin, TimestampMixin):
     # anche quello a True (vedi update_post), ma il flag può restare True per
     # sola segnalazione automatica anche a lista vuota.
     cover_image_categories: Mapped[list[str]] = mapped_column(ARRAY(String(20)), default=list, nullable=False)
+    # Testo alternativo della cover (accessibilità, blocco "libreria media"):
+    # indipendente dall'eventuale alt text della stessa immagine in
+    # MediaFile.alt_text (app/api/v1/blogs/media.py) — una cover può avere
+    # un alt più specifico al contesto del post rispetto a quello generico
+    # salvato in libreria al momento dell'upload.
+    cover_image_alt_text: Mapped[str] = mapped_column(String(300), default="", nullable=False)
 
     # Tag inseriti esplicitamente nel campo dedicato (vedi app/domain/tags.py):
     # SOLO quelli, non gli hashtag nel testo — serve a poterli ripresentare

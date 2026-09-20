@@ -142,10 +142,52 @@ export function ExpandIcon() {
   );
 }
 
+export function UnderlineIcon() {
+  return (
+    <Icon>
+      <path d="M5 3.5v5.5a4 4 0 0 0 8 0V3.5" />
+      <path d="M4 14.5h10" />
+    </Icon>
+  );
+}
+
+export function AlignLeftIcon() {
+  return (
+    <Icon>
+      <path d="M3 5h12M3 9h8M3 13h10" />
+    </Icon>
+  );
+}
+
+export function AlignCenterIcon() {
+  return (
+    <Icon>
+      <path d="M3 5h12M5 9h8M4 13h10" />
+    </Icon>
+  );
+}
+
+export function AlignRightIcon() {
+  return (
+    <Icon>
+      <path d="M3 5h12M7 9h8M5 13h10" />
+    </Icon>
+  );
+}
+
 export function PencilIcon() {
   return (
     <Icon>
       <path d="M11.5 3.5 14.5 6.5 6 15H3v-3z" />
+    </Icon>
+  );
+}
+
+/** Seconda riga della toolbar (RichTextEditor): ruotata 180° quando espansa. */
+export function ChevronDownIcon() {
+  return (
+    <Icon>
+      <path d="M4 6.5 9 12l5-5.5" />
     </Icon>
   );
 }

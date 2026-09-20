@@ -55,7 +55,9 @@
     "media": "Media",
     "publications": "Publications",
     "links": "Links",
-    "bibliography": "Bibliography"
+    "bibliography": "Bibliography",
+    "backToPlatform": "Back to platform",
+    "viewCurrentBlog": "View {slug}"
   },
   "BlogNav": {
     "posts": "Posts",
@@ -98,7 +100,9 @@
     "notes": "Notes",
     "blogBibliography": "Blog bibliography →",
     "backToText": "Back to text",
-    "expandImage": "Expand"
+    "expandImage": "Expand",
+    "copyCode": "Copy",
+    "copiedCode": "Copied"
   },
   "Fragment": {
     "meta": "{words} words · {ratio}% of post",
@@ -556,6 +560,18 @@
     "threshold": "Image moderation threshold",
     "thresholdNote": "Above: blurred + queued. Fail-open if the service is down.",
     "maxBlogs": "Max blogs per user",
+    "maxBlogStorage": "Max storage per blog (MB)",
+    "maxBlogStorageHint": "0 = no limit. Media plus Markdown backups of the blog, same count as the \"Storage\" card in the overview.",
+    "verification": "Verification",
+    "verificationNote": "Profile verification badges assigned by hand (in addition to the automatic bronze one from a verified custom domain).",
+    "verificationGold": "Manually verified (gold badge)",
+    "verificationGoldHint": "Emails, usernames, or domains of news outlets, agencies, organizations, or well-known personalities.",
+    "verificationSilver": "Sponsors (silver badge)",
+    "verificationSilverHint": "Emails or usernames of people who made a donation to support the project.",
+    "verificationBlue": "Trusted domains (blue badge)",
+    "verificationBlueHint": "In addition to the platform's own domain ({domain}), already included automatically.",
+    "verificationIdentifierPlaceholder": "email or username…",
+    "verificationDomainPlaceholder": "domain.com…",
     "auditRetention": "Audit log retention (days)",
     "auditRetentionNote": "Older events are deleted from the database (archived to storage first, if enabled). Minimum 7 days.",
     "footer": "Footer",
@@ -587,8 +603,11 @@
     "reservedPlaceholder": "name",
     "savedToast": "Settings saved",
     "interests": "User interests",
-    "interestsNote": "Selectable by users on their profile (max 5 each) — canonical key not editable after creation, Italian/English labels here; other languages only via NOCT_DEFAULT_INTERESTS.",
-    "interestKeyPlaceholder": "key"
+    "interestsNote": "Selectable by users on their profile (max 5 each) — canonical key not editable after creation, one label per language added below.",
+    "interestKeyPlaceholder": "key",
+    "interestLocalePlaceholder": "language (it, en, de…)",
+    "interestLabelPlaceholder": "label",
+    "interestAdd": "Add interest"
   },
   "Theme": {
     "light": "Light",
@@ -598,6 +617,8 @@
     "autoSystem": "Follows the system preference (location unavailable)"
   },
   "Auth": {
+    "ssoDivider": "or",
+    "ssoContinueWith": "Continue with {provider}",
     "welcomeBack": "Welcome back",
     "loginIntro": "Sign in with your email. The username is never used to sign in.",
     "email": "Email",
@@ -754,6 +775,7 @@
     "fediverseActivitypub": "ActivityPub",
     "directoryListed": "Listed in the user directory",
     "directoryListedSub": "If off, your profile stays reachable only via direct link (@username), not in the public search/listing at /users.",
+    "directoryListedSuperAdminSub": "The Super Admin account is always excluded from the public directory, for security — it's not an editable option.",
     "interests": "{count, plural, one {# interest} other {# interests}} of {max}",
     "changePasswordTitle": "Change password",
     "changePasswordSub": "On save, every open session (including this one) is closed: you'll need to sign in again.",
@@ -919,15 +941,26 @@
     "heading1": "Heading 1",
     "heading2": "Heading 2",
     "heading3": "Heading 3",
+    "heading4": "Heading 4",
+    "expandRow2": "More tools",
+    "collapseRow2": "Hide more tools",
     "bold": "Bold",
     "italic": "Italic",
     "strike": "Strikethrough",
+    "underline": "Underline",
     "code": "Code",
+    "codeBlock": "Code block",
+    "codeBlockLanguagePlaceholder": "language…",
+    "codeBlockLanguageTitle": "Language (syntax highlighting): sql, bash, php, python, ...",
+    "codeBlockLineNumbers": "Line numbers",
     "link": "Link",
     "note": "Footnote",
     "quote": "Quote",
     "bulletList": "Bullet list",
     "orderedList": "Numbered list",
+    "alignLeft": "Align left",
+    "alignCenter": "Align center",
+    "alignRight": "Align right",
     "image": "Image",
     "table": "Table",
     "addColumn": "+col",
@@ -990,7 +1023,24 @@
     "addWarning": "Add a warning",
     "coverAlt": "Post cover image",
     "uploading": "Uploading…",
-    "uploadCta": "Upload a cover image (16:9, 800 × 450 px)"
+    "uploadCta": "Upload a cover image (16:9, 800 × 450 px)",
+    "altTextLabel": "Alt text",
+    "altTextPlaceholder": "Describe the image for people who can't see it",
+    "changeFromLibrary": "Choose from library",
+    "orChooseFromLibrary": "or choose from library"
+  },
+  "ImagePickerModal": {
+    "title": "Insert image",
+    "tabUpload": "Upload",
+    "tabBlogLibrary": "Blog library",
+    "tabMyLibrary": "All my blogs",
+    "uploadCta": "Upload an image",
+    "uploading": "Uploading…",
+    "uploadFailed": "Image upload failed.",
+    "loadFailed": "Couldn't load the library.",
+    "loading": "Loading…",
+    "empty": "No images here yet.",
+    "cancel": "Cancel"
   },
   "Editor": {
     "status": "Status",
@@ -1133,6 +1183,7 @@
     "typographyHint": "headings serif · body sans · max 3 fonts",
     "heading_font": "Heading font",
     "body_font": "Body font",
+    "monospace_font": "Monospace font (code)",
     "bodySize": "Body size",
     "measure": {
       "narrow": "Narrow",
@@ -1153,6 +1204,7 @@
     "previewBody": "There is a kind of writing that happens only after the house has gone quiet. It is not faster or better; it is simply less observed. The margin is where a text admits it is unfinished",
     "previewLink": "and a footnote is the most honest sentence a writer can offer",
     "previewNote": "Zerby, Chuck. The Devil's Details. 2002.",
+    "previewCode": "const note = \"footnote\";",
     "previewHint": "Readers can still switch to dark: your palette defines the light theme, the dark theme uses the platform palette.",
     "measureLabel": "Measure",
     "layoutLabel": "Layout",
@@ -1627,10 +1679,12 @@
   },
   "NewsletterCampaignModal": {
     "title": "New campaign",
+    "editTitle": "Edit campaign",
     "subject": "Subject",
     "body": "Content",
     "bodyHint": "Markdown supported",
     "bodyPlaceholder": "Write the email content…",
+    "bodyRequired": "The email content can't be empty.",
     "scheduledAt": "Schedule for (optional)",
     "scheduledAtHint": "leave empty to send right away",
     "creating": "Creating…",
@@ -1648,7 +1702,25 @@
     "recipients": "{count} recipients",
     "failed": "{count} failed",
     "sentAt": "sent on {date}",
-    "scheduledAt": "scheduled for {date}"
+    "scheduledAt": "scheduled for {date}",
+    "cancelCampaign": "Cancel",
+    "confirmCancelCampaign": "Cancel this scheduled campaign? It won't be sent."
+  },
+  "NewsletterSettingsCard": {
+    "title": "Email configuration",
+    "hint": "Sender name and banner shown in campaign emails. Leave blank to use the defaults.",
+    "senderNameLabel": "Sender name",
+    "senderNamePlaceholder": "e.g. Blog editors",
+    "bannerLabel": "Banner",
+    "bannerPlaceholder": "https://...",
+    "bannerPreviewAlt": "Banner preview",
+    "uploadCta": "Upload",
+    "uploading": "Uploading…",
+    "bannerAltLabel": "Banner alt text",
+    "bannerAltHint": "For people who can't see the image",
+    "bannerAltPlaceholder": "Describe the banner",
+    "uploadFailed": "Upload failed.",
+    "saved": "Settings saved."
   },
   "AdminNewsletter": {
     "title": "Platform newsletter",
@@ -1660,7 +1732,9 @@
     "noCampaigns": "No campaign sent yet.",
     "recipients": "{count} recipients",
     "sentAt": "sent on {date}",
-    "scheduledAt": "scheduled for {date}"
+    "scheduledAt": "scheduled for {date}",
+    "cancelCampaign": "Cancel",
+    "confirmCancelCampaign": "Cancel this scheduled campaign? It won't be sent."
   },
   "MyPostsPage": {
     "title": "Posts",
