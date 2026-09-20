@@ -32,6 +32,11 @@
   --vis-public: #3f8a5f;
   --vis-members: #d9a441;
   --vis-private: repeating-linear-gradient(135deg, #8b2e2e 0 6px, #232220 6px 12px);
+  /* Font monospace dei blocchi di codice nei post pubblici (blocco
+     "evidenziazione sintassi"): sovrascritto per singolo blog da
+     BlogPageShell (typography.monospace_font, lib/blog-fonts.ts) — questo è
+     solo il fallback di piattaforma (nessun blog personalizzato). */
+  --font-monospace: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 @theme inline {
@@ -215,6 +220,88 @@ body {
   border-radius: 0.25em;
   padding: 0.1em 0.35em;
   font-size: 0.9em;
+  font-family: var(--font-monospace);
+}
+/* Blocco di codice con linguaggio (```lang, blocco "evidenziazione
+   sintassi"): il markup arriva già evidenziato da Shiki (span con colore
+   inline, vedi lib/markdown.ts) — qui solo il contenitore, la numerazione
+   righe opzionale (data-line-numbers) e il tasto copia iniettato lato
+   client (CodeBlockEnhancer.tsx). */
+.notturni-prose pre {
+  position: relative;
+  margin: 1em 0;
+  padding: 1em 1.1em;
+  border-radius: 0.6em;
+  overflow-x: auto;
+  font-size: 0.85em;
+  line-height: 1.6;
+}
+.notturni-prose pre code {
+  background: none;
+  padding: 0;
+  font-size: 1em;
+  border-radius: 0;
+  display: block;
+}
+/* Shiki (doppio tema, `defaultColor: false`, lib/shiki-highlighter.ts):
+   ogni token porta `--shiki-light`/`--shiki-dark`/`--shiki-light-bg`/
+   `--shiki-dark-bg` inline, tocca a noi scegliere quale applicare in base
+   allo stesso attributo data-theme usato dal resto del tema chiaro/scuro
+   (vedi ThemeProvider). Nessun linguaggio riconosciuto/evidenziato: il
+   fence resta testo semplice senza queste variabili, eredita i colori
+   normali del blocco di codice sopra. */
+.notturni-prose pre.shiki,
+.notturni-prose pre.shiki span {
+  color: var(--shiki-light);
+  background-color: var(--shiki-light-bg) !important;
+}
+:root[data-theme="dark"] .notturni-prose pre.shiki,
+:root[data-theme="dark"] .notturni-prose pre.shiki span {
+  color: var(--shiki-dark);
+  background-color: var(--shiki-dark-bg) !important;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .notturni-prose pre.shiki,
+  :root:not([data-theme="light"]) .notturni-prose pre.shiki span {
+    color: var(--shiki-dark);
+    background-color: var(--shiki-dark-bg) !important;
+  }
+}
+.notturni-prose pre[data-line-numbers] code {
+  counter-reset: notturni-line;
+}
+.notturni-prose pre[data-line-numbers] code > .line::before {
+  counter-increment: notturni-line;
+  content: counter(notturni-line);
+  display: inline-block;
+  width: 2em;
+  margin-right: 1em;
+  text-align: right;
+  color: var(--muted);
+  user-select: none;
+}
+.notturni-prose .code-copy-button {
+  position: absolute;
+  top: 0.5em;
+  right: 0.5em;
+  padding: 0.3em 0.6em;
+  font-size: 0.75em;
+  font-family: var(--font-body, inherit);
+  border-radius: 0.4em;
+  border: 1px solid color-mix(in srgb, var(--foreground) 20%, transparent);
+  background: color-mix(in srgb, var(--background) 70%, transparent);
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.notturni-prose pre:hover .code-copy-button,
+.notturni-prose .code-copy-button:focus-visible {
+  opacity: 1;
+}
+.notturni-prose .code-copy-button[data-copied="true"] {
+  color: var(--ok);
+  border-color: var(--ok);
 }
 .notturni-prose ul,
 .notturni-prose ol {

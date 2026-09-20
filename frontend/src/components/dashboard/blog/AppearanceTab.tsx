@@ -12,13 +12,14 @@ import { SkeletonRows } from "@/components/ui/States";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { contrastRatio, deriveDarkPalette } from "@/lib/contrast";
-import { SANS_SERIF_FONTS, SERIF_FONTS, type BlogConfig } from "@/lib/types";
+import { MONOSPACE_FONTS, SANS_SERIF_FONTS, SERIF_FONTS, type BlogConfig } from "@/lib/types";
 
 import { errorMessage } from "./shared";
 
 const FONT_OPTIONS: Record<string, string[]> = {
   heading_font: SERIF_FONTS,
   body_font: SANS_SERIF_FONTS,
+  monospace_font: MONOSPACE_FONTS,
 };
 
 /** Preset di palette calme (saturazione < 90%, vincolo del backend). */
@@ -177,7 +178,7 @@ export function AppearanceTab({ blogSlug, canEdit }: { blogSlug: string; canEdit
             <span className="text-[13px] text-muted">{t("typographyHint")}</span>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            {(["heading_font", "body_font"] as const).map((key) => (
+            {(["heading_font", "body_font", "monospace_font"] as const).map((key) => (
               <FieldGroup key={key} className="mb-0">
                 <Label htmlFor={`font-${key}`}>{t(key)}</Label>
                 <select
@@ -303,6 +304,12 @@ export function AppearanceTab({ blogSlug, canEdit }: { blogSlug: string; canEdit
           <p className="mt-4 text-[.85em]" style={{ color: muted }}>
             1. {t("previewNote")}
           </p>
+          <code
+            className="mt-3 block rounded px-2 py-1 text-[.8em]"
+            style={{ fontFamily: `"${typography.monospace_font ?? "JetBrains Mono"}", monospace`, background: "color-mix(in srgb, currentColor 8%, transparent)" }}
+          >
+            {t("previewCode")}
+          </code>
         </div>
         <span className="text-xs text-muted">{darkPalette ? t("previewHintDark") : t("previewHint")}</span>
       </aside>

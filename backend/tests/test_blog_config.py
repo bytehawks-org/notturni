@@ -11,7 +11,11 @@ async def test_default_config_when_not_customized(client: AsyncClient, make_user
 
     res = await client.get("/api/v1/blogs/blog-cfg-1/config")
     assert res.status_code == 200
-    assert res.json()["typography"] == {"heading_font": "Lora", "body_font": "Source Sans 3"}
+    assert res.json()["typography"] == {
+        "heading_font": "Lora",
+        "body_font": "Source Sans 3",
+        "monospace_font": "JetBrains Mono",
+    }
 
 
 async def test_update_config_owner_only(client: AsyncClient, make_user: Callable) -> None:

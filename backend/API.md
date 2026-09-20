@@ -478,18 +478,19 @@ segue il blog.
 presentazione del blog (palette/tipografia/layout — vedi
 [ROADMAP.md](../ROADMAP.md#2-estetica) per i vincoli), applicata dal frontend
 a tutte le pagine pubbliche del blog (`BlogPageShell`, todo/UX_REDESIGN.md
-B10): palette come variabili CSS, `typography.heading_font`/`body_font` come
-`--font-heading`/`--font-body` (font self-hostati al build, nessuna
-richiesta a Google a runtime), `body_size`/`measure` per dimensione del
-corpo e larghezza della colonna di lettura del post, `layout` per la
-disposizione del feed della home del blog. JSON libero; se il proprietario
-non ha ancora salvato nulla, ritorna il default della piattaforma (identico
-allo shell non personalizzato):
+B10): palette come variabili CSS, `typography.heading_font`/`body_font`/
+`monospace_font` come `--font-heading`/`--font-body`/`--font-monospace` (font
+self-hostati al build, nessuna richiesta a Google a runtime — quest'ultimo
+usato per i blocchi di codice, blocco "evidenziazione sintassi"),
+`body_size`/`measure` per dimensione del corpo e larghezza della colonna di
+lettura del post, `layout` per la disposizione del feed della home del blog.
+JSON libero; se il proprietario non ha ancora salvato nulla, ritorna il
+default della piattaforma (identico allo shell non personalizzato):
 
 ```json
 {
   "palette": {"background": "#fbf9f6", "foreground": "#2b2a28", "primary": "#3e6259", "muted": "#a8a29a", "border": "#e7e2da"},
-  "typography": {"heading_font": "Lora", "body_font": "Source Sans 3"},
+  "typography": {"heading_font": "Lora", "body_font": "Source Sans 3", "monospace_font": "JetBrains Mono"},
   "layout": "standard"
 }
 ```
@@ -504,16 +505,18 @@ e qualsiasi altra chiave) libero:
 - `palette_dark` (opzionale): stessi vincoli di `palette`; è la variante
   scura applicata alle pagine pubbliche del blog quando il lettore usa il
   tema scuro. Assente, in tema scuro vale la palette scura di piattaforma.
-- `typography`: al massimo 3 font distinti tra `heading_font`/`body_font`
-  (`body_size`/`measure`, pur essendo anch'esse stringhe, non contano verso
-  questo limite); se presenti, `heading_font` deve essere uno dei font serif
-  curati (`Lora`, `Merriweather`, `Playfair Display`, `Source Serif 4`,
-  `Crimson Pro`) e `body_font` uno dei font sans-serif curati (`Inter`,
-  `Nunito Sans`, `Work Sans`, `Source Sans 3`, `Karla`) — vedi
-  `backend/app/domain/blog_config.py`. `body_size` (`"17"`/`"18"`/`"19"`) e
-  `measure` (`"narrow"`/`"normal"`) non sono validati lato backend (solo
-  accettati); un valore diverso da quelli attesi è ignorato dal frontend, che
-  ricade sul default.
+- `typography`: al massimo 3 font distinti tra `heading_font`/`body_font`/
+  `monospace_font` (`body_size`/`measure`, pur essendo anch'esse stringhe, non
+  contano verso questo limite); se presenti, `heading_font` deve essere uno
+  dei font serif curati (`Lora`, `Merriweather`, `Playfair Display`,
+  `Source Serif 4`, `Crimson Pro`), `body_font` uno dei font sans-serif curati
+  (`Inter`, `Nunito Sans`, `Work Sans`, `Source Sans 3`, `Karla`) e
+  `monospace_font` uno dei font monospace curati (`JetBrains Mono`,
+  `Fira Code`, `IBM Plex Mono`, `Source Code Pro`, `Space Mono`; default di
+  piattaforma `JetBrains Mono`) — vedi `backend/app/domain/blog_config.py`.
+  `body_size` (`"17"`/`"18"`/`"19"`) e `measure` (`"narrow"`/`"normal"`) non
+  sono validati lato backend (solo accettati); un valore diverso da quelli
+  attesi è ignorato dal frontend, che ricade sul default.
 - `footer` (opzionale): override per questo blog delle sole colonne 1/2 del
   footer di piattaforma (`GET /api/v1/footer`) — `{"column1": "...",
   "column2": "..."}`, Markdown libero, max 5000 caratteri ciascuna, nessun'altra
@@ -1622,10 +1625,11 @@ massimo 100), `offset`. Voce:
 ```
 
 `verification_tier` (`none`|`bronze`|`silver`|`gold`|`blue`): sigillo di
-verifica del profilo, stile Bluesky/Instagram/Twitter. Solo
-`bronze` è oggi assegnato da una logica reale (dominio custom verificato via
-DNS, vedi sotto) — `silver`/`gold`/`blue` sono riservati per future
-integrazioni, nessun endpoint li assegna. `custom_domain` è valorizzato solo
+verifica del profilo, stile Bluesky/Instagram/Twitter — `bronze` da dominio
+custom verificato via DNS (vedi sotto), `gold`/`silver`/`blue` da elenchi/
+domini gestiti a mano da un Super Admin (`PATCH /admin/config`, vedi
+sezione Amministrazione), ricalcolati da `app/domain/verification.py`.
+`custom_domain` è valorizzato solo
 se un dominio custom è stato verificato con successo (mai per uno stato
 `pending`/`failed`) — lo username di piattaforma resta comunque sempre
 citabile/risolvibile, il dominio è un'aggiunta, non una sostituzione a
@@ -2046,9 +2050,9 @@ limite, default; superarlo risponde `413` su
 `POST /blogs/{slug}/media` e `POST /blogs/{slug}/cover-image`),
 `verification_gold_identifiers`/`verification_silver_identifiers`
 (array di email/username, confronto case-insensitive: assegnano
-rispettivamente il sigillo di verifica `gold` — sostenitori economici del
-progetto — e `silver` — entità verificate a mano dalla piattaforma, testate/
-agenzie/organizzazioni/personalità note; `verification_silver_identifiers`
+rispettivamente il sigillo di verifica `gold` — entità verificate a mano
+dalla piattaforma, testate/agenzie/organizzazioni/personalità note — e
+`silver` — sostenitori economici del progetto; `verification_gold_identifiers`
 accetta anche un dominio email nudo, es. `"testata.it"`, non solo email/
 username interi) e `verification_blue_domains` (array di domini email,
 formato hostname validato: assegnano il sigillo `blue`, in aggiunta al

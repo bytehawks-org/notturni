@@ -114,6 +114,34 @@ export function underlineMarkdownPlugin(md: MarkdownIt): void {
   md.inline.ruler2.before("emphasis", "underline", postProcess);
 }
 
+/** Blocchi di codice con linguaggio ed evidenziazione sintassi (blocco
+ * "evidenziazione sintassi"): sintassi standard ```` ```lang ```` (`lang` è
+ * già l'unica cosa che markdown-it usa per la classe `language-*`, il resto
+ * dell'info string dopo il primo spazio viene ignorato di suo) più
+ * un'estensione non-CommonMark, il token `line-numbers` come seconda parola
+ * dell'info string (```` ```python line-numbers ````), per la numerazione
+ * delle righe a discrezione di chi scrive — codificata come attributo
+ * `data-line-numbers` sul `<pre>` renderizzato, letta sia dal renderer
+ * pubblico (src/lib/markdown.ts, che poi la passa a Shiki/CSS) sia
+ * dall'editor (CodeBlockNode in components/editor/markdownFormatting.ts,
+ * stesso principio di `parse.setup` di underline/textAlign sopra). */
+export function codeBlockMarkdownPlugin(md: MarkdownIt): void {
+  const flagged = md as unknown as { __notturniCodeBlockInstalled?: boolean };
+  if (flagged.__notturniCodeBlockInstalled) return;
+  flagged.__notturniCodeBlockInstalled = true;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Renderer/Token non tipizzati dai .d.ts di markdown-it usati qui
+  const defaultFence = md.renderer.rules.fence as any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- vedi sopra
+  md.renderer.rules.fence = (tokens: any[], idx: number, options: any, env: any, slf: any) => {
+    const token = tokens[idx];
+    const info = token.info ? md.utils.unescapeAll(token.info).trim() : "";
+    const hasLineNumbers = /(^|\s)line-numbers(\s|$)/.test(info);
+    const html: string = defaultFence(tokens, idx, options, env, slf);
+    return hasLineNumbers ? html.replace("<pre", '<pre data-line-numbers=""') : html;
+  };
+}
+
 const ALIGN_MARKER_RE = /\{:\s*\.(left|center|right)\}\s*$/;
 
 export function textAlignMarkdownPlugin(md: MarkdownIt): void {

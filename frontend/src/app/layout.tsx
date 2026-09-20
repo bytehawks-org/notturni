@@ -5,6 +5,7 @@ import { getLocale, getMessages } from "next-intl/server";
 import Script from "next/script";
 
 import { LightboxProvider } from "@/components/Lightbox";
+import { CodeCopyProvider } from "@/components/blog/CodeCopyProvider";
 import { ToastProvider } from "@/components/ui/Toast";
 import { AuthProvider } from "@/lib/auth-context";
 import { SITE_URL } from "@/lib/site";
@@ -64,6 +65,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             <AuthProvider>
               <ToastProvider>
                 <LightboxProvider>{children}</LightboxProvider>
+                <CodeCopyProvider />
               </ToastProvider>
             </AuthProvider>
           </ThemeProvider>

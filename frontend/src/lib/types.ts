@@ -225,6 +225,10 @@ export interface BlogConfig {
  * sincronia se cambia uno dei due lati. */
 export const SERIF_FONTS = ["Lora", "Merriweather", "Playfair Display", "Source Serif 4", "Crimson Pro"];
 export const SANS_SERIF_FONTS = ["Inter", "Nunito Sans", "Work Sans", "Source Sans 3", "Karla"];
+/** Font monospace per i blocchi di codice (blocco "evidenziazione sintassi"):
+ * stesso principio degli elenchi sopra, conta come terzo font verso il
+ * limite di 3 di CLAUDE.md §5 Estetica insieme a titoli/corpo. */
+export const MONOSPACE_FONTS = ["JetBrains Mono", "Fira Code", "IBM Plex Mono", "Source Code Pro", "Space Mono"];
 
 /** Stati persistiti dal backend (app/models/post.py). "Pianificato" non è uno
  * stato a sé: è `published` con `published_at` nel futuro — vedi lib/post-status.ts. */

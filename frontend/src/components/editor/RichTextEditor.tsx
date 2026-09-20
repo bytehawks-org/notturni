@@ -24,6 +24,7 @@ import {
   AlignLeftIcon,
   AlignRightIcon,
   BulletListIcon,
+  ChevronDownIcon,
   ImageIcon,
   LinkIcon,
   NoteIcon,
@@ -36,7 +37,7 @@ import {
 } from "./icons";
 import { ImagePickerModal, type PickedImage } from "./ImagePickerModal";
 import { LinkPreviewCard } from "./LinkPreviewCard";
-import { HeadingNode, ParagraphNode, TextAlignExtension, UnderlineMark } from "./markdownFormatting";
+import { CodeBlockNode, HeadingNode, ParagraphNode, TextAlignExtension, UnderlineMark } from "./markdownFormatting";
 import { NoteModal, type NoteModalValue } from "./NoteModal";
 import { sensitiveImageNodeView } from "./SensitiveImageNodeView";
 
@@ -286,10 +287,14 @@ const DEFAULT_TOOLBAR_STATE = {
   strike: false,
   underline: false,
   code: false,
+  codeBlock: false,
+  codeBlockLanguage: "",
+  codeBlockLineNumbers: false,
   link: false,
   heading1: false,
   heading2: false,
   heading3: false,
+  heading4: false,
   blockquote: false,
   bulletList: false,
   orderedList: false,
@@ -319,6 +324,10 @@ export function RichTextEditor({
   // bibliografici di una nota già presente nell'elenco sotto l'editor
   // (idx valorizzato, nessun nuovo marcatore da inserire nel testo).
   const [noteModal, setNoteModal] = useState<{ mode: "create" | "edit"; idx?: number } | null>(null);
+  // Seconda riga della toolbar (elenchi, tabella, nota): nascosta di default,
+  // lascia spazio per aggiunte future senza dover scegliere subito quali
+  // pulsanti "sacrificare" dalla prima riga sempre visibile.
+  const [showRow2, setShowRow2] = useState(false);
   // Snapshot preso una sola volta al primo render: il contenuto iniziale
   // dell'editor non deve rincorrere ogni cambio di `value` (sarebbe l'editor
   // stesso, tramite onUpdate, a farlo cambiare) — solo il caso "arrivato in
@@ -329,9 +338,10 @@ export function RichTextEditor({
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      StarterKit.configure({ link: false, underline: false, paragraph: false, heading: false }),
+      StarterKit.configure({ link: false, underline: false, paragraph: false, heading: false, codeBlock: false }),
       ParagraphNode,
       HeadingNode,
+      CodeBlockNode,
       UnderlineMark,
       TextAlignExtension,
       LinkExtension.configure({ openOnClick: false, autolink: true }),
@@ -417,10 +427,14 @@ export function RichTextEditor({
             strike: ctx.editor.isActive("strike"),
             underline: ctx.editor.isActive("underline"),
             code: ctx.editor.isActive("code"),
+            codeBlock: ctx.editor.isActive("codeBlock"),
+            codeBlockLanguage: (ctx.editor.getAttributes("codeBlock").language as string | null) ?? "",
+            codeBlockLineNumbers: Boolean(ctx.editor.getAttributes("codeBlock").lineNumbers),
             link: ctx.editor.isActive("link"),
             heading1: ctx.editor.isActive("heading", { level: 1 }),
             heading2: ctx.editor.isActive("heading", { level: 2 }),
             heading3: ctx.editor.isActive("heading", { level: 3 }),
+            heading4: ctx.editor.isActive("heading", { level: 4 }),
             blockquote: ctx.editor.isActive("blockquote"),
             bulletList: ctx.editor.isActive("bulletList"),
             orderedList: ctx.editor.isActive("orderedList"),
@@ -547,6 +561,15 @@ export function RichTextEditor({
           <div className="mb-3 flex flex-wrap items-end gap-3">{toolbarEnd}</div>
         )}
         <div className="flex flex-nowrap items-center gap-0.5 overflow-x-auto text-foreground/70">
+        <ToolbarButton title={t("undo")} disabled={!state.canUndo} onClick={() => editor.chain().focus().undo().run()}>
+          <UndoIcon />
+        </ToolbarButton>
+        <ToolbarButton title={t("redo")} disabled={!state.canRedo} onClick={() => editor.chain().focus().redo().run()}>
+          <RedoIcon />
+        </ToolbarButton>
+
+        <ToolbarDivider />
+
         <ToolbarButton
           title={t("heading1")}
           active={state.heading1}
@@ -568,6 +591,13 @@ export function RichTextEditor({
         >
           <span className="font-bold">H3</span>
         </ToolbarButton>
+        <ToolbarButton
+          title={t("heading4")}
+          active={state.heading4}
+          onClick={() => editor.chain().focus().toggleHeading({ level: 4 }).run()}
+        >
+          <span className="font-bold">H4</span>
+        </ToolbarButton>
 
         <ToolbarDivider />
 
@@ -578,53 +608,18 @@ export function RichTextEditor({
           <span className="italic">I</span>
         </ToolbarButton>
         <ToolbarButton
-          title={t("strike")}
-          active={state.strike}
-          onClick={() => editor.chain().focus().toggleStrike().run()}
-        >
-          <span className="line-through">S</span>
-        </ToolbarButton>
-        <ToolbarButton
           title={t("underline")}
           active={state.underline}
           onClick={() => editor.chain().focus().toggleUnderline().run()}
         >
           <UnderlineIcon />
         </ToolbarButton>
-        <ToolbarButton title={t("code")} active={state.code} onClick={() => editor.chain().focus().toggleCode().run()}>
-          <span className="font-mono text-xs">{"</>"}</span>
-        </ToolbarButton>
-        <ToolbarButton title={t("link")} active={state.link} onClick={setLink}>
-          <LinkIcon />
-        </ToolbarButton>
-        {onNotesChange && (
-          <ToolbarButton title={t("note")} onClick={openNoteModal}>
-            <NoteIcon />
-          </ToolbarButton>
-        )}
-
-        <ToolbarDivider />
-
         <ToolbarButton
-          title={t("quote")}
-          active={state.blockquote}
-          onClick={() => editor.chain().focus().toggleBlockquote().run()}
+          title={t("strike")}
+          active={state.strike}
+          onClick={() => editor.chain().focus().toggleStrike().run()}
         >
-          <QuoteIcon />
-        </ToolbarButton>
-        <ToolbarButton
-          title={t("bulletList")}
-          active={state.bulletList}
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-        >
-          <BulletListIcon />
-        </ToolbarButton>
-        <ToolbarButton
-          title={t("orderedList")}
-          active={state.orderedList}
-          onClick={() => editor.chain().focus().toggleOrderedList().run()}
-        >
-          <OrderedListIcon />
+          <span className="line-through">S</span>
         </ToolbarButton>
 
         <ToolbarDivider />
@@ -653,43 +648,122 @@ export function RichTextEditor({
 
         <ToolbarDivider />
 
+        <ToolbarButton
+          title={t("quote")}
+          active={state.blockquote}
+          onClick={() => editor.chain().focus().toggleBlockquote().run()}
+        >
+          <QuoteIcon />
+        </ToolbarButton>
+        <ToolbarButton title={t("code")} active={state.code} onClick={() => editor.chain().focus().toggleCode().run()}>
+          <span className="font-mono text-xs">{"</>"}</span>
+        </ToolbarButton>
+        <ToolbarButton
+          title={t("codeBlock")}
+          active={state.codeBlock}
+          onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+        >
+          <span className="font-mono text-xs">{"{ }"}</span>
+        </ToolbarButton>
+        {state.codeBlock && (
+          <>
+            <input
+              type="text"
+              value={state.codeBlockLanguage}
+              onChange={(e) =>
+                editor
+                  .chain()
+                  .focus()
+                  .updateAttributes("codeBlock", { language: e.target.value.trim().toLowerCase() || null })
+                  .run()
+              }
+              placeholder={t("codeBlockLanguagePlaceholder")}
+              title={t("codeBlockLanguageTitle")}
+              className="h-8 w-24 shrink-0 rounded-md border border-border bg-transparent px-2 text-xs text-foreground focus:outline-none focus:border-primary"
+            />
+            <ToolbarButton
+              title={t("codeBlockLineNumbers")}
+              active={state.codeBlockLineNumbers}
+              onClick={() =>
+                editor.chain().focus().updateAttributes("codeBlock", { lineNumbers: !state.codeBlockLineNumbers }).run()
+              }
+            >
+              <span className="font-mono text-[10px]">#</span>
+            </ToolbarButton>
+          </>
+        )}
+        <ToolbarButton title={t("link")} active={state.link} onClick={setLink}>
+          <LinkIcon />
+        </ToolbarButton>
         {blogSlug && (
           <ToolbarButton title={t("image")} onClick={() => setImagePickerOpen(true)}>
             <ImageIcon />
           </ToolbarButton>
         )}
+
         <ToolbarButton
-          title={t("table")}
-          active={state.inTable}
-          onClick={() =>
-            editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
-          }
+          title={showRow2 ? t("collapseRow2") : t("expandRow2")}
+          active={showRow2}
+          onClick={() => setShowRow2((v) => !v)}
         >
-          <TableIcon />
-        </ToolbarButton>
-        {state.inTable && (
-          <>
-            <ToolbarButton title={t("addColumnTitle")} onClick={() => editor.chain().focus().addColumnAfter().run()}>
-              <span className="text-xs">{t("addColumn")}</span>
-            </ToolbarButton>
-            <ToolbarButton title={t("addRowTitle")} onClick={() => editor.chain().focus().addRowAfter().run()}>
-              <span className="text-xs">{t("addRow")}</span>
-            </ToolbarButton>
-            <ToolbarButton title={t("deleteTableTitle")} onClick={() => editor.chain().focus().deleteTable().run()}>
-              <span className="text-xs text-red-700">{t("deleteTable")}</span>
-            </ToolbarButton>
-          </>
-        )}
-
-        <ToolbarDivider />
-
-        <ToolbarButton title={t("undo")} disabled={!state.canUndo} onClick={() => editor.chain().focus().undo().run()}>
-          <UndoIcon />
-        </ToolbarButton>
-        <ToolbarButton title={t("redo")} disabled={!state.canRedo} onClick={() => editor.chain().focus().redo().run()}>
-          <RedoIcon />
+          <span className={`inline-block transition-transform ${showRow2 ? "rotate-180" : ""}`}>
+            <ChevronDownIcon />
+          </span>
         </ToolbarButton>
         </div>
+
+        {showRow2 && (
+          <div className="mt-0.5 flex flex-nowrap items-center gap-0.5 overflow-x-auto text-foreground/70">
+            <ToolbarButton
+              title={t("orderedList")}
+              active={state.orderedList}
+              onClick={() => editor.chain().focus().toggleOrderedList().run()}
+            >
+              <OrderedListIcon />
+            </ToolbarButton>
+            <ToolbarButton
+              title={t("bulletList")}
+              active={state.bulletList}
+              onClick={() => editor.chain().focus().toggleBulletList().run()}
+            >
+              <BulletListIcon />
+            </ToolbarButton>
+
+            <ToolbarDivider />
+
+            <ToolbarButton
+              title={t("table")}
+              active={state.inTable}
+              onClick={() =>
+                editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
+              }
+            >
+              <TableIcon />
+            </ToolbarButton>
+            {state.inTable && (
+              <>
+                <ToolbarButton title={t("addColumnTitle")} onClick={() => editor.chain().focus().addColumnAfter().run()}>
+                  <span className="text-xs">{t("addColumn")}</span>
+                </ToolbarButton>
+                <ToolbarButton title={t("addRowTitle")} onClick={() => editor.chain().focus().addRowAfter().run()}>
+                  <span className="text-xs">{t("addRow")}</span>
+                </ToolbarButton>
+                <ToolbarButton title={t("deleteTableTitle")} onClick={() => editor.chain().focus().deleteTable().run()}>
+                  <span className="text-xs text-red-700">{t("deleteTable")}</span>
+                </ToolbarButton>
+              </>
+            )}
+
+            {onNotesChange && (
+              <>
+                <ToolbarDivider />
+                <ToolbarButton title={t("note")} onClick={openNoteModal}>
+                  <NoteIcon />
+                </ToolbarButton>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {imagePickerOpen && blogSlug && (

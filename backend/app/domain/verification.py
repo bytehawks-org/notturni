@@ -4,10 +4,12 @@ farli variare (registrazione, cambio email/username, verifica/rimozione
 dominio custom, modifica delle liste di piattaforma da un Super Admin).
 
 Priorità in caso di più criteri soddisfatti contemporaneamente, dalla più
-alta: GOLD (sostenitori economici, elenco a mano) > SILVER (entità
-verificate a mano dalla piattaforma) > BLUE (dominio email di piattaforma o
-di un'organizzazione approvata) > BRONZE (dominio custom del blog
-verificato via DNS, `app/domain/custom_domains.py`) > NONE. Un tier più alto
+alta: GOLD (entità verificate a mano dalla piattaforma) > SILVER
+(sostenitori economici, elenco a mano — migrazione b4c5d6e7f8a9: invertito
+con GOLD rispetto alla prima versione di questo blocco, richiesta esplicita)
+> BLUE (dominio email di piattaforma o di un'organizzazione approvata) >
+BRONZE (dominio custom del blog verificato via DNS,
+`app/domain/custom_domains.py`) > NONE. Un tier più alto
 non è mai perso "per errore": se nessun criterio manuale/dominio è più
 soddisfatto l'utente ricade sul tier immediatamente inferiore che ancora si
 applica (es. rimosso dall'elenco GOLD ma dominio custom ancora verificato ->

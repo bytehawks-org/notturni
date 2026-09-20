@@ -14,7 +14,7 @@ DEFAULT_BLOG_CONFIG: dict[str, Any] = {
         "muted": "#a8a29a",
         "border": "#e7e2da",
     },
-    "typography": {"heading_font": "Lora", "body_font": "Source Sans 3"},
+    "typography": {"heading_font": "Lora", "body_font": "Source Sans 3", "monospace_font": "JetBrains Mono"},
     "layout": "standard",
 }
 
@@ -29,11 +29,15 @@ NON_FONT_TYPOGRAPHY_KEYS = {"body_size", "measure"}
 
 # Estetica CLAUDE.md #4/#5: "titoli in serif, testo e link in sans-serif" —
 # elenco curato di Google Fonts coerenti con il tono elegante/moderno
-# richiesto, applicato solo alle due chiavi note dello schema (heading_font/
-# body_font): chiavi di typography non riconosciute restano libere per non
-# bloccare l'evoluzione futura del layout.
+# richiesto, applicato solo alle tre chiavi note dello schema (heading_font/
+# body_font/monospace_font): chiavi di typography non riconosciute restano
+# libere per non bloccare l'evoluzione futura del layout.
 SERIF_FONTS = {"Lora", "Merriweather", "Playfair Display", "Source Serif 4", "Crimson Pro"}
 SANS_SERIF_FONTS = {"Inter", "Nunito Sans", "Work Sans", "Source Sans 3", "Karla"}
+# Font a spaziatura fissa dei blocchi di codice (blocco "evidenziazione
+# sintassi"): JetBrains Mono è il default di piattaforma (DEFAULT_BLOG_CONFIG
+# sopra).
+MONOSPACE_FONTS = {"JetBrains Mono", "Fira Code", "IBM Plex Mono", "Source Code Pro", "Space Mono"}
 
 _HEX_COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 
@@ -102,6 +106,11 @@ def validate_blog_config(config: dict[str, Any]) -> None:
         if isinstance(body_font, str) and body_font not in SANS_SERIF_FONTS:
             raise ValueError(
                 f"body_font deve essere un font sans-serif tra: {', '.join(sorted(SANS_SERIF_FONTS))}."
+            )
+        monospace_font = typography.get("monospace_font")
+        if isinstance(monospace_font, str) and monospace_font not in MONOSPACE_FONTS:
+            raise ValueError(
+                f"monospace_font deve essere un font a spaziatura fissa tra: {', '.join(sorted(MONOSPACE_FONTS))}."
             )
 
     # Override per il proprio blog delle sole colonne 1/2 del footer di

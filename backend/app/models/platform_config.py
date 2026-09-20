@@ -67,12 +67,14 @@ class PlatformConfig(Base):
     # Sigilli di verifica del profilo (User.verification_tier,
     # app/domain/verification.py) gestiti a mano dal Super Admin, in aggiunta
     # al BRONZE automatico da dominio custom verificato:
-    # - GOLD: sostenitori economici del progetto, elenco esplicito di email/
-    #   username inserito a mano (nessuna integrazione con un sistema di
-    #   pagamento, solo l'elenco).
-    # - SILVER: entità verificate manualmente dalla piattaforma (testate
+    # - GOLD: entità verificate manualmente dalla piattaforma (testate
     #   giornalistiche, agenzie, organizzazioni, personalità note), elenco di
     #   username, domini email o singole caselle email.
+    # - SILVER: sostenitori economici del progetto, elenco esplicito di
+    #   email/username inserito a mano (nessuna integrazione con un sistema
+    #   di pagamento, solo l'elenco) — migrazione b4c5d6e7f8a9: invertito
+    #   con GOLD rispetto alla prima versione di questo blocco, richiesta
+    #   esplicita.
     # - BLUE: chiunque si registri con un'email il cui dominio è quello della
     #   piattaforma stessa (NOCT_PLATFORM_DOMAIN) o uno di questi domini
     #   aggiuntivi, tipicamente per organizzazioni/aziende partner.

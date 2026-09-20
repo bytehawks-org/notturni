@@ -46,7 +46,11 @@ export default async function PublicPlatformPagePage({
   if (!page) notFound();
 
   const tPost = await getTranslations("Post");
-  const html = await renderMarkdown(page.content, { expandImageLabel: tPost("expandImage") });
+  const html = await renderMarkdown(page.content, {
+    expandImageLabel: tPost("expandImage"),
+    copyCodeLabel: tPost("copyCode"),
+    copiedCodeLabel: tPost("copiedCode"),
+  });
 
   return (
     <div className="flex flex-1 flex-col">

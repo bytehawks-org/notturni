@@ -182,3 +182,12 @@ export function PencilIcon() {
     </Icon>
   );
 }
+
+/** Seconda riga della toolbar (RichTextEditor): ruotata 180° quando espansa. */
+export function ChevronDownIcon() {
+  return (
+    <Icon>
+      <path d="M4 6.5 9 12l5-5.5" />
+    </Icon>
+  );
+}
