@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: notturni-backend:latest
+          image: ghcr.io/bytehawks-org/notturni-backend:sha-d559a82
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
