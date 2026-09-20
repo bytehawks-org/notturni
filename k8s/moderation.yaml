@@ -26,7 +26,7 @@ spec:
     spec:
       containers:
         - name: moderation
-          image: notturni-moderation:latest
+          image: ghcr.io/bytehawks-org/notturni-moderation:sha-d559a82
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8100

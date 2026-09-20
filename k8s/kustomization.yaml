@@ -9,7 +9,7 @@ resources:
   - redis.yaml
   - rabbitmq.yaml
   - minio.yaml
-  - smtp-relay.yaml
+  #- smtp-relay.yaml
   - backend.yaml
   - worker-post-backup.yaml
   - worker-email-otp.yaml

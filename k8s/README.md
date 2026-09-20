@@ -1,10 +1,14 @@
 # Notturni – manifest Kubernetes
 
 Primo draft dei manifest per un singolo nodo K3s (vedi
-[ROADMAP.md](../ROADMAP.md#3-architettura-stack-e-infrastruttura)). Richiede:
-Longhorn (storage class `longhorn`), Traefik come IngressController (entrambi
-già inclusi in una installazione K3s standard, salvo li si sia disattivati
-esplicitamente).
+[ROADMAP.md](../ROADMAP.md#3-architettura-stack-e-infrastruttura)). Richiede
+una `StorageClass` e Traefik come IngressController (quest'ultimo già incluso
+in una installazione K3s standard, salvo lo si sia disattivato
+esplicitamente). `postgres.yaml`/`minio.yaml` puntano di default a
+`storageClassName: local-path` (il provisioner incluso di serie in K3s,
+adatto a un nodo singolo senza componenti aggiuntivi da installare); Longhorn
+resta l'obiettivo per un futuro cluster multi-nodo, da riabilitare
+sostituendo quel valore quando si passa a quel setup.
 
 `ingress.yaml`/`ingressroute.yaml` servono ora **https** sotto il dominio
 reale `notturni.eu` (apex + wildcard `*.notturni.eu` per i blog per
@@ -88,10 +92,17 @@ build, non a runtime — vedi nota più sotto).
   `cert-manager.io/cluster-issuer`. Il dominio custom per-utente resta
   invece un lavoro successivo (vedi
   [ROADMAP.md](../ROADMAP.md#3-architettura-stack-e-infrastruttura)).
-- `middleware-security-headers.yaml` (Traefik `Middleware`): CSP/HSTS/
-  `X-Content-Type-Options: nosniff` minimi, applicato a entrambe le risorse
-  sopra (annotazione su `ingress.yaml`, campo `middlewares` su
-  `ingressroute.yaml`) — un solo posto da tenere aggiornato.
+- `middleware-security-headers.yaml` (Traefik `Middleware`): HSTS/
+  `X-Content-Type-Options: nosniff`/`X-Frame-Options`/`Referrer-Policy`
+  minimi, applicato a entrambe le risorse sopra (annotazione su
+  `ingress.yaml`, campo `middlewares` su `ingressroute.yaml`) — un solo
+  posto da tenere aggiornato. **Non** la Content-Security-Policy: una CSP
+  statica uguale per ogni richiesta non può includere un nonce, e
+  `script-src 'self'` senza nonce/`unsafe-inline` blocca anche gli script
+  inline che Next.js inietta per l'idratazione (non solo script di terze
+  parti) — bug scoperto in produzione: pagina servita (200) ma nessun
+  form/bottone rispondeva, login e registrazione inclusi. La CSP è ora
+  generata per-richiesta con un nonce fresco in `frontend/src/proxy.ts`.
 - MinIO non è esposto pubblicamente da questi manifest (nessuna regola Ingress
   dedicata): `NOCT_S3_PUBLIC_URL` in `configmap.yaml` è un placeholder,
   senza un'esposizione reale gli avatar caricati non saranno raggiungibili

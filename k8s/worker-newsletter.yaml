@@ -25,7 +25,7 @@ spec:
     spec:
       containers:
         - name: worker-newsletter
-          image: notturni-backend:latest
+          image: ghcr.io/bytehawks-org/notturni-backend:sha-d559a82
           imagePullPolicy: IfNotPresent
           command: ["python", "-m", "app.workers.newsletter_consumer"]
           envFrom:

@@ -34,7 +34,7 @@ data:
   # placeholder: MinIO non è ancora esposto pubblicamente da questi manifest
   # (nessuna regola Ingress dedicata) — da sostituire con un dominio/CDN reale
   # prima che gli avatar siano visibili dall'esterno del cluster
-  NOCT_S3_PUBLIC_URL: "https://storage.notturni.eu"
+  NOCT_S3_PUBLIC_URL: "https://s3.notturni.eu"
   NOCT_S3_BUCKET_AVATARS: "avatars"
   # bucket privato per gli archivi di audit (mai esposto pubblicamente)
   NOCT_S3_BUCKET_AUDIT: "notturni-audit"
@@ -57,10 +57,10 @@ data:
   # SMTP per l'invio del codice MFA via email (app/core/mail.py) — placeholder,
   # da sostituire con un provider SMTP/transazionale reale prima della
   # produzione (credenziali in secret.yaml: NOCT_SMTP_USER/_PASSWORD).
-  NOCT_SMTP_HOST: ""
+  NOCT_SMTP_HOST: "smtps.aruba.it"
   NOCT_SMTP_PORT: "587"
   NOCT_SMTP_USE_TLS: "true"
-  NOCT_SMTP_FROM_EMAIL: "no-reply@notturni.eu"
+  NOCT_SMTP_FROM_EMAIL: "info@notturni.eu"
 
   # Servizio SMTP containerizzato alternativo (smtp-relay.yaml) — un'opzione
   # in più oltre a puntare NOCT_SMTP_HOST/_PORT/_USE_TLS sopra direttamente a
@@ -83,7 +83,7 @@ data:
   # a tutti. Site key pubblica (safe da esporre, letta anche dal frontend via
   # GET /api/v1/config) — la secret key sta in secret.yaml. Vuota: quella
   # modalità di commenti non è selezionabile su questa istanza.
-  NOCT_TURNSTILE_SITE_KEY: ""
+  NOCT_TURNSTILE_SITE_KEY: "0x4AAAAAAE9rQ3JQvA_jSRu-"
 
   # ATTENZIONE per il test di stasera: senza dominio reale (ingress.yaml solo
   # http) il browser chiama l'API da "http://<ip-nodo>" — questa variabile
