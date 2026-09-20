@@ -658,40 +658,6 @@ export function RichTextEditor({
         <ToolbarButton title={t("code")} active={state.code} onClick={() => editor.chain().focus().toggleCode().run()}>
           <span className="font-mono text-xs">{"</>"}</span>
         </ToolbarButton>
-        <ToolbarButton
-          title={t("codeBlock")}
-          active={state.codeBlock}
-          onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-        >
-          <span className="font-mono text-xs">{"{ }"}</span>
-        </ToolbarButton>
-        {state.codeBlock && (
-          <>
-            <input
-              type="text"
-              value={state.codeBlockLanguage}
-              onChange={(e) =>
-                editor
-                  .chain()
-                  .focus()
-                  .updateAttributes("codeBlock", { language: e.target.value.trim().toLowerCase() || null })
-                  .run()
-              }
-              placeholder={t("codeBlockLanguagePlaceholder")}
-              title={t("codeBlockLanguageTitle")}
-              className="h-8 w-24 shrink-0 rounded-md border border-border bg-transparent px-2 text-xs text-foreground focus:outline-none focus:border-primary"
-            />
-            <ToolbarButton
-              title={t("codeBlockLineNumbers")}
-              active={state.codeBlockLineNumbers}
-              onClick={() =>
-                editor.chain().focus().updateAttributes("codeBlock", { lineNumbers: !state.codeBlockLineNumbers }).run()
-              }
-            >
-              <span className="font-mono text-[10px]">#</span>
-            </ToolbarButton>
-          </>
-        )}
         <ToolbarButton title={t("link")} active={state.link} onClick={setLink}>
           <LinkIcon />
         </ToolbarButton>
@@ -759,6 +725,46 @@ export function RichTextEditor({
                 <ToolbarDivider />
                 <ToolbarButton title={t("note")} onClick={openNoteModal}>
                   <NoteIcon />
+                </ToolbarButton>
+              </>
+            )}
+
+            <ToolbarDivider />
+
+            {/* Temporaneamente in seconda riga, non più tra i pulsanti sempre
+                visibili: alcuni problemi da analizzare più avanti prima di
+                promuoverlo di nuovo in prima riga (richiesta esplicita). */}
+            <ToolbarButton
+              title={t("codeBlock")}
+              active={state.codeBlock}
+              onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+            >
+              <span className="font-mono text-xs">{"{ }"}</span>
+            </ToolbarButton>
+            {state.codeBlock && (
+              <>
+                <input
+                  type="text"
+                  value={state.codeBlockLanguage}
+                  onChange={(e) =>
+                    editor
+                      .chain()
+                      .focus()
+                      .updateAttributes("codeBlock", { language: e.target.value.trim().toLowerCase() || null })
+                      .run()
+                  }
+                  placeholder={t("codeBlockLanguagePlaceholder")}
+                  title={t("codeBlockLanguageTitle")}
+                  className="h-8 w-24 shrink-0 rounded-md border border-border bg-transparent px-2 text-xs text-foreground focus:outline-none focus:border-primary"
+                />
+                <ToolbarButton
+                  title={t("codeBlockLineNumbers")}
+                  active={state.codeBlockLineNumbers}
+                  onClick={() =>
+                    editor.chain().focus().updateAttributes("codeBlock", { lineNumbers: !state.codeBlockLineNumbers }).run()
+                  }
+                >
+                  <span className="font-mono text-[10px]">#</span>
                 </ToolbarButton>
               </>
             )}
