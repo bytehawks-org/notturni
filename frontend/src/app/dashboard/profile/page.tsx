@@ -1,6 +1,6 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
@@ -9,17 +9,22 @@ import { LanguagePicker } from "@/components/LanguagePicker";
 import { UiLanguagePicker } from "@/components/shell/UiLanguagePicker";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { Toggle } from "@/components/ui/Controls";
 import { FieldGroup, Input, Label, TextArea } from "@/components/ui/Field";
 import { VerificationBadge } from "@/components/ui/VerificationBadge";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { interestLabel } from "@/lib/interests";
 import { SOCIAL_PLATFORMS, getSocialPlatform } from "@/lib/social-platforms";
 import {
   type DomainOut,
   type FollowStats,
+  type Interest,
   type MeProfile,
   type PostAuthorNameStyle,
 } from "@/lib/types";
+
+const MAX_USER_INTERESTS = 5;
 
 const AUTHOR_NAME_STYLES: PostAuthorNameStyle[] = ["username", "full_name", "display_name", "verified_domain"];
 
@@ -27,16 +32,24 @@ export default function ProfilePage() {
   const router = useRouter();
   const { user, authFetch, refreshUser, logout } = useAuth();
   const t = useTranslations("Profile");
+  const uiLocale = useLocale();
   const tc = useTranslations("Common");
+  const tTier = useTranslations("VerificationTier");
   const errorMessage = useCallback(
     (err: unknown): string => (err instanceof ApiClientError ? err.message : tc("unexpectedError")),
     [tc]
   );
   const [profile, setProfile] = useState<MeProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // catturato una sola volta al mount: basta per decidere se mostrare il
-  // form disabilitato, non serve un valore che si aggiorni dal vivo.
-  const [nowMs] = useState(() => Date.now());
+  // Aggiornato periodicamente (non catturato una sola volta al mount): il
+  // cooldown username dura 5 giorni, una scheda lasciata aperta oltre quel
+  // confine deve poter sbloccare da sola l'input invece di restarci
+  // bloccata fino a un refresh manuale della pagina.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   const [username, setUsername] = useState("");
   const [bio, setBio] = useState("");
@@ -47,7 +60,13 @@ export default function ProfilePage() {
   const [country, setCountry] = useState("");
   const [nativeLanguage, setNativeLanguage] = useState<string | null>(null);
   const [fallbackLanguages, setFallbackLanguages] = useState<string[]>([]);
+  const [interests, setInterests] = useState<string[]>([]);
+  const [availableInterests, setAvailableInterests] = useState<Interest[]>([]);
   const [savingBio, setSavingBio] = useState(false);
+
+  useEffect(() => {
+    api.interests.list().then(setAvailableInterests).catch(() => {});
+  }, []);
 
   const [linkPlatform, setLinkPlatform] = useState(SOCIAL_PLATFORMS[0].key);
   const [linkUrl, setLinkUrl] = useState("");
@@ -64,6 +83,12 @@ export default function ProfilePage() {
   const [deleteConfirmUsername, setDeleteConfirmUsername] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [repeatNewPassword, setRepeatNewPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [changingPassword, setChangingPassword] = useState(false);
 
   const [mfaMessage, setMfaMessage] = useState<string | null>(null);
   const [mfaError, setMfaError] = useState<string | null>(null);
@@ -102,13 +127,18 @@ export default function ProfilePage() {
         setCountry(p.country ?? "");
         setNativeLanguage(p.native_language);
         setFallbackLanguages(p.fallback_languages);
+        setInterests(p.interests);
         if (p.pending_email_change) {
           setNewEmail(p.pending_email_change.new_email);
         }
         if (p.domain_pending_verification && p.domain_verification_instructions) {
           setDomainInfo({
             domain: p.domain_pending_verification,
-            status: "pending",
+            // Prima era sempre "pending": un fallimento di verifica
+            // persistito in DB come "failed" tornava a mostrarsi "pending"
+            // a ogni refresh del profilo (bug segnalato dalla review
+            // Copilot).
+            status: p.domain_status ?? "pending",
             txt_record_name: p.domain_verification_instructions.txt_record_name,
             txt_record_value: p.domain_verification_instructions.txt_record_value,
           });
@@ -140,6 +170,7 @@ export default function ProfilePage() {
           country,
           native_language: nativeLanguage ?? "",
           fallback_languages: fallbackLanguages,
+          interests,
         })
       );
       setProfile(updated);
@@ -150,6 +181,21 @@ export default function ProfilePage() {
       setError(errorMessage(err));
     } finally {
       setSavingBio(false);
+    }
+  }
+
+  function toggleInterest(key: string) {
+    setInterests((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : prev.length >= MAX_USER_INTERESTS ? prev : [...prev, key]
+    );
+  }
+
+  async function handleToggleDirectoryListed(value: boolean) {
+    try {
+      const updated = await authFetch((token) => api.users.updateMe(token, { directory_listed: value }));
+      setProfile(updated);
+    } catch (err) {
+      setError(errorMessage(err));
     }
   }
 
@@ -249,12 +295,22 @@ export default function ProfilePage() {
     }
   }
 
-  function handleCancelEmailChange() {
-    setNewEmail("");
-    setEmailChangeCode("");
+  async function handleCancelEmailChange() {
     setEmailChangeError(null);
     setEmailChangeMessage(null);
-    setProfile((prev) => (prev ? { ...prev, pending_email_change: null } : prev));
+    try {
+      // Pulire lo stato locale solo dopo la conferma del server: prima
+      // azzerava subito React mentre la richiesta pending (e il vecchio
+      // OTP valido) restava in DB in caso di errore, mostrando "annullato"
+      // all'utente senza che lo fosse davvero (bug segnalato dalla review
+      // Copilot).
+      await authFetch((token) => api.users.cancelEmailChange(token));
+      setNewEmail("");
+      setEmailChangeCode("");
+      setProfile((prev) => (prev ? { ...prev, pending_email_change: null } : prev));
+    } catch (err) {
+      setEmailChangeError(errorMessage(err));
+    }
   }
 
   async function handleSaveDomain(event: FormEvent) {
@@ -286,6 +342,15 @@ export default function ProfilePage() {
       }
     } catch (err) {
       setDomainError(errorMessage(err));
+      // Il backend marca il record "failed" in DB solo per la risposta 400
+      // di mismatch DNS (vedi app/api/v1/users.py::verify_my_domain) — per
+      // qualunque altro errore (rete, 401/429, 404 dominio assente) il
+      // record resta invariato, e replicare "failed" qui a prescindere
+      // disallineava il badge dallo stato reale nel database (bug segnalato
+      // dalla review Copilot).
+      if (err instanceof ApiClientError && err.status === 400) {
+        setDomainInfo((prev) => (prev ? { ...prev, status: "failed" } : prev));
+      }
     } finally {
       setDomainSubmitting(false);
     }
@@ -302,6 +367,28 @@ export default function ProfilePage() {
       setDomainError(errorMessage(err));
     } finally {
       setDomainSubmitting(false);
+    }
+  }
+
+  async function handleChangePassword(event: FormEvent) {
+    event.preventDefault();
+    setPasswordError(null);
+    if (newPassword !== repeatNewPassword) {
+      setPasswordError(t("passwordMismatch"));
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      await authFetch((token) =>
+        api.users.changePassword(token, { current_password: currentPassword, new_password: newPassword })
+      );
+      // Il backend revoca tutte le sessioni (anche quella corrente): serve
+      // rifare login, non ha senso restare su una sessione già invalidata.
+      await logout();
+      router.push("/login");
+    } catch (err) {
+      setPasswordError(errorMessage(err));
+      setChangingPassword(false);
     }
   }
 
@@ -586,6 +673,30 @@ export default function ProfilePage() {
                   placeholder={t("bioPlaceholder")}
                 />
               </FieldGroup>
+
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-semibold uppercase tracking-[.04em] text-muted">
+                  {t("interests", { count: interests.length, max: MAX_USER_INTERESTS })}
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {availableInterests.map((interest) => {
+                    const active = interests.includes(interest.key);
+                    return (
+                      <button
+                        key={interest.key}
+                        type="button"
+                        onClick={() => toggleInterest(interest.key)}
+                        disabled={!active && interests.length >= MAX_USER_INTERESTS}
+                        className={`rounded-full border px-3 py-1 text-[13px] transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                          active ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted hover:border-primary/40"
+                        }`}
+                      >
+                        {interestLabel(interest, interest.key, uiLocale)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </section>
 
             <section id="lingue" className="flex scroll-mt-6 flex-col gap-5">
@@ -774,7 +885,11 @@ export default function ProfilePage() {
             <h2 className="font-serif text-lg text-foreground">{t("nav.verification")}</h2>
 
             <div className="flex items-center gap-2">
-              <VerificationBadge tier={profile?.verification_tier ?? "none"} size={20} />
+              <VerificationBadge
+                tier={profile?.verification_tier ?? "none"}
+                size={20}
+                label={profile && profile.verification_tier !== "none" ? tTier(profile.verification_tier) : undefined}
+              />
               <span className="text-sm text-foreground">
                 {profile && profile.verification_tier !== "none"
                   ? t("verificationBadgeActive")
@@ -939,11 +1054,79 @@ export default function ProfilePage() {
             )}
             {mfaMessage && <Alert kind="success">{mfaMessage}</Alert>}
             {mfaError && <Alert kind="error">{mfaError}</Alert>}
+
+            <div className="flex flex-col gap-3 border-t border-border pt-5">
+              <h3 className="text-sm font-semibold text-foreground">{t("changePasswordTitle")}</h3>
+              <p className="text-[13px] text-muted">{t("changePasswordSub")}</p>
+              <form onSubmit={handleChangePassword} className="flex flex-col gap-3.5">
+                <FieldGroup className="mb-0">
+                  <Label htmlFor="current-password">{t("currentPassword")}</Label>
+                  <Input
+                    id="current-password"
+                    type="password"
+                    required
+                    autoComplete="current-password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                  />
+                </FieldGroup>
+                <FieldGroup className="mb-0">
+                  <Label htmlFor="new-password">{t("newPassword")}</Label>
+                  <Input
+                    id="new-password"
+                    type="password"
+                    required
+                    minLength={10}
+                    autoComplete="new-password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                  />
+                </FieldGroup>
+                <FieldGroup className="mb-0">
+                  <Label htmlFor="repeat-new-password">{t("repeatNewPassword")}</Label>
+                  <Input
+                    id="repeat-new-password"
+                    type="password"
+                    required
+                    minLength={10}
+                    autoComplete="new-password"
+                    value={repeatNewPassword}
+                    onChange={(e) => setRepeatNewPassword(e.target.value)}
+                  />
+                  {repeatNewPassword.length > 0 && newPassword !== repeatNewPassword && (
+                    <p className="mt-1 text-xs text-danger">{t("passwordMismatch")}</p>
+                  )}
+                </FieldGroup>
+                {passwordError && <Alert kind="error">{passwordError}</Alert>}
+                <div>
+                  <Button type="submit" variant="secondary" disabled={changingPassword}>
+                    {changingPassword ? t("changingPassword") : t("changePassword")}
+                  </Button>
+                </div>
+              </form>
+            </div>
           </section>
 
           <section id="privacy" className="flex scroll-mt-6 flex-col gap-4">
             <h2 className="font-serif text-lg text-foreground">{t("nav.privacy")}</h2>
             <div className="overflow-hidden rounded-lg border border-border">
+              {profile && user?.platform_role === "super_admin" ? (
+                <div className="border-b border-border px-4 py-4">
+                  <Toggle checked={false} onChange={() => {}} label={t("directoryListed")} disabled />
+                  <p className="mt-1 text-[13px] text-muted">{t("directoryListedSuperAdminSub")}</p>
+                </div>
+              ) : (
+                profile && (
+                  <div className="border-b border-border px-4 py-4">
+                    <Toggle
+                      checked={profile.directory_listed}
+                      onChange={handleToggleDirectoryListed}
+                      label={t("directoryListed")}
+                    />
+                    <p className="mt-1 text-[13px] text-muted">{t("directoryListedSub")}</p>
+                  </div>
+                )
+              )}
               <div className="flex items-center justify-between gap-5 border-b border-border px-4 py-4 last:border-0">
                 <div className="flex flex-col gap-0.5">
                   <span className="text-sm font-medium text-foreground">{t("downloadData")}</span>

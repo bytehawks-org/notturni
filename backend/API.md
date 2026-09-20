@@ -73,6 +73,14 @@ via `Authorization: Bearer` con l'access token, di per sé immune a CSRF —
 un'origine estranea non può impostare quell'header su una richiesta
 cross-site.
 
+Un cambio password (`POST /users/me/password`, reset "password dimenticata")
+cancella le sessioni (`UserSession`, quindi i refresh token) ma un access
+token JWT già emesso resterebbe altrimenti valido fino al suo `exp` naturale
+(15 minuti), essendo stateless. `User.credentials_changed_at` chiude questa
+finestra: `get_current_user`/`get_current_user_optional` confrontano l'`iat`
+del token con questo campo e rifiutano (401) ogni token emesso prima
+dell'ultimo cambio password.
+
 ## Autenticazione utente (password, MFA, SSO)
 
 ### Registrazione e login con password
@@ -88,7 +96,10 @@ automatico: va fatto separatamente. `409` se username o email già in uso.
 `400` se lo username non rispetta il formato (todo/USERS.md #1): minuscole,
 cifre, `-` e `_` come separatori interni (mai a inizio/fine né ripetuti),
 3–32 caratteri, e non in blacklist (`app/domain/usernames.py`). Lo username è
-l'identificatore citabile come `@username` nei contenuti.
+l'identificatore citabile come `@username` nei contenuti. `400` anche se la
+password è più corta di 10 caratteri (`app/domain/passwords.py`, unico
+requisito della policy — nessun vincolo su classi di caratteri): stesso
+controllo applicato dal flusso "password dimenticata" più sotto.
 
 Se `NOCT_DEPLOYMENT_MODE=solo` (installazione a singolo proprietario, es.
 blog personale — vedi `.env.example`): il **primo** utente registrato diventa
@@ -130,6 +141,10 @@ minuti dallo stesso IP o oltre 5 tentativi/5 minuti sulla stessa email
 
 → `200` con `access_token` come sopra (refresh token nel cookie). `401` se il
 codice è sbagliato/scaduto o il challenge non è più valido (dura 5 minuti).
+`429` oltre 20 tentativi/5 minuti dallo stesso IP o oltre 8 tentativi/5 minuti
+sullo stesso soggetto del challenge (stessa protezione del login, applicata
+anche a `mfa/totp/confirm` e `mfa/email/confirm` sotto — un codice a 6 cifre è
+altrimenti indovinabile in un numero di tentativi gestibile).
 
 **`POST /api/v1/auth/refresh`** — nessun corpo: il refresh token è letto dal
 cookie `noct_refresh_token`, richiede l'header `X-CSRF-Token` (vedi sopra).
@@ -146,6 +161,72 @@ se la sessione era già revocata o il cookie assente). `403` senza
 
 **`GET /api/v1/auth/me`** — richiede sessione. Ritorna
 `{id, username, email, mfa_enabled}`.
+
+**`GET /api/v1/auth/username-available?username=...`** — pubblico, nessuna
+sessione richiesta. Rate limit 30 richieste/minuto per IP. Verifica formato
+(`app/domain/usernames.py::validate_username` — lunghezza, caratteri
+ammessi, parole riservate) e unicità con la stessa query di
+`register_user`:
+
+```json
+{"available": true, "reason": null}
+{"available": false, "reason": "invalid_format"}
+{"available": false, "reason": "taken"}
+```
+
+Pensato per il controllo dal vivo mentre l'utente digita in fase di
+registrazione — non sostituisce la validazione di unicità fatta comunque a
+`POST /auth/register` (race condition tra il check e il submit sempre
+possibile, gestita lì).
+
+### Cambio password da loggati
+
+**`POST /api/v1/users/me/password`** — richiede sessione.
+
+```json
+{"current_password": "...", "new_password": "..."}
+```
+
+→ `200 {"status": "ok"}`. Verifica `current_password` contro l'hash
+esistente (stessa funzione del login), applica la policy minima di 10
+caratteri, e **revoca tutte le sessioni attive** dell'utente — stesso
+principio di `POST /auth/password/reset` sopra (`app/domain/password_reset.py`),
+qui applicato esplicitamente perché prima d'ora non esisteva alcun modo di
+cambiare la password restando loggati, solo il reset via email (senza
+vecchia password). La sessione corrente viene chiusa anch'essa: il client
+deve rifare login con la nuova password. `400` se `current_password` è
+sbagliata, se `new_password` non rispetta la policy minima, o se l'account
+non ha una password impostata (utente collegato solo via SSO).
+
+### Password dimenticata
+
+**`POST /api/v1/auth/password/forgot`**
+
+```json
+{"email": "mario@example.com"}
+```
+
+→ **sempre** `202`, email esistente o no: la risposta non deve mai rendere
+enumerabile quali indirizzi hanno un account. Se l'email corrisponde a un
+utente attivo, accoda un codice a 6 cifre via email (stesso meccanismo
+dell'OTP MFA/cambio email — RabbitMQ + `app/workers/email_otp_consumer.py`,
+TTL 10 minuti). `429` oltre 20 tentativi/5 minuti dallo stesso IP o 5/5
+minuti sulla stessa email.
+
+**`POST /api/v1/auth/password/reset`**
+
+```json
+{"email": "mario@example.com", "code": "123456", "new_password": "..."}
+```
+
+→ `204`. Imposta la nuova password (stessa policy minima di 10 caratteri di
+sopra) e **revoca tutte le sessioni attive** dell'utente (ogni refresh token
+già emesso smette di funzionare, come per la cancellazione account —
+`app/domain/gdpr.py`): un reset di password è tipicamente una risposta a un
+account compromesso, non solo a una password dimenticata. `400` se il
+codice è sbagliato/scaduto/già usato o se `new_password` non rispetta la
+policy minima — stesso messaggio generico per email sconosciuta e codice
+errato. `429` con gli stessi limiti di `password/forgot`.
 
 ### MFA — gestione (richiede una sessione attiva, cioè un login già fatto)
 
@@ -192,13 +273,23 @@ provider, scambia il code, recupera l'userinfo e applica l'account linking:
 - utente esistente con la stessa email, **senza** MFA → collegamento
   immediato e login;
 - utente esistente con la stessa email, **con** MFA attiva → non collega
-  subito: ritorna `{"mfa_required": true, "method": ..., "challenge": ...}`
-  come nel login normale. Il completamento del collegamento avviene dentro
-  `/auth/mfa/verify`, che riconosce il challenge come "collegamento SSO in
-  sospeso" e lo finalizza dopo la verifica del codice.
+  subito, richiede la verifica del codice. Il completamento del
+  collegamento avviene dentro `/auth/mfa/verify`, che riconosce il
+  challenge come "collegamento SSO in sospeso" e lo finalizza dopo la
+  verifica del codice.
 
-Risposta finale (login riuscito, senza MFA da verificare): stesso formato di
-`/auth/login` (`access_token` nel corpo, refresh token nel cookie).
+**Risposta: sempre un redirect (`303`) verso il frontend, mai JSON** — a
+differenza di ogni altro endpoint di questa sezione, questo è raggiunto da
+una navigazione vera del browser (redirect OAuth), non da una fetch: nessun
+codice JS è lì a leggere un corpo JSON, deve chiudere su una pagina reale
+(bug corretto: prima restituiva JSON grezzo, mostrato a schermo invece che
+gestito dall'app). Login riuscito → `{frontend}/dashboard` (cookie di
+sessione già impostati sulla risposta di redirect, il refresh silenzioso
+del frontend al mount recupera l'access token). MFA da verificare →
+`{frontend}/login?mfa_challenge=...&mfa_method=...` (stesso form OTP del
+login via password). Errore (provider non configurato, OAuth fallito, email
+non disponibile dal provider) → `{frontend}/login?sso_error=1`. `{frontend}`
+è la prima origine di `NOCT_CORS_ORIGINS`.
 
 **Limitazione nota:** senza credenziali OAuth reali (client id/secret per
 ciascun provider) il flow non è testabile end-to-end in questo ambiente di
@@ -288,10 +379,12 @@ Conteggi per la tab Panoramica del blog (todo/UX_REDESIGN.md B1, mockup 5a):
 `posts_scheduled` sono i `published` con `published_at` futuro; `media` è il
 numero di immagini citate nei post (tabella `post_media`). In più (B2):
 `reads_30d` — 30 voci `{day, reads}` (giorni UTC, quelli senza letture a 0),
-`reads_total_30d`, e `storage_bytes` — byte occupati su storage da media e
+`reads_total_30d`, `storage_bytes` — byte occupati su storage da media e
 backup Markdown del blog (prefissi `userdata/{utente}/{blog}/` di
 proprietario e collaboratori; `null` se lo storage non risponde, `0` se il
-bucket non è mai stato creato).
+bucket non è mai stato creato) — e `storage_limit_mb`, il limite impostato
+da un Super Admin (`platform_config.max_blog_storage_mb`), `null` se nessun
+limite.
 
 **`POST /api/v1/posts/{post_id}/read`** — pubblico, `204`, nessun corpo.
 Conteggio letture aggregato per giorno (tabella `post_reads_daily`, mockup
@@ -395,18 +488,19 @@ segue il blog.
 presentazione del blog (palette/tipografia/layout — vedi
 [ROADMAP.md](../ROADMAP.md#2-estetica) per i vincoli), applicata dal frontend
 a tutte le pagine pubbliche del blog (`BlogPageShell`, todo/UX_REDESIGN.md
-B10): palette come variabili CSS, `typography.heading_font`/`body_font` come
-`--font-heading`/`--font-body` (font self-hostati al build, nessuna
-richiesta a Google a runtime), `body_size`/`measure` per dimensione del
-corpo e larghezza della colonna di lettura del post, `layout` per la
-disposizione del feed della home del blog. JSON libero; se il proprietario
-non ha ancora salvato nulla, ritorna il default della piattaforma (identico
-allo shell non personalizzato):
+B10): palette come variabili CSS, `typography.heading_font`/`body_font`/
+`monospace_font` come `--font-heading`/`--font-body`/`--font-monospace` (font
+self-hostati al build, nessuna richiesta a Google a runtime — quest'ultimo
+usato per i blocchi di codice, blocco "evidenziazione sintassi"),
+`body_size`/`measure` per dimensione del corpo e larghezza della colonna di
+lettura del post, `layout` per la disposizione del feed della home del blog.
+JSON libero; se il proprietario non ha ancora salvato nulla, ritorna il
+default della piattaforma (identico allo shell non personalizzato):
 
 ```json
 {
   "palette": {"background": "#fbf9f6", "foreground": "#2b2a28", "primary": "#3e6259", "muted": "#a8a29a", "border": "#e7e2da"},
-  "typography": {"heading_font": "Lora", "body_font": "Source Sans 3"},
+  "typography": {"heading_font": "Lora", "body_font": "Source Sans 3", "monospace_font": "JetBrains Mono"},
   "layout": "standard"
 }
 ```
@@ -421,16 +515,18 @@ e qualsiasi altra chiave) libero:
 - `palette_dark` (opzionale): stessi vincoli di `palette`; è la variante
   scura applicata alle pagine pubbliche del blog quando il lettore usa il
   tema scuro. Assente, in tema scuro vale la palette scura di piattaforma.
-- `typography`: al massimo 3 font distinti tra `heading_font`/`body_font`
-  (`body_size`/`measure`, pur essendo anch'esse stringhe, non contano verso
-  questo limite); se presenti, `heading_font` deve essere uno dei font serif
-  curati (`Lora`, `Merriweather`, `Playfair Display`, `Source Serif 4`,
-  `Crimson Pro`) e `body_font` uno dei font sans-serif curati (`Inter`,
-  `Nunito Sans`, `Work Sans`, `Source Sans 3`, `Karla`) — vedi
-  `backend/app/domain/blog_config.py`. `body_size` (`"17"`/`"18"`/`"19"`) e
-  `measure` (`"narrow"`/`"normal"`) non sono validati lato backend (solo
-  accettati); un valore diverso da quelli attesi è ignorato dal frontend, che
-  ricade sul default.
+- `typography`: al massimo 3 font distinti tra `heading_font`/`body_font`/
+  `monospace_font` (`body_size`/`measure`, pur essendo anch'esse stringhe, non
+  contano verso questo limite); se presenti, `heading_font` deve essere uno
+  dei font serif curati (`Lora`, `Merriweather`, `Playfair Display`,
+  `Source Serif 4`, `Crimson Pro`), `body_font` uno dei font sans-serif curati
+  (`Inter`, `Nunito Sans`, `Work Sans`, `Source Sans 3`, `Karla`) e
+  `monospace_font` uno dei font monospace curati (`JetBrains Mono`,
+  `Fira Code`, `IBM Plex Mono`, `Source Code Pro`, `Space Mono`; default di
+  piattaforma `JetBrains Mono`) — vedi `backend/app/domain/blog_config.py`.
+  `body_size` (`"17"`/`"18"`/`"19"`) e `measure` (`"narrow"`/`"normal"`) non
+  sono validati lato backend (solo accettati); un valore diverso da quelli
+  attesi è ignorato dal frontend, che ricade sul default.
 - `footer` (opzionale): override per questo blog delle sole colonne 1/2 del
   footer di piattaforma (`GET /api/v1/footer`) — `{"column1": "...",
   "column2": "..."}`, Markdown libero, max 5000 caratteri ciascuna, nessun'altra
@@ -444,23 +540,31 @@ Altre chiavi restano libere.
 proprietario (`403` altrimenti). `multipart/form-data`, campo `file`.
 Immagine di copertina del blog (banner della home pubblica, facoltativa):
 stessi formati/limite di dimensione e stessa moderazione automatica di
-`POST .../media` sotto — l'upload aggiorna `cover_image_url` e
+`POST .../media` sotto (incluso il controllo dello spazio massimo per blog,
+`413` se superato — vedi `platform_config.max_blog_storage_mb`) — l'upload
+aggiorna `cover_image_url` e
 `cover_image_is_sensitive` (risultato della moderazione), azzera
-`cover_image_categories`. Sostituire una cover esistente non cancella
-l'oggetto precedente su storage (stessa scelta di `Post.cover_image_url`).
-Ritorna il `Blog` aggiornato (`BlogOut`).
+`cover_image_categories`/`cover_image_alt_text`. Sostituire una cover
+esistente non cancella l'oggetto precedente su storage (stessa scelta di
+`Post.cover_image_url`). Ritorna il `Blog` aggiornato (`BlogOut`).
+Crea anche una riga nella libreria media del blog (`GET .../media` sotto,
+`used_as_blog_cover=true` finché resta la cover corrente) — prima non ci
+finiva mai, a differenza della cover di un post (che passa dallo stesso
+endpoint di `POST .../media`).
 
 **`PATCH /api/v1/blogs/{slug}/cover-image`** — solo il proprietario, `400`
-se il blog non ha ancora una cover. `{"categories": ["nudity", ...]}`
-(vocabolario in `backend/app/domain/content_media.py::SENSITIVITY_CATEGORIES`):
-aggiorna l'avviso manuale sui contenuti senza ricaricare l'immagine, stesso
+se il blog non ha ancora una cover. `{"categories": ["nudity", ...],
+"alt_text"?}` (vocabolario categorie in
+`backend/app/domain/content_media.py::SENSITIVITY_CATEGORIES`): aggiorna
+l'avviso manuale sui contenuti senza ricaricare l'immagine, stesso
 principio del `PATCH /posts/{id}` quando cambia solo `cover_image_categories`
-— categorie non vuote forzano `cover_image_is_sensitive=true`. Ritorna il
-`Blog` aggiornato.
+— categorie non vuote forzano `cover_image_is_sensitive=true`. `alt_text`
+assente lascia invariato, presente (anche `null`/`""`) lo azzera o
+sostituisce. Ritorna il `Blog` aggiornato.
 
 **`DELETE /api/v1/blogs/{slug}/cover-image`** — solo il proprietario. Azzera
-cover/avviso/categorie (l'oggetto su storage non viene cancellato, stessa
-scelta di cui sopra). Ritorna il `Blog` aggiornato.
+cover/avviso/categorie/alt text (l'oggetto su storage non viene cancellato,
+stessa scelta di cui sopra). Ritorna il `Blog` aggiornato.
 
 **`POST /api/v1/blogs/{slug}/favicon`** — richiede sessione, solo il
 proprietario. `multipart/form-data`, campo `file`. Favicon dedicata del blog
@@ -480,7 +584,11 @@ l'oggetto su storage e azzera `favicon_url`. Ritorna il `Blog` aggiornato.
 scrittura al blog (proprietario/autore/co-autore). `multipart/form-data`,
 campo `file`. Formati ammessi: PNG, JPEG, WEBP, GIF; max 10 MiB (`400`
 altrimenti). Immagine da incorporare nel Markdown di un post (es.
-`![alt](url)`). Vedi "Media e backup" sotto per il path S3.
+`![alt](url)`). Vedi "Media e backup" sotto per il path S3. Se un Super
+Admin ha impostato uno spazio massimo per blog
+(`platform_config.max_blog_storage_mb`, `PATCH /admin/config`), l'upload
+che lo supererebbe risponde `413` invece di essere accettato — nessun
+controllo (comportamento invariato) se il limite non è impostato.
 
 ```json
 {"url": "https://.../notturni/userdata/{user_uuid}/{blog_uuid}/media/{uuid}.png"}
@@ -521,6 +629,7 @@ citati nel corpo dei post **pubblicati**, raggruppati per URL identico:
     "url": "https://.../media/....jpg",
     "alt_text": "Descrizione dell'immagine",
     "categories": ["nudity", "explicit"],
+    "is_sensitive": true,
     "citations": [
       {"post_title": "...", "post_slug": "...", "permalink": "/{blog}/{slug}", "locale": "it", "used_at": "2026-01-01T00:00:00Z"}
     ]
@@ -530,8 +639,12 @@ citati nel corpo dei post **pubblicati**, raggruppati per URL identico:
 
 `categories` è il sottoinsieme di `suggestive`/`nudity`/`explicit`/`other`
 scelto dall'autore per quell'immagine (vedi "Avviso sui contenuti" nella
-sezione Post) — vuoto se non segnalata o segnalata senza una categoria
-specifica. `used_at` è la data di pubblicazione del post che la cita.
+sezione Post) — vuoto se non segnalata *oppure* segnalata (dalla sola
+automoderazione, o dal modal senza una categoria specifica) senza una
+categoria: per questo `is_sensitive` è un campo separato, non derivabile da
+`categories.length > 0` — è lui a decidere se l'immagine va mostrata sfocata
+nella griglia, stesso flag usato dal rendering del post. `used_at` è la data
+di pubblicazione del post che la cita.
 
 **`GET /api/v1/blogs/{slug}/links-bibliography`** — stesso principio, per i
 link citati nel corpo dei post pubblicati:
@@ -793,8 +906,10 @@ sezione "Moderazione automatica delle immagini" più sotto; non viene
 ricalcolato qui. `cover_image_categories` (default `[]`) sono le categorie
 di avviso sui contenuti scelte manualmente dall'autore (vedi "Avviso sui
 contenuti" più sotto): non vuoto forza anche `cover_image_is_sensitive` a
-`true`, indipendentemente dal valore passato per quel campo. `tags` è
-opzionale (vedi sezione "Tag" sotto).
+`true`, indipendentemente dal valore passato per quel campo.
+`cover_image_alt_text` (default `""`) è il testo alternativo della cover
+(accessibilità), indipendente dall'eventuale alt text della stessa immagine
+in libreria media. `tags` è opzionale (vedi sezione "Tag" sotto).
 `category_id` è opzionale: l'UUID di una categoria esistente del blog (vedi
 sezione "Categorie" sopra) — `404` se non appartiene a questo blog. `409` se
 lo slug è già in uso su quel blog per quella lingua. `notes` è opzionale
@@ -878,8 +993,11 @@ esporre l'UUID nell'URL. `404` se blog/slug non corrispondono a nessun post
 
 **`PATCH /api/v1/posts/{post_id}`** — stessa autorizzazione della creazione.
 Aggiorna
-`title`/`content`/`cover_image_url`/`cover_image_is_sensitive`/`cover_image_categories`/`tags`/`category_id`/`notes`
-(tutti opzionali). Se `content` cambia, accoda di nuovo il backup su S3 e
+`title`/`content`/`cover_image_url`/`cover_image_is_sensitive`/`cover_image_categories`/`cover_image_alt_text`/`tags`/`category_id`/`notes`
+(tutti opzionali). `cover_image_alt_text` è indipendente da `cover_image_url`
+(stesso principio di `cover_image_categories` sotto): campo assente lascia
+l'alt text invariato, presente (anche `null`/`""`) lo azzera o sostituisce.
+Se `content` cambia, accoda di nuovo il backup su S3 e
 ricalcola anche i media/link citati (vedi "Avviso sui contenuti" e
 "Media e link citati" più sotto). Per `notes`: campo assente lascia le note
 invariate, una lista (anche vuota `[]`) le sostituisce. Per
@@ -1111,8 +1229,15 @@ immagine in `media_files` e risponde anche con `media_id`.
 **`GET /api/v1/blogs/{slug}/media`** — proprietario e collaboratori
 (`403` altrimenti). `{items: [{id, url, content_type, size_bytes, alt_text,
 caption, categories, is_sensitive, uploader_username, created_at, used_in:
-[{post_id, post_slug, post_title, permalink}]}], total_bytes}`, dal più
-recente. `used_in` viene da `post_media` (immagini citate nei post).
+[{post_id, post_slug, post_title, permalink}], used_as_blog_cover}],
+total_bytes}`, dal più recente. `used_in` copre sia le immagini citate nel
+contenuto (`post_media`) sia quelle usate come cover di un post
+(`Post.cover_image_url`) — prima tracciava solo le prime, quindi
+un'immagine usata solo come cover risultava "non usata da nessuno" e
+cancellabile mentre era ancora la cover live del post (bug corretto).
+`used_as_blog_cover` è `true` se l'immagine è l'attuale cover del blog
+(`Blog.cover_image_url`, sezione cover-image sopra) — anch'essa ora sempre
+registrata qui all'upload.
 
 **`POST /api/v1/blogs/{slug}/media/sync`** — accesso in scrittura. Importa
 nella libreria le immagini citate nei post che non hanno ancora una riga
@@ -1126,8 +1251,9 @@ non vengono riscritti: i valori della libreria sono il default per gli usi
 futuri.
 
 **`DELETE /api/v1/blogs/{slug}/media/{media_id}`** — `204`; `409` se
-l'immagine è ancora citata in un post. Rimuove la riga e, se caricata via
-libreria, l'oggetto su storage.
+l'immagine è ancora citata in un post (contenuto o cover) o è l'attuale
+cover del blog. Rimuove la riga e, se caricata via libreria, l'oggetto su
+storage.
 
 ## Anteprima di un link
 
@@ -1354,6 +1480,62 @@ questa vista derivata.
 proprietario del frammento (`404` altrimenti, non `403`: non rivela
 l'esistenza del frammento a chi non è suo). `204` se rimosso.
 
+### Viste aggregate su tutti i blog dell'utente
+
+Cinque endpoint, tutti `GET /api/v1/users/me/...`, richiedono sessione,
+nessuna paginazione (come le liste per-singolo-blog che generalizzano).
+Ambito comune: **tutti i blog di cui l'utente è proprietario o
+collaboratore** (`app/domain/blog_scope.py::my_blog_ids`, union tra
+`Blog.owner_id` e `BlogMembership.user_id`, blog cancellati esclusi) — non
+un solo blog per volta come le rispettive tab in `dashboard/blogs/{slug}`,
+che restano l'unico modo per modificare/caricare/eliminare questi
+contenuti (queste viste sono di sola lettura). Ogni elemento porta
+`blog_slug`/`blog_title` per sapere da quale blog proviene.
+
+**`GET /api/v1/users/me/posts`** — tutti i post (qualunque stato: bozza,
+revisione, pubblicato, pianificato) di tutti i blog dell'utente, dal più
+recente. Stesso schema di risposta di `GET /blogs/{slug}/posts` (`PostOut`,
+già include `blog_slug`/`permalink`), generalizzato a più blog.
+
+**`GET /api/v1/users/me/media`** — generalizza `GET /blogs/{slug}/media`
+(sezione "Libreria media del blog" sotto), stesso schema per riga (alt,
+didascalia, categorie, sensibilità, "usato in") più `blog_slug`/`blog_title`:
+
+```json
+[{
+  "id": "...", "url": "...", "content_type": "image/jpeg", "size_bytes": 12345,
+  "alt_text": "...", "caption": null, "categories": [], "is_sensitive": false,
+  "uploader_username": "mario", "created_at": "...",
+  "used_in": [{"post_id": "...", "post_slug": "...", "post_title": "...", "permalink": "/blog/post"}],
+  "blog_slug": "...", "blog_title": "..."
+}]
+```
+
+**`GET /api/v1/users/me/publications`** — generalizza `GET
+/blogs/{slug}/publications` (sezione "Pubblicazioni" sotto), stessi
+conteggi capitoli totali/pubblicati per pubblicazione, più
+`blog_slug`/`blog_title`.
+
+**`GET /api/v1/users/me/links`** — generalizza `GET
+/blogs/{slug}/links-bibliography` (sezione "Anteprima di un link"/
+bibliografia sotto) a più blog, raggruppato per URL identico su tutti i
+post. **Vista autore**: a differenza dell'endpoint pubblico che generalizza,
+non applica il filtro di visibilità pubblica — un autore vede qui anche i
+link nelle proprie bozze. Ogni citazione porta `blog_slug`/`blog_title`.
+
+```json
+[{"url": "...", "link_text": "...", "citations": [
+  {"post_title": "...", "post_slug": "...", "permalink": "...", "locale": "it", "used_at": "...", "blog_slug": "...", "blog_title": "..."}
+]}]
+```
+
+**`GET /api/v1/users/me/bibliography`** — generalizza la bibliografia delle
+note a piè di pagina (sezione "Libreria note del blog" sotto) a più blog,
+raggruppate per testo nota identico, stessa vista-autore (nessun filtro di
+visibilità pubblica) e stessa cautela sugli URL non http(s) su note create
+prima della validazione di schema. Ogni citazione porta
+`blog_slug`/`blog_title`.
+
 ## Pagine statiche (sito principale)
 
 Pagine come Chi siamo, Contatti, Privacy — non legate a un blog utente
@@ -1396,7 +1578,45 @@ ricerca della sezione Pagine del dashboard (`frontend/src/app/admin/pagine`).
 singola traduzione (`slug`, `title`, `content`, `is_published`, tutti
 opzionali).
 
+## Interessi utente
+
+**`GET /api/v1/interests`** — pubblico, nessuna autenticazione. Elenco
+corrente degli interessi selezionabili (blocco "interessi utente", tag
+fissi multilingua — chiave canonica non linguistica, mai testo libero):
+
+```json
+[{"key": "music", "translations": {"it": "Musica", "en": "Music"}}, ...]
+```
+
+Sola sorgente di verità: `platform_config.interests`, seminata da
+`NOCT_DEFAULT_INTERESTS` (JSON, stesso schema) o da un elenco builtin
+curato alla prima installazione, poi modificabile in qualsiasi momento da
+un Super Admin (`PATCH /api/v1/admin/config`, campo `interests` — vedi
+sezione Amministrazione). Il frontend risolve la traduzione nella lingua
+corrente da sé (fallback `en`, poi la prima disponibile, poi `key`).
+
 ## Profilo utente e follow
+
+**`GET /api/v1/users`** — pubblico, nessuna autenticazione. Directory
+pubblica degli utenti (blocco "directory di utenti", stesso schema di
+`GET /blogs`): solo account attivi (non anonimizzati/cancellati) che non
+hanno scelto l'opt-out (`User.directory_listed`, vedi `PATCH /users/me`
+sotto). Il Super Admin è **sempre** escluso, a prescindere dal proprio
+`directory_listed` — non un'opzione dell'utente, per sicurezza (evitare che
+l'account con i privilegi più ampi sia individuabile dalla directory
+pubblica). `q` cerca in username/alias pubblico/bio (`ILIKE`), `locale` filtra
+per lingua madre (`native_language`), `interest` filtra per chiave canonica
+di interesse (per trovare persone con cui condividerlo e seguirle), `sort`
+è `new` (registrazione, default) o `followers`, `limit` (default 30,
+massimo 100), `offset`. Voce:
+
+```json
+{
+  "username": "...", "display_name": "...", "bio": "...",
+  "avatar_url": "...", "verification_tier": "none", "custom_domain": null,
+  "interests": ["music", "cinema"], "follower_count": 3
+}
+```
 
 **`GET /api/v1/users/{username}`** — pubblico. Profilo pubblico:
 
@@ -1406,6 +1626,7 @@ opzionali).
   "first_name": "...", "last_name": "...", "display_name": "...",
   "post_author_name_style": "username",
   "country": "IT", "native_language": "it", "fallback_languages": ["en", "fr"],
+  "interests": ["music", "cinema"],
   "avatar_url": "...", "social_links": [...], "created_at": "...",
   "verification_tier": "none", "custom_domain": null,
   "atproto_did": "did:web:notturni.eu:users:<uuid>",
@@ -1413,11 +1634,12 @@ opzionali).
 }
 ```
 
-`verification_tier` (`none`|`bronze`|`silver`|`gold`|`blue`, CLAUDE.md §5):
-sigillo di verifica del profilo, stile Bluesky/Instagram/Twitter. Solo
-`bronze` è oggi assegnato da una logica reale (dominio custom verificato via
-DNS, vedi sotto) — `silver`/`gold`/`blue` sono riservati per future
-integrazioni, nessun endpoint li assegna. `custom_domain` è valorizzato solo
+`verification_tier` (`none`|`bronze`|`silver`|`gold`|`blue`): sigillo di
+verifica del profilo, stile Bluesky/Instagram/Twitter — `bronze` da dominio
+custom verificato via DNS (vedi sotto), `gold`/`silver`/`blue` da elenchi/
+domini gestiti a mano da un Super Admin (`PATCH /admin/config`, vedi
+sezione Amministrazione), ricalcolati da `app/domain/verification.py`.
+`custom_domain` è valorizzato solo
 se un dominio custom è stato verificato con successo (mai per uno stato
 `pending`/`failed`) — lo username di piattaforma resta comunque sempre
 citabile/risolvibile, il dominio è un'aggiunta, non una sostituzione a
@@ -1448,7 +1670,8 @@ privati del proprietario, mai esposti sul profilo pubblico di nessuno:
   "next_username_change_allowed_at": "2026-09-15T12:00:00Z",
   "pending_email_change": {"new_email": "...", "stage": "awaiting_old_confirmation"},
   "domain_pending_verification": "...",
-  "domain_verification_instructions": {"txt_record_name": "...", "txt_record_value": "..."}
+  "domain_verification_instructions": {"txt_record_name": "...", "txt_record_value": "..."},
+  "directory_listed": true, "interests": ["music", "cinema"]
 }
 ```
 
@@ -1460,6 +1683,10 @@ flusso di cambio email sotto. `domain_pending_verification`/
 `domain_verification_instructions` sono valorizzati solo se esiste un
 dominio custom non ancora verificato (`pending`/`failed`), per poter
 riprendere il flusso senza dover richiamare `POST .../domain`.
+`directory_listed` (privato, mai esposto su `GET /{username}`): opt-out
+dalla directory pubblica (`GET /users` sotto), attivo di default — il
+profilo resta comunque sempre raggiungibile dal link diretto `@username`,
+questo flag esclude solo dall'elenco/ricerca.
 
 `display_name` è un alias pubblico globale (todo/BLOG.md #4): quando
 valorizzato, è l'intestazione del profilo pubblico al posto di username /
@@ -1493,7 +1720,12 @@ invariato — accettato anche senza un dominio verificato attivo (ricade sullo
 username finché non lo è, stesso comportamento di `display_name` non
 impostato). Per
 `fallback_languages`: assente lascia invariata la lista, una lista (anche
-vuota) la sostituisce (`400` se oltre 5 o un codice non valido). `username`:
+vuota) la sostituisce (`400` se oltre 5 o un codice non valido).
+`directory_listed`: booleano, assente lascia invariato — opt-out dalla
+directory pubblica (`GET /users` sotto). `interests`: array di chiavi
+canoniche (vedi `GET /api/v1/interests`), assente lascia invariato, una
+lista (anche vuota) la sostituisce — massimo 5, `400` se oltre il limite o
+se contiene una chiave non tra quelle correnti di piattaforma. `username`:
 assente lo lascia invariato, altrimenti stesso formato/blacklist della
 registrazione (`app/domain/usernames.py`, `400` se non valido, `409` se già
 in uso) **più un cooldown di 5 giorni** (`USERNAME_CHANGE_COOLDOWN_DAYS`,
@@ -1507,7 +1739,7 @@ scritte nel testo di post/pagine esistenti, salvate come testo semplice e non
 riscritte. Evento di audit `user.username_changed`
 (`payload.old_username`/`new_username`).
 
-### Cambio email verificato (CLAUDE.md §5)
+### Cambio email verificato
 
 Nessun `email` in `ProfileUpdateRequest`/`PATCH /users/me`: il cambio email
 passa da un flusso dedicato a **due passi**, a prova che chi lo richiede
@@ -1537,7 +1769,13 @@ cambio (ricontrollando l'unicità per evitare race condition). `400` se
 codice errato/scaduto o passo precedente non completato. Evento di audit
 `user.email_changed` (`payload.old_email`/`new_email`).
 
-### Dominio custom verificato via DNS (CLAUDE.md §5, stile Bluesky)
+**`DELETE /api/v1/users/me/email/request`** — richiede sessione. `204`,
+idempotente (anche senza una richiesta pending). Annulla la richiesta
+pending a qualunque passo si trovi — cancella la riga in
+`email_change_requests`, non solo lo stato lato client, altrimenti l'OTP già
+inviato resterebbe comunque valido fino a scadenza.
+
+### Dominio custom verificato via DNS (stile Bluesky)
 
 Un dominio per utente (`custom_domains`, `user_id` unico), verificato
 dimostrando il possesso pubblicando un record TXT sul proprio DNS — nessuna
@@ -1567,7 +1805,9 @@ il dominio non è verificato).
 
 `400` se il formato non è un hostname valido o è un (sotto)dominio della
 piattaforma stessa (`NOCT_INSTANCE_FQDN`); `409` se già rivendicato e
-verificato da un altro account.
+verificato da un altro account, o se due utenti rivendicano in parallelo lo
+stesso dominio ancora libero (vince chi fa commit per primo, l'altro riceve
+`409` invece di un errore generico).
 
 **`POST /api/v1/users/me/domain/verify`** — richiede sessione. Interroga il
 DNS per il record TXT atteso (timeout 5s, fail sulla singola verifica non
@@ -1646,10 +1886,12 @@ accesso/portabilità (Art. 20): istantanea JSON di tutti i dati collegati
 all'account — profilo, blog di proprietà, post e commenti scritti (ovunque,
 non solo sui propri blog — restano comunque parole scritte dall'utente),
 frammenti salvati, follow (in entrambe le direzioni, solo gli id), token API
-(nome/prefisso/date, mai il segreto o l'hash) ed eventi di audit di cui è
-l'attore (fino a 1000, i più recenti). Struttura libera, non un
-`response_model` tipizzato: vedi `app/domain/gdpr.py::export_user_data` per
-i campi esatti.
+(nome/prefisso/date, mai il segreto o l'hash), eventi di audit di cui è
+l'attore (fino a 1000, i più recenti) e l'eventuale claim di dominio custom
+(anche se ancora `pending`/`failed`, non solo quello già verificato — mai il
+`verification_token`, segreto operativo e non dato personale). Struttura
+libera, non un `response_model` tipizzato: vedi
+`app/domain/gdpr.py::export_user_data` per i campi esatti.
 
 **`DELETE /api/v1/users/me`** — richiede sessione.
 `{"confirm_username": "il-proprio-username"}` → `204`, `400` se non
@@ -1801,7 +2043,40 @@ modificabile a sé, non un valore d'ambiente), `footer_column1_markdown`/
 su ogni pagina pubblica di piattaforma e di ogni blog, vedi `GET /api/v1/footer`
 sotto; le colonne 1/2 sono solo il default, sovrascrivibile per singolo blog
 in `PUT /blogs/{slug}/config` — mai la 3 né `bottom_bar`, sempre e solo di
-piattaforma). Ogni modifica va nel registro (`platform.config_updated`, con
+piattaforma), `interests` (blocco "interessi utente": elenco completo —
+questo campo **sostituisce**, non aggiunge, a differenza di
+`reserved_blog_names` — di `{"key": "...", "translations": {"it": "...",
+"en": "..."}}`; chiave canonica in formato slug `[a-z0-9_-]{1,40}`, univoca,
+almeno una traduzione non vuota per voce, massimo 200 voci; seminato alla
+creazione della riga da `NOCT_DEFAULT_INTERESTS` (JSON, stesso schema) se
+valorizzata, altrimenti da un elenco builtin curato
+(`app/domain/interests.py::DEFAULT_INTERESTS`) — vedi `GET /api/v1/interests`
+sotto per l'elenco pubblico e `PATCH /users/me` per la scelta dell'utente;
+rimuovere una chiave qui ripulisce anche `User.interests` di ogni utente che
+l'aveva selezionata, non solo l'elenco di piattaforma), `max_blog_storage_mb`
+(spazio massimo per blog — media + backup Markdown, stesso conteggio di
+`GET /blogs/{slug}/overview::storage_bytes` — in MB; `null`/`0` = nessun
+limite, default; superarlo risponde `413` su
+`POST /blogs/{slug}/media` e `POST /blogs/{slug}/cover-image`),
+`verification_gold_identifiers`/`verification_silver_identifiers`
+(array di email/username, confronto case-insensitive: assegnano
+rispettivamente il sigillo di verifica `gold` — entità verificate a mano
+dalla piattaforma, testate/agenzie/organizzazioni/personalità note — e
+`silver` — sostenitori economici del progetto; `verification_gold_identifiers`
+accetta anche un dominio email nudo, es. `"testata.it"`, non solo email/
+username interi) e `verification_blue_domains` (array di domini email,
+formato hostname validato: assegnano il sigillo `blue`, in aggiunta al
+dominio della piattaforma stessa — `NOCT_INSTANCE_FQDN` — già incluso
+automaticamente). `User.verification_tier` (vedi `GET /users/{username}`)
+è ricalcolato da `app/domain/verification.py` a ogni evento che può
+cambiarlo (registrazione, cambio email/username, verifica/rimozione del
+dominio custom, modifica di uno di questi tre elenchi — che ricalcola
+**tutti** gli utenti attivi in un colpo solo); priorità in caso di più
+criteri soddisfatti: `gold` > `silver` > `blue` > `bronze` (dominio custom
+verificato via DNS) > `none`, mai persa "per errore" (rimosso da un elenco
+più alto ricade sul tier immediatamente inferiore ancora valido, non su
+`none` a prescindere).
+Ogni modifica va nel registro (`platform.config_updated`, con
 `changes: {campo: {from, to}}`) e, se cambia un campo `footer_*`, invalida la
 cache del frontend sul tag condiviso `platform-footer` (tutte le pagine
 pubbliche, non solo quelle di un blog).
@@ -1859,6 +2134,21 @@ per username o email (`ilike`, sottostringa).
 - Non è possibile disattivare il proprio stesso account (`400`) — evita
   l'auto-blocco dell'unico Super Admin rimasto.
 - Un utente disattivato (`is_active=false`) non può più fare login.
+
+**`POST /api/v1/admin/users/{user_id}/reset-password`** — richiede
+`Amministratore`/`Super Admin`, sempre `202`, nessun corpo. Reset forzoso
+della password: innesca verso l'utente lo stesso ciclo email di
+`POST /auth/password/forgot` (stessa funzione di dominio
+`app/domain/password_reset.py::request_password_reset` — codice a 6 cifre,
+TTL 10 minuti, invio via coda RabbitMQ), ma avviato dall'admin invece che
+dall'utente stesso: l'admin non imposta né vede alcuna password, solo
+innesca l'invio. `400` se l'utente target non è attivo. Nessun rate limit
+per IP/email (quello di `/auth/password/forgot` è pensato per un anonimo
+che enumera indirizzi): solo un limite più permissivo per attore admin
+(20/5 min), contro un account admin compromesso che spamma reset su molti
+utenti. Evento di audit `user.password_reset_triggered` (nessuna nota
+richiesta, a differenza di cambio ruolo/attivazione — non è un cambio di
+stato persistente sull'account).
 
 Non esiste un endpoint per creare il primo Super Admin (nessuna sessione da
 cui autenticare la richiesta), ma non serve più promuoverlo a mano sul
@@ -1942,9 +2232,10 @@ riga porta:
 - `actor_type`/`actor_id`/`actor_label` — chi: tipo di attore, il suo id (se
   applicabile) e uno snapshot leggibile `username <email>` al momento del
   fatto (resta valido anche se l'account viene poi rinominato o cancellato).
-- `ip`/`user_agent` — indirizzo IP sorgente della richiesta (primo hop di
-  `X-Forwarded-For` dietro Traefik, altrimenti l'IP di connessione diretta —
-  `app/core/http.py::client_ip`) e user agent.
+- `ip`/`user_agent` — indirizzo IP sorgente della richiesta (**ultimo** hop di
+  `X-Forwarded-For` dietro Traefik — l'unico scritto dal proxy fidato, non dal
+  client, che potrebbe altrimenti spoofare un primo hop a piacere — altrimenti
+  l'IP di connessione diretta, `app/core/http.py::client_ip`) e user agent.
 - `target_type`/`target_id`/`blog_id` — su cosa: tipo e id dell'oggetto
   coinvolto, più il blog di contesto quando applicabile (denormalizzato per
   filtrare senza join).
@@ -2005,13 +2296,137 @@ param opzionali: `days`, `limit` (default 10, massimo 30). Non esistono
 ancora contatori di like/condivisioni in piattaforma (vedi ROADMAP.md): è
 l'unica base disponibile oggi per una sezione "di tendenza".
 
+**`GET /api/v1/feed/locales`** — pubblico, nessuna autenticazione. Conteggio
+post per lingua, stessi filtri di visibilità di `GET /feed/posts`, dal più
+usato, **massimo 5 risultati**, solo lingue con almeno un post:
+`[{"locale": "it", "count": 42}, {"locale": "en", "count": 7}]`. Pensato
+per i pill del filtro lingua sulla homepage — sostituisce un elenco statico
+di lingue hardcoded che poteva mostrare lingue senza alcun post.
+
+## Ricerca
+
+Due endpoint distinti, non uno solo con uno scope opzionale: la ricerca sul
+portale attraversa tutti i blog pubblici, quella su un singolo blog (anche
+raggiunto dal proprio sottodominio) resta ristretta ai suoi soli post.
+Entrambi cercano in titolo e contenuto con `ILIKE` (nessuno stemming/full
+text search Postgres oggi, stesso approccio pragmatico già usato da
+`GET /blogs?q=`), quindi case-insensitive e senza bisogno di parole intere.
+
+**`GET /api/v1/search/posts`** — pubblico, nessuna autenticazione. `q`
+(obbligatorio, stringa vuota o solo spazi → `[]` senza errore) cerca in
+titolo/contenuto tra i post pubblicati dei soli blog `public`, stessi
+vincoli di visibilità di `GET /feed/posts`, dal più recente. Query param
+opzionali: `limit` (default 20, massimo 50), `offset` (paginazione, default
+0). Per cercare i blog stessi per nome vedi `GET /blogs?q=` (sezione Blog).
+
+**`GET /blogs/{slug}/search`** — pubblico. Come sopra ma ristretto ai post
+del blog `{slug}` (`404` se il blog non è visibile al richiedente, stesso
+comportamento di `GET /blogs/{slug}/posts`); sempre solo post effettivamente
+pubblicati, anche per chi ha accesso in scrittura al blog (a differenza di
+`GET /blogs/{slug}/posts`, che a loro mostra anche bozze/revisione: la
+ricerca è una casella pubblica, non uno strumento di editing). Stessi
+`limit`/`offset` di sopra.
+
+## Newsletter (ROADMAP.md §3)
+
+Una lista per blog (`blog_slug`) più una lista di piattaforma (digest,
+nessun `blog_slug`), doppio opt-in via email, disiscrizione/cancellazione
+self-service senza login.
+
+**`POST /api/v1/newsletter/subscribe`** — pubblico. Body `{email, blog_slug?,
+locale?}`. Rate-limited (5/ora per IP, 3/ora per email). Risponde sempre
+`202 {"status": "ok"}`, incluso quando l'email è già iscritta e confermata:
+nessuna enumerazione di indirizzi via risposta diversa. Se nuovo o non
+ancora confermato, genera un token di conferma opaco (hash sha256 in
+tabella, come i token API) e accoda l'invio dell'email su RabbitMQ.
+
+**`GET /api/v1/newsletter/confirm?token=...`** — pubblico. `200
+{"status": "confirmed"|"already_confirmed"|"invalid"}`, idempotente (un
+secondo click sullo stesso link valido risponde `already_confirmed`, non
+errore). Token scaduto dopo 48 ore → `invalid`.
+
+**`POST /api/v1/newsletter/unsubscribe`** — pubblico. Body `{token,
+reason?}`. Il `token` è un link firmato HMAC (non un hash in tabella: serve
+poterlo ricostruire ad ogni invio, non solo verificarlo una volta), incluso
+in fondo a ogni email inviata. `400` se il token non è valido.
+
+**`POST /api/v1/newsletter/unsubscribe/delete`** — pubblico. Body
+`{token}`. Cancellazione permanente della riga (diritto alla cancellazione
+GDPR Art. 17), self-service senza bisogno di login: chi riceve l'email è
+già identificato dal token firmato.
+
+**Gestione per blog** (proprietario o membership `autore`/`co_autore`,
+stessa logica di `can_write_posts`):
+
+- `GET /blogs/{slug}/newsletter/stats` → `{pending, confirmed,
+  unsubscribed}`.
+- `GET /blogs/{slug}/newsletter/campaigns` → elenco campagne (automatiche e
+  manuali), più recenti prima.
+- `POST /blogs/{slug}/newsletter/campaigns` — body `{subject, body_markdown,
+  scheduled_at?}`. Senza `scheduled_at` (o nel passato): invio immediato
+  (`status=sending`, accodato su RabbitMQ). Con `scheduled_at` futuro:
+  resta `status=scheduled` — **nessuno scheduler la invia ancora
+  automaticamente**, è solo lo stato persistito. `scheduled_at` deve
+  includere il fuso orario (es. suffisso `Z` o `+00:00`): un valore naive
+  è rifiutato con 422, non confrontabile con l'istante corrente. L'invio
+  (`app/workers/newsletter_consumer.py`) è idempotente su ridelivery del
+  messaggio (`NewsletterCampaign.sent_to_subscriber_ids`): un iscritto già
+  notificato non riceve una seconda email se il worker viene interrotto a
+  metà invio e il messaggio torna in coda.
+- `PATCH /blogs/{slug}/newsletter/campaigns/{id}` / `DELETE .../campaigns/{id}`
+  — modifica (`{subject?, body_markdown?, scheduled_at?}`) o annulla una
+  campagna, **solo mentre `status=scheduled`** (409 altrimenti: una
+  campagna già `sending` può essere già stata presa in carico dal worker,
+  nessuna finestra sicura per intercettarla; le automatiche
+  `post_notification` nascono già `sending`, quindi non sono mai in questo
+  stato). `DELETE` non cancella la riga, la porta a `status=canceled` (il
+  worker la salta se il messaggio è già in coda). `scheduled_at` è
+  tri-state come le impostazioni sopra: omesso lascia invariato, `null` o
+  un istante nel passato converte subito la campagna in invio immediato
+  (stessa logica della creazione).
+- `GET /blogs/{slug}/newsletter/settings` / `PATCH .../newsletter/settings`
+  — `{newsletter_auto_notify_enabled, newsletter_sender_name,
+  newsletter_banner_url, newsletter_banner_alt_text}`. Il primo campo
+  disattiva/riattiva la notifica automatica ad ogni post pubblicato per
+  questo blog (attivo di default, `Blog.newsletter_auto_notify_enabled`),
+  un solo invio automatico per post anche in caso di ripubblicazione
+  (vincolo unique su `post_id`). Gli altri tre personalizzano l'email delle
+  campagne: nome visualizzato nell'header `From` (indirizzo resta sempre
+  `NOCT_SMTP_FROM_EMAIL`, mai un dominio arbitrario) e un banner mostrato in
+  cima al corpo HTML (`newsletter_banner_url` deve iniziare con `http://`
+  o `https://`, come i link nelle note/bibliografia). **PATCH è tri-state**:
+  un campo omesso nel body lascia il valore attuale invariato, `null` lo
+  azzera esplicitamente — vale anche per `newsletter_auto_notify_enabled`,
+  reso opzionale per questo. Default (tutti i campi assenti/vuoti): nome
+  mittente = titolo del blog, nessun banner.
+- Le email delle campagne (`app/workers/newsletter_consumer.py`) sono
+  `multipart/alternative`: un fallback testuale (client senza HTML, screen
+  reader) più una versione HTML con banner e `body_markdown` renderizzato
+  a HTML (`app/domain/markdown_render.py`, `markdown` + sanificazione
+  `nh3` — niente `<script>`/attributi `on*`/schema diverso da
+  `http`/`https`/`mailto` in `href`/`src`, stessa cautela delle note/
+  bibliografia). È l'unico punto del backend che renderizza Markdown lato
+  server: i post lo fanno solo lato frontend. Le altre email di piattaforma
+  (OTP, reset password) restano solo testo.
+
+**Digest di piattaforma** (Super Admin/Amministratore,
+`require_platform_admin`), stesse forme di sopra con `blog_id=None`:
+`GET /admin/newsletter/stats`, `GET /admin/newsletter/campaigns`,
+`POST /admin/newsletter/campaigns`, `PATCH`/`DELETE
+/admin/newsletter/campaigns/{id}` (stesse regole di editabilità/annullo di
+sopra), e `GET`/`PATCH /admin/newsletter/settings` — stesso schema
+tri-state di sopra ma senza `newsletter_auto_notify_enabled` (non
+applicabile a un digest non legato alla pubblicazione di un singolo blog),
+sorgente `platform_config` invece di `Blog`.
+
 ## CORS
 
-Il backend accetta chiamate dal browser solo dalle origini in
-`NOCT_CORS_ORIGINS` (separate da virgola; default `http://localhost:3000`).
-In produzione copre solo un'origine esatta — non i sottodomini per-blog
-(`nomeutente.notturni.eu`): da rivedere quando le pagine pubbliche dei blog
-chiameranno l'API direttamente dal browser.
+Il backend accetta chiamate dal browser dalle origini in `NOCT_CORS_ORIGINS`
+(separate da virgola; default `http://localhost:3000`, origini esatte) più,
+opzionalmente, `NOCT_CORS_ORIGIN_REGEX` (regex Python, `allow_origin_regex` di
+Starlette) — necessaria per i sottodomini per-blog (`slug.notturni.eu`, vedi
+`k8s/ingressroute.yaml`): un'origine esatta per ciascuno non è enumerabile in
+anticipo. Esempio produzione: `https://([a-z0-9-]+\.)?notturni\.eu`.
 
 ## Health
 

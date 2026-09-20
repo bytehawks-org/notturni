@@ -11,8 +11,10 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { EmptyState } from "@/components/ui/States";
 import { VerificationBadge } from "@/components/ui/VerificationBadge";
 import { formatDate } from "@/lib/format";
+import { interestLabel, interestsByKey } from "@/lib/interests";
 import { languageName } from "@/lib/languages";
 import {
+  getPublicInterests,
   getPublicUserBlogs,
   getPublicUserComments,
   getPublicUserFollowers,
@@ -48,6 +50,9 @@ function resolvePersonalDisplayName(profile: Profile): string {
   if (profile.post_author_name_style === "display_name") {
     return profile.display_name || profile.username;
   }
+  if (profile.post_author_name_style === "verified_domain") {
+    return profile.custom_domain || profile.username;
+  }
   return profile.username;
 }
 
@@ -61,19 +66,22 @@ function resolvePersonalDisplayName(profile: Profile): string {
  * visitatore, mai disponibile a un Server Component. */
 export default async function PublicProfilePage({ params }: { params: Promise<PageParams> }) {
   const { username } = await params;
-  const [profile, posts, blogs, comments, followers, locale, t] = await Promise.all([
+  const [profile, posts, blogs, comments, followers, interestsList, locale, t, tTier] = await Promise.all([
     getPublicUserProfile(username),
     getPublicUserPosts(username),
     getPublicUserBlogs(username),
     getPublicUserComments(username),
     getPublicUserFollowers(username),
+    getPublicInterests(),
     getLocale(),
     getTranslations("PublicProfile"),
+    getTranslations("VerificationTier"),
   ]);
   if (!profile) notFound();
 
   const displayHeading = resolvePersonalDisplayName(profile);
   const languages = [profile.native_language, ...profile.fallback_languages].filter((l): l is string => !!l);
+  const interestsMap = interestsByKey(interestsList);
 
   return (
     <>
@@ -91,7 +99,11 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
             <div className="flex min-w-0 flex-col gap-2">
               <h1 className="flex items-center gap-2 font-serif text-[30px] font-medium leading-tight text-foreground">
                 {displayHeading}
-                <VerificationBadge tier={profile.verification_tier} size={20} />
+                <VerificationBadge
+                  tier={profile.verification_tier}
+                  size={20}
+                  label={profile.verification_tier !== "none" ? tTier(profile.verification_tier) : undefined}
+                />
               </h1>
               <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted">
                 <span>@{profile.custom_domain ?? profile.username}</span>
@@ -103,6 +115,19 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
                 )}
               </p>
               {profile.bio && <p className="max-w-[560px] text-[15px] leading-relaxed text-foreground">{profile.bio}</p>}
+              {profile.interests.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {profile.interests.map((key) => (
+                    <Link
+                      key={key}
+                      href={`/users?interest=${encodeURIComponent(key)}`}
+                      className="rounded-full border border-border px-2.5 py-0.5 text-[13px] text-muted no-underline hover:border-primary/40 hover:text-foreground"
+                    >
+                      {interestLabel(interestsMap.get(key), key, locale)}
+                    </Link>
+                  ))}
+                </div>
+              )}
               <div className="flex flex-wrap items-center gap-5 pt-1 text-sm">
                 <span>
                   <span className="font-semibold text-foreground">{followers.length}</span>{" "}

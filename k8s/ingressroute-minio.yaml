@@ -1,0 +1,39 @@
+# Espone il solo endpoint S3 (porta 9000, MAI la console admin 9001) su
+# s3.notturni.eu — NOCT_S3_PUBLIC_URL in configmap.yaml. Senza questa
+# risorsa il DNS puntava comunque a Cloudflare/Traefik, ma la richiesta
+# ricadeva sull'IngressRoute jolly di ingressroute.yaml (*.notturni.eu ->
+# frontend): Next.js rispondeva 404 (nessuna route per quel path), avatar e
+# media caricati risultavano irraggiungibili nonostante l'upload andasse a
+# buon fine (bug osservato in produzione).
+#
+# Priorità esplicita più alta del match jolly (che non ne dichiara una,
+# quindi usa il default di Traefik) — un host esatto deve sempre vincere sul
+# regex generico, coerente con la nota già presente in ingressroute.yaml su
+# come aggiungere un sottodominio riservato con una sua destinazione reale.
+#
+# Sicuro da esporre pubblicamente in lettura: le policy dei bucket
+# (app/core/storage.py::ensure_public_bucket/ensure_content_bucket)
+# concedono solo s3:GetObject anonimo, mai scrittura/cancellazione/list —
+# quelle richiedono comunque le credenziali NOCT_S3_ACCESS_KEY_ID/
+# _SECRET_ACCESS_KEY, mai inviate al browser.
+#
+# "s3" è ora anche in RESERVED_SUBDOMAINS (frontend/src/proxy.ts) e
+# RESERVED_BLOG_SLUGS (backend/app/domain/blog_rules.py): un utente non può
+# registrare un blog con quello slug.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: notturni-s3
+  namespace: notturni
+spec:
+  entryPoints:
+    - websecure
+  tls:
+    secretName: notturni-eu-tls
+  routes:
+    - kind: Rule
+      match: "Host(`s3.notturni.eu`)"
+      priority: 100
+      services:
+        - name: minio
+          port: 9000

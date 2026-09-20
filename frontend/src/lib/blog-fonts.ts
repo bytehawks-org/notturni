@@ -1,13 +1,18 @@
 import {
   Crimson_Pro,
+  Fira_Code,
+  IBM_Plex_Mono,
   Inter,
+  JetBrains_Mono,
   Karla,
   Lora,
   Merriweather,
   Nunito_Sans,
   Playfair_Display,
+  Source_Code_Pro,
   Source_Sans_3,
   Source_Serif_4,
+  Space_Mono,
   Work_Sans,
 } from "next/font/google";
 
@@ -28,6 +33,15 @@ const workSans = Work_Sans({ subsets: ["latin", "latin-ext"], weight: ["400", "5
 const sourceSans3 = Source_Sans_3({ subsets: ["latin", "latin-ext"], weight: ["400", "500", "600"], variable: "--font-blog-source-sans-3" });
 const karla = Karla({ subsets: ["latin", "latin-ext"], weight: ["400", "500", "600"], variable: "--font-blog-karla" });
 
+// Font monospace per i blocchi di codice (blocco "evidenziazione sintassi"):
+// JetBrains Mono è il default di piattaforma (blog_config.py), pesi 300/400
+// per lasciare la scelta regular/light richiesta esplicitamente.
+const jetBrainsMono = JetBrains_Mono({ subsets: ["latin", "latin-ext"], weight: ["300", "400", "500"], variable: "--font-blog-jetbrains-mono" });
+const firaCode = Fira_Code({ subsets: ["latin", "latin-ext"], weight: ["400", "500"], variable: "--font-blog-fira-code" });
+const ibmPlexMono = IBM_Plex_Mono({ subsets: ["latin", "latin-ext"], weight: ["400", "500"], variable: "--font-blog-ibm-plex-mono" });
+const sourceCodePro = Source_Code_Pro({ subsets: ["latin", "latin-ext"], weight: ["400", "500"], variable: "--font-blog-source-code-pro" });
+const spaceMono = Space_Mono({ subsets: ["latin", "latin-ext"], weight: ["400", "700"], variable: "--font-blog-space-mono" });
+
 /** Nome font (come salvato in `blog_configs.typography`) → classe generata da
  * next/font. La classe imposta la variabile CSS `--font-blog-*`; quale delle
  * due variabili (titoli/corpo) legge `--font-heading`/`--font-body` è deciso
@@ -43,6 +57,11 @@ export const BLOG_FONT_CLASSES: Record<string, string> = {
   "Work Sans": workSans.variable,
   "Source Sans 3": sourceSans3.variable,
   Karla: karla.variable,
+  "JetBrains Mono": jetBrainsMono.variable,
+  "Fira Code": firaCode.variable,
+  "IBM Plex Mono": ibmPlexMono.variable,
+  "Source Code Pro": sourceCodePro.variable,
+  "Space Mono": spaceMono.variable,
 };
 
 /** Variabile CSS esposta da ciascuna classe sopra (stesso ordine di
@@ -59,6 +78,11 @@ export const BLOG_FONT_VARS: Record<string, string> = {
   "Work Sans": "--font-blog-work-sans",
   "Source Sans 3": "--font-blog-source-sans-3",
   Karla: "--font-blog-karla",
+  "JetBrains Mono": "--font-blog-jetbrains-mono",
+  "Fira Code": "--font-blog-fira-code",
+  "IBM Plex Mono": "--font-blog-ibm-plex-mono",
+  "Source Code Pro": "--font-blog-source-code-pro",
+  "Space Mono": "--font-blog-space-mono",
 };
 
 /** Tutte le classi font insieme, da applicare una sola volta sul contenitore

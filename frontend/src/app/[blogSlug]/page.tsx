@@ -8,10 +8,12 @@ import { BlogPageShell, blogLayout } from "@/components/blog/BlogPageShell";
 import { BlogStateNotice, blogIsOffline } from "@/components/blog/BlogStateNotice";
 import { BlogHeaderActions } from "@/components/blog/PostHeaderActions";
 import { FeedPostCard } from "@/components/FeedPostCard";
+import { NewsletterSignup } from "@/components/NewsletterSignup";
 import { SensitiveImage } from "@/components/blog/SensitiveImage";
 import { BlogHeader } from "@/components/shell/BlogHeader";
 import { FilterChip } from "@/components/ui/Pill";
 import { SITE_HOST } from "@/lib/site";
+import { blogLinks } from "@/lib/blog-path";
 import { getPublicPublications, getPublicBlog, getPublicBlogCategories, getPublicBlogConfig, getPublicBlogPosts } from "@/lib/server-api";
 
 interface PageParams {
@@ -51,19 +53,21 @@ export default async function BlogHomePage({
   searchParams: Promise<{ category?: string }>;
 }) {
   const [{ blogSlug }, { category }] = await Promise.all([params, searchParams]);
-  const [blog, posts, categories, config, t] = await Promise.all([
+  const [blog, posts, categories, config, t, links] = await Promise.all([
     getPublicBlog(blogSlug),
     getPublicBlogPosts(blogSlug),
     getPublicBlogCategories(blogSlug),
     getPublicBlogConfig(blogSlug),
     getTranslations("BlogPage"),
+    blogLinks(blogSlug),
   ]);
+  const basePath = links.basePath;
   if (!blog) notFound();
   const hasPublications = (await getPublicPublications(blogSlug).catch(() => [])).length > 0;
   if (blogIsOffline(blog)) {
     return (
       <BlogPageShell config={config}>
-        <BlogHeader slug={blogSlug} name={blog.title} hasPublications={hasPublications} current="posts" />
+        <BlogHeader basePath={basePath} name={blog.title} hasPublications={hasPublications} current="posts" />
         <BlogStateNotice blog={blog} />
       </BlogPageShell>
     );
@@ -74,7 +78,7 @@ export default async function BlogHomePage({
 
   return (
     <BlogPageShell config={config}>
-      <BlogHeader slug={blogSlug} name={blog.title} hasPublications={hasPublications} current="posts" actions={<BlogHeaderActions slug={blogSlug} />} />
+      <BlogHeader basePath={basePath} name={blog.title} hasPublications={hasPublications} current="posts" actions={<BlogHeaderActions slug={blogSlug} />} />
       <main className="mx-auto w-full max-w-[1184px] flex-1 px-5 py-10 lg:px-12 lg:py-14">
         {blog.cover_image_url && (
           <SensitiveImage
@@ -123,11 +127,11 @@ export default async function BlogHomePage({
               <span className="font-mono text-[11px] uppercase tracking-[.08em] text-muted">{t("latest")}</span>
               {categories.length > 0 && (
                 <div className="flex gap-1.5 overflow-x-auto">
-                  <Link href={`/${blogSlug}`} className="no-underline">
+                  <Link href={basePath || "/"} className="no-underline">
                     <FilterChip active={!category}>{t("allPosts")}</FilterChip>
                   </Link>
                   {categories.map((c) => (
-                    <Link key={c.id} href={`/${blogSlug}?category=${encodeURIComponent(c.slug)}`} className="no-underline">
+                    <Link key={c.id} href={`${basePath || "/"}?category=${encodeURIComponent(c.slug)}`} className="no-underline">
                       <FilterChip active={category === c.slug}>{c.name}</FilterChip>
                     </Link>
                   ))}
@@ -139,18 +143,20 @@ export default async function BlogHomePage({
             ) : layout === "magazine" ? (
               <div className="grid gap-6 sm:grid-cols-2">
                 {visible.map((post) => (
-                  <FeedPostCard key={post.id} post={post} showBlog={false} variant="magazine" />
+                  <FeedPostCard key={post.id} post={post} showBlog={false} variant="magazine" resolvePermalink={links.fromPermalink} />
                 ))}
               </div>
             ) : (
-              visible.map((post) => <FeedPostCard key={post.id} post={post} showBlog={false} variant={layout} />)
+              visible.map((post) => (
+                <FeedPostCard key={post.id} post={post} showBlog={false} variant={layout} resolvePermalink={links.fromPermalink} />
+              ))
             )}
           </section>
           <aside className="flex flex-col gap-6 text-sm">
             {hasPublications && (
               <div className="flex flex-col gap-2 rounded-xl border border-border bg-surface px-[18px] py-4">
                 <span className="font-mono text-[11px] uppercase tracking-[.08em] text-muted">{t("publications")}</span>
-                <Link href={`/${blogSlug}/pub`} className="text-[13px] font-medium text-primary no-underline hover:underline">
+                <Link href={`${basePath}/pub`} className="text-[13px] font-medium text-primary no-underline hover:underline">
                   {t("publicationsLink")}
                 </Link>
               </div>
@@ -160,13 +166,14 @@ export default async function BlogHomePage({
               <span className="text-[13px] leading-relaxed text-muted">
                 {t("postsCount", { count: posts.length })} · {t("language", { lang: blog.default_locale.toUpperCase() })}
               </span>
-              <Link href={`/${blogSlug}/bibliografia`} className="text-[13px] font-medium text-primary no-underline hover:underline">
+              <Link href={`${basePath}/bibliografia`} className="text-[13px] font-medium text-primary no-underline hover:underline">
                 {t("bibliographyLink")}
               </Link>
-              <Link href={`/${blogSlug}/feed.xml`} className="text-[13px] font-medium text-primary no-underline hover:underline">
+              <Link href={`${basePath}/feed.xml`} className="text-[13px] font-medium text-primary no-underline hover:underline">
                 {t("rssLink")}
               </Link>
             </div>
+            <NewsletterSignup blogSlug={blogSlug} variant="blog" />
           </aside>
         </div>
       </main>

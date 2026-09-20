@@ -4,7 +4,9 @@ import DOMPurify from "isomorphic-dompurify";
 import { JSDOM } from "jsdom";
 import MarkdownIt from "markdown-it";
 
+import { codeBlockMarkdownPlugin, textAlignMarkdownPlugin, underlineMarkdownPlugin } from "./markdown-format-extensions";
 import { REVALIDATE_SECONDS } from "./revalidate";
+import { ensureLanguagesLoaded, highlightCode } from "./shiki-highlighter";
 import type { PostNote } from "./types";
 
 // Stessa risoluzione di server-api.ts::BACKEND_INTERNAL_URL — endpoint
@@ -25,7 +27,10 @@ const LINK_PREVIEW_TIMEOUT_MS = 2000;
 // lasciar passare tag HTML scritti a mano nel sorgente; DOMPurify è comunque
 // una seconda barriera sull'HTML che markdown-it stesso genera (es. src di
 // immagini/link), difesa in profondità più che ridondanza.
-const renderer = new MarkdownIt({ html: false, linkify: true, breaks: false });
+const renderer = new MarkdownIt({ html: false, linkify: true, breaks: false })
+  .use(underlineMarkdownPlugin)
+  .use(textAlignMarkdownPlugin)
+  .use(codeBlockMarkdownPlugin);
 
 /** Un'immagine segnalata sensibile dalla moderazione automatica (vedi
  * API.md) viene inserita dall'editor come `![alt](url "sensitive")`: il
@@ -44,7 +49,7 @@ const renderer = new MarkdownIt({ html: false, linkify: true, breaks: false });
  *
  * Muta `document` in place: fa parte della pipeline di `renderMarkdown`, che
  * fa un solo parse DOM per tutte le trasformazioni. */
-function wrapSensitiveImages(document: Document): void {
+function wrapSensitiveImages(document: Document, expandImageLabel: string): void {
   document.querySelectorAll('img[title^="sensitive"]').forEach((img) => {
     const wrapper = document.createElement("label");
     wrapper.className = "sensitive-image-wrapper";
@@ -60,7 +65,7 @@ function wrapSensitiveImages(document: Document): void {
     expandBtn.className = "lightbox-expand-btn";
     expandBtn.setAttribute("data-lightbox-src", src);
     expandBtn.setAttribute("data-lightbox-alt", img.getAttribute("alt") ?? "");
-    expandBtn.setAttribute("aria-label", "Ingrandisci");
+    expandBtn.setAttribute("aria-label", expandImageLabel);
     expandBtn.innerHTML =
       '<svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3.5h3.5V7"/><path d="M14.5 3.5 10 8"/><path d="M7 14.5H3.5V11"/><path d="M3.5 14.5 8 10"/></svg>';
     img.replaceWith(wrapper);
@@ -280,8 +285,12 @@ function buildNoteCitationElement(
   }
 
   // Un link generico (a differenza del DOI, non implica di per sé un dominio
-  // fisso) solo se diverso dalla pagina doi.org già mostrata sopra.
-  if (note.url && !(note.doi && note.url.includes(`doi.org/${note.doi}`))) {
+  // fisso) solo se diverso dalla pagina doi.org già mostrata sopra. Lo schema
+  // è già validato alla scrittura (app/domain/notes.py::_clean_url), ma qui
+  // finisce direttamente in un href dopo l'ultimo DOMPurify della pipeline
+  // (vedi commento sopra la funzione): un secondo controllo difende anche
+  // righe salvate prima di quella validazione.
+  if (note.url && /^https?:\/\//i.test(note.url) && !(note.doi && note.url.includes(`doi.org/${note.doi}`))) {
     if (parts.length > 0 || p.childNodes.length > 0) p.append(" · ");
     const a = document.createElement("a");
     a.setAttribute("href", note.url);
@@ -433,11 +442,44 @@ export interface RenderOptions {
   notes?: PostNote[];
   /** Etichette dell'elenco note nella lingua dell'interfaccia (next-intl). */
   footnoteLabels?: FootnoteLabels;
+  /** Etichetta del pulsante di ingrandimento sulle immagini segnalate come
+   * sensibili (Common.expandImage, next-intl) — questa pipeline gira
+   * server-side senza contesto di richiesta/lingua proprio, va passata da
+   * chi chiama. Default in italiano per i chiamanti che non la passano
+   * ancora (pagine statiche, `excerpt`). */
+  expandImageLabel?: string;
+  /** Etichette del tasto "copia" sui blocchi di codice (blocco
+   * "evidenziazione sintassi"), stesso motivo/default di `expandImageLabel`. */
+  copyCodeLabel?: string;
+  copiedCodeLabel?: string;
 }
 
 export interface RenderedPost {
   html: string;
   headings: PostHeading[];
+}
+
+/** Tasto "copia" su ogni blocco di codice (blocco "evidenziazione
+ * sintassi"), a prescindere dal linguaggio/dall'evidenziazione essere
+ * riuscita: il testo da copiare è preso da `textContent` (già decodificato
+ * dalle entity HTML da JSDOM), mai dal sorgente Markdown grezzo — così
+ * copia esattamente ciò che Shiki ha effettivamente reso, spazi inclusi.
+ * Il click-to-clipboard è gestito client-side da CodeCopyProvider (delega
+ * globale, stesso principio di LightboxProvider): qui solo il markup. */
+function injectCopyButtons(document: Document, copyLabel: string, copiedLabel: string): void {
+  document.querySelectorAll("pre").forEach((pre) => {
+    const code = pre.querySelector("code");
+    if (!code) return;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "code-copy-button";
+    button.setAttribute("data-copy-text", code.textContent ?? "");
+    button.setAttribute("data-label-copy", copyLabel);
+    button.setAttribute("data-label-copied", copiedLabel);
+    button.setAttribute("aria-label", copyLabel);
+    button.textContent = copyLabel;
+    pre.appendChild(button);
+  });
 }
 
 /** Come `renderMarkdown`, ma restituisce anche l'indice dei titoli (con id
@@ -451,6 +493,15 @@ export async function renderMarkdown(markdown: string, options: RenderOptions = 
 }
 
 async function renderPipeline(markdown: string, options: RenderOptions, withHeadings: boolean): Promise<RenderedPost> {
+  // Deve restare sincrono a sincrono con renderer.render() sotto, senza
+  // nessun await in mezzo: markdown-it non supporta un highlight()
+  // asincrono, quindi i linguaggi citati nel documento vanno già caricati
+  // sull'highlighter condiviso *prima* di impostare l'opzione (vedi
+  // lib/shiki-highlighter.ts per il perché è comunque sicuro in
+  // concorrenza — l'highlighter condiviso cresce soltanto, non perde mai
+  // un linguaggio già caricato da un'altra richiesta).
+  const highlighter = await ensureLanguagesLoaded(markdown);
+  renderer.set({ highlight: (code: string, lang: string) => highlightCode(highlighter, code, lang) });
   const rawHtml = renderer.render(markdown);
   const cleanHtml = DOMPurify.sanitize(rawHtml);
 
@@ -460,7 +511,8 @@ async function renderPipeline(markdown: string, options: RenderOptions, withHead
   const dom = new JSDOM(`<body>${cleanHtml}</body>`);
   const { document } = dom.window;
 
-  wrapSensitiveImages(document);
+  const expandImageLabel = options.expandImageLabel ?? "Ingrandisci";
+  wrapSensitiveImages(document, expandImageLabel);
   // Immagini di contenuto non segnalate come sensibili: cliccabili subito
   // per la Lightbox (Rifinitura #1) — quelle sensibili restano escluse (sono
   // comunque ancora <img> dentro il wrapper appena creato sopra, non
@@ -469,13 +521,28 @@ async function renderPipeline(markdown: string, options: RenderOptions, withHead
   // (altrimenti il primo click aprirebbe subito la lightbox invece di
   // limitarsi a rivelarla).
   document.querySelectorAll("img").forEach((img) => {
-    if (!img.closest(".sensitive-image-wrapper")) img.setAttribute("data-lightbox", "1");
+    if (!img.closest(".sensitive-image-wrapper")) {
+      img.setAttribute("data-lightbox", "1");
+      // L'unico handler è un listener globale di click/keydown
+      // (LightboxProvider): senza tabIndex/role l'immagine resta
+      // raggiungibile solo col mouse/touch, non da tastiera.
+      img.setAttribute("tabindex", "0");
+      img.setAttribute("role", "button");
+      // Un'immagine Markdown con alt vuoto (`![](url)`) diventerebbe un
+      // controllo da tastiera senza nome accessibile — l'`alt` da solo non
+      // basta più una volta che diventa un "button" (bug segnalato dalla
+      // review Copilot).
+      if (!img.getAttribute("alt")) {
+        img.setAttribute("aria-label", expandImageLabel);
+      }
+    }
     // HTML grezzo (dangerouslySetInnerHTML, non componenti React): niente
     // next/image qui, ma il caricamento lazy nativo del browser resta
     // comunque disponibile senza JS aggiuntivo.
     img.setAttribute("loading", "lazy");
     img.setAttribute("decoding", "async");
   });
+  injectCopyButtons(document, options.copyCodeLabel ?? "Copia", options.copiedCodeLabel ?? "Copiato");
   await resolveLinkCards(document);
   if (options.mentions !== false) linkifyMentions(document);
   const headings = withHeadings ? anchorHeadings(document) : [];

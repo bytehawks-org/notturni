@@ -8,6 +8,7 @@ from app.core.config import settings
 
 EMAIL_OTP_QUEUE = "email_otp"
 POST_BACKUP_QUEUE = "post_backup"
+NEWSLETTER_SEND_QUEUE = "newsletter_send"
 
 logger = logging.getLogger(__name__)
 
@@ -39,10 +40,13 @@ def connect_with_retry(
     raise AssertionError("irraggiungibile")
 
 
-def publish_email_otp(email: str, code: str) -> None:
+def publish_email_otp(email: str, code: str, *, purpose: str = "login") -> None:
     """Accoda l'invio del codice OTP via email (CLAUDE.md #3) — inviato
     davvero via SMTP dal consumer, vedi app/workers/email_otp_consumer.py e
-    app/core/mail.py."""
+    app/core/mail.py. `purpose` sceglie solo oggetto/testo dell'email lato
+    consumer ("login" di default, MFA/cambio email; "password_reset" per il
+    flusso "password dimenticata") — stessa coda e medesimo formato di
+    codice, nessuna differenza di trasporto."""
     connection = pika.BlockingConnection(pika.URLParameters(settings.rabbitmq_url))
     try:
         channel = connection.channel()
@@ -50,7 +54,53 @@ def publish_email_otp(email: str, code: str) -> None:
         channel.basic_publish(
             exchange="",
             routing_key=EMAIL_OTP_QUEUE,
-            body=json.dumps({"email": email, "code": code}),
+            body=json.dumps({"email": email, "code": code, "purpose": purpose}),
+            properties=pika.BasicProperties(delivery_mode=2),
+        )
+    finally:
+        connection.close()
+
+
+def publish_newsletter_confirmation(
+    email: str, token: str, list_label: str, locale: str | None
+) -> None:
+    """Accoda l'invio dell'email di conferma iscrizione (double opt-in) —
+    inviata davvero via SMTP dal consumer, vedi
+    app/workers/newsletter_consumer.py."""
+    connection = pika.BlockingConnection(pika.URLParameters(settings.rabbitmq_url))
+    try:
+        channel = connection.channel()
+        channel.queue_declare(queue=NEWSLETTER_SEND_QUEUE, durable=True)
+        channel.basic_publish(
+            exchange="",
+            routing_key=NEWSLETTER_SEND_QUEUE,
+            body=json.dumps(
+                {
+                    "kind": "confirmation",
+                    "email": email,
+                    "token": token,
+                    "list_label": list_label,
+                    "locale": locale,
+                }
+            ),
+            properties=pika.BasicProperties(delivery_mode=2),
+        )
+    finally:
+        connection.close()
+
+
+def publish_newsletter_campaign(campaign_id: str) -> None:
+    """Accoda l'invio di una campagna (notifica automatica di un nuovo post o
+    invio manuale) a tutti gli iscritti confermati della lista — vedi
+    app/workers/newsletter_consumer.py."""
+    connection = pika.BlockingConnection(pika.URLParameters(settings.rabbitmq_url))
+    try:
+        channel = connection.channel()
+        channel.queue_declare(queue=NEWSLETTER_SEND_QUEUE, durable=True)
+        channel.basic_publish(
+            exchange="",
+            routing_key=NEWSLETTER_SEND_QUEUE,
+            body=json.dumps({"kind": "campaign", "campaign_id": campaign_id}),
             properties=pika.BasicProperties(delivery_mode=2),
         )
     finally:

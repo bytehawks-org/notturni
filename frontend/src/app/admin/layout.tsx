@@ -56,6 +56,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       : []),
     ...(isAdmin ? [{ href: "/admin/blog", label: t("allBlogs"), icon: "✎", mobile: true } as NavItem] : []),
     ...(isAdmin ? [{ href: "/admin/moderazione", label: t("moderation"), icon: "◔", mobile: true } as NavItem] : []),
+    ...(isAdmin ? [{ href: "/admin/newsletter", label: t("newsletter"), icon: "✉", mobile: true } as NavItem] : []),
     ...(isModerator
       ? [{ href: "/admin/moderazione-commenti", label: t("commentModeration"), icon: "◔", mobile: true } as NavItem]
       : []),
@@ -83,19 +84,45 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         items={items}
         eyebrow={t("administration")}
         homeHref="/admin"
-        footer={
-          <div className="flex flex-col gap-3 px-3 text-sm">
-            <Link href="/dashboard" className="text-muted hover:text-foreground">
-              {tc("myDashboard")}
-            </Link>
-            <div className="flex items-center justify-between">
-              <span className="truncate text-muted">{user.username}</span>
-              <ThemeToggle />
+        platformLink={{ href: "/", label: t("backToPlatform") }}
+        footer={(collapsed) =>
+          collapsed ? (
+            <div className="flex flex-col items-center gap-2 px-1">
+              <Link
+                href="/dashboard"
+                title={tc("myDashboard")}
+                aria-label={tc("myDashboard")}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-foreground/5 hover:text-foreground"
+              >
+                <span aria-hidden="true">✎</span>
+              </Link>
+              <div className="flex flex-wrap justify-center gap-1">
+                <ThemeToggle />
+              </div>
+              <button
+                type="button"
+                onClick={() => logout().then(() => router.push("/login"))}
+                title={tc("signOut")}
+                aria-label={tc("signOut")}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-foreground/5 hover:text-foreground"
+              >
+                <span aria-hidden="true">⏻</span>
+              </button>
             </div>
-            <Button variant="secondary" size="sm" onClick={() => logout().then(() => router.push("/login"))}>
-            {tc("signOut")}
-          </Button>
-          </div>
+          ) : (
+            <div className="flex flex-col gap-3 px-3 text-sm">
+              <Link href="/dashboard" className="text-muted hover:text-foreground">
+                {tc("myDashboard")}
+              </Link>
+              <div className="flex items-center justify-between">
+                <span className="truncate text-muted">{user.username}</span>
+                <ThemeToggle />
+              </div>
+              <Button variant="secondary" size="sm" onClick={() => logout().then(() => router.push("/login"))}>
+                {tc("signOut")}
+              </Button>
+            </div>
+          )
         }
       >
         {children}

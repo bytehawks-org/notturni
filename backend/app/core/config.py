@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     # riga `platform_config` alla prima installazione, poi modificabile dal
     # Super Admin. Ogni utente può sovrascriverla nel profilo (users.ui_locale).
     default_locale: Literal["it", "en"] = "it"
+    # Elenco di interessi utente (blocco "interessi", massimo 5 per utente,
+    # tag fissi multilingua — non testo libero): seme JSON opzionale per
+    # `platform_config.interests` alla prima installazione (stesso schema
+    # della colonna: `[{"key": "music", "translations": {"it": "Musica",
+    # "en": "Music"}}, ...]`), poi modificabile dal Super Admin. Assente:
+    # usa i default builtin curati in app/domain/interests.py::DEFAULT_INTERESTS.
+    default_interests: str | None = None
 
     # Bootstrap del primo Super Admin all'avvio del backend (CLAUDE.md #5),
     # per accedere all'area di amministrazione del dashboard senza
@@ -159,6 +166,14 @@ class Settings(BaseSettings):
 
     # origini ammesse per le chiamate del frontend dal browser (CORS), separate da virgola
     cors_origins: str = "http://localhost:3000"
+    # match a wildcard in aggiunta a cors_origins, indispensabile per i
+    # sottodomini per-blog (slug.notturni.eu, CLAUDE.md #6): un'origine
+    # esatta per ciascuno non è enumerabile in anticipo. Regex Python passata
+    # a Starlette CORSMiddleware(allow_origin_regex=...), es.
+    # NOCT_CORS_ORIGIN_REGEX="https://([a-z0-9-]+\.)?notturni\.eu". None
+    # (default) disattiva il match a wildcard, restano valide solo le
+    # origini esatte di cors_origins.
+    cors_origin_regex: str | None = None
 
     # Cookie di sessione (refresh token, ROADMAP.md "Sessione in
     # localStorage"): httpOnly, mai leggibile da JS — a differenza

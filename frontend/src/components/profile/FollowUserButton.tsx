@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { useToast } from "@/components/ui/Toast";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 
@@ -15,6 +16,8 @@ import { useAuth } from "@/lib/auth-context";
 export function FollowUserButton({ username, initialFollowers }: { username: string; initialFollowers: string[] }) {
   const { user, loading, authFetch } = useAuth();
   const t = useTranslations("PublicProfile");
+  const tc = useTranslations("Common");
+  const toast = useToast();
   const [followers, setFollowers] = useState<string[]>(initialFollowers);
   const [busy, setBusy] = useState(false);
 
@@ -32,6 +35,11 @@ export function FollowUserButton({ username, initialFollowers }: { username: str
         await authFetch((token) => api.users.follow(token, username));
         setFollowers((prev) => [...prev, user.username]);
       }
+    } catch {
+      // authFetch rilancia per ogni errore non-401 (vedi lib/auth-context.tsx):
+      // senza questo catch la rejection restava inosservata e l'utente non
+      // vedeva alcun riscontro di un follow/unfollow fallito.
+      toast(tc("unexpectedError"), "danger");
     } finally {
       setBusy(false);
     }

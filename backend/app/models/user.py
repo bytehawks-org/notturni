@@ -58,6 +58,12 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     # nullable: un utente creato solo via SSO può non avere una password locale
     hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # confrontato con l'"iat" dei JWT access token (stateless, non tracciati in
+    # UserSession) per invalidarli al cambio password: cancellare le
+    # UserSession (POST /users/me/password) non basta a revocare un access
+    # token già emesso e ancora entro la sua scadenza. Null = mai cambiata,
+    # nessun access token pregresso da invalidare.
+    credentials_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     platform_role: Mapped[PlatformRole] = mapped_column(
         Enum(
@@ -145,6 +151,20 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     # un accesso lazy a una relazione fuori dal contesto della sessione
     # async fallisce con MissingGreenlet) — qui basta una colonna semplice.
     verified_domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Opt-out dalla directory pubblica utenti (GET /api/v1/users, blocco
+    # "ricerca globale"), attivo di default — stesso principio di
+    # Blog.search_indexing_enabled, ma per la ricerca *interna* alla
+    # piattaforma, non i crawler esterni: nome diverso apposta per non
+    # confonderla con quel concetto. Il profilo resta comunque sempre
+    # raggiungibile per username/link diretto (GET /{username}), questo
+    # flag esclude solo dall'elenco/ricerca.
+    directory_listed: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Interessi (blocco "interessi utente", app/domain/interests.py): al più
+    # 5 chiavi canoniche tra quelle correnti di `platform_config.interests`
+    # — enforcement applicativo (PATCH /users/me), non a livello di DB, come
+    # già per Post.manual_tags. Colonna semplice (non relazione ORM): niente
+    # join/FK verso un elenco che l'admin può riscrivere in ogni momento.
+    interests: Mapped[list[str]] = mapped_column(ARRAY(String(40)), default=list, nullable=False)
 
     blogs: Mapped[list["Blog"]] = relationship(back_populates="owner")
     memberships: Mapped[list["BlogMembership"]] = relationship(back_populates="user")
@@ -152,6 +172,7 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     sessions: Mapped[list["UserSession"]] = relationship(back_populates="user")
     mfa_email_codes: Mapped[list["MfaEmailCode"]] = relationship(back_populates="user")
     email_change_requests: Mapped[list["EmailChangeRequest"]] = relationship(back_populates="user")
+    password_reset_codes: Mapped[list["PasswordResetCode"]] = relationship(back_populates="user")
     custom_domain: Mapped["CustomDomain | None"] = relationship(back_populates="user", uselist=False)
     sso_identities: Mapped[list["SsoIdentity"]] = relationship(back_populates="user")
     social_links: Mapped[list["SocialLink"]] = relationship(

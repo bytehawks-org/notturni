@@ -70,6 +70,20 @@ async def can_write_posts(session: AsyncSession, *, user_id: uuid.UUID, blog: Bl
     return role in WRITE_ROLES
 
 
+async def can_manage_newsletter(session: AsyncSession, *, user_id: uuid.UUID, blog: Blog) -> bool:
+    """Stessa autorizzazione di can_write_posts (proprietario o membership
+    autore/co-autore): la newsletter fa parte della gestione editoriale del
+    blog, non è un permesso a sé."""
+    if blog.is_suspended or blog.deleted_at is not None:
+        return False
+    if blog.owner_id == user_id:
+        return True
+    if blog.visibility == BlogVisibility.PRIVATE:
+        return False
+    role = await get_membership_role(session, user_id=user_id, blog_id=blog.id)
+    return role in WRITE_ROLES
+
+
 async def can_view_blog(
     session: AsyncSession, *, user_id: uuid.UUID | None, blog: Blog
 ) -> bool:

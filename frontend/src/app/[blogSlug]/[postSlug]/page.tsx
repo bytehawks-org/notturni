@@ -24,6 +24,7 @@ import { languageName } from "@/lib/languages";
 import { excerpt, renderPost } from "@/lib/markdown";
 import { getPublicBlog, getPublicBlogConfig, getPublicPostByPermalink, getPublicPostTranslations, getPublicPublication, getPublicPublications } from "@/lib/server-api";
 import { SITE_URL } from "@/lib/site";
+import { blogLinks } from "@/lib/blog-path";
 
 interface PageParams {
   blogSlug: string;
@@ -60,13 +61,15 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
  * destra; colonna singola sotto, con il menu frammenti come bottom-sheet. */
 export default async function PublicPostPage({ params }: { params: Promise<PageParams> }) {
   const { blogSlug, postSlug } = await params;
-  const [post, blog, config, t, locale] = await Promise.all([
+  const [post, blog, config, t, locale, links] = await Promise.all([
     getPublicPostByPermalink(blogSlug, postSlug),
     getPublicBlog(blogSlug),
     getPublicBlogConfig(blogSlug),
     getTranslations("PostPage"),
     getLocale(),
+    blogLinks(blogSlug),
   ]);
+  const basePath = links.basePath;
   if (!post) notFound();
   const measure = blogMeasure(config);
   const articleWidth = measure === "narrow" ? "560px" : "680px";
@@ -86,6 +89,9 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
     mentions: post.mentions_enabled,
     notes: post.notes,
     footnoteLabels: { title: tPost("notes"), backToText: tPost("backToText") },
+    expandImageLabel: tPost("expandImage"),
+    copyCodeLabel: tPost("copyCode"),
+    copiedCodeLabel: tPost("copiedCode"),
   });
   const blogTitle = blog?.title ?? blogSlug;
   const minutes = readingMinutes(post.content);
@@ -126,7 +132,7 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
               </li>
             ))}
           </ol>
-          <Link href={`/${blogSlug}/bibliografia`} className="text-primary no-underline hover:underline">
+          <Link href={`${basePath}/bibliografia`} className="text-primary no-underline hover:underline">
             {tPost("blogBibliography")}
           </Link>
         </div>
@@ -147,7 +153,7 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
                 {tr.locale === post.locale ? (
                   <span className="font-medium text-foreground">{languageName(tr.locale, locale)}</span>
                 ) : (
-                  <Link href={`/${blogSlug}/${tr.slug}`} className="no-underline hover:text-foreground">
+                  <Link href={`${basePath}/${tr.slug}`} className="no-underline hover:text-foreground">
                     {languageName(tr.locale, locale)}
                   </Link>
                 )}
@@ -162,7 +168,7 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
   return (
     <BlogPageShell config={config}>
       <JsonLd data={jsonLd} />
-      <BlogHeader slug={blogSlug} name={blogTitle} current={chapter ? "publications" : "posts"} hasPublications={publications.length > 0} actions={<BlogHeaderActions slug={blogSlug} />} />
+      <BlogHeader basePath={basePath} name={blogTitle} current={chapter ? "publications" : "posts"} hasPublications={publications.length > 0} actions={<BlogHeaderActions slug={blogSlug} />} />
       {chapter && <ChapterProgress current={chapter.current} total={chapter.total} />}
       <main className="mx-auto w-full max-w-[1184px] flex-1 px-5 py-10 lg:px-12 lg:py-14">
         <div
@@ -178,7 +184,7 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
           <article className="mx-auto w-full min-w-0" style={{ maxWidth: articleWidth }}>
             <header className="flex flex-col gap-4">
               {chapter && publication && (
-                <Link href={`/${blogSlug}/pub/${publication.name}`} className="font-mono text-[11px] uppercase tracking-[.08em] text-primary no-underline hover:underline">
+                <Link href={`${basePath}/pub/${publication.name}`} className="font-mono text-[11px] uppercase tracking-[.08em] text-primary no-underline hover:underline">
                   {publication.title} · {chapter.current}/{chapter.total}
                 </Link>
               )}
@@ -190,7 +196,7 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
                   {post.author_avatar_url ? (
                     <Image
                       src={post.author_avatar_url}
-                      alt={post.author_display_name}
+                      alt=""
                       width={28}
                       height={28}
                       className="h-7 w-7 rounded-full object-cover"
@@ -212,7 +218,7 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-4">
-                <PostActions permalink={post.permalink} title={post.title} citation={citation} />
+                <PostActions permalink={links.fromPermalink(post.permalink)} title={post.title} citation={citation} />
                 <ReportButton target={{ type: "post", id: post.id }} />
               </div>
             </header>
@@ -241,7 +247,7 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
               <FragmentReader
                 postId={post.id}
                 html={html}
-                permalink={post.permalink}
+                permalink={links.fromPermalink(post.permalink)}
                 quoteAttribution={`${post.author_display_name}, ${post.title}`}
                 className="notturni-prose notturni-prose--reading mt-8 leading-[1.7]"
               />
@@ -256,7 +262,7 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
             <div className="mt-10 xl:hidden">{rail}</div>
 
             {chapter && publication && (
-              <ChapterNav prev={chapter.prev} next={chapter.next} index={{ title: publication.title, href: `/${blogSlug}/pub/${publication.name}` }} />
+              <ChapterNav prev={chapter.prev} next={chapter.next} index={{ title: publication.title, href: `${basePath}/pub/${publication.name}` }} resolvePermalink={links.fromPermalink} />
             )}
 
             <CommentsSection postId={post.id} mode={post.effective_comments_mode} />

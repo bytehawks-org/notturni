@@ -9,6 +9,7 @@ import { BlogHeaderActions } from "@/components/blog/PostHeaderActions";
 import { PublicationIndex } from "@/components/publications/PublicationIndex";
 import { BlogHeader } from "@/components/shell/BlogHeader";
 import { Button } from "@/components/ui/Button";
+import { blogLinks } from "@/lib/blog-path";
 import { getPublicBlog, getPublicBlogConfig, getPublicPublication } from "@/lib/server-api";
 
 interface PageParams {
@@ -30,17 +31,18 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
 /** /{blog}/pub/{name} — indice della pubblicazione (mockup 2d). */
 export default async function PublicationPage({ params }: { params: Promise<PageParams> }) {
   const { blogSlug, name } = await params;
-  const [blog, config, pub, t] = await Promise.all([
+  const [blog, config, pub, t, links] = await Promise.all([
     getPublicBlog(blogSlug),
     getPublicBlogConfig(blogSlug),
     getPublicPublication(blogSlug, name),
     getTranslations("Publication"),
+    blogLinks(blogSlug),
   ]);
   if (!blog) notFound();
   if (blogIsOffline(blog)) {
     return (
       <BlogPageShell config={config}>
-        <BlogHeader slug={blogSlug} name={blog.title} current="publications" hasPublications />
+        <BlogHeader basePath={links.basePath} name={blog.title} current="publications" hasPublications />
         <BlogStateNotice blog={blog} />
       </BlogPageShell>
     );
@@ -50,7 +52,7 @@ export default async function PublicationPage({ params }: { params: Promise<Page
   const first = pub.chapters[0];
   return (
     <BlogPageShell config={config}>
-      <BlogHeader slug={blogSlug} name={blog.title} current="publications" hasPublications actions={<BlogHeaderActions slug={blogSlug} />} />
+      <BlogHeader basePath={links.basePath} name={blog.title} current="publications" hasPublications actions={<BlogHeaderActions slug={blogSlug} />} />
       <main className="mx-auto w-full max-w-[860px] flex-1 px-5 py-10 lg:px-12 lg:py-14">
         <span className="font-mono text-[11px] uppercase tracking-[.08em] text-muted">{t("label")}</span>
         <h1 className="mt-2 font-serif text-[34px] font-medium leading-[1.12] tracking-tight md:text-[44px]">{pub.title}</h1>
@@ -59,13 +61,13 @@ export default async function PublicationPage({ params }: { params: Promise<Page
           <span>{t("chaptersOf", { published: pub.chapters_published, total: pub.chapters_total })}</span>
           <span>· {t("minutes", { min: totalMinutes })}</span>
           {first && (
-            <Link href={first.permalink} className="no-underline">
+            <Link href={links.fromPermalink(first.permalink)} className="no-underline">
               <Button size="sm">{t("startReading")}</Button>
             </Link>
           )}
         </div>
         <div className="mt-10">
-          <PublicationIndex chapters={pub.chapters} />
+          <PublicationIndex chapters={pub.chapters} resolvePermalink={links.fromPermalink} />
         </div>
       </main>
     </BlogPageShell>

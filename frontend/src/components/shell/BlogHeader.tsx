@@ -5,9 +5,14 @@ import type { ReactNode } from "react";
 import { PlatformMark } from "./PlatformMark";
 
 export interface BlogNavProps {
-  slug: string;
+  /** Prefisso dei link interni al blog: `/{slug}` se la pagina è raggiunta
+   * path-based, stringa vuota se raggiunta dal proprio sottodominio — vedi
+   * `src/lib/blog-path.ts::blogBasePath`. Ogni chiamante lo calcola dal
+   * proprio `params`/host, BlogHeader non lo ricava da solo per restare un
+   * Server Component senza bisogno di rileggere l'header Host più volte. */
+  basePath: string;
   name: string;
-  current: "posts" | "publications" | "bibliography" | "media" | "links";
+  current: "posts" | "publications" | "bibliography" | "media" | "links" | "search";
   hasPublications?: boolean;
   actions?: ReactNode;
 }
@@ -17,14 +22,15 @@ export interface BlogNavProps {
  * diventa una riga di tab scorrevole. "Pubblicazioni" appare solo se
  * hasPublications (blocco B9, nessun chiamante lo passa oggi).
  */
-export async function BlogHeader({ slug, name, current, hasPublications, actions }: BlogNavProps) {
+export async function BlogHeader({ basePath, name, current, hasPublications, actions }: BlogNavProps) {
   const t = await getTranslations("BlogNav");
   const items: [BlogNavProps["current"], string, string][] = [
-    ["posts", t("posts"), `/${slug}`],
-    ...(hasPublications ? ([["publications", t("publications"), `/${slug}/pub`]] as [BlogNavProps["current"], string, string][]) : []),
-    ["bibliography", t("bibliography"), `/${slug}/bibliografia`],
-    ["media", t("media"), `/${slug}/media`],
-    ["links", t("links"), `/${slug}/link`],
+    ["posts", t("posts"), basePath || "/"],
+    ...(hasPublications ? ([["publications", t("publications"), `${basePath}/pub`]] as [BlogNavProps["current"], string, string][]) : []),
+    ["bibliography", t("bibliography"), `${basePath}/bibliografia`],
+    ["media", t("media"), `${basePath}/media`],
+    ["links", t("links"), `${basePath}/link`],
+    ["search", t("search"), `${basePath}/search`],
   ];
   return (
     <header className="border-b border-border">
@@ -32,7 +38,7 @@ export async function BlogHeader({ slug, name, current, hasPublications, actions
         <div className="flex min-w-0 items-center gap-4">
           <PlatformMark />
           <div className="h-5 w-px shrink-0 bg-border" aria-hidden="true" />
-          <Link href={`/${slug}`} className="truncate font-serif text-[19px] font-semibold text-foreground no-underline">
+          <Link href={basePath || "/"} className="truncate font-serif text-[19px] font-semibold text-foreground no-underline">
             {name}
           </Link>
           <nav className="hidden gap-5 text-sm text-muted md:flex">

@@ -34,10 +34,15 @@ data:
   # placeholder: MinIO non è ancora esposto pubblicamente da questi manifest
   # (nessuna regola Ingress dedicata) — da sostituire con un dominio/CDN reale
   # prima che gli avatar siano visibili dall'esterno del cluster
-  NOCT_S3_PUBLIC_URL: "https://storage.notturni.eu"
+  NOCT_S3_PUBLIC_URL: "https://s3.notturni.eu"
   NOCT_S3_BUCKET_AVATARS: "avatars"
   # bucket privato per gli archivi di audit (mai esposto pubblicamente)
   NOCT_S3_BUCKET_AUDIT: "notturni-audit"
+
+  # Servizio di moderazione automatica delle immagini (moderation.yaml),
+  # chiamato da app/domain/moderation.py ad ogni upload (fail open: un
+  # problema di questo servizio non blocca mai l'upload).
+  NOCT_MODERATION_SERVICE_URL: "http://moderation:8100"
 
   # Backup infrastrutturale di Postgres e MinIO (app/workers/backup.py,
   # backup-cronjob.yaml) verso uno storage S3 **esterno** — placeholder,
@@ -52,10 +57,10 @@ data:
   # SMTP per l'invio del codice MFA via email (app/core/mail.py) — placeholder,
   # da sostituire con un provider SMTP/transazionale reale prima della
   # produzione (credenziali in secret.yaml: NOCT_SMTP_USER/_PASSWORD).
-  NOCT_SMTP_HOST: ""
+  NOCT_SMTP_HOST: "smtp.notturni.eu"
   NOCT_SMTP_PORT: "587"
-  NOCT_SMTP_USE_TLS: "true"
-  NOCT_SMTP_FROM_EMAIL: "no-reply@notturni.eu"
+  NOCT_SMTP_USE_TLS: "false"
+  NOCT_SMTP_FROM_EMAIL: "info@notturni.eu"
 
   # Servizio SMTP containerizzato alternativo (smtp-relay.yaml) — un'opzione
   # in più oltre a puntare NOCT_SMTP_HOST/_PORT/_USE_TLS sopra direttamente a
@@ -78,27 +83,29 @@ data:
   # a tutti. Site key pubblica (safe da esporre, letta anche dal frontend via
   # GET /api/v1/config) — la secret key sta in secret.yaml. Vuota: quella
   # modalità di commenti non è selezionabile su questa istanza.
-  NOCT_TURNSTILE_SITE_KEY: ""
+  NOCT_TURNSTILE_SITE_KEY: "0x4AAAAAAE9rQ3JQvA_jSRu-"
 
-  # placeholder: CORS ad origine esatta non copre i sottodomini per-blog
-  # (nomeutente.notturni.eu) — da rivedere con un match a wildcard quando le
-  # pagine pubbliche dei blog chiameranno l'API dal browser.
   # ATTENZIONE per il test di stasera: senza dominio reale (ingress.yaml solo
   # http) il browser chiama l'API da "http://<ip-nodo>" — questa variabile
   # va aggiornata di conseguenza, altrimenti ogni richiesta del frontend
   # all'API viene bloccata dal browser come cross-origin non ammessa (nessun
   # errore lato backend: si vede solo in console/Network del browser).
   NOCT_CORS_ORIGINS: "https://notturni.eu"
+  # match a wildcard per i sottodomini per-blog (slug.notturni.eu,
+  # ingressroute.yaml): un'origine esatta per ciascuno non è enumerabile in
+  # anticipo. Con dominio reale + TLS attivi; per il test di stasera senza
+  # dominio (solo IP nodo) non c'è alcun sottodominio da coprire, resta vuoto.
+  NOCT_CORS_ORIGIN_REGEX: "https://([a-z0-9-]+\\.)?notturni\\.eu"
 
   # Cookie di sessione (refresh token httpOnly, backend/API.md).
-  # NOCT_SESSION_COOKIE_SECURE="false" perché ingress.yaml, nella sua
-  # versione attuale, serve solo http (nessun dominio reale/cert-manager
-  # ancora configurato — vedi commento in cima a quel file): un cookie
+  # NOCT_SESSION_COOKIE_SECURE="true" perché ingress.yaml/ingressroute.yaml
+  # servono ora https (TLS via cert-manager, certificate.yaml) — un cookie
   # Secure non verrebbe accettato dal browser su una connessione non
-  # cifrata. Passare a "true" **insieme** al blocco TLS di ingress.yaml non
-  # appena l'istanza è raggiunta in https, mai prima (altrimenti il login
-  # smette di "restare loggato" senza errori visibili).
-  NOCT_SESSION_COOKIE_SECURE: "false"
+  # cifrata. Se si torna temporaneamente a un test solo http (nessun
+  # dominio/cert-manager), riportarlo a "false" **insieme** alla rimozione
+  # del blocco tls in ingress.yaml, mai uno senza l'altro (altrimenti il
+  # login smette di "restare loggato" senza errori visibili).
+  NOCT_SESSION_COOKIE_SECURE: "true"
   NOCT_SESSION_COOKIE_SAMESITE: "lax"
   NOCT_SESSION_COOKIE_DOMAIN: ""
 

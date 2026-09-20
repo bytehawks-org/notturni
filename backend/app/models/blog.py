@@ -94,6 +94,19 @@ class Blog(Base, UUIDPKMixin, TimestampMixin):
     # app/domain/seo.py::effective_search_indexing/effective_ai_crawling).
     search_indexing_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     ai_crawling_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Newsletter (app/models/newsletter.py): invio automatico di una
+    # campagna agli iscritti confermati del blog ad ogni pubblicazione di un
+    # post (vedi app/api/v1/posts.py:publish_post). Attivo di default,
+    # disattivabile dal proprietario.
+    newsletter_auto_notify_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Personalizzazione delle email di campagna (app/workers/newsletter_consumer.py):
+    # nome visualizzato nell'header "From" (indirizzo resta quello unico di
+    # piattaforma, NOCT_SMTP_FROM_EMAIL — nessun invio da domini arbitrari) e
+    # banner mostrato in cima al corpo HTML. None/"" = default di piattaforma
+    # (nome del blog, nessun banner).
+    newsletter_sender_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    newsletter_banner_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    newsletter_banner_alt_text: Mapped[str] = mapped_column(String(300), default="", nullable=False)
     # Sospensione da parte di un admin di piattaforma (dashboard/blog): blog
     # irraggiungibile pubblicamente e non scrivibile finché non viene
     # riattivato, indipendentemente da `visibility` — vedi app/domain/authorization.py.
@@ -131,6 +144,7 @@ class Blog(Base, UUIDPKMixin, TimestampMixin):
     cover_image_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     cover_image_is_sensitive: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     cover_image_categories: Mapped[list[str]] = mapped_column(ARRAY(String(20)), default=list, nullable=False)
+    cover_image_alt_text: Mapped[str] = mapped_column(String(300), default="", nullable=False)
     # Favicon dedicata del blog (facoltativa): stesso schema di
     # User.avatar_object_key — object key su storage, non moderata (icona
     # dell'identità del blog, non contenuto). URL risolto a runtime in

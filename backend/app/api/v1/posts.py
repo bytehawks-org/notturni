@@ -5,11 +5,11 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy import delete, insert, select, tuple_
+from sqlalchemy import delete, insert, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_optional_current_user
-from app.core.broker import publish_post_backup
+from app.core.broker import publish_newsletter_campaign, publish_post_backup
 from app.core.captcha import turnstile_configured
 from app.core.database import get_session
 from app.core.storage import avatar_public_url
@@ -33,6 +33,7 @@ from app.domain.tags import resolve_tags
 from app.models.blog import Blog, BlogMembership, BlogVisibility
 from app.models.comment import CommentsMode
 from app.models.category import Category
+from app.models.newsletter import NewsletterCampaign, NewsletterCampaignKind, NewsletterCampaignStatus
 from app.models.publication import Publication
 from app.models.post import Post, PostStatus
 from app.models.post_read import PostReadDaily
@@ -114,6 +115,9 @@ class PostCreateRequest(BaseModel):
     # (CLAUDE.md #3, vocabolario in app/domain/content_media.py). Non vuoto
     # forza anche cover_image_is_sensitive a True.
     cover_image_categories: list[str] = []
+    # Testo alternativo della cover (accessibilità) — indipendente
+    # dall'eventuale alt text della stessa immagine in libreria media.
+    cover_image_alt_text: str = ""
     # Tag del campo dedicato (vedi app/domain/tags.py); si sommano agli
     # eventuali #hashtag scritti nel testo, massimo 5 in tutto.
     tags: list[str] | None = None
@@ -135,6 +139,7 @@ class PostTranslationRequest(BaseModel):
     cover_image_url: str | None = None
     cover_image_is_sensitive: bool = False
     cover_image_categories: list[str] = []
+    cover_image_alt_text: str = ""
     tags: list[str] | None = None
     category_id: uuid.UUID | None = None
     # B9: pubblicazione di appartenenza (stesso schema tri-state di category_id)
@@ -158,6 +163,10 @@ class PostUpdateRequest(BaseModel):
     # esistente. Assente: lascia invariate; lista (anche vuota `[]`): la
     # sostituisce — non vuota forza anche cover_image_is_sensitive a True.
     cover_image_categories: list[str] | None = None
+    # Come cover_image_categories: indipendente da un nuovo cover_image_url.
+    # Assente: lascia invariato; presente (anche `null`/`""`): lo azzera o
+    # sostituisce — usare model_fields_set in update_post, non "is not None".
+    cover_image_alt_text: str | None = None
     # assente: lascia invariati i tag del campo dedicato; lista (anche vuota
     # []): la sostituisce. Gli #hashtag nel testo sono comunque ricalcolati
     # ad ogni modifica del contenuto, a prescindere da questo campo.
@@ -219,6 +228,7 @@ class PostOut(BaseModel):
     cover_image_url: str | None
     cover_image_is_sensitive: bool
     cover_image_categories: list[str]
+    cover_image_alt_text: str
     status: PostStatus
     published_at: datetime | None
     created_at: datetime
@@ -474,6 +484,7 @@ async def _posts_out(
                 cover_image_url=post.cover_image_url,
                 cover_image_is_sensitive=post.cover_image_is_sensitive,
                 cover_image_categories=post.cover_image_categories,
+                cover_image_alt_text=post.cover_image_alt_text,
                 status=post.status,
                 published_at=post.published_at,
                 created_at=post.created_at,
@@ -583,6 +594,7 @@ async def _sync_post_media(session: AsyncSession, post: Post) -> None:
                     "url": r.url,
                     "alt_text": r.alt_text,
                     "categories": list(r.categories),
+                    "is_sensitive": r.is_sensitive,
                 }
                 for r in refs
             ],
@@ -629,6 +641,37 @@ def _backup_to_s3(blog: Blog, post: Post) -> None:
         logger.warning("Impossibile accodare il backup S3 per il post %s", post.id, exc_info=True)
 
 
+async def _queue_newsletter_notification(session: AsyncSession, post: Post, blog: Blog) -> uuid.UUID | None:
+    """Crea (una sola volta per post, indice unico parziale su
+    `newsletter_campaigns.post_id`) la campagna di notifica automatica agli
+    iscritti alla newsletter del blog, nella stessa transazione della
+    pubblicazione: se il commit del post fallisce, non deve restare in giro
+    una campagna orfana. Il pre-check SELECT invece dell'IntegrityError
+    copre il caso più comune (ripubblicazione dopo un ritorno in bozza) senza
+    dover gestire un rollback parziale della transazione in corso.
+
+    Ritorna l'id della campagna appena creata (da accodare su RabbitMQ *dopo*
+    il commit, stesso principio fire-and-forget di `_backup_to_s3`), o None
+    se non è stata creata nessuna campagna (opt-out del blog o già esistente)."""
+    if not blog.newsletter_auto_notify_enabled:
+        return None
+    existing = await session.execute(
+        select(NewsletterCampaign.id).where(NewsletterCampaign.post_id == post.id)
+    )
+    if existing.scalar_one_or_none() is not None:
+        return None
+    campaign = NewsletterCampaign(
+        blog_id=blog.id,
+        kind=NewsletterCampaignKind.POST_NOTIFICATION,
+        post_id=post.id,
+        status=NewsletterCampaignStatus.SENDING,
+        subject=f"Nuovo post su {blog.title}: {post.title}",
+    )
+    session.add(campaign)
+    await session.flush()
+    return campaign.id
+
+
 @router.post("/blogs/{blog_slug}/posts", response_model=PostOut, status_code=status.HTTP_201_CREATED)
 async def create_post(
     blog_slug: str,
@@ -672,6 +715,7 @@ async def create_post(
         cover_image_url=payload.cover_image_url,
         cover_image_is_sensitive=payload.cover_image_is_sensitive or bool(payload.cover_image_categories),
         cover_image_categories=payload.cover_image_categories,
+        cover_image_alt_text=payload.cover_image_alt_text,
         manual_tags=manual_tags,
         category_id=payload.category_id,
         publication_id=payload.publication_id,
@@ -754,6 +798,7 @@ async def add_post_translation(
         cover_image_url=payload.cover_image_url,
         cover_image_is_sensitive=payload.cover_image_is_sensitive or bool(payload.cover_image_categories),
         cover_image_categories=payload.cover_image_categories,
+        cover_image_alt_text=payload.cover_image_alt_text,
         manual_tags=manual_tags,
         category_id=category_id,
         publication_id=publication_id,
@@ -813,6 +858,51 @@ async def list_posts(
     result = await session.execute(stmt)
     posts = list(result.scalars().all())
 
+    return await _posts_out(session, [(p, blog) for p in posts])
+
+
+MAX_SEARCH_LIMIT = 50
+DEFAULT_SEARCH_LIMIT = 20
+
+
+@router.get("/blogs/{blog_slug}/search", response_model=list[PostOut])
+async def search_blog_posts(
+    blog_slug: str,
+    q: str,
+    limit: int = DEFAULT_SEARCH_LIMIT,
+    offset: int = 0,
+    current_user: User | None = Depends(get_optional_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[PostOut]:
+    """Ricerca ristretta a un singolo blog (sottodominio `{slug}.notturni.eu`):
+    `q` cerca in titolo e contenuto dei soli post effettivamente pubblicati,
+    a prescindere da chi effettua la richiesta (a differenza di
+    `GET /blogs/{blog_slug}/posts`, non mostra mai bozze/revisione a chi ha
+    accesso in scrittura — è una casella di ricerca pubblica, non uno
+    strumento di editing). 404 se il blog non è visibile al richiedente,
+    stesso comportamento di `list_posts`."""
+    blog = await _get_blog_or_404(session, blog_slug)
+    await _require_blog_viewable(session, current_user, blog)
+    q = q.strip()
+    if not q:
+        return []
+    limit = min(max(limit, 1), MAX_SEARCH_LIMIT)
+    offset = max(offset, 0)
+
+    needle = f"%{q}%"
+    stmt = (
+        select(Post)
+        .where(
+            Post.blog_id == blog.id,
+            publicly_visible_clause(),
+            or_(Post.title.ilike(needle), Post.content.ilike(needle)),
+        )
+        .order_by(Post.published_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    result = await session.execute(stmt)
+    posts = list(result.scalars().all())
     return await _posts_out(session, [(p, blog) for p in posts])
 
 
@@ -899,6 +989,8 @@ async def update_post(
         post.cover_image_categories = payload.cover_image_categories
         if post.cover_image_categories:
             post.cover_image_is_sensitive = True
+    if "cover_image_alt_text" in payload.model_fields_set:
+        post.cover_image_alt_text = payload.cover_image_alt_text or ""
 
     # i tag vanno ricalcolati se è cambiato il contenuto (gli #hashtag nel
     # testo potrebbero essere cambiati) o se il campo dedicato è stato
@@ -1040,8 +1132,11 @@ async def publish_post(
 
     post.status = PostStatus.PUBLISHED
     post.published_at = scheduled_at or datetime.now(timezone.utc)
+    newsletter_campaign_id = await _queue_newsletter_notification(session, post, blog)
     await session.commit()
     await session.refresh(post)
+    if newsletter_campaign_id is not None:
+        publish_newsletter_campaign(str(newsletter_campaign_id))
     if is_publicly_visible(post):
         await _revalidate_post(post, blog)
     return await _post_out(session, post, blog)

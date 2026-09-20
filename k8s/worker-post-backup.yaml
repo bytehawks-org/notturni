@@ -1,0 +1,32 @@
+# image: come backend.yaml, riferimento a un'immagine costruita/caricata
+# localmente sul nodo finché non c'è un registro in CI/CD.
+#
+# Consumer della coda post_backup (app/workers/post_backup_consumer.py):
+# replica su S3 il Markdown di ogni post ad ogni salvataggio. Deployment
+# long-running (non un CronJob), stesso schema di env di backend.yaml —
+# in locale (compose.yaml) punta a mailhog/minio via override, qui invece
+# arriva già tutto da ConfigMap/Secret condivisi. Nessun Service: un
+# consumer non riceve richieste in ingresso.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-post-backup
+  namespace: notturni
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker-post-backup
+  template:
+    metadata:
+      labels:
+        app: worker-post-backup
+    spec:
+      containers:
+        - name: worker-post-backup
+          image: ghcr.io/bytehawks-org/notturni-backend:sha-fd6ce11
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "app.workers.post_backup_consumer"]
+          envFrom:
+            - configMapRef: {name: notturni-config}
+            - secretRef: {name: notturni-secrets}

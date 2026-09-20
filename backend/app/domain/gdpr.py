@@ -14,10 +14,15 @@ contenuto pubblico condiviso resta, attribuito a un'identità anonima (stesso
 principio già presente nel prodotto con gli alias per-blog, CLAUDE.md #1).
 
 Cancellati per intero (dati puramente personali, mai condivisi con altri):
-sessioni, token API, codici MFA email pendenti, identità SSO, link social,
-frammenti salvati, i follow (in entrambe le direzioni) e le membership su
-blog altrui (l'utente anonimizzato non ha più senso come "collaboratore
-attivo"). Lasciati intatti: blog di proprietà, post, commenti — il
+sessioni, token API, codici MFA email/reset password pendenti, richieste di
+cambio email pendenti, dominio custom (verificato o no) e il relativo badge
+bronzo, identità SSO, link social, frammenti salvati, i follow (in entrambe
+le direzioni), le membership su blog altrui (l'utente anonimizzato non ha
+più senso come "collaboratore attivo") e le iscrizioni alla newsletter
+collegate all'account (stesso trattamento di SocialLink/PostFragment: dato
+puramente personale, cancellato per intero — chi vuole restare iscritto
+alla newsletter di un blog può comunque farlo di nuovo con l'email che
+preferisce, senza account). Lasciati intatti: blog di proprietà, post, commenti — il
 `post_author_name_style`/`display_name` impostati qui li fa comparire da
 subito con l'autore "Utente eliminato" ovunque (stessa risoluzione dinamica
 già usata per gli alias, `app/domain/display_names.py`)."""
@@ -33,12 +38,16 @@ from app.models.audit_log import AuditLog
 from app.models.blog import Blog, BlogMembership
 from app.models.comment import Comment
 from app.models.follow import BlogFollow, UserFollow
+from app.models.custom_domain import CustomDomain
+from app.models.email_change_request import EmailChangeRequest
 from app.models.mfa_email_code import MfaEmailCode
+from app.models.newsletter import NewsletterSubscriber
+from app.models.password_reset_code import PasswordResetCode
 from app.models.post import Post
 from app.models.post_fragment import PostFragment
 from app.models.social_link import SocialLink
 from app.models.sso_identity import SsoIdentity
-from app.models.user import PlatformRole, PostAuthorNameStyle, User
+from app.models.user import PlatformRole, PostAuthorNameStyle, User, VerificationTier
 from app.models.user_session import UserSession
 
 ANONYMIZED_DISPLAY_NAME = "Utente eliminato"
@@ -86,6 +95,23 @@ async def export_user_data(session: AsyncSession, user: User) -> dict[str, Any]:
     api_tokens = (
         (await session.execute(select(ApiToken).where(ApiToken.user_id == user.id))).scalars().all()
     )
+    # `User.verified_domain` copre solo il dominio già verificato: una
+    # richiesta ancora pending/failed vive solo qui e altrimenti sparirebbe
+    # dall'export se l'utente lo scarica prima di completare la verifica DNS
+    # (bug segnalato dalla review Copilot). Mai il verification_token: è un
+    # segreto operativo, non un dato personale da portare fuori.
+    custom_domain_claim = (
+        await session.execute(select(CustomDomain).where(CustomDomain.user_id == user.id))
+    ).scalar_one_or_none()
+    newsletter_subscriptions = (
+        (
+            await session.execute(
+                select(NewsletterSubscriber).where(NewsletterSubscriber.user_id == user.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
     audit_events = (
         (
             await session.execute(
@@ -113,7 +139,21 @@ async def export_user_data(session: AsyncSession, user: User) -> dict[str, Any]:
             "fallback_languages": user.fallback_languages,
             "platform_role": user.platform_role.value,
             "mfa_enabled": user.mfa_enabled,
+            "verified_domain": user.verified_domain,
+            "verification_tier": user.verification_tier.value,
             "created_at": user.created_at.isoformat(),
+            "custom_domain_claim": (
+                {
+                    "domain": custom_domain_claim.domain,
+                    "status": custom_domain_claim.status.value,
+                    "created_at": custom_domain_claim.created_at.isoformat(),
+                    "verified_at": custom_domain_claim.verified_at.isoformat()
+                    if custom_domain_claim.verified_at
+                    else None,
+                }
+                if custom_domain_claim is not None
+                else None
+            ),
         },
         "social_links": [
             {"label": s.label, "url": s.url, "position": s.position} for s in social_links
@@ -172,6 +212,15 @@ async def export_user_data(session: AsyncSession, user: User) -> dict[str, Any]:
             }
             for t in api_tokens
         ],
+        "newsletter_subscriptions": [
+            {
+                "blog_id": str(s.blog_id) if s.blog_id else None,
+                "email": s.email,
+                "status": s.status.value,
+                "confirmed_at": s.confirmed_at.isoformat() if s.confirmed_at else None,
+            }
+            for s in newsletter_subscriptions
+        ],
         "audit_log": [
             {
                 "occurred_at": a.occurred_at.isoformat(),
@@ -194,9 +243,21 @@ async def anonymize_and_deactivate_user(session: AsyncSession, user: User) -> No
     await session.execute(delete(UserSession).where(UserSession.user_id == user.id))
     await session.execute(delete(ApiToken).where(ApiToken.user_id == user.id))
     await session.execute(delete(MfaEmailCode).where(MfaEmailCode.user_id == user.id))
+    await session.execute(delete(PasswordResetCode).where(PasswordResetCode.user_id == user.id))
+    await session.execute(delete(EmailChangeRequest).where(EmailChangeRequest.user_id == user.id))
+    await session.execute(delete(CustomDomain).where(CustomDomain.user_id == user.id))
+    # Il dominio verificato e il badge bronzo sono un handle pubblico
+    # ("dominio", CLAUDE.md #5) tanto quanto l'username: senza questo
+    # restavano visibili sul profilo anonimizzato anche dopo la
+    # cancellazione della riga CustomDomain sopra (User.verified_domain è
+    # una copia denormalizzata, non una FK che sparirebbe da sola).
+    user.verified_domain = None
+    if user.verification_tier == VerificationTier.BRONZE:
+        user.verification_tier = VerificationTier.NONE
     await session.execute(delete(SsoIdentity).where(SsoIdentity.user_id == user.id))
     await session.execute(delete(SocialLink).where(SocialLink.user_id == user.id))
     await session.execute(delete(PostFragment).where(PostFragment.user_id == user.id))
+    await session.execute(delete(NewsletterSubscriber).where(NewsletterSubscriber.user_id == user.id))
     await session.execute(
         delete(UserFollow).where(
             (UserFollow.follower_id == user.id) | (UserFollow.followed_user_id == user.id)

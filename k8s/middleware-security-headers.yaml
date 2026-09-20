@@ -1,0 +1,35 @@
+# Security header minimi (CLAUDE.md #6: HSTS, X-Content-Type-Options, ecc.)
+# applicati a livello Traefik, non nell'app: coprono anche le pagine servite
+# da Next.js senza dover toccare ogni singola response lato frontend/backend.
+# Referenziato sia da ingress.yaml (via annotazione
+# traefik.ingress.kubernetes.io/router.middlewares) sia da
+# ingressroute.yaml (campo middlewares) — un solo posto da tenere aggiornato.
+#
+# HSTS (stsSeconds) è configurato fin da subito ma, per costruzione di
+# Traefik, viene emesso solo sulle richieste già in TLS: con ingress.yaml
+# nella sua versione "test" (solo http, vedi commento in cima a quel file)
+# resta silenzioso, nessuna azione da fare quando si passa a TLS reale.
+#
+# Content-Security-Policy NON è più qui: una CSP statica uguale per ogni
+# richiesta non può includere un nonce, e script-src 'self' senza
+# nonce/unsafe-inline blocca anche gli script inline che Next.js stesso
+# inietta per l'idratazione (payload RSC in streaming) — non solo script di
+# terze parti. Sintomo osservato: pagina servita correttamente (200), ma
+# nessun bottone/form rispondeva (React non si idratava), login e
+# registrazione inclusi. La CSP è ora generata per-richiesta con un nonce
+# fresco in frontend/src/proxy.ts, unica fonte di verità — vedi il commento
+# lì per il dettaglio (script-src 'self' 'nonce-...' 'strict-dynamic',
+# necessario anche per il widget Turnstile dei commenti anonimi).
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: security-headers
+  namespace: notturni
+spec:
+  headers:
+    stsSeconds: 31536000
+    stsIncludeSubdomains: true
+    stsPreload: true
+    contentTypeNosniff: true
+    customFrameOptionsValue: "DENY"
+    referrerPolicy: "strict-origin-when-cross-origin"

@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 
+import { BlogPageShell } from "@/components/blog/BlogPageShell";
 import { BlogHeader } from "@/components/shell/BlogHeader";
+import { blogBasePath } from "@/lib/blog-path";
 import { excerpt, renderMarkdown } from "@/lib/markdown";
-import { getPublicBlog, getPublicPage } from "@/lib/server-api";
+import { getPublicBlog, getPublicBlogConfig, getPublicPage, getPublicPublications } from "@/lib/server-api";
 
 interface PageParams {
   blogSlug: string;
@@ -44,22 +47,31 @@ export default async function PublicBlogPagePage({
 }) {
   const { blogSlug, pageSlug } = await params;
   const { locale = "it" } = await searchParams;
-  const [page, blog] = await Promise.all([
+  const [page, blog, basePath, config, publications] = await Promise.all([
     getPublicPage(blogSlug, pageSlug, locale),
     getPublicBlog(blogSlug),
+    blogBasePath(blogSlug),
+    getPublicBlogConfig(blogSlug),
+    getPublicPublications(blogSlug).catch(() => []),
   ]);
   if (!page) notFound();
 
-  const html = await renderMarkdown(page.content, { mentions: page.mentions_enabled });
+  const tPost = await getTranslations("Post");
+  const html = await renderMarkdown(page.content, {
+    mentions: page.mentions_enabled,
+    expandImageLabel: tPost("expandImage"),
+    copyCodeLabel: tPost("copyCode"),
+    copiedCodeLabel: tPost("copiedCode"),
+  });
 
   return (
-    <div className="flex flex-1 flex-col">
-      <BlogHeader slug={blogSlug} name={blog?.title ?? blogSlug} current="posts" />
+    <BlogPageShell config={config}>
+      <BlogHeader basePath={basePath} name={blog?.title ?? blogSlug} current="posts" hasPublications={publications.length > 0} />
       <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-12">
         <h1 className="font-serif text-5xl font-semibold leading-tight text-foreground">{page.title}</h1>
 
         <div className="notturni-prose mt-10 text-lg leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />
       </main>
-    </div>
+    </BlogPageShell>
   );
 }

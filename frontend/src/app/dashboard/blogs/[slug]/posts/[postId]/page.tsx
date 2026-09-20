@@ -48,6 +48,7 @@ export default function PostEditorPage() {
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
   const [coverImageIsSensitive, setCoverImageIsSensitive] = useState(false);
   const [coverImageCategories, setCoverImageCategories] = useState<SensitivityCategory[]>([]);
+  const [coverImageAltText, setCoverImageAltText] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [publicationId, setPublicationId] = useState<string | null>(null);
@@ -72,6 +73,7 @@ export default function PostEditorPage() {
         setCoverImageUrl(p.cover_image_url);
         setCoverImageIsSensitive(p.cover_image_is_sensitive);
         setCoverImageCategories(p.cover_image_categories);
+        setCoverImageAltText(p.cover_image_alt_text);
         setTags(p.manual_tags);
         setCategoryId(p.category?.id ?? null);
         setPublicationId(p.publication?.id ?? null);
@@ -108,6 +110,7 @@ export default function PostEditorPage() {
           cover_image_url: coverImageUrl ?? "",
           cover_image_is_sensitive: coverImageIsSensitive,
           cover_image_categories: coverImageCategories,
+          cover_image_alt_text: coverImageAltText,
           tags,
           category_id: categoryId,
           publication_id: publicationId,
@@ -200,12 +203,16 @@ export default function PostEditorPage() {
               value={coverImageUrl}
               isSensitive={coverImageIsSensitive}
               categories={coverImageCategories}
+              altText={coverImageAltText}
+              onAltTextChange={setCoverImageAltText}
               onChange={(url, sensitive, categories) => {
                 setCoverImageUrl(url);
                 setCoverImageIsSensitive(sensitive);
                 setCoverImageCategories(categories);
               }}
               onUpload={(file) => authFetch((token) => api.blogs.uploadMedia(token, params.slug, file))}
+              blogSlug={params.slug}
+              authFetch={authFetch}
             />
           </div>
 
