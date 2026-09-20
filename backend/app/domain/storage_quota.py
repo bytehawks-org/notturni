@@ -30,6 +30,6 @@ async def assert_blog_storage_quota(session: AsyncSession, *, blog: Blog, config
         return
     if current_bytes + extra_bytes > limit_bytes:
         raise HTTPException(
-            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status.HTTP_413_CONTENT_TOO_LARGE,
             f"Spazio massimo per questo blog superato ({config.max_blog_storage_mb} MB).",
         )

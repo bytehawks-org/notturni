@@ -3,9 +3,11 @@
 from collections.abc import Callable
 
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests.conftest import AuthedUser, FakeS3Client
 from tests.test_overview import _blog
+from tests.test_platform_config import _super
 
 
 async def test_upload_lists_edits_and_deletes_media(client: AsyncClient, make_user: Callable, fake_s3: FakeS3Client) -> None:
@@ -115,3 +117,43 @@ async def test_blog_cover_upload_lands_in_library_and_is_protected(client: Async
     # rimossa la cover dal blog → di nuovo cancellabile
     await client.delete("/api/v1/blogs/bc-blog/cover-image", headers=owner.headers)
     assert (await client.delete(f"/api/v1/blogs/bc-blog/media/{items[0]['id']}", headers=owner.headers)).status_code == 204
+
+
+async def test_media_upload_blocked_over_storage_quota(
+    client: AsyncClient, make_user: Callable, make_admin: Callable, db_session: AsyncSession, fake_s3: FakeS3Client
+) -> None:
+    """`platform_config.max_blog_storage_mb` (blocco "impostazioni di
+    piattaforma"): null di default (nessun limite, comportamento invariato),
+    un upload che lo supererebbe risponde 413 (app/domain/storage_quota.py)."""
+    owner: AuthedUser = await make_user("quota-owner")
+    await _blog(client, owner, "quota-blog")
+    root = await _super(make_admin, db_session, "quota-media-root")
+
+    set_res = await client.patch(
+        "/api/v1/admin/config", json={"max_blog_storage_mb": 1}, headers=root.headers
+    )
+    assert set_res.status_code == 200 and set_res.json()["max_blog_storage_mb"] == 1
+
+    under_limit = b"\x89PNG" + b"1" * 700_000
+    first = await client.post(
+        "/api/v1/blogs/quota-blog/media",
+        files={"file": ("a.png", under_limit, "image/png")},
+        headers=owner.headers,
+    )
+    assert first.status_code == 201, first.text
+
+    second = await client.post(
+        "/api/v1/blogs/quota-blog/media",
+        files={"file": ("b.png", under_limit, "image/png")},
+        headers=owner.headers,
+    )
+    assert second.status_code == 413
+
+    # senza limite, lo stesso upload torna a essere accettato
+    await client.patch("/api/v1/admin/config", json={"max_blog_storage_mb": 0}, headers=root.headers)
+    third = await client.post(
+        "/api/v1/blogs/quota-blog/media",
+        files={"file": ("c.png", under_limit, "image/png")},
+        headers=owner.headers,
+    )
+    assert third.status_code == 201

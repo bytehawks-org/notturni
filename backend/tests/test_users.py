@@ -4,7 +4,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import User
+from app.models.user import PlatformRole, User
 from tests.conftest import AuthedUser, FakeS3Client
 
 
@@ -396,3 +396,47 @@ async def test_update_profile_rejects_invalid_country_and_language(
         headers=user.headers,
     )
     assert too_many.status_code == 400
+
+
+async def test_directory_respects_opt_out_and_excludes_super_admin(
+    client: AsyncClient, make_user: Callable, db_session: AsyncSession
+) -> None:
+    """GET /users (directory pubblica): opt-out volontario via
+    `directory_listed` e, indipendentemente da quel flag, il Super Admin è
+    sempre escluso (blocco "opt-in directory utenti") — per sicurezza,
+    evitare che l'account con i privilegi più ampi sia individuabile dalla
+    directory pubblica, superficie utile per un attacco a forza bruta."""
+    listed: AuthedUser = await make_user("dirlisted1")
+    opted_out: AuthedUser = await make_user("diroptout1")
+    root: AuthedUser = await make_user("dirroot1")
+
+    result = await db_session.execute(select(User).where(User.username == root.username))
+    root_row = result.scalar_one()
+    root_row.platform_role = PlatformRole.SUPER_ADMIN
+    await db_session.commit()
+
+    before = await client.get("/api/v1/users")
+    assert before.status_code == 200
+    usernames_before = {u["username"] for u in before.json()}
+    assert listed.username in usernames_before
+    assert opted_out.username in usernames_before
+    # Il Super Admin non compare mai, anche se non ha scelto alcun opt-out
+    # (directory_listed è True di default per qualunque account nuovo).
+    assert root.username not in usernames_before
+
+    hide = await client.patch(
+        "/api/v1/users/me", json={"directory_listed": False}, headers=opted_out.headers
+    )
+    assert hide.status_code == 200
+    assert hide.json()["directory_listed"] is False
+
+    after = await client.get("/api/v1/users")
+    usernames_after = {u["username"] for u in after.json()}
+    assert listed.username in usernames_after
+    assert opted_out.username not in usernames_after
+    assert root.username not in usernames_after
+
+    # Il profilo dell'utente che ha fatto opt-out resta comunque raggiungibile
+    # dal link diretto: il flag esclude solo dall'elenco/ricerca.
+    direct = await client.get(f"/api/v1/users/{opted_out.username}")
+    assert direct.status_code == 200
