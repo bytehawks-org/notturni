@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.custom_domain import CustomDomain, CustomDomainStatus
 from app.models.user import User, VerificationTier
 from tests.conftest import AuthedUser
+from tests.test_platform_config import _super
 
 
 @pytest.fixture
@@ -234,3 +235,84 @@ async def _async_true(*args, **kwargs) -> bool:
 
 async def _async_false(*args, **kwargs) -> bool:
     return False
+
+
+async def test_verification_tier_priority_and_admin_list_cascade(
+    client: AsyncClient, make_user: Callable, make_admin: Callable, db_session: AsyncSession
+) -> None:
+    """app/domain/verification.py: GOLD (entità verificate a mano) > SILVER
+    (sostenitori) > BLUE (dominio email fidato) > NONE, ricalcolato per
+    *tutti* gli utenti attivi a ogni modifica di uno dei tre elenchi in
+    `PATCH /admin/config` (stessa cascata già usata per gli interessi
+    rimossi) — non solo al momento della registrazione/cambio email."""
+    user: AuthedUser = await make_user("vtuser1")
+    root = await _super(make_admin, db_session, "vt-root1")
+
+    async def tier() -> str:
+        res = await client.get(f"/api/v1/users/{user.username}")
+        return res.json()["verification_tier"]
+
+    assert await tier() == "none"
+
+    # BLUE: dominio dell'email dell'utente (make_user usa sempre
+    # "{username}@example.com") aggiunto ai domini fidati — il cambio
+    # dell'elenco ricalcola subito, senza bisogno che l'utente rifaccia login.
+    blue = await client.patch(
+        "/api/v1/admin/config", json={"verification_blue_domains": ["example.com"]}, headers=root.headers
+    )
+    assert blue.status_code == 200
+    assert await tier() == "blue"
+
+    # SILVER prevale su BLUE
+    silver = await client.patch(
+        "/api/v1/admin/config", json={"verification_silver_identifiers": [user.username]}, headers=root.headers
+    )
+    assert silver.status_code == 200
+    assert await tier() == "silver"
+
+    # GOLD prevale su SILVER e BLUE
+    gold = await client.patch(
+        "/api/v1/admin/config", json={"verification_gold_identifiers": [user.username.upper()]}, headers=root.headers
+    )
+    assert gold.status_code == 200
+    assert await tier() == "gold"  # match case-insensitive
+
+    # rimosso da GOLD: ricade su SILVER (ancora nell'elenco), non su NONE
+    await client.patch("/api/v1/admin/config", json={"verification_gold_identifiers": []}, headers=root.headers)
+    assert await tier() == "silver"
+
+    # rimosso anche da SILVER: ricade su BLUE (dominio ancora fidato)
+    await client.patch("/api/v1/admin/config", json={"verification_silver_identifiers": []}, headers=root.headers)
+    assert await tier() == "blue"
+
+    # rimosso anche il dominio fidato: nessun criterio più soddisfatto
+    await client.patch("/api/v1/admin/config", json={"verification_blue_domains": []}, headers=root.headers)
+    assert await tier() == "none"
+
+
+async def test_verification_tier_falls_back_to_bronze_not_none(
+    client: AsyncClient, make_user: Callable, make_admin: Callable, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Un utente con dominio custom verificato (bronzo) promosso a GOLD e poi
+    rimosso dall'elenco deve ricadere sul bronzo che ha ancora diritto ad
+    avere, non su "none" a prescindere (app/domain/verification.py)."""
+    user: AuthedUser = await make_user("vtbronze1")
+    root = await _super(make_admin, db_session, "vt-root2")
+
+    await client.post("/api/v1/users/me/domain", json={"domain": "vtbronze1.test"}, headers=user.headers)
+    monkeypatch.setattr("app.domain.custom_domains.verify_domain_dns", _async_true)
+    verified = await client.post("/api/v1/users/me/domain/verify", headers=user.headers)
+    assert verified.status_code == 200
+
+    me = await client.get("/api/v1/users/me", headers=user.headers)
+    assert me.json()["verification_tier"] == "bronze"
+
+    await client.patch(
+        "/api/v1/admin/config", json={"verification_gold_identifiers": [user.username]}, headers=root.headers
+    )
+    me_gold = await client.get("/api/v1/users/me", headers=user.headers)
+    assert me_gold.json()["verification_tier"] == "gold"
+
+    await client.patch("/api/v1/admin/config", json={"verification_gold_identifiers": []}, headers=root.headers)
+    me_after = await client.get("/api/v1/users/me", headers=user.headers)
+    assert me_after.json()["verification_tier"] == "bronze"

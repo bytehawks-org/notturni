@@ -28,7 +28,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: audit-maintenance
-              image: notturni-backend:latest
+              image: ghcr.io/bytehawks-org/notturni-backend:sha-fd6ce11
               imagePullPolicy: IfNotPresent
               command: ["python", "-m", "app.workers.audit_maintenance"]
               envFrom:

@@ -57,7 +57,19 @@ export function NoteDialog({
           />
         </label>
         <div className="mt-1.5 flex justify-end gap-2">
-          <Button type="button" variant="secondary" size="sm" onClick={onCancel}>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              // Il componente resta montato tra un'apertura e l'altra (`open`
+              // controlla solo il render, non lo smontaggio): senza questo la
+              // nota della volta precedente restava nello stato e poteva
+              // essere inviata per un'azione diversa alla riapertura.
+              setNote("");
+              onCancel();
+            }}
+          >
             {tc("cancel")}
           </Button>
           <Button type="submit" variant={danger ? "danger" : "primary"} size="sm" disabled={!ok}>

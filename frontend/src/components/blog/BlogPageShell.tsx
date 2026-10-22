@@ -16,6 +16,7 @@ const DEFAULT_PALETTE: Record<string, string> = {
 };
 const DEFAULT_HEADING_FONT = "Lora";
 const DEFAULT_BODY_FONT = "Source Sans 3";
+const DEFAULT_MONOSPACE_FONT = "JetBrains Mono";
 
 const PALETTE_VARS: Record<string, string> = {
   background: "--background",
@@ -37,8 +38,16 @@ const HEX_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 export function paletteStyle(config: BlogConfig | null): CSSProperties | null {
   const palette = config?.palette;
   const dark = config?.palette_dark;
+  // Il validatore backend ammette valori non-stringa nella palette (li
+  // ignora silenziosamente invece di rifiutarli, vedi
+  // app/domain/blog_config.py::validate_blog_config) — `v.toLowerCase()`
+  // incondizionato qui sotto avrebbe fatto esplodere il rendering
+  // dell'intera pagina pubblica del blog su un valore così (es. `null`).
   const lightIsDefault =
-    !palette || Object.entries(palette).every(([k, v]) => DEFAULT_PALETTE[k]?.toLowerCase() === v.toLowerCase());
+    !palette ||
+    Object.entries(palette).every(
+      ([k, v]) => typeof v === "string" && DEFAULT_PALETTE[k]?.toLowerCase() === v.toLowerCase()
+    );
   if (lightIsDefault && !dark) return null;
   const style: Record<string, string> = {};
   if (palette && !lightIsDefault) {
@@ -76,8 +85,9 @@ export function blogLayout(config: BlogConfig | null): "standard" | "magazine" |
   return value === "magazine" || value === "minimal" ? value : "standard";
 }
 
-/** Font titoli/corpo (mockup 2e) come variabili CSS `--font-heading`/`--font-body`
- * puntate al font scelto tra quelli curati (`SERIF_FONTS`/`SANS_SERIF_FONTS`,
+/** Font titoli/corpo/monospace (mockup 2e) come variabili CSS
+ * `--font-heading`/`--font-body`/`--font-monospace` puntate al font scelto
+ * tra quelli curati (`SERIF_FONTS`/`SANS_SERIF_FONTS`/`MONOSPACE_FONTS`,
  * self-hostati da `lib/blog-fonts.ts`); più la classe che rende disponibili
  * quelle variabili. `null` se il blog usa i font di default di piattaforma
  * (nessuna classe/variabile aggiuntiva da caricare). */
@@ -85,13 +95,20 @@ function typographyStyle(config: BlogConfig | null): { style: CSSProperties; cla
   const typography = config?.typography ?? {};
   const headingFont = typeof typography.heading_font === "string" ? typography.heading_font : DEFAULT_HEADING_FONT;
   const bodyFont = typeof typography.body_font === "string" ? typography.body_font : DEFAULT_BODY_FONT;
-  if (headingFont === DEFAULT_HEADING_FONT && bodyFont === DEFAULT_BODY_FONT) return null;
+  const monospaceFont = typeof typography.monospace_font === "string" ? typography.monospace_font : DEFAULT_MONOSPACE_FONT;
+  if (headingFont === DEFAULT_HEADING_FONT && bodyFont === DEFAULT_BODY_FONT && monospaceFont === DEFAULT_MONOSPACE_FONT) {
+    return null;
+  }
   const headingVar = BLOG_FONT_VARS[headingFont];
   const bodyVar = BLOG_FONT_VARS[bodyFont];
+  const monospaceVar = BLOG_FONT_VARS[monospaceFont];
   const style: Record<string, string> = {};
   if (headingVar) style["--font-heading"] = `var(${headingVar})`;
   if (bodyVar) style["--font-body"] = `var(${bodyVar})`;
-  const className = [BLOG_FONT_CLASSES[headingFont], BLOG_FONT_CLASSES[bodyFont]].filter(Boolean).join(" ");
+  if (monospaceVar) style["--font-monospace"] = `var(${monospaceVar})`;
+  const className = [BLOG_FONT_CLASSES[headingFont], BLOG_FONT_CLASSES[bodyFont], BLOG_FONT_CLASSES[monospaceFont]]
+    .filter(Boolean)
+    .join(" ");
   return { style: style as CSSProperties, className };
 }
 

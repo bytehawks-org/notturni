@@ -1,0 +1,56 @@
+# Richiede cert-manager già installato nel cluster (Helm — non gestito da
+# questi manifest, stesso principio di Longhorn/Traefik: "già inclusi in
+# un'installazione K3s standard", cert-manager invece va installato a parte:
+# `helm install cert-manager jetstack/cert-manager --namespace cert-manager
+# --create-namespace --set crds.enabled=true`).
+#
+# Due ClusterIssuer, stesso solver DNS-01 su Cloudflare (necessario per il
+# certificato wildcard *.notturni.eu di certificate.yaml — la sfida HTTP-01
+# non copre un host jolly). Il token API Cloudflare vive in
+# notturni-secrets (chiave NOCT_CLOUDFLARE_API_TOKEN, vedi
+# secret.example.yaml) — permesso minimo Zone:DNS:Edit sulla sola zona
+# notturni.eu, mai un token account-wide.
+#
+# **Usare prima "letsencrypt-staging"**: Let's Encrypt di produzione ha
+# limiti stretti (5 certificati duplicati/settimana per dominio esatto) — un
+# primo giro con staging (certificato emesso davvero ma non fidato dal
+# browser, nessun limite pratico) verifica che il solver DNS-01/il token
+# Cloudflare funzionino prima di consumare il budget di produzione.
+# certificate.yaml punta a "letsencrypt-prod" di default: cambiare
+# temporaneamente `issuerRef.name` a "letsencrypt-staging" lì per il primo
+# test, poi tornare a "letsencrypt-prod" una volta verificato (cancellando
+# prima il Secret notturni-eu-tls, altrimenti cert-manager non ri-richiede
+# un certificato già presente).
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: info@notturni.eu
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: notturni-secrets
+              key: NOCT_CLOUDFLARE_API_TOKEN
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: info@notturni.eu
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: notturni-secrets
+              key: NOCT_CLOUDFLARE_API_TOKEN

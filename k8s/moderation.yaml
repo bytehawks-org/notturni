@@ -1,0 +1,55 @@
+# image: come backend.yaml, riferimento a un'immagine costruita/caricata
+# localmente sul nodo finché non c'è un registro in CI/CD (contesto di build
+# ./moderation, non ./backend — vedi compose.yaml).
+#
+# Servizio di moderazione automatica delle immagini (moderation/, modello
+# open-source per rilevare nudità/contenuti sensibili), chiamato da
+# app/domain/moderation.py ad ogni upload. "Fail open": un problema di
+# questo servizio non blocca mai l'upload, semplicemente nessuna immagine
+# viene moderata finché non torna raggiungibile — non un errore visibile
+# all'utente, ma un rischio reale per un'istanza pubblica se resta giù a
+# lungo. NOCT_MODERATION_SERVICE_URL punta qui da configmap.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: moderation
+  namespace: notturni
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: moderation
+  template:
+    metadata:
+      labels:
+        app: moderation
+    spec:
+      containers:
+        - name: moderation
+          image: ghcr.io/bytehawks-org/notturni-moderation:sha-fd6ce11
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8100
+          # initialDelaySeconds più alto del solito (vedi backend.yaml): il
+          # modello di rilevazione (torch) viene caricato all'avvio, stesso
+          # start_period di 30s già usato dall'healthcheck in compose.yaml.
+          readinessProbe:
+            httpGet: {path: /health, port: 8100}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: 8100}
+            initialDelaySeconds: 45
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: moderation
+  namespace: notturni
+spec:
+  selector:
+    app: moderation
+  ports:
+    - port: 8100
+      targetPort: 8100

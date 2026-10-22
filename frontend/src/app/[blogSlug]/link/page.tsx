@@ -7,6 +7,7 @@ import { BlogPageShell } from "@/components/blog/BlogPageShell";
 import { BlogStateNotice, blogIsOffline } from "@/components/blog/BlogStateNotice";
 import { BlogHeaderActions } from "@/components/blog/PostHeaderActions";
 import { BlogHeader } from "@/components/shell/BlogHeader";
+import { blogLinks } from "@/lib/blog-path";
 import { formatDate } from "@/lib/format";
 import { getBlogLinksBibliography, getPublicBlog, getPublicBlogConfig, getPublicPublications } from "@/lib/server-api";
 import type { LinkBibliographyEntry } from "@/lib/types";
@@ -40,20 +41,21 @@ function hostOf(url: string): string {
  * raggruppati per sito e ordinati per numero di link. */
 export default async function BlogLinksBibliographyPage({ params }: { params: Promise<PageParams> }) {
   const { blogSlug } = await params;
-  const [blog, entries, config, t, tl, locale] = await Promise.all([
+  const [blog, entries, config, t, tl, locale, links] = await Promise.all([
     getPublicBlog(blogSlug),
     getBlogLinksBibliography(blogSlug),
     getPublicBlogConfig(blogSlug),
     getTranslations("LinksPage"),
     getTranslations("Links"),
     getLocale(),
+    blogLinks(blogSlug),
   ]);
   if (!blog) notFound();
   const hasPublications = (await getPublicPublications(blogSlug).catch(() => [])).length > 0;
   if (blogIsOffline(blog)) {
     return (
       <BlogPageShell config={config}>
-        <BlogHeader slug={blogSlug} name={blog.title} hasPublications={hasPublications} current="links" />
+        <BlogHeader basePath={links.basePath} name={blog.title} hasPublications={hasPublications} current="links" />
         <BlogStateNotice blog={blog} />
       </BlogPageShell>
     );
@@ -69,7 +71,7 @@ export default async function BlogLinksBibliographyPage({ params }: { params: Pr
 
   return (
     <BlogPageShell config={config}>
-      <BlogHeader slug={blogSlug} name={blog.title} hasPublications={hasPublications} current="links" actions={<BlogHeaderActions slug={blogSlug} />} />
+      <BlogHeader basePath={links.basePath} name={blog.title} hasPublications={hasPublications} current="links" actions={<BlogHeaderActions slug={blogSlug} />} />
       <main className="mx-auto w-full max-w-[1184px] flex-1 px-5 py-10 lg:px-12 lg:py-14">
         <div className="flex flex-col gap-1.5">
           <h1 className="font-serif text-[34px] font-medium leading-[1.12] tracking-tight md:text-[40px]">{t("title")}</h1>
@@ -112,7 +114,7 @@ export default async function BlogLinksBibliographyPage({ params }: { params: Pr
                           {first && (
                             <span className="text-xs text-muted md:text-right md:text-[13px] md:leading-snug">
                               {tl("in")}{" "}
-                              <Link href={first.permalink} className="no-underline hover:underline">
+                              <Link href={links.fromPermalink(first.permalink)} className="no-underline hover:underline">
                                 {first.post_title}
                               </Link>
                               {first.used_at && (

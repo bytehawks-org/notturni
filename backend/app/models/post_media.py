@@ -1,4 +1,4 @@
-from sqlalchemy import ARRAY, Column, ForeignKey, Integer, String, Table, Text
+from sqlalchemy import ARRAY, Boolean, Column, ForeignKey, Integer, String, Table, Text
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.models.base import Base
@@ -15,7 +15,9 @@ from app.models.base import Base
 # (non un identificatore stabile nel tempo). `categories` è il sottoinsieme
 # di app/domain/content_media.py::SENSITIVITY_CATEGORIES scelto dall'autore
 # (vuoto se l'immagine non è segnalata, o segnalata solo dall'automoderazione
-# senza una categoria specifica).
+# senza una categoria specifica) — per questo `is_sensitive` è una colonna
+# separata, non derivabile da `bool(categories)`: un'immagine segnalata solo
+# dall'automoderazione ha comunque `categories == []`.
 post_media = Table(
     "post_media",
     Base.metadata,
@@ -24,4 +26,5 @@ post_media = Table(
     Column("url", Text, nullable=False),
     Column("alt_text", Text, nullable=False, default=""),
     Column("categories", ARRAY(String(20)), nullable=False, default=list),
+    Column("is_sensitive", Boolean, nullable=False, default=False),
 )

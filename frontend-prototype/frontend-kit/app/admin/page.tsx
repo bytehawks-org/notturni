@@ -1,10 +1,12 @@
+import { getTranslations } from "next-intl/server";
+
 import { DashboardShell, ADMIN_NAV } from "@/components/shell/DashboardShell";
 import { KpiRow, ActivityList } from "@/components/dashboard/blog/OverviewTab";
 import { QueuesCard, ServicesCard } from "@/components/admin/AdminOverview";
 
 /** /admin overview (5d). Endpoints to add: GET /api/v1/admin/overview (kpis, queues, audit tail, services health). */
 export default async function AdminOverviewPage() {
-  const d = await getAdminOverview();
+  const [d, t] = await Promise.all([getAdminOverview(), getTranslations("Admin")]);
   return (
     <DashboardShell items={ADMIN_NAV} eyebrow="administration">
       <div className="flex flex-col gap-5">

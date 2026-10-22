@@ -3,7 +3,8 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import func, select
+from sqlalchemy import any_, delete, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -11,6 +12,7 @@ from app.domain.authorization import blog_publicly_listable_clause
 from app.api.v1.blogs._common import BlogOut, _to_blog_out
 from app.api.v1.posts import PostOut, _posts_out
 from app.core.database import get_session
+from app.core.security import hash_password, verify_password
 from app.core.storage import avatar_public_url, delete_avatar, upload_avatar
 from app.domain import audit
 from app.domain import custom_domains as custom_domains_domain
@@ -20,10 +22,13 @@ from app.domain.gdpr import anonymize_and_deactivate_user, export_user_data
 from app.domain.gdpr_queue import log_self_service_request
 from app.models.gdpr_request import GdprRequestType
 from app.domain.i18n import validate_locale
-from app.domain.platform_config import SUPPORTED_LOCALES
+from app.domain.interests import validate_user_interest_keys
+from app.domain.passwords import validate_password_policy
+from app.domain.platform_config import SUPPORTED_LOCALES, get_platform_config
 from app.domain.profile import validate_country_code, validate_fallback_languages
 from app.domain.rate_limit import enforce_rate_limit
 from app.domain.usernames import USERNAME_CHANGE_COOLDOWN_DAYS, validate_username
+from app.domain.verification import sync_verification_tier
 from app.models.blog import Blog, BlogVisibility
 from app.models.comment import Comment, CommentStatus
 from app.models.custom_domain import CustomDomain, CustomDomainStatus
@@ -31,7 +36,8 @@ from app.models.email_change_request import EmailChangeRequest
 from app.models.post import Post, PostStatus
 from app.models.follow import BlogFollow, UserFollow
 from app.models.social_link import SocialLink
-from app.models.user import PostAuthorNameStyle, User, VerificationTier
+from app.models.user import PlatformRole, PostAuthorNameStyle, User, VerificationTier
+from app.models.user_session import UserSession
 
 router = APIRouter()
 
@@ -61,6 +67,12 @@ class ProfileUpdateRequest(BaseModel):
     fallback_languages: list[str] | None = None
     # B6: lingua dell'interfaccia ("" = torna al default di piattaforma)
     ui_locale: str | None = None
+    # Opt-out dalla directory pubblica (GET /users), assente lascia invariato
+    directory_listed: bool | None = None
+    # Interessi (blocco "interessi utente"): al più 5 chiavi canoniche tra
+    # quelle correnti di GET /interests. Assente lascia invariato, una lista
+    # (anche vuota) la sostituisce — stesso schema di fallback_languages.
+    interests: list[str] | None = None
 
 
 class SocialLinkCreateRequest(BaseModel):
@@ -91,6 +103,9 @@ class ProfileOut(BaseModel):
     country: str | None
     native_language: str | None
     fallback_languages: list[str]
+    # Chiavi canoniche (blocco "interessi utente"): il frontend le risolve
+    # nella lingua corrente tramite GET /interests, mai stringhe libere.
+    interests: list[str]
     avatar_url: str | None
     social_links: list[SocialLinkOut]
     created_at: datetime
@@ -121,7 +136,15 @@ class MeProfileOut(ProfileOut):
     next_username_change_allowed_at: datetime | None
     pending_email_change: PendingEmailChangeOut | None
     domain_pending_verification: str | None
+    # `pending`/`failed` del dominio non ancora verificato — senza questo il
+    # frontend non ha modo di distinguerli al caricamento del profilo e
+    # ricostruiva sempre "pending" a un refresh, perdendo lo stato "failed"
+    # persistito in DB (bug segnalato dalla review Copilot).
+    domain_status: CustomDomainStatus | None
     domain_verification_instructions: dict | None
+    # Impostazione privata (GET /{username} non la espone): opt-out dalla
+    # directory pubblica, vedi ProfileUpdateRequest.directory_listed.
+    directory_listed: bool
 
 
 class DomainUpdateRequest(BaseModel):
@@ -220,6 +243,7 @@ def _to_profile_out(user: User) -> ProfileOut:
         country=user.country,
         native_language=user.native_language,
         fallback_languages=user.fallback_languages,
+        interests=user.interests,
         avatar_url=avatar_public_url(user.avatar_object_key) if user.avatar_object_key else None,
         social_links=[SocialLinkOut.model_validate(link) for link in user.social_links],
         created_at=user.created_at,
@@ -252,9 +276,11 @@ async def _to_me_profile_out(session: AsyncSession, user: User) -> MeProfileOut:
         next_change = user.username_changed_at + timedelta(days=USERNAME_CHANGE_COOLDOWN_DAYS)
 
     domain_pending = None
+    domain_status = None
     domain_instructions = None
     if user.custom_domain is not None and user.custom_domain.status != CustomDomainStatus.VERIFIED:
         domain_pending = user.custom_domain.domain
+        domain_status = user.custom_domain.status
         domain_instructions = {
             "txt_record_name": custom_domains_domain.txt_record_name(user.custom_domain.domain),
             "txt_record_value": custom_domains_domain.txt_record_value(user.custom_domain.verification_token),
@@ -267,8 +293,92 @@ async def _to_me_profile_out(session: AsyncSession, user: User) -> MeProfileOut:
         next_username_change_allowed_at=next_change,
         pending_email_change=pending_out,
         domain_pending_verification=domain_pending,
+        domain_status=domain_status,
         domain_verification_instructions=domain_instructions,
+        directory_listed=user.directory_listed,
     )
+
+
+class DirectoryUserOut(BaseModel):
+    """Voce della directory pubblica (`GET /users`, blocco "directory
+    utenti"): sottoinsieme di `ProfileOut` per le card, più il conteggio
+    follower — stesso schema di `PublicBlogOut` per la directory blog."""
+
+    username: str
+    display_name: str | None
+    bio: str | None
+    avatar_url: str | None
+    verification_tier: VerificationTier
+    custom_domain: str | None
+    interests: list[str]
+    follower_count: int
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("", response_model=list[DirectoryUserOut])
+async def list_public_users(
+    q: str | None = None,
+    locale: str | None = None,
+    interest: str | None = None,
+    sort: str = "new",
+    limit: int = 30,
+    offset: int = 0,
+    session: AsyncSession = Depends(get_session),
+) -> list[DirectoryUserOut]:
+    """Directory pubblica degli utenti: solo account attivi (non anonimizzati/
+    cancellati, `is_active`) che non hanno scelto l'opt-out
+    (`User.directory_listed`) — stesso principio di `GET /blogs` per i blog,
+    ma qui il criterio di esclusione è impostabile dall'utente stesso, non
+    derivato da stato dell'account. Eccezione: il Super Admin è **sempre**
+    escluso, indipendentemente da `directory_listed` — non è un'opzione
+    dell'utente, per sicurezza (evitare che l'account con i privilegi più
+    ampi sia individuabile dalla directory pubblica, superficie utile per un
+    attacco a forza bruta sulle credenziali). `q` cerca in username/nome
+    pubblico/bio, `locale` filtra per lingua madre, `interest` filtra per
+    chiave canonica di interesse (blocco "interessi utente", per trovare
+    persone con lo stesso interesse da seguire), `sort` è `new`
+    (registrazione, default) o `followers`."""
+    limit = max(1, min(limit, 100))
+    follower_count = (
+        select(func.count())
+        .select_from(UserFollow)
+        .where(UserFollow.followed_user_id == User.id)
+        .correlate(User)
+        .scalar_subquery()
+    )
+    stmt = select(User, follower_count).where(
+        User.is_active.is_(True),
+        User.directory_listed.is_(True),
+        User.platform_role != PlatformRole.SUPER_ADMIN,
+    )
+    if q:
+        needle = f"%{q.strip()}%"
+        stmt = stmt.where(
+            or_(User.username.ilike(needle), User.display_name.ilike(needle), User.bio.ilike(needle))
+        )
+    if locale:
+        stmt = stmt.where(User.native_language == locale)
+    if interest:
+        stmt = stmt.where(interest == any_(User.interests))
+    if sort == "followers":
+        stmt = stmt.order_by(follower_count.desc(), User.created_at.desc())
+    else:
+        stmt = stmt.order_by(User.created_at.desc())
+    result = await session.execute(stmt.limit(limit).offset(max(offset, 0)))
+    return [
+        DirectoryUserOut(
+            username=user.username,
+            display_name=user.display_name,
+            bio=user.bio,
+            avatar_url=avatar_public_url(user.avatar_object_key) if user.avatar_object_key else None,
+            verification_tier=user.verification_tier,
+            custom_domain=user.verified_domain,
+            interests=user.interests,
+            follower_count=int(followers or 0),
+        )
+        for user, followers in result.all()
+    ]
 
 
 @router.get("/me", response_model=MeProfileOut)
@@ -327,6 +437,9 @@ async def update_profile(
             old_username = current_user.username
             current_user.username = new_username
             current_user.username_changed_at = datetime.now(timezone.utc)
+            # Il nuovo username può comparire/non comparire più negli
+            # elenchi GOLD/SILVER di verifica (app/domain/verification.py).
+            sync_verification_tier(current_user, await get_platform_config(session))
             await audit.record(
                 session,
                 action="user.username_changed",
@@ -373,9 +486,61 @@ async def update_profile(
         except ValueError as exc:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
         current_user.fallback_languages = normalized
+    if payload.directory_listed is not None:
+        current_user.directory_listed = payload.directory_listed
+    if payload.interests is not None:
+        config = await get_platform_config(session)
+        available = {item["key"] for item in config.interests}
+        try:
+            current_user.interests = validate_user_interest_keys(payload.interests, available)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
     await session.commit()
     return await _to_me_profile_out(session, current_user)
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class StatusOut(BaseModel):
+    status: str = "ok"
+
+
+@router.post("/me/password", response_model=StatusOut)
+async def change_my_password(
+    payload: PasswordChangeRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> StatusOut:
+    """Cambio password autenticato (a differenza del reset "password
+    dimenticata" in app/domain/password_reset.py, richiede di conoscere la
+    password attuale, non un codice via email)."""
+    if current_user.hashed_password is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Questo account non ha una password impostata (accesso solo tramite SSO).",
+        )
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Password attuale non corretta.")
+    try:
+        validate_password_policy(payload.new_password)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    current_user.hashed_password = hash_password(payload.new_password)
+    # Come il reset "password dimenticata" (app/domain/password_reset.py):
+    # una password cambiata invalida ogni sessione già aperta altrove, non
+    # solo il refresh token della richiesta corrente. Le UserSession coprono
+    # solo i refresh token; gli access token JWT sono stateless e restano
+    # validi fino al loro exp naturale se non si aggiorna anche questo campo
+    # (controllato in app/api/deps.py::get_current_user contro l'iat del token).
+    current_user.credentials_changed_at = datetime.now(timezone.utc)
+    await session.execute(delete(UserSession).where(UserSession.user_id == current_user.id))
+    await session.commit()
+    return StatusOut()
 
 
 @router.post("/me/avatar", response_model=AvatarOut)
@@ -483,6 +648,16 @@ async def verify_current_email(
     return {"detail": "Codice inviato al nuovo indirizzo email."}
 
 
+@router.delete("/me/email/request", status_code=status.HTTP_204_NO_CONTENT)
+async def cancel_email_change(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Annulla una richiesta di cambio email pending, a qualunque passo si
+    trovi (prima o dopo aver verificato la vecchia casella)."""
+    await email_change_domain.cancel_email_change(session, current_user)
+
+
 @router.post("/me/email/verify-new", response_model=MeProfileOut)
 async def verify_new_email(
     payload: EmailChangeCodeIn,
@@ -496,6 +671,9 @@ async def verify_new_email(
         old_email = await email_change_domain.confirm_new_email(session, current_user, payload.code)
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    # La nuova email può cambiare dominio: ricalcola il sigillo BLU/ORO/
+    # ARGENTO (app/domain/verification.py).
+    sync_verification_tier(current_user, await get_platform_config(session))
     await audit.record(
         session,
         action="user.email_changed",
@@ -522,22 +700,52 @@ async def set_my_domain(
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
+    # Solo un claim già VERIFIED di un altro account blocca il dominio (vedi
+    # API.md: "409 se già rivendicato e verificato da un altro account") —
+    # un pending/failed non prova alcun controllo sul dominio, altrimenti
+    # chiunque potrebbe "prenotare" un dominio arbitrario senza mai
+    # verificarlo, bloccandolo indefinitamente al vero proprietario.
     existing_owner = await session.execute(
         select(CustomDomain).where(
-            CustomDomain.domain == normalized, CustomDomain.user_id != current_user.id
+            CustomDomain.domain == normalized,
+            CustomDomain.user_id != current_user.id,
+            CustomDomain.status == CustomDomainStatus.VERIFIED,
         )
     )
     if existing_owner.scalar_one_or_none() is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Dominio già rivendicato da un altro account.")
 
+    # `CustomDomain.domain` è unique a livello di DB (un solo proprietario per
+    # riga, chiunque esso sia): una riga pending/failed di un altro utente non
+    # blocca la richiesta sopra, ma resterebbe comunque a occupare la stessa
+    # colonna unique e farebbe fallire l'insert/update sotto con un
+    # IntegrityError invece che con un 409 pulito. Sotto la stessa regola per
+    # cui non blocca ("non prova il possesso"), va rimossa qui: la si
+    # considera riconquistabile, non la si "eredita".
+    await session.execute(
+        delete(CustomDomain).where(
+            CustomDomain.domain == normalized,
+            CustomDomain.user_id != current_user.id,
+            CustomDomain.status != CustomDomainStatus.VERIFIED,
+        )
+    )
+
     await session.refresh(current_user, attribute_names=["custom_domain"])
     token = custom_domains_domain.generate_verification_token()
     if current_user.custom_domain is not None:
         record = current_user.custom_domain
+        was_verified = record.status == CustomDomainStatus.VERIFIED
         record.domain = normalized
         record.verification_token = token
         record.status = CustomDomainStatus.PENDING
         record.verified_at = None
+        # Sostituire un dominio già verificato con uno nuovo (ancora da
+        # verificare) non deve lasciare il profilo pubblico a mostrare il
+        # vecchio dominio/badge bronzo come se fosse ancora attivo — stessa
+        # pulizia di delete_my_domain sotto.
+        if was_verified:
+            current_user.verified_domain = None
+            sync_verification_tier(current_user, await get_platform_config(session))
     else:
         record = CustomDomain(
             user_id=current_user.id,
@@ -546,7 +754,17 @@ async def set_my_domain(
             status=CustomDomainStatus.PENDING,
         )
         session.add(record)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        # La DELETE sopra rimuove solo le righe pending/failed già viste in
+        # questa richiesta: due utenti che rivendicano lo stesso dominio non
+        # ancora reclamato in parallelo possono comunque superare entrambi i
+        # controlli prima che uno dei due faccia commit — senza questo
+        # catch il secondo commit fallisce sul vincolo unique con un 500
+        # invece di un 409 pulito (bug segnalato dalla review Copilot).
+        await session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "Dominio già rivendicato da un altro account.") from exc
     await session.refresh(record)
 
     return DomainOut(
@@ -588,9 +806,10 @@ async def verify_my_domain(
 
     record.status = CustomDomainStatus.VERIFIED
     record.verified_at = datetime.now(timezone.utc)
-    if current_user.verification_tier == VerificationTier.NONE:
-        current_user.verification_tier = VerificationTier.BRONZE
     current_user.verified_domain = record.domain
+    # BRONZE solo se non c'è già un tier superiore da GOLD/SILVER/BLU
+    # (app/domain/verification.py: la priorità è gestita lì, non qui).
+    sync_verification_tier(current_user, await get_platform_config(session))
     await audit.record(
         session,
         action="user.domain_verified",
@@ -624,8 +843,7 @@ async def delete_my_domain(
     await session.delete(record)
     if was_verified:
         current_user.verified_domain = None
-        if current_user.verification_tier == VerificationTier.BRONZE:
-            current_user.verification_tier = VerificationTier.NONE
+        sync_verification_tier(current_user, await get_platform_config(session))
     await session.commit()
 
 

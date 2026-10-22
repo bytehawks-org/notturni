@@ -50,7 +50,14 @@
     "register": "Registro",
     "pages": "Pagine",
     "commentModeration": "Moderazione commenti",
-    "administrationShort": "Amministrazione"
+    "administrationShort": "Amministrazione",
+    "newsletter": "Newsletter",
+    "media": "Media",
+    "publications": "Pubblicazioni",
+    "links": "Link",
+    "bibliography": "Bibliografia",
+    "backToPlatform": "Torna alla piattaforma",
+    "viewCurrentBlog": "Vedi {slug}"
   },
   "BlogNav": {
     "posts": "Post",
@@ -58,7 +65,8 @@
     "bibliography": "Bibliografia",
     "media": "Media",
     "links": "Link",
-    "about": "Chi siamo"
+    "about": "Chi siamo",
+    "search": "Cerca"
   },
   "Site": {
     "latest": "Ultimi",
@@ -72,7 +80,9 @@
     "privacy": "Privacy",
     "terms": "Termini",
     "status": "Stato",
-    "latestPosts": "Ultimi articoli"
+    "latestPosts": "Ultimi articoli",
+    "search": "Cerca",
+    "people": "Persone"
   },
   "Visibility": {
     "public": "Pubblico",
@@ -89,7 +99,10 @@
   "Post": {
     "notes": "Note",
     "blogBibliography": "Bibliografia del blog →",
-    "backToText": "Torna al testo"
+    "backToText": "Torna al testo",
+    "expandImage": "Ingrandisci",
+    "copyCode": "Copia",
+    "copiedCode": "Copiato"
   },
   "Fragment": {
     "meta": "{words} parole · {ratio}% del post",
@@ -253,7 +266,8 @@
     "followers": "Follower",
     "appearance": "Aspetto",
     "settings": "Impostazioni",
-    "media": "Media"
+    "media": "Media",
+    "newsletter": "Newsletter"
   },
   "Overview": {
     "attention": {
@@ -546,6 +560,18 @@
     "threshold": "Soglia moderazione immagini",
     "thresholdNote": "Sopra: sfocata e in coda. Fail-open se il servizio è giù.",
     "maxBlogs": "Blog massimi per utente",
+    "maxBlogStorage": "Spazio massimo per blog (MB)",
+    "maxBlogStorageHint": "0 = nessun limite. Media più backup Markdown del blog, stesso conteggio della card \"Spazio\" nella panoramica.",
+    "verification": "Verifica",
+    "verificationNote": "Sigilli di verifica del profilo assegnati a mano (in aggiunta al bronzo automatico da dominio custom verificato).",
+    "verificationGold": "Verificati manualmente (sigillo oro)",
+    "verificationGoldHint": "Email, username o domini di testate giornalistiche, agenzie, organizzazioni o personalità note.",
+    "verificationSilver": "Sostenitori (sigillo argento)",
+    "verificationSilverHint": "Email o username di chi ha fatto una donazione per sostenere il progetto.",
+    "verificationBlue": "Domini fidati (sigillo blu)",
+    "verificationBlueHint": "In aggiunta al dominio della piattaforma stessa ({domain}), già incluso automaticamente.",
+    "verificationIdentifierPlaceholder": "email o username…",
+    "verificationDomainPlaceholder": "dominio.it…",
     "auditRetention": "Conservazione registro di audit (giorni)",
     "auditRetentionNote": "Eventi più vecchi vengono cancellati dal database (archiviati su storage prima, se attivo). Minimo 7 giorni.",
     "footer": "Footer",
@@ -575,7 +601,13 @@
     "registrationNote": "\"Su invito\" e \"Chiusa\" bloccano le nuove registrazioni con messaggi diversi; gli inviti non sono ancora gestiti dalla piattaforma.",
     "ssoNote": "Solo i provider configurati nell'ambiente sono selezionabili; nessuna selezione = tutti quelli configurati.",
     "reservedPlaceholder": "nome",
-    "savedToast": "Impostazioni salvate"
+    "savedToast": "Impostazioni salvate",
+    "interests": "Interessi utente",
+    "interestsNote": "Elenco selezionabile dagli utenti nel profilo (massimo 5 a testa) — chiave canonica non modificabile dopo la creazione, etichetta per ogni lingua aggiunta qui sotto.",
+    "interestKeyPlaceholder": "chiave",
+    "interestLocalePlaceholder": "lingua (it, en, de…)",
+    "interestLabelPlaceholder": "etichetta",
+    "interestAdd": "Aggiungi interesse"
   },
   "Theme": {
     "light": "Chiaro",
@@ -585,11 +617,14 @@
     "autoSystem": "Segue le preferenze del sistema (posizione non disponibile)"
   },
   "Auth": {
+    "ssoDivider": "oppure",
+    "ssoContinueWith": "Continua con {provider}",
+    "ssoError": "Accesso con questo provider non riuscito. Riprova o usa email e password.",
     "welcomeBack": "Bentornato/a",
     "loginIntro": "Accedi con la tua email. Lo username non serve mai per l'accesso.",
     "email": "Email",
     "password": "Password",
-    "passwordHint": "minimo 8 caratteri",
+    "passwordHint": "minimo 10 caratteri",
     "username": "Username",
     "signingIn": "Accesso in corso…",
     "continue": "Continua",
@@ -607,7 +642,27 @@
     "haveAccount": "Hai già un account?",
     "signIn": "Accedi",
     "registrationClosed": "Le registrazioni sono chiuse su questa piattaforma.",
-    "registrationInvite": "Registrazione solo su invito: chiedi a chi gestisce la piattaforma."
+    "registrationInvite": "Registrazione solo su invito: chiedi a chi gestisce la piattaforma.",
+    "forgotPassword": "Password dimenticata?",
+    "forgotPasswordTitle": "Reimposta la password",
+    "forgotPasswordIntro": "Inserisci l'email del tuo account: se esiste, ti mandiamo un codice per reimpostare la password.",
+    "sendCode": "Invia il codice",
+    "sendingCode": "Invio…",
+    "checkYourEmail": "Se l'indirizzo corrisponde a un account, riceverai a breve un'email con un codice a 6 cifre.",
+    "resetPasswordIntro": "Inserisci il codice ricevuto via email e la nuova password.",
+    "newPassword": "Nuova password",
+    "resetting": "Reimpostazione…",
+    "resetPassword": "Reimposta password",
+    "resetSuccess": "Password aggiornata. Ora puoi accedere con la nuova password.",
+    "backToLogin": "Torna al login",
+    "otpLegend": "Codice di verifica a 6 cifre",
+    "otpDigitLabel": "Cifra {index} di {total}",
+    "repeatPassword": "Ripeti password",
+    "repeatPasswordMismatch": "Le password non coincidono.",
+    "usernameChecking": "Verifica disponibilità…",
+    "usernameAvailable": "Username disponibile.",
+    "usernameTaken": "Username già in uso.",
+    "usernameInvalidFormat": "Username non valido."
   },
   "FragmentsPage": {
     "title": "Frammenti",
@@ -718,7 +773,19 @@
     "fediverseTitle": "Identificativi per il fediverse",
     "fediverseNote": "Riservati per un'eventuale federazione futura (AT Protocol/Bluesky, poi ActivityPub/Mastodon) — non ancora attiva, solo creati e mostrati qui.",
     "fediverseAtproto": "AT Protocol (DID)",
-    "fediverseActivitypub": "ActivityPub"
+    "fediverseActivitypub": "ActivityPub",
+    "directoryListed": "Elencato nella directory utenti",
+    "directoryListedSub": "Se disattivato, il tuo profilo resta raggiungibile solo dal link diretto (@username), non nella ricerca/elenco pubblico di /users.",
+    "directoryListedSuperAdminSub": "L'account Super Admin è sempre escluso dalla directory pubblica, per sicurezza — non è un'opzione modificabile.",
+    "interests": "{count, plural, one {# interesse} other {# interessi}} su {max}",
+    "changePasswordTitle": "Cambia password",
+    "changePasswordSub": "Al salvataggio, tutte le sessioni aperte (compresa questa) vengono chiuse: dovrai accedere di nuovo.",
+    "currentPassword": "Password attuale",
+    "newPassword": "Nuova password",
+    "repeatNewPassword": "Ripeti nuova password",
+    "passwordMismatch": "Le password non coincidono.",
+    "changePassword": "Cambia password",
+    "changingPassword": "Cambio in corso…"
   },
   "PostPage": {
     "inThisPost": "In questo post",
@@ -781,7 +848,8 @@
     "subtitle": "{count, plural, one {# immagine citata} other {# immagini citate}} nei post pubblicati. Ogni immagine porta il suo testo alternativo; quelle segnalate restano sfocate finché non scegli di mostrarle.",
     "grid": "Griglia",
     "byPost": "Per post",
-    "empty": "Nessuna immagine, per ora."
+    "empty": "Nessuna immagine, per ora.",
+    "expandImage": "Ingrandisci"
   },
   "LinksPage": {
     "title": "Link",
@@ -874,15 +942,26 @@
     "heading1": "Titolo 1",
     "heading2": "Titolo 2",
     "heading3": "Titolo 3",
+    "heading4": "Titolo 4",
+    "expandRow2": "Altri strumenti",
+    "collapseRow2": "Nascondi altri strumenti",
     "bold": "Grassetto",
     "italic": "Corsivo",
     "strike": "Barrato",
+    "underline": "Sottolineato",
     "code": "Codice",
+    "codeBlock": "Blocco di codice",
+    "codeBlockLanguagePlaceholder": "linguaggio…",
+    "codeBlockLanguageTitle": "Linguaggio (evidenziazione sintassi): sql, bash, php, python, ...",
+    "codeBlockLineNumbers": "Numerazione righe",
     "link": "Link",
     "note": "Nota a piè di pagina",
     "quote": "Citazione",
     "bulletList": "Elenco puntato",
     "orderedList": "Elenco numerato",
+    "alignLeft": "Allinea a sinistra",
+    "alignCenter": "Allinea al centro",
+    "alignRight": "Allinea a destra",
     "image": "Immagine",
     "table": "Tabella",
     "addColumn": "+col",
@@ -945,7 +1024,24 @@
     "addWarning": "Aggiungi un avviso",
     "coverAlt": "Copertina del post",
     "uploading": "Caricamento…",
-    "uploadCta": "Carica immagine di copertina (16:9, 800 × 450 px)"
+    "uploadCta": "Carica immagine di copertina (16:9, 800 × 450 px)",
+    "altTextLabel": "Testo alternativo",
+    "altTextPlaceholder": "Descrivi l'immagine per chi non la vede",
+    "changeFromLibrary": "Scegli dalla libreria",
+    "orChooseFromLibrary": "oppure scegli dalla libreria"
+  },
+  "ImagePickerModal": {
+    "title": "Inserisci immagine",
+    "tabUpload": "Carica",
+    "tabBlogLibrary": "Libreria del blog",
+    "tabMyLibrary": "Tutti i miei blog",
+    "uploadCta": "Carica un'immagine",
+    "uploading": "Caricamento…",
+    "uploadFailed": "Caricamento immagine non riuscito.",
+    "loadFailed": "Caricamento della libreria non riuscito.",
+    "loading": "Caricamento…",
+    "empty": "Nessuna immagine qui per ora.",
+    "cancel": "Annulla"
   },
   "Editor": {
     "status": "Stato",
@@ -1088,6 +1184,7 @@
     "typographyHint": "titoli serif · corpo sans · massimo 3 font",
     "heading_font": "Font dei titoli",
     "body_font": "Font del corpo",
+    "monospace_font": "Font a spaziatura fissa (codice)",
     "bodySize": "Corpo del testo",
     "measure": {
       "narrow": "Stretta",
@@ -1108,6 +1205,7 @@
     "previewBody": "C'è un modo di scrivere che accade solo quando la casa è già silenziosa. Non è più veloce né migliore; è semplicemente meno osservato. Il margine è dove un testo ammette di non essere finito",
     "previewLink": "e una nota è la frase più onesta che uno scrittore possa offrire",
     "previewNote": "Zerby, Chuck. The Devil's Details. 2002.",
+    "previewCode": "const nota = \"a piè di pagina\";",
     "previewHint": "I lettori possono comunque passare al tema scuro: la palette definisce il tema chiaro, in quello scuro si usa la palette di piattaforma.",
     "measureLabel": "Misura",
     "layoutLabel": "Layout",
@@ -1117,6 +1215,12 @@
     "previewDark": "Anteprima tema scuro",
     "previewLight": "Anteprima tema chiaro",
     "previewHintDark": "La variante scura è applicata alle pagine pubbliche quando il lettore usa il tema scuro."
+  },
+  "VerificationTier": {
+    "bronze": "Verificato — dominio personalizzato",
+    "silver": "Verificato — argento",
+    "gold": "Verificato — oro",
+    "blue": "Verificato — blu"
   },
   "PublicProfile": {
     "writesIn": "scrive in",
@@ -1189,7 +1293,8 @@
       "since": "Iscritto dal",
       "status": "Stato",
       "blogs": "Blog",
-      "lastSeen": "Ultimo accesso"
+      "lastSeen": "Ultimo accesso",
+      "actions": "Azioni"
     },
     "role": {
       "utente": "Utente",
@@ -1205,7 +1310,10 @@
     "activate": "Riattiva",
     "never": "Mai",
     "exportCsv": "Esporta CSV",
-    "noteTitle": "Modifica di @{username}"
+    "noteTitle": "Modifica di @{username}",
+    "resetPassword": "Reset password",
+    "confirmResetPassword": "Inviare il codice di reset?",
+    "resetPasswordSent": "Email inviata"
   },
   "Tokens": {
     "title": "Token API",
@@ -1493,5 +1601,184 @@
     "addHint": "Per aggiungere un capitolo apri il post nell'editor e scegli la pubblicazione nel pannello a destra.",
     "deleteTitle": "Eliminare “{title}”?",
     "deleteBody": "I post restano, solo senza pubblicazione. Digita il nome nell'URL per confermare."
+  },
+  "SearchPage": {
+    "title": "Ricerca",
+    "placeholder": "Cerca articoli su Notturni…",
+    "searchButton": "Cerca",
+    "resultsCount": "{count} risultati per «{query}»",
+    "noQuery": "Scrivi qualcosa da cercare.",
+    "noResults": "Nessun risultato per «{query}»."
+  },
+  "BlogSearchPage": {
+    "title": "Cerca in {blog}",
+    "placeholder": "Cerca in questo blog…",
+    "searchButton": "Cerca",
+    "resultsCount": "{count} risultati per «{query}»",
+    "noQuery": "Scrivi qualcosa da cercare.",
+    "noResults": "Nessun risultato per «{query}»."
+  },
+  "UsersPage": {
+    "title": "Persone su Notturni",
+    "subtitle": "{count} profili pubblici · elencati solo se l'utente lo consente",
+    "search": "Cerca persone",
+    "all": "Tutte",
+    "filteredByInterest": "con l'interesse",
+    "removeFilter": "Rimuovi filtro"
+  },
+  "UserDirectory": {
+    "noMatch": "Nessun utente trovato.",
+    "follow": "Segui",
+    "followers": "{count} follower"
+  },
+  "NewsletterSignup": {
+    "title": "Newsletter di Notturni",
+    "titleBlog": "Iscriviti alla newsletter",
+    "intro": "Ricevi un'email quando c'è qualcosa di nuovo. Ti invieremo un'email di conferma prima di attivare l'iscrizione.",
+    "emailPlaceholder": "La tua email",
+    "consent": "Accetto la <privacy>informativa sulla privacy</privacy> e di ricevere l'email di conferma.",
+    "submit": "Iscrivimi",
+    "submitting": "Invio…",
+    "success": "Controlla la tua casella: ti abbiamo inviato un'email per confermare l'iscrizione.",
+    "error": "Non è stato possibile completare l'iscrizione. Riprova tra qualche minuto."
+  },
+  "NewsletterConfirmPage": {
+    "title": "Conferma iscrizione",
+    "confirmedTitle": "Iscrizione confermata",
+    "confirmedBody": "Da ora riceverai le email della newsletter. Grazie!",
+    "alreadyTitle": "Iscrizione già confermata",
+    "alreadyBody": "Questo link è già stato usato: la tua iscrizione risulta già attiva.",
+    "invalidTitle": "Link scaduto o non valido",
+    "invalidBody": "Il link di conferma non è più valido. Se vuoi ancora iscriverti, richiedi una nuova email dal modulo di iscrizione.",
+    "backHome": "Torna alla home"
+  },
+  "NewsletterUnsubscribePage": {
+    "title": "Disiscrizione dalla newsletter",
+    "missingToken": "Link non valido: manca il codice di disiscrizione.",
+    "intro": "Ci dispiace vederti andare via. Puoi disiscriverti o, se preferisci, cancellare del tutto i tuoi dati dalla nostra lista.",
+    "reasonLabel": "Motivo (facoltativo)",
+    "reasonPlaceholder": "Raccontaci perché te ne vai, se vuoi…",
+    "unsubscribe": "Disiscrivimi",
+    "unsubscribing": "Disiscrizione in corso…",
+    "unsubscribedSuccess": "Fatto: sei stato disiscritto dalla newsletter.",
+    "deleteExplanation": "In alternativa alla semplice disiscrizione, puoi chiedere la cancellazione definitiva del tuo indirizzo email e di ogni dato collegato a questa iscrizione (diritto alla cancellazione, GDPR). L'operazione non è reversibile.",
+    "deleteData": "Cancella anche i miei dati",
+    "deleting": "Cancellazione in corso…",
+    "deletedSuccess": "Fatto: i tuoi dati sono stati cancellati."
+  },
+  "NewsletterKind": {
+    "post_notification": "Notifica automatica",
+    "manual": "Campagna manuale"
+  },
+  "NewsletterStatus": {
+    "draft": "Bozza",
+    "scheduled": "Pianificata",
+    "sending": "In invio",
+    "sent": "Inviata",
+    "canceled": "Annullata",
+    "failed": "Non riuscita"
+  },
+  "NewsletterCampaignModal": {
+    "title": "Nuova campagna",
+    "editTitle": "Modifica campagna",
+    "subject": "Oggetto",
+    "body": "Contenuto",
+    "bodyHint": "Markdown supportato",
+    "bodyPlaceholder": "Scrivi il contenuto dell'email…",
+    "bodyRequired": "Il contenuto dell'email non può essere vuoto.",
+    "scheduledAt": "Pianifica per (facoltativo)",
+    "scheduledAtHint": "lasciando vuoto, l'invio parte subito",
+    "creating": "Creazione…",
+    "create": "Crea campagna"
+  },
+  "NewsletterTab": {
+    "pending": "In attesa di conferma",
+    "confirmed": "Confermati",
+    "unsubscribed": "Disiscritti",
+    "autoNotifyLabel": "Avvisa gli iscritti a ogni nuovo post",
+    "autoNotifyHint": "Se attivo, ogni volta che pubblichi un post viene inviata automaticamente un'email agli iscritti confermati di questo blog.",
+    "campaignsTitle": "Campagne",
+    "newCampaign": "Nuova campagna",
+    "noCampaigns": "Nessuna campagna ancora inviata.",
+    "recipients": "{count} destinatari",
+    "failed": "{count} falliti",
+    "sentAt": "inviata il {date}",
+    "scheduledAt": "pianificata per il {date}",
+    "cancelCampaign": "Annulla",
+    "confirmCancelCampaign": "Annullare questa campagna pianificata? Non verrà inviata."
+  },
+  "NewsletterSettingsCard": {
+    "title": "Configurazione email",
+    "hint": "Nome mittente e banner mostrati nelle email di campagna. Lasciali vuoti per usare i valori di default.",
+    "senderNameLabel": "Nome mittente",
+    "senderNamePlaceholder": "es. Redazione del blog",
+    "bannerLabel": "Banner",
+    "bannerPlaceholder": "https://...",
+    "bannerPreviewAlt": "Anteprima banner",
+    "uploadCta": "Carica",
+    "uploading": "Caricamento…",
+    "bannerAltLabel": "Testo alternativo del banner",
+    "bannerAltHint": "Per chi non vede l'immagine",
+    "bannerAltPlaceholder": "Descrivi il banner",
+    "uploadFailed": "Caricamento non riuscito.",
+    "saved": "Impostazioni salvate."
+  },
+  "AdminNewsletter": {
+    "title": "Newsletter di piattaforma",
+    "newCampaign": "Nuova campagna",
+    "pending": "In attesa di conferma",
+    "confirmed": "Confermati",
+    "unsubscribed": "Disiscritti",
+    "campaignsTitle": "Campagne",
+    "noCampaigns": "Nessuna campagna ancora inviata.",
+    "recipients": "{count} destinatari",
+    "sentAt": "inviata il {date}",
+    "scheduledAt": "pianificata per il {date}",
+    "cancelCampaign": "Annulla",
+    "confirmCancelCampaign": "Annullare questa campagna pianificata? Non verrà inviata."
+  },
+  "MyPostsPage": {
+    "title": "Post",
+    "subtitle": "Tutti i post di tutti i tuoi blog, in un unico elenco.",
+    "filter": {
+      "all": "Tutti",
+      "draft": "Bozze",
+      "review": "In revisione",
+      "scheduled": "Pianificati",
+      "published": "Pubblicati"
+    },
+    "emptyTitle": "Nessun post",
+    "emptyBody": "I post che scrivi nei tuoi blog compariranno qui.",
+    "noneInFilter": "Nessun post in questo filtro.",
+    "view": "Vedi"
+  },
+  "MyMediaPage": {
+    "title": "Media",
+    "subtitle": "{count, plural, one {# file} other {# file}} da tutti i tuoi blog.",
+    "emptyTitle": "Nessuna immagine",
+    "emptyBody": "Le immagini caricate nei tuoi blog compariranno qui.",
+    "sensitive": "Sensibile",
+    "missingAlt": "Testo alternativo mancante",
+    "in": "in",
+    "notUsed": "Non usata in nessun post"
+  },
+  "MyPublicationsPage": {
+    "title": "Pubblicazioni",
+    "subtitle": "Tutte le pubblicazioni di tutti i tuoi blog, in un unico elenco.",
+    "emptyTitle": "Nessuna pubblicazione",
+    "emptyBody": "Le pubblicazioni create nei tuoi blog compariranno qui.",
+    "chaptersOf": "{published} di {total} capitoli"
+  },
+  "MyLinksPage": {
+    "title": "Link",
+    "subtitle": "Tutti gli URL citati nei post di tutti i tuoi blog, raggruppati per sito.",
+    "emptyTitle": "Nessun link",
+    "emptyBody": "I link citati nei tuoi post compariranno qui."
+  },
+  "MyBibliographyPage": {
+    "title": "Bibliografia",
+    "subtitle": "Tutte le note dei post di tutti i tuoi blog, deduplicate.",
+    "emptyTitle": "Nessuna nota",
+    "emptyBody": "Le note a piè di pagina dei tuoi post compariranno qui."
   }
 }

@@ -17,6 +17,8 @@ RESERVED_USERNAMES = {
     "moderatore",
     "null",
     "undefined",
+    "search",
+    "users",
 }
 
 USERNAME_MIN_LENGTH = 3

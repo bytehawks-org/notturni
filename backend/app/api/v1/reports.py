@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.core.database import get_session
-from app.domain.authorization import is_blog_publicly_readable, is_publicly_visible
+from app.domain.authorization import can_view_blog, is_publicly_visible
 from app.domain.rate_limit import enforce_rate_limit
 from app.models.blog import Blog
 from app.models.content_report import ContentReport, ReportReason, ReportStatus, ReportTargetType
@@ -82,7 +82,11 @@ async def report_blog(
     session: AsyncSession = Depends(get_session),
 ) -> ContentReport:
     blog = (await session.execute(select(Blog).where(Blog.slug == slug))).scalar_one_or_none()
-    if blog is None or not is_blog_publicly_readable(blog):
+    # is_blog_publicly_readable copre solo sospensione/pausa/cancellazione,
+    # non la visibilità (todo/BLOG.md #2): senza can_view_blog chiunque fosse
+    # autenticato poteva segnalare un blog privato/riservato ai membri che
+    # non può nemmeno vedere.
+    if blog is None or not await can_view_blog(session, user_id=current_user.id, blog=blog):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Blog non trovato.")
     if blog.owner_id == current_user.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Non puoi segnalare il tuo stesso blog.")
@@ -100,7 +104,7 @@ async def report_post(
     if post is None or not is_publicly_visible(post):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Post non trovato.")
     blog = await session.get(Blog, post.blog_id)
-    if blog is None or not is_blog_publicly_readable(blog):
+    if blog is None or not await can_view_blog(session, user_id=current_user.id, blog=blog):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Post non trovato.")
     if post.author_id == current_user.id or blog.owner_id == current_user.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Non puoi segnalare un tuo contenuto.")

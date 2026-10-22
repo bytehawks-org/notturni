@@ -11,7 +11,11 @@ async def test_default_config_when_not_customized(client: AsyncClient, make_user
 
     res = await client.get("/api/v1/blogs/blog-cfg-1/config")
     assert res.status_code == 200
-    assert res.json()["typography"] == {"heading_font": "Lora", "body_font": "Source Sans 3"}
+    assert res.json()["typography"] == {
+        "heading_font": "Lora",
+        "body_font": "Source Sans 3",
+        "monospace_font": "JetBrains Mono",
+    }
 
 
 async def test_update_config_owner_only(client: AsyncClient, make_user: Callable) -> None:
@@ -118,3 +122,40 @@ async def test_config_enforces_serif_heading_sans_serif_body(
         headers=owner.headers,
     )
     assert ok_res.status_code == 200
+
+
+async def test_config_enforces_monospace_font_from_curated_list(client: AsyncClient, make_user: Callable) -> None:
+    """`monospace_font` (blocco "evidenziazione sintassi"): stesso principio
+    di heading_font/body_font, elenco curato validato lato backend
+    (backend/app/domain/blog_config.py::MONOSPACE_FONTS)."""
+    owner: AuthedUser = await make_user()
+    await client.post("/api/v1/blogs", json={"slug": "blog-cfg-7", "title": "x"}, headers=owner.headers)
+
+    wrong = await client.put(
+        "/api/v1/blogs/blog-cfg-7/config",
+        json={"typography": {"heading_font": "Lora", "body_font": "Karla", "monospace_font": "Comic Sans"}},
+        headers=owner.headers,
+    )
+    assert wrong.status_code == 400
+
+    ok = await client.put(
+        "/api/v1/blogs/blog-cfg-7/config",
+        json={"typography": {"heading_font": "Lora", "body_font": "Karla", "monospace_font": "Fira Code"}},
+        headers=owner.headers,
+    )
+    assert ok.status_code == 200
+    assert ok.json()["typography"]["monospace_font"] == "Fira Code"
+
+
+async def test_config_monospace_font_counts_toward_max_fonts(client: AsyncClient, make_user: Callable) -> None:
+    owner: AuthedUser = await make_user()
+    await client.post("/api/v1/blogs", json={"slug": "blog-cfg-8", "title": "x"}, headers=owner.headers)
+
+    # 3 font distinti (heading + body + monospace, tutti dagli elenchi
+    # curati): esattamente al limite, ammesso.
+    at_limit = await client.put(
+        "/api/v1/blogs/blog-cfg-8/config",
+        json={"typography": {"heading_font": "Lora", "body_font": "Karla", "monospace_font": "Fira Code", "body_size": "18"}},
+        headers=owner.headers,
+    )
+    assert at_limit.status_code == 200

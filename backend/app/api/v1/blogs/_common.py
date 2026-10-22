@@ -83,6 +83,14 @@ class BlogOut(BaseModel):
     static_pages_enabled: bool
     search_indexing_enabled: bool
     ai_crawling_enabled: bool
+    # gestito da PATCH /blogs/{slug}/newsletter/settings (app/api/v1/newsletter.py),
+    # non da BlogUpdateRequest — qui solo in lettura, per far riflettere alla
+    # tab Newsletter della dashboard lo stato persistito al caricamento.
+    newsletter_auto_notify_enabled: bool
+    # Come sopra, gestiti da PATCH /blogs/{slug}/newsletter/settings.
+    newsletter_sender_name: str | None = None
+    newsletter_banner_url: str | None = None
+    newsletter_banner_alt_text: str = ""
     default_locale: str
     # B3: lingue secondarie (informative), pausa volontaria, sospensione da
     # admin e cancellazione con tolleranza (`deleted_at`, ripristinabile).
@@ -100,6 +108,7 @@ class BlogOut(BaseModel):
     cover_image_url: str | None = None
     cover_image_is_sensitive: bool = False
     cover_image_categories: list[str] = []
+    cover_image_alt_text: str = ""
     favicon_url: str | None = None
     # CLAUDE.md #8: presente solo per il proprietario stesso (usato lato
     # frontend per calcolare `isOwner`) — chiunque altro lo riceve a `null`,

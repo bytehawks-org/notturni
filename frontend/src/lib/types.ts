@@ -99,6 +99,14 @@ export interface Blog {
    * un eventuale override di Post.search_indexing_enabled/ai_crawling_enabled. */
   search_indexing_enabled: boolean;
   ai_crawling_enabled: boolean;
+  /** Invio automatico di una notifica newsletter ad ogni post pubblicato
+   * (backend/app/api/v1/newsletter.py), gestito da PATCH .../newsletter/settings. */
+  newsletter_auto_notify_enabled: boolean;
+  /** Come sopra, gestiti dallo stesso endpoint: nome mittente e banner
+   * mostrati nelle email di campagna (app/workers/newsletter_consumer.py). */
+  newsletter_sender_name: string | null;
+  newsletter_banner_url: string | null;
+  newsletter_banner_alt_text: string;
   default_locale: string;
   /** Lingue secondarie del blog (informative), oltre a default_locale. */
   extra_locales: string[];
@@ -117,6 +125,7 @@ export interface Blog {
   cover_image_url: string | null;
   cover_image_is_sensitive: boolean;
   cover_image_categories: SensitivityCategory[];
+  cover_image_alt_text: string;
   /** Favicon dedicata del blog (facoltativa): nessuna moderazione, icona di identità. */
   favicon_url: string | null;
   /** `null` per chiunque non sia il proprietario stesso (CLAUDE.md #8): non
@@ -130,6 +139,20 @@ export interface PublicBlog extends Blog {
   post_count: number;
   follower_count: number;
   last_published_at: string | null;
+}
+
+/** Voce di `GET /users` (directory pubblica utenti): sottoinsieme di
+ * `Profile` per le card, più il conteggio follower — stesso schema di
+ * `PublicBlog` per la directory blog. */
+export interface PublicUser {
+  username: string;
+  display_name: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+  verification_tier: VerificationTier;
+  custom_domain: string | null;
+  interests: string[];
+  follower_count: number;
 }
 
 /** `GET /blogs/{slug}/overview` (todo/UX_REDESIGN.md B1): conteggi per la tab Panoramica. */
@@ -150,6 +173,8 @@ export interface BlogOverview {
   reads_total_30d: number;
   /** Byte su storage (media + backup); `null` se non calcolabile. */
   storage_bytes: number | null;
+  /** Limite impostato da un Super Admin, in MB; `null` = nessun limite. */
+  storage_limit_mb: number | null;
 }
 
 export interface MembershipBlog {
@@ -200,6 +225,10 @@ export interface BlogConfig {
  * sincronia se cambia uno dei due lati. */
 export const SERIF_FONTS = ["Lora", "Merriweather", "Playfair Display", "Source Serif 4", "Crimson Pro"];
 export const SANS_SERIF_FONTS = ["Inter", "Nunito Sans", "Work Sans", "Source Sans 3", "Karla"];
+/** Font monospace per i blocchi di codice (blocco "evidenziazione sintassi"):
+ * stesso principio degli elenchi sopra, conta come terzo font verso il
+ * limite di 3 di CLAUDE.md §5 Estetica insieme a titoli/corpo. */
+export const MONOSPACE_FONTS = ["JetBrains Mono", "Fira Code", "IBM Plex Mono", "Source Code Pro", "Space Mono"];
 
 /** Stati persistiti dal backend (app/models/post.py). "Pianificato" non è uno
  * stato a sé: è `published` con `published_at` nel futuro — vedi lib/post-status.ts. */
@@ -222,6 +251,9 @@ export interface Post {
   cover_image_is_sensitive: boolean;
   /** Categorie di avviso scelte manualmente dal modal stile Bluesky (CLAUDE.md #3). */
   cover_image_categories: SensitivityCategory[];
+  /** Testo alternativo della cover (accessibilità), indipendente dall'eventuale
+   * alt text della stessa immagine in libreria media. */
+  cover_image_alt_text: string;
   status: PostStatus;
   published_at: string | null;
   created_at: string;
@@ -381,6 +413,7 @@ export interface MediaBibliographyEntry {
   url: string;
   alt_text: string;
   categories: SensitivityCategory[];
+  is_sensitive: boolean;
   citations: ContentCitation[];
 }
 
@@ -534,6 +567,9 @@ export interface Profile {
   country: string | null;
   native_language: string | null;
   fallback_languages: string[];
+  /** Chiavi canoniche (blocco "interessi utente"), al più 5 — risolvere
+   * l'etichetta nella lingua corrente tramite `GET /api/v1/interests`. */
+  interests: string[];
   avatar_url: string | null;
   social_links: SocialLink[];
   created_at: string;
@@ -575,7 +611,10 @@ export interface MeProfile extends Profile {
   next_username_change_allowed_at: string | null;
   pending_email_change: PendingEmailChange | null;
   domain_pending_verification: string | null;
+  domain_status: CustomDomainStatus | null;
   domain_verification_instructions: DomainVerificationInstructions | null;
+  /** Opt-out dalla directory pubblica utenti (`GET /users`), attivo (listato) di default. */
+  directory_listed: boolean;
 }
 
 export interface AdminUser {
@@ -816,8 +855,26 @@ export interface PlatformConfig {
   footer_column2_markdown: string | null;
   footer_column3_markdown: string | null;
   footer_bottom_bar_markdown: string | null;
+  /** Elenco completo (sostituisce, non aggiunge) — vedi `Interest` sotto. */
+  interests: Interest[];
+  /** Spazio massimo per blog (media + backup), in MB; `null` = nessun limite. */
+  max_blog_storage_mb: number | null;
+  /** Email/username che assegnano il sigillo ORO (sostenitori). */
+  verification_gold_identifiers: string[];
+  /** Email/username/domini che assegnano il sigillo ARGENTO (verificati a mano). */
+  verification_silver_identifiers: string[];
+  /** Domini email che assegnano il sigillo BLU, in aggiunta a quello della piattaforma stessa. */
+  verification_blue_domains: string[];
   updated_at: string | null;
   infrastructure: Record<string, string | boolean | null>;
+}
+
+/** Voce di `GET /api/v1/interests` (blocco "interessi utente"): tag fisso
+ * multilingua, chiave canonica non linguistica + un'etichetta per lingua.
+ * Il frontend risolve la lingua corrente da sé (fallback a `key`). */
+export interface Interest {
+  key: string;
+  translations: Record<string, string>;
 }
 
 export type GdprRequestType = "export" | "deletion";
@@ -866,4 +923,147 @@ export interface FragmentCollectionEntry {
   author_display_name: string;
   /** Permalink pubblico /{blog}/{slug} del post di provenienza. */
   permalink: string;
+}
+
+/** Viste aggregate "tutti i miei blog" (backend/app/api/v1/fragments.py,
+ * sezione dedicata in fondo al file): stessa forma degli equivalenti
+ * per-blog, con l'attribuzione del blog di appartenenza per riga (`blog_slug`/
+ * `blog_title`). Vista autore, mai filtrata dalla visibilità pubblica. */
+export interface MyMediaUsage {
+  post_id: string;
+  post_slug: string;
+  post_title: string;
+  permalink: string;
+}
+
+export interface MyMediaFile {
+  id: string;
+  url: string;
+  content_type: string;
+  size_bytes: number;
+  alt_text: string;
+  caption: string | null;
+  categories: SensitivityCategory[];
+  is_sensitive: boolean;
+  uploader_username: string | null;
+  created_at: string;
+  used_in: MyMediaUsage[];
+  blog_slug: string;
+  blog_title: string;
+}
+
+export interface MyPublication {
+  id: string;
+  name: string;
+  title: string;
+  description: string | null;
+  chapters_total: number;
+  chapters_published: number;
+  created_at: string;
+  blog_slug: string;
+  blog_title: string;
+}
+
+export interface MyContentCitation {
+  post_title: string;
+  post_slug: string;
+  permalink: string;
+  locale: string;
+  used_at: string | null;
+  blog_slug: string;
+  blog_title: string;
+}
+
+export interface MyLinkBibliographyEntry {
+  url: string;
+  link_text: string;
+  citations: MyContentCitation[];
+}
+
+export interface MyBibliographyCitation {
+  post_title: string;
+  post_slug: string;
+  permalink: string;
+  locale: string;
+  idx: number;
+  blog_slug: string;
+  blog_title: string;
+}
+
+export interface MyBibliographyEntry extends StructuredNoteFields {
+  content: string;
+  citations: MyBibliographyCitation[];
+}
+
+/** Newsletter/mailing-list (backend/app/api/v1/newsletter.py): iscrizione
+ * pubblica a doppio opt-in per un blog (`blog_id` valorizzato) o per il
+ * digest di piattaforma (`blog_id` null). */
+export type NewsletterCampaignKind = "post_notification" | "manual";
+
+/** `scheduled` non implica un invio automatico: nessuno scheduler esiste
+ * ancora lato backend, resta così finché non arriva un invio manuale o un
+ * worker futuro — non presentarlo in UI come "verrà inviata il...". */
+export type NewsletterCampaignStatus = "draft" | "scheduled" | "sending" | "sent" | "canceled" | "failed";
+
+export interface NewsletterStats {
+  pending: number;
+  confirmed: number;
+  unsubscribed: number;
+}
+
+/** Configurazione delle campagne (backend/app/api/v1/newsletter.py): nome
+ * mittente e banner mostrati nell'email HTML, oltre all'avviso automatico
+ * per blog. PATCH è tri-state: un campo omesso lascia il valore invariato,
+ * `null` lo azzera esplicitamente. */
+export interface NewsletterSettings {
+  newsletter_auto_notify_enabled: boolean;
+  newsletter_sender_name: string | null;
+  newsletter_banner_url: string | null;
+  newsletter_banner_alt_text: string;
+}
+
+export type NewsletterSettingsUpdate = Partial<{
+  newsletter_auto_notify_enabled: boolean | null;
+  newsletter_sender_name: string | null;
+  newsletter_banner_url: string | null;
+  newsletter_banner_alt_text: string | null;
+}>;
+
+/** Come NewsletterSettings, per il digest di piattaforma (blog_id=None):
+ * nessun newsletter_auto_notify_enabled. */
+export interface AdminNewsletterSettings {
+  newsletter_sender_name: string | null;
+  newsletter_banner_url: string | null;
+  newsletter_banner_alt_text: string;
+}
+
+export type AdminNewsletterSettingsUpdate = Partial<{
+  newsletter_sender_name: string | null;
+  newsletter_banner_url: string | null;
+  newsletter_banner_alt_text: string | null;
+}>;
+
+/** Modificabile/annullabile solo mentre `status === "scheduled"` (backend
+ * app/api/v1/newsletter.py::_require_editable_campaign) — tri-state solo su
+ * `scheduled_at`: omesso lascia invariato, `null` o nel passato converte la
+ * campagna in invio immediato. */
+export type NewsletterCampaignUpdate = Partial<{
+  subject: string;
+  body_markdown: string;
+  scheduled_at: string | null;
+}>;
+
+export interface NewsletterCampaign {
+  id: string;
+  blog_id: string | null;
+  kind: NewsletterCampaignKind;
+  post_id: string | null;
+  subject: string;
+  body_markdown: string | null;
+  status: NewsletterCampaignStatus;
+  scheduled_at: string | null;
+  sent_at: string | null;
+  recipient_count: number;
+  failed_count: number;
+  created_at: string;
 }

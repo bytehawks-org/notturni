@@ -16,11 +16,15 @@ import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Markdown, type MarkdownStorage } from "tiptap-markdown";
 
-import { ApiClientError, api } from "@/lib/api";
+import { api } from "@/lib/api";
 import { MAX_NOTE_LENGTH, type PostNote } from "@/lib/types";
 
 import {
+  AlignCenterIcon,
+  AlignLeftIcon,
+  AlignRightIcon,
   BulletListIcon,
+  ChevronDownIcon,
   ImageIcon,
   LinkIcon,
   NoteIcon,
@@ -28,9 +32,12 @@ import {
   QuoteIcon,
   RedoIcon,
   TableIcon,
+  UnderlineIcon,
   UndoIcon,
 } from "./icons";
+import { ImagePickerModal, type PickedImage } from "./ImagePickerModal";
 import { LinkPreviewCard } from "./LinkPreviewCard";
+import { CodeBlockNode, HeadingNode, ParagraphNode, TextAlignExtension, UnderlineMark } from "./markdownFormatting";
 import { NoteModal, type NoteModalValue } from "./NoteModal";
 import { sensitiveImageNodeView } from "./SensitiveImageNodeView";
 
@@ -247,7 +254,7 @@ function useMentionAutocomplete(
             {item.avatar_url ? (
               <Image
                 src={item.avatar_url}
-                alt={item.username}
+                alt=""
                 width={24}
                 height={24}
                 className="h-6 w-6 shrink-0 rounded-full object-cover"
@@ -278,15 +285,23 @@ const DEFAULT_TOOLBAR_STATE = {
   bold: false,
   italic: false,
   strike: false,
+  underline: false,
   code: false,
+  codeBlock: false,
+  codeBlockLanguage: "",
+  codeBlockLineNumbers: false,
   link: false,
   heading1: false,
   heading2: false,
   heading3: false,
+  heading4: false,
   blockquote: false,
   bulletList: false,
   orderedList: false,
   inTable: false,
+  alignLeft: false,
+  alignCenter: false,
+  alignRight: false,
   canUndo: false,
   canRedo: false,
 };
@@ -303,12 +318,16 @@ export function RichTextEditor({
   stickyToolbar = true,
 }: RichTextEditorProps) {
   const t = useTranslations("RichTextEditor");
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [imagePickerOpen, setImagePickerOpen] = useState(false);
   // "create": nuova nota inserita al cursore. "edit": modifica dei campi
   // bibliografici di una nota già presente nell'elenco sotto l'editor
   // (idx valorizzato, nessun nuovo marcatore da inserire nel testo).
   const [noteModal, setNoteModal] = useState<{ mode: "create" | "edit"; idx?: number } | null>(null);
+  // Seconda riga della toolbar (elenchi, tabella, nota): nascosta di default,
+  // lascia spazio per aggiunte future senza dover scegliere subito quali
+  // pulsanti "sacrificare" dalla prima riga sempre visibile.
+  const [showRow2, setShowRow2] = useState(false);
   // Snapshot preso una sola volta al primo render: il contenuto iniziale
   // dell'editor non deve rincorrere ogni cambio di `value` (sarebbe l'editor
   // stesso, tramite onUpdate, a farlo cambiare) — solo il caso "arrivato in
@@ -319,7 +338,12 @@ export function RichTextEditor({
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      StarterKit.configure({ link: false }),
+      StarterKit.configure({ link: false, underline: false, paragraph: false, heading: false, codeBlock: false }),
+      ParagraphNode,
+      HeadingNode,
+      CodeBlockNode,
+      UnderlineMark,
+      TextAlignExtension,
       LinkExtension.configure({ openOnClick: false, autolink: true }),
       ImageExtension.extend({ addNodeView: sensitiveImageNodeView }),
       Placeholder.configure({ placeholder: placeholder ?? t("placeholder") }),
@@ -401,15 +425,23 @@ export function RichTextEditor({
             bold: ctx.editor.isActive("bold"),
             italic: ctx.editor.isActive("italic"),
             strike: ctx.editor.isActive("strike"),
+            underline: ctx.editor.isActive("underline"),
             code: ctx.editor.isActive("code"),
+            codeBlock: ctx.editor.isActive("codeBlock"),
+            codeBlockLanguage: (ctx.editor.getAttributes("codeBlock").language as string | null) ?? "",
+            codeBlockLineNumbers: Boolean(ctx.editor.getAttributes("codeBlock").lineNumbers),
             link: ctx.editor.isActive("link"),
             heading1: ctx.editor.isActive("heading", { level: 1 }),
             heading2: ctx.editor.isActive("heading", { level: 2 }),
             heading3: ctx.editor.isActive("heading", { level: 3 }),
+            heading4: ctx.editor.isActive("heading", { level: 4 }),
             blockquote: ctx.editor.isActive("blockquote"),
             bulletList: ctx.editor.isActive("bulletList"),
             orderedList: ctx.editor.isActive("orderedList"),
             inTable: ctx.editor.isActive("table"),
+            alignLeft: ctx.editor.isActive({ textAlign: "left" }),
+            alignCenter: ctx.editor.isActive({ textAlign: "center" }),
+            alignRight: ctx.editor.isActive({ textAlign: "right" }),
             canUndo: ctx.editor.can().undo(),
             canRedo: ctx.editor.can().redo(),
           }
@@ -500,27 +532,21 @@ export function RichTextEditor({
     }
   }
 
-  async function handleImagePicked(file: File) {
-    if (!blogSlug) return;
-    setUploadError(null);
-    try {
-      const media = await authFetch((token) => api.blogs.uploadMedia(token, blogSlug, file));
-      // ALT text e categorie di avviso si impostano dopo l'inserimento,
-      // tramite le pillole in sovraimpressione sull'immagine (stile
-      // Bluesky, CLAUDE.md #2/#3) — niente più window.prompt bloccante.
-      // Un paragrafo vuoto subito dopo permette di continuare a scrivere
-      // senza doverlo creare a mano.
-      editor!
-        .chain()
-        .focus()
-        .insertContent([
-          { type: "image", attrs: { src: media.url, title: media.is_sensitive ? "sensitive" : null } },
-          { type: "paragraph" },
-        ])
-        .run();
-    } catch (err) {
-      setUploadError(err instanceof ApiClientError ? err.message : t("uploadFailed"));
-    }
+  /** Inserisce un'immagine già caricata (upload diretto o scelta dalla
+   * libreria del blog/di tutti i propri blog, ImagePickerModal) al cursore.
+   * ALT text e categorie di avviso si impostano dopo l'inserimento, tramite
+   * le pillole in sovraimpressione sull'immagine (stile Bluesky, CLAUDE.md
+   * #2/#3) — niente più window.prompt bloccante. Un paragrafo vuoto subito
+   * dopo permette di continuare a scrivere senza doverlo creare a mano. */
+  function insertImage(media: PickedImage) {
+    editor!
+      .chain()
+      .focus()
+      .insertContent([
+        { type: "image", attrs: { src: media.url, title: media.is_sensitive ? "sensitive" : null } },
+        { type: "paragraph" },
+      ])
+      .run();
   }
 
   return (
@@ -535,6 +561,15 @@ export function RichTextEditor({
           <div className="mb-3 flex flex-wrap items-end gap-3">{toolbarEnd}</div>
         )}
         <div className="flex flex-nowrap items-center gap-0.5 overflow-x-auto text-foreground/70">
+        <ToolbarButton title={t("undo")} disabled={!state.canUndo} onClick={() => editor.chain().focus().undo().run()}>
+          <UndoIcon />
+        </ToolbarButton>
+        <ToolbarButton title={t("redo")} disabled={!state.canRedo} onClick={() => editor.chain().focus().redo().run()}>
+          <RedoIcon />
+        </ToolbarButton>
+
+        <ToolbarDivider />
+
         <ToolbarButton
           title={t("heading1")}
           active={state.heading1}
@@ -556,6 +591,13 @@ export function RichTextEditor({
         >
           <span className="font-bold">H3</span>
         </ToolbarButton>
+        <ToolbarButton
+          title={t("heading4")}
+          active={state.heading4}
+          onClick={() => editor.chain().focus().toggleHeading({ level: 4 }).run()}
+        >
+          <span className="font-bold">H4</span>
+        </ToolbarButton>
 
         <ToolbarDivider />
 
@@ -566,23 +608,43 @@ export function RichTextEditor({
           <span className="italic">I</span>
         </ToolbarButton>
         <ToolbarButton
+          title={t("underline")}
+          active={state.underline}
+          onClick={() => editor.chain().focus().toggleUnderline().run()}
+        >
+          <UnderlineIcon />
+        </ToolbarButton>
+        <ToolbarButton
           title={t("strike")}
           active={state.strike}
           onClick={() => editor.chain().focus().toggleStrike().run()}
         >
           <span className="line-through">S</span>
         </ToolbarButton>
-        <ToolbarButton title={t("code")} active={state.code} onClick={() => editor.chain().focus().toggleCode().run()}>
-          <span className="font-mono text-xs">{"</>"}</span>
+
+        <ToolbarDivider />
+
+        <ToolbarButton
+          title={t("alignLeft")}
+          active={state.alignLeft}
+          onClick={() => editor.chain().focus().setTextAlign("left").run()}
+        >
+          <AlignLeftIcon />
         </ToolbarButton>
-        <ToolbarButton title={t("link")} active={state.link} onClick={setLink}>
-          <LinkIcon />
+        <ToolbarButton
+          title={t("alignCenter")}
+          active={state.alignCenter}
+          onClick={() => editor.chain().focus().setTextAlign("center").run()}
+        >
+          <AlignCenterIcon />
         </ToolbarButton>
-        {onNotesChange && (
-          <ToolbarButton title={t("note")} onClick={openNoteModal}>
-            <NoteIcon />
-          </ToolbarButton>
-        )}
+        <ToolbarButton
+          title={t("alignRight")}
+          active={state.alignRight}
+          onClick={() => editor.chain().focus().setTextAlign("right").run()}
+        >
+          <AlignRightIcon />
+        </ToolbarButton>
 
         <ToolbarDivider />
 
@@ -593,70 +655,129 @@ export function RichTextEditor({
         >
           <QuoteIcon />
         </ToolbarButton>
-        <ToolbarButton
-          title={t("bulletList")}
-          active={state.bulletList}
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-        >
-          <BulletListIcon />
+        <ToolbarButton title={t("code")} active={state.code} onClick={() => editor.chain().focus().toggleCode().run()}>
+          <span className="font-mono text-xs">{"</>"}</span>
         </ToolbarButton>
-        <ToolbarButton
-          title={t("orderedList")}
-          active={state.orderedList}
-          onClick={() => editor.chain().focus().toggleOrderedList().run()}
-        >
-          <OrderedListIcon />
+        <ToolbarButton title={t("link")} active={state.link} onClick={setLink}>
+          <LinkIcon />
         </ToolbarButton>
         {blogSlug && (
-          <ToolbarButton title={t("image")} onClick={() => fileInputRef.current?.click()}>
+          <ToolbarButton title={t("image")} onClick={() => setImagePickerOpen(true)}>
             <ImageIcon />
           </ToolbarButton>
         )}
+
         <ToolbarButton
-          title={t("table")}
-          active={state.inTable}
-          onClick={() =>
-            editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
-          }
+          title={showRow2 ? t("collapseRow2") : t("expandRow2")}
+          active={showRow2}
+          onClick={() => setShowRow2((v) => !v)}
         >
-          <TableIcon />
-        </ToolbarButton>
-        {state.inTable && (
-          <>
-            <ToolbarButton title={t("addColumnTitle")} onClick={() => editor.chain().focus().addColumnAfter().run()}>
-              <span className="text-xs">{t("addColumn")}</span>
-            </ToolbarButton>
-            <ToolbarButton title={t("addRowTitle")} onClick={() => editor.chain().focus().addRowAfter().run()}>
-              <span className="text-xs">{t("addRow")}</span>
-            </ToolbarButton>
-            <ToolbarButton title={t("deleteTableTitle")} onClick={() => editor.chain().focus().deleteTable().run()}>
-              <span className="text-xs text-red-700">{t("deleteTable")}</span>
-            </ToolbarButton>
-          </>
-        )}
-
-        <ToolbarDivider />
-
-        <ToolbarButton title={t("undo")} disabled={!state.canUndo} onClick={() => editor.chain().focus().undo().run()}>
-          <UndoIcon />
-        </ToolbarButton>
-        <ToolbarButton title={t("redo")} disabled={!state.canRedo} onClick={() => editor.chain().focus().redo().run()}>
-          <RedoIcon />
+          <span className={`inline-block transition-transform ${showRow2 ? "rotate-180" : ""}`}>
+            <ChevronDownIcon />
+          </span>
         </ToolbarButton>
         </div>
+
+        {showRow2 && (
+          <div className="mt-0.5 flex flex-nowrap items-center gap-0.5 overflow-x-auto text-foreground/70">
+            <ToolbarButton
+              title={t("orderedList")}
+              active={state.orderedList}
+              onClick={() => editor.chain().focus().toggleOrderedList().run()}
+            >
+              <OrderedListIcon />
+            </ToolbarButton>
+            <ToolbarButton
+              title={t("bulletList")}
+              active={state.bulletList}
+              onClick={() => editor.chain().focus().toggleBulletList().run()}
+            >
+              <BulletListIcon />
+            </ToolbarButton>
+
+            <ToolbarDivider />
+
+            <ToolbarButton
+              title={t("table")}
+              active={state.inTable}
+              onClick={() =>
+                editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
+              }
+            >
+              <TableIcon />
+            </ToolbarButton>
+            {state.inTable && (
+              <>
+                <ToolbarButton title={t("addColumnTitle")} onClick={() => editor.chain().focus().addColumnAfter().run()}>
+                  <span className="text-xs">{t("addColumn")}</span>
+                </ToolbarButton>
+                <ToolbarButton title={t("addRowTitle")} onClick={() => editor.chain().focus().addRowAfter().run()}>
+                  <span className="text-xs">{t("addRow")}</span>
+                </ToolbarButton>
+                <ToolbarButton title={t("deleteTableTitle")} onClick={() => editor.chain().focus().deleteTable().run()}>
+                  <span className="text-xs text-red-700">{t("deleteTable")}</span>
+                </ToolbarButton>
+              </>
+            )}
+
+            {onNotesChange && (
+              <>
+                <ToolbarDivider />
+                <ToolbarButton title={t("note")} onClick={openNoteModal}>
+                  <NoteIcon />
+                </ToolbarButton>
+              </>
+            )}
+
+            <ToolbarDivider />
+
+            {/* Temporaneamente in seconda riga, non più tra i pulsanti sempre
+                visibili: alcuni problemi da analizzare più avanti prima di
+                promuoverlo di nuovo in prima riga (richiesta esplicita). */}
+            <ToolbarButton
+              title={t("codeBlock")}
+              active={state.codeBlock}
+              onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+            >
+              <span className="font-mono text-xs">{"{ }"}</span>
+            </ToolbarButton>
+            {state.codeBlock && (
+              <>
+                <input
+                  type="text"
+                  value={state.codeBlockLanguage}
+                  onChange={(e) =>
+                    editor
+                      .chain()
+                      .focus()
+                      .updateAttributes("codeBlock", { language: e.target.value.trim().toLowerCase() || null })
+                      .run()
+                  }
+                  placeholder={t("codeBlockLanguagePlaceholder")}
+                  title={t("codeBlockLanguageTitle")}
+                  className="h-8 w-24 shrink-0 rounded-md border border-border bg-transparent px-2 text-xs text-foreground focus:outline-none focus:border-primary"
+                />
+                <ToolbarButton
+                  title={t("codeBlockLineNumbers")}
+                  active={state.codeBlockLineNumbers}
+                  onClick={() =>
+                    editor.chain().focus().updateAttributes("codeBlock", { lineNumbers: !state.codeBlockLineNumbers }).run()
+                  }
+                >
+                  <span className="font-mono text-[10px]">#</span>
+                </ToolbarButton>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
-      {blogSlug && (
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/png,image/jpeg,image/webp,image/gif"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void handleImagePicked(file);
-            e.target.value = "";
-          }}
+      {imagePickerOpen && blogSlug && (
+        <ImagePickerModal
+          blogSlug={blogSlug}
+          authFetch={authFetch}
+          onSelect={insertImage}
+          onClose={() => setImagePickerOpen(false)}
         />
       )}
 

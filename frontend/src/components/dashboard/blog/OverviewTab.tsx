@@ -132,7 +132,12 @@ export function OverviewTab({ blogSlug }: { blogSlug: string }) {
         </Card>
         <Card className="flex flex-col gap-2 text-sm">
           <span className="font-mono text-[11px] uppercase tracking-[.08em] text-muted">{t("storage")}</span>
-          <span className="font-serif text-2xl text-foreground">{data.storage_bytes === null ? t("storageUnknown") : formatBytes(data.storage_bytes)}</span>
+          <span className="font-serif text-2xl text-foreground">
+            {data.storage_bytes === null ? t("storageUnknown") : formatBytes(data.storage_bytes)}
+            {data.storage_limit_mb !== null && (
+              <span className="text-base text-muted"> / {formatBytes(data.storage_limit_mb * 1024 * 1024)}</span>
+            )}
+          </span>
           <span className="text-foreground">{t("mediaCount", { count: data.media })}</span>
           <span className="text-[13px] text-muted">{t("kpi.members")}: {data.members}</span>
           <span className="text-[13px] text-muted">{t("approvedComments", { count: data.approved_comments })}</span>

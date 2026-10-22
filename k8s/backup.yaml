@@ -25,7 +25,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: backup
-              image: notturni-backend:latest
+              image: ghcr.io/bytehawks-org/notturni-backend:sha-fd6ce11
               imagePullPolicy: IfNotPresent
               command: ["python", "-m", "app.workers.backup"]
               envFrom:

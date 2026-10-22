@@ -3,7 +3,9 @@ import uuid
 
 from authlib.integrations.starlette_client import OAuthError
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -23,6 +25,7 @@ from app.domain.auth import (
     rotate_refresh_token,
 )
 from app.domain.rate_limit import enforce_rate_limit
+from app.domain.usernames import validate_username
 from app.domain.mfa import (
     generate_totp_secret,
     send_email_otp,
@@ -31,6 +34,7 @@ from app.domain.mfa import (
     verify_email_otp,
     verify_totp_code,
 )
+from app.domain.password_reset import request_password_reset, reset_password
 from app.domain.sso import ExternalProfile, SsoLinkPending, complete_pending_link, link_or_create_user
 from app.models.audit_log import AuditActorType
 from app.models.sso_identity import SsoProvider
@@ -45,6 +49,58 @@ router = APIRouter()
 LOGIN_IP_RATE_LIMIT = 20
 LOGIN_EMAIL_RATE_LIMIT = 5
 LOGIN_RATE_LIMIT_WINDOW_SECONDS = 300
+
+# Stesso principio sui codici MFA (TOTP a 6 cifre, OTP email): senza un
+# limite un attaccante con la sola sessione/challenge può provare in loop.
+# Per IP (contiene bot) e per soggetto del codice (utente autenticato per
+# setup/confirm, subject del challenge per il login) — stessa coppia di
+# limiti del login.
+MFA_CODE_IP_RATE_LIMIT = 20
+MFA_CODE_SUBJECT_RATE_LIMIT = 8
+MFA_CODE_RATE_LIMIT_WINDOW_SECONDS = 300
+
+
+async def _enforce_mfa_rate_limit(request: Request, *, subject: str) -> None:
+    ip = client_ip(request)
+    if ip is not None:
+        await enforce_rate_limit(
+            f"ratelimit:mfa:ip:{ip}",
+            limit=MFA_CODE_IP_RATE_LIMIT,
+            window_seconds=MFA_CODE_RATE_LIMIT_WINDOW_SECONDS,
+            message="Troppi tentativi di verifica da questo indirizzo. Riprova tra qualche minuto.",
+        )
+    await enforce_rate_limit(
+        f"ratelimit:mfa:subject:{subject}",
+        limit=MFA_CODE_SUBJECT_RATE_LIMIT,
+        window_seconds=MFA_CODE_RATE_LIMIT_WINDOW_SECONDS,
+        message="Troppi tentativi di verifica per questo account. Riprova tra qualche minuto.",
+    )
+
+# "Password dimenticata": stesso principio del login, per IP (contiene bot
+# che provano molte email) e per email (contiene tentativi mirati). Applicato
+# sia alla richiesta del codice sia alla sua verifica — un codice a 6 cifre è
+# indovinabile in un numero di tentativi gestibile senza un limite.
+PASSWORD_RESET_IP_RATE_LIMIT = 20
+PASSWORD_RESET_EMAIL_RATE_LIMIT = 5
+PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS = 300
+
+
+async def _enforce_password_reset_rate_limit(request: Request, *, email: str) -> None:
+    ip = client_ip(request)
+    if ip is not None:
+        await enforce_rate_limit(
+            f"ratelimit:password-reset:ip:{ip}",
+            limit=PASSWORD_RESET_IP_RATE_LIMIT,
+            window_seconds=PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS,
+            message="Troppi tentativi da questo indirizzo. Riprova tra qualche minuto.",
+        )
+    await enforce_rate_limit(
+        f"ratelimit:password-reset:email:{email.lower()}",
+        limit=PASSWORD_RESET_EMAIL_RATE_LIMIT,
+        window_seconds=PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS,
+        message="Troppi tentativi per questo indirizzo. Riprova tra qualche minuto.",
+    )
+
 
 # Sessione (ROADMAP.md "Sessione in localStorage"): il refresh token vive
 # solo in un cookie httpOnly, mai in JSON/localStorage — l'access token
@@ -161,7 +217,25 @@ class MfaCodeRequest(BaseModel):
     code: str
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    code: str
+    new_password: str
+
+
+class UsernameAvailabilityOut(BaseModel):
+    available: bool
+    reason: str | None = None
+
+
 # ---- registrazione / login --------------------------------------------------
+
+USERNAME_AVAILABILITY_IP_RATE_LIMIT = 30
+USERNAME_AVAILABILITY_RATE_LIMIT_WINDOW_SECONDS = 60
 
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
@@ -183,6 +257,33 @@ async def register(payload: RegisterRequest, session: AsyncSession = Depends(get
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
+@router.get("/username-available", response_model=UsernameAvailabilityOut)
+async def check_username_available(
+    username: str, request: Request, session: AsyncSession = Depends(get_session)
+) -> UsernameAvailabilityOut:
+    """Pubblico: verifica in tempo reale durante la registrazione, prima
+    ancora di inviare il form (`reason` distingue formato non valido da
+    username già preso, per un messaggio mirato lato frontend)."""
+    ip = client_ip(request)
+    if ip is not None:
+        await enforce_rate_limit(
+            f"ratelimit:username-available:ip:{ip}",
+            limit=USERNAME_AVAILABILITY_IP_RATE_LIMIT,
+            window_seconds=USERNAME_AVAILABILITY_RATE_LIMIT_WINDOW_SECONDS,
+            message="Troppi controlli di disponibilità username. Riprova tra qualche minuto.",
+        )
+
+    try:
+        validate_username(username)
+    except ValueError:
+        return UsernameAvailabilityOut(available=False, reason="invalid_format")
+
+    existing = await session.execute(select(User).where(User.username == username))
+    if existing.scalar_one_or_none() is not None:
+        return UsernameAvailabilityOut(available=False, reason="taken")
+    return UsernameAvailabilityOut(available=True, reason=None)
 
 
 @router.post("/login", response_model=SessionResponse | MfaRequiredResponse)
@@ -245,6 +346,8 @@ async def verify_mfa(
     except ValueError as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
 
+    await _enforce_mfa_rate_limit(request, subject=claims["sub"])
+
     user = await session.get(User, uuid.UUID(claims["sub"]))
     if user is None or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Utente non valido.")
@@ -304,6 +407,31 @@ async def me(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
+# ---- password dimenticata ---------------------------------------------------
+
+
+@router.post("/password/forgot", status_code=status.HTTP_202_ACCEPTED)
+async def forgot_password(
+    payload: ForgotPasswordRequest, request: Request, session: AsyncSession = Depends(get_session)
+) -> None:
+    """Risponde sempre 202, email esistente o no (mai enumerabile) — se
+    l'email corrisponde a un account, accoda un codice di reset via
+    RabbitMQ (stesso meccanismo dell'OTP MFA, purpose="password_reset")."""
+    await _enforce_password_reset_rate_limit(request, email=payload.email)
+    await request_password_reset(session, payload.email)
+
+
+@router.post("/password/reset", status_code=status.HTTP_204_NO_CONTENT)
+async def reset_password_endpoint(
+    payload: ResetPasswordRequest, request: Request, session: AsyncSession = Depends(get_session)
+) -> None:
+    await _enforce_password_reset_rate_limit(request, email=payload.email)
+    try:
+        await reset_password(session, email=payload.email, code=payload.code, new_password=payload.new_password)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+
 # ---- MFA: gestione (richiede sessione attiva) -------------------------------
 
 
@@ -328,9 +456,11 @@ async def setup_totp(
 @router.post("/mfa/totp/confirm", status_code=status.HTTP_204_NO_CONTENT)
 async def confirm_totp(
     payload: MfaCodeRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> None:
+    await _enforce_mfa_rate_limit(request, subject=str(current_user.id))
     if current_user.mfa_totp_secret is None or not verify_totp_code(
         current_user.mfa_totp_secret, payload.code
     ):
@@ -351,9 +481,11 @@ async def setup_email_mfa(
 @router.post("/mfa/email/confirm", status_code=status.HTTP_204_NO_CONTENT)
 async def confirm_email_mfa(
     payload: MfaCodeRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> None:
+    await _enforce_mfa_rate_limit(request, subject=str(current_user.id))
     if not await verify_email_otp(session, current_user, payload.code):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Codice non valido o scaduto.")
     current_user.mfa_enabled = True
@@ -387,18 +519,32 @@ async def sso_login(provider: str, request: Request, session: AsyncSession = Dep
     return await client.authorize_redirect(request, redirect_uri)
 
 
-@router.get("/sso/{provider}/callback", response_model=SessionResponse | MfaRequiredResponse)
-async def sso_callback(
-    provider: str, request: Request, response: Response, session: AsyncSession = Depends(get_session)
-):
+def _sso_frontend_base_url() -> str:
+    """Origine pubblica del frontend per i redirect di fine flow SSO — questo
+    endpoint è raggiunto da una navigazione vera del browser (redirect
+    OAuth), mai da una fetch: non può restituire JSON perché nessun codice
+    JS è lì a leggerlo, deve sempre chiudere con un redirect verso una
+    pagina reale. cors_origins è già l'origine pubblica esatta del frontend
+    (in produzione coincide con oauth_redirect_base_url perché frontend e
+    backend condividono lo stesso host tramite il routing path-based di
+    k8s/ingress.yaml, ma in sviluppo locale sono porte diverse — 3000 vs
+    8000 — da cui la necessità di un valore a sé)."""
+    origins = settings.cors_allowed_origins
+    return origins[0] if origins else settings.oauth_redirect_base_url
+
+
+@router.get("/sso/{provider}/callback")
+async def sso_callback(provider: str, request: Request, session: AsyncSession = Depends(get_session)):
+    frontend_url = _sso_frontend_base_url()
+
     if provider not in configured_providers():
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, f"Provider '{provider}' non configurato.")
+        return RedirectResponse(f"{frontend_url}/login?sso_error=1", status_code=status.HTTP_303_SEE_OTHER)
 
     client = oauth.create_client(provider)
     try:
         token = await client.authorize_access_token(request)
-    except OAuthError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    except OAuthError:
+        return RedirectResponse(f"{frontend_url}/login?sso_error=1", status_code=status.HTTP_303_SEE_OTHER)
 
     if provider == "github":
         profile_data = (await client.get("user", token=token)).json()
@@ -414,7 +560,7 @@ async def sso_callback(
         email = profile_data.get("email")
 
     if not email:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Email non disponibile dal provider.")
+        return RedirectResponse(f"{frontend_url}/login?sso_error=1", status_code=status.HTTP_303_SEE_OTHER)
 
     ext_profile = ExternalProfile(
         provider=SsoProvider(provider), provider_user_id=provider_user_id, email=email
@@ -434,11 +580,15 @@ async def sso_callback(
         )
         if pending.user.mfa_method == MfaMethod.EMAIL:
             await send_email_otp(session, pending.user)
-        return MfaRequiredResponse(method=pending.user.mfa_method.value, challenge=challenge)
+        return RedirectResponse(
+            f"{frontend_url}/login?mfa_challenge={challenge}&mfa_method={pending.user.mfa_method.value}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
 
     await audit.record(
         session, action="auth.login", actor=user, request=request, payload={"method": f"sso_{provider}"}
     )
-    access_token, refresh_token = await issue_session(session, user)
-    _set_session_cookies(response, refresh_token)
-    return SessionResponse(access_token=access_token)
+    _, refresh_token = await issue_session(session, user)
+    redirect = RedirectResponse(f"{frontend_url}/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+    _set_session_cookies(redirect, refresh_token)
+    return redirect

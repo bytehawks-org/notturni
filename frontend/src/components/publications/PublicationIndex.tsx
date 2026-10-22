@@ -3,8 +3,19 @@ import Link from "next/link";
 
 import type { Chapter } from "@/lib/types";
 
-/** Indice cronologico di una pubblicazione (mockup 2d, todo/PUBLICATIONS.md). */
-export async function PublicationIndex({ chapters, currentPostId }: { chapters: Chapter[]; currentPostId?: string }) {
+/** Indice cronologico di una pubblicazione (mockup 2d, todo/PUBLICATIONS.md).
+ * `resolvePermalink` adatta gli href assoluti dati dall'API (già prefissati
+ * con lo slug del blog) al contesto path-based/sottodominio corrente — vedi
+ * `src/lib/blog-path.ts::blogLinks`. */
+export async function PublicationIndex({
+  chapters,
+  currentPostId,
+  resolvePermalink,
+}: {
+  chapters: Chapter[];
+  currentPostId?: string;
+  resolvePermalink: (permalink: string) => string;
+}) {
   const t = await getTranslations("Publication");
   return (
     <ol className="flex flex-col">
@@ -25,7 +36,7 @@ export async function PublicationIndex({ chapters, currentPostId }: { chapters: 
         return (
           <li key={c.post_id}>
             {c.is_public ? (
-              <Link href={c.permalink} className="block text-foreground no-underline hover:text-primary">
+              <Link href={resolvePermalink(c.permalink)} className="block text-foreground no-underline hover:text-primary">
                 {row}
               </Link>
             ) : (
@@ -39,7 +50,17 @@ export async function PublicationIndex({ chapters, currentPostId }: { chapters: 
 }
 
 /** Piè di pagina precedente/successivo dentro un capitolo (mockup 3g). */
-export async function ChapterNav({ prev, next, index }: { prev?: Chapter; next?: Chapter; index: { title: string; href: string } }) {
+export async function ChapterNav({
+  prev,
+  next,
+  index,
+  resolvePermalink,
+}: {
+  prev?: Chapter;
+  next?: Chapter;
+  index: { title: string; href: string };
+  resolvePermalink: (permalink: string) => string;
+}) {
   const t = await getTranslations("Publication");
   return (
     <nav className="mt-10 grid grid-cols-2 gap-3 rounded-xl border border-border bg-surface p-4 text-[13px] md:p-5">
@@ -47,7 +68,7 @@ export async function ChapterNav({ prev, next, index }: { prev?: Chapter; next?:
         {prev ? (
           <>
             <span className="text-[11px]">{t("previous")}</span>
-            <Link href={prev.permalink} className="truncate font-medium text-foreground no-underline hover:underline">
+            <Link href={resolvePermalink(prev.permalink)} className="truncate font-medium text-foreground no-underline hover:underline">
               {prev.title}
             </Link>
           </>
@@ -61,7 +82,7 @@ export async function ChapterNav({ prev, next, index }: { prev?: Chapter; next?:
         {next ? (
           <>
             <span className="text-[11px]">{t("next")}</span>
-            <Link href={next.permalink} className="truncate font-medium text-foreground no-underline hover:underline">
+            <Link href={resolvePermalink(next.permalink)} className="truncate font-medium text-foreground no-underline hover:underline">
               {next.title}
             </Link>
           </>

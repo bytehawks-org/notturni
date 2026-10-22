@@ -164,6 +164,43 @@ async def test_post_cover_image_url(client: AsyncClient, make_user: Callable) ->
     assert no_cover_res.json()["cover_image_url"] is None
 
 
+async def test_post_cover_image_alt_text(client: AsyncClient, make_user: Callable) -> None:
+    owner: AuthedUser = await make_user("owner-cover-alt")
+    slug = await _create_blog(client, owner, "blog-cover-alt-test")
+
+    create_res = await client.post(
+        f"/api/v1/blogs/{slug}/posts",
+        json={
+            "slug": "post-cover-alt",
+            "title": "A",
+            "content": "B",
+            "cover_image_url": "https://x/1.png",
+            "cover_image_alt_text": "Un tramonto",
+        },
+        headers=owner.headers,
+    )
+    assert create_res.status_code == 201
+    post_id = create_res.json()["id"]
+    assert create_res.json()["cover_image_alt_text"] == "Un tramonto"
+
+    # omesso: resta invariato
+    no_touch = await client.patch(f"/api/v1/posts/{post_id}", json={"title": "C"}, headers=owner.headers)
+    assert no_touch.json()["cover_image_alt_text"] == "Un tramonto"
+
+    # aggiornabile indipendentemente da cover_image_url
+    updated = await client.patch(
+        f"/api/v1/posts/{post_id}", json={"cover_image_alt_text": "Un'alba"}, headers=owner.headers
+    )
+    assert updated.json()["cover_image_alt_text"] == "Un'alba"
+    assert updated.json()["cover_image_url"] == "https://x/1.png"
+
+    # null esplicito: azzera
+    cleared = await client.patch(
+        f"/api/v1/posts/{post_id}", json={"cover_image_alt_text": None}, headers=owner.headers
+    )
+    assert cleared.json()["cover_image_alt_text"] == ""
+
+
 async def test_post_translations(client: AsyncClient, make_user: Callable) -> None:
     owner: AuthedUser = await make_user("owner6")
     slug = await _create_blog(client, owner, "blog-i18n-test")

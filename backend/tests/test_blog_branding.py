@@ -40,16 +40,31 @@ async def test_cover_image_upload_update_categories_and_delete(
     assert upd.status_code == 200
     assert upd.json()["cover_image_categories"] == ["nudity"]
     assert upd.json()["cover_image_is_sensitive"] is True
+    # alt_text omesso: resta invariato (vuoto di default)
+    assert upd.json()["cover_image_alt_text"] == ""
+
+    alt_upd = await client.patch(
+        "/api/v1/blogs/cover-blog/cover-image", json={"categories": ["nudity"], "alt_text": "Copertina del blog"}, headers=owner.headers
+    )
+    assert alt_upd.json()["cover_image_alt_text"] == "Copertina del blog"
 
     bad = await client.patch(
         "/api/v1/blogs/cover-blog/cover-image", json={"categories": ["boh"]}, headers=owner.headers
     )
     assert bad.status_code == 400
 
+    # la cover caricata finisce nella libreria media del blog (B7)
+    lib = await client.get("/api/v1/blogs/cover-blog/media", headers=owner.headers)
+    assert lib.status_code == 200
+    assert len(lib.json()["items"]) == 1
+    assert lib.json()["items"][0]["url"] == body["cover_image_url"]
+    assert lib.json()["items"][0]["used_as_blog_cover"] is True
+
     deleted = await client.delete("/api/v1/blogs/cover-blog/cover-image", headers=owner.headers)
     assert deleted.status_code == 200
     assert deleted.json()["cover_image_url"] is None
     assert deleted.json()["cover_image_categories"] == []
+    assert deleted.json()["cover_image_alt_text"] == ""
 
     # nessun oggetto content cancellato dalla sostituzione/rimozione (stessa
     # scelta di Post.cover_image_url, vedi branding.py)

@@ -243,3 +243,46 @@ async def test_gdpr_queue_second_admin_approval(client: AsyncClient, make_admin:
     exp = await client.post("/api/v1/admin/gdpr", json={"username": "gq-a2", "type": "export", "note": "test"}, headers=a1.headers)
     data = await client.post(f"/api/v1/admin/gdpr/{exp.json()['id']}/execute", headers=a1.headers)
     assert data.status_code == 200 and data.json()["account"]["username"] == "gq-a2"
+
+
+async def test_max_blog_storage_mb_validation_and_clear(
+    client: AsyncClient, make_admin: Callable, db_session: AsyncSession
+) -> None:
+    """`max_blog_storage_mb` (spazio massimo per blog, blocco "impostazioni
+    di piattaforma"): null di default (nessun limite), 0 lo azzera
+    esplicitamente, un valore fuori range è rifiutato."""
+    root = await _super(make_admin, db_session, "quota-cfg-root")
+    cfg = await client.get("/api/v1/admin/config", headers=root.headers)
+    assert cfg.json()["max_blog_storage_mb"] is None
+
+    too_low = await client.patch("/api/v1/admin/config", json={"max_blog_storage_mb": -1}, headers=root.headers)
+    assert too_low.status_code == 400
+    too_high = await client.patch(
+        "/api/v1/admin/config", json={"max_blog_storage_mb": 2_000_000}, headers=root.headers
+    )
+    assert too_high.status_code == 400
+
+    set_res = await client.patch("/api/v1/admin/config", json={"max_blog_storage_mb": 10}, headers=root.headers)
+    assert set_res.status_code == 200 and set_res.json()["max_blog_storage_mb"] == 10
+
+    cleared = await client.patch("/api/v1/admin/config", json={"max_blog_storage_mb": 0}, headers=root.headers)
+    assert cleared.status_code == 200 and cleared.json()["max_blog_storage_mb"] is None
+
+
+async def test_verification_blue_domains_rejects_invalid_format(
+    client: AsyncClient, make_admin: Callable, db_session: AsyncSession
+) -> None:
+    root = await _super(make_admin, db_session, "verif-cfg-root")
+    bad = await client.patch(
+        "/api/v1/admin/config", json={"verification_blue_domains": ["not a domain!"]}, headers=root.headers
+    )
+    assert bad.status_code == 400
+
+    ok = await client.patch(
+        "/api/v1/admin/config",
+        json={"verification_blue_domains": ["Esempio.IT", "esempio.it"]},
+        headers=root.headers,
+    )
+    assert ok.status_code == 200
+    # normalizzato minuscolo e deduplicato (stesso principio di reserved_blog_names)
+    assert ok.json()["verification_blue_domains"] == ["esempio.it"]

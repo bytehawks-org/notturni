@@ -20,19 +20,27 @@ export async function FeedPostCard({
   blogTitle,
   showBlog = true,
   variant = "standard",
+  resolvePermalink = (permalink) => permalink,
 }: {
   post: Post;
   blogTitle?: string;
   showBlog?: boolean;
   variant?: FeedPostCardVariant;
+  /** Adatta `post.permalink` (assoluto, prefissato con lo slug del blog) al
+   * contesto path-based/sottodominio corrente — vedi
+   * `src/lib/blog-path.ts::blogLinks`. Identità di default: il feed di
+   * piattaforma (`/`, `/u/{username}`) è sempre path-based, nessun
+   * sottodominio da gestire. */
+  resolvePermalink?: (permalink: string) => string;
 }) {
   const [t, locale] = await Promise.all([getTranslations("Feed"), getLocale()]);
+  const permalink = resolvePermalink(post.permalink);
   const meta = (
     <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted">
       {post.author_avatar_url ? (
         <Image
           src={post.author_avatar_url}
-          alt={post.author_display_name}
+          alt=""
           width={20}
           height={20}
           className="h-5 w-5 rounded-full object-cover"
@@ -62,7 +70,7 @@ export async function FeedPostCard({
   );
   const title = (
     <h3 className="m-0 font-serif text-xl font-medium leading-tight text-pretty md:text-[23px]">
-      <Link href={post.permalink} className="text-foreground no-underline hover:text-primary">
+      <Link href={permalink} className="text-foreground no-underline hover:text-primary">
         {post.title}
       </Link>
     </h3>
@@ -98,7 +106,7 @@ export async function FeedPostCard({
     return (
       <article className="flex flex-col gap-3 border-b border-border py-5 last:border-0">
         {post.cover_image_url && (
-          <Link href={post.permalink} className="relative block aspect-[16/9] w-full overflow-hidden rounded-lg border border-border">
+          <Link href={permalink} className="relative block aspect-[16/9] w-full overflow-hidden rounded-lg border border-border">
             <Image
               src={post.cover_image_url}
               alt=""
@@ -126,7 +134,7 @@ export async function FeedPostCard({
         {footer}
       </div>
       {post.cover_image_url && (
-        <Link href={post.permalink} className="relative hidden h-24 w-full overflow-hidden rounded-lg border border-border md:block">
+        <Link href={permalink} className="relative hidden h-24 w-full overflow-hidden rounded-lg border border-border md:block">
           <Image
             src={post.cover_image_url}
             alt=""

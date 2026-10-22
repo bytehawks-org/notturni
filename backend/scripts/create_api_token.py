@@ -34,7 +34,13 @@ async def create_token(name: str, user_id: uuid.UUID | None) -> None:
         )
         await session.commit()
 
-    print(f"Token ({owner_type.value}) creato: {plaintext}")
+    # Stampa in chiaro intenzionale, non un log persistito: è l'unico modo in
+    # cui questo script di bootstrap può consegnare il token a chi lo esegue
+    # (solo l'hash finisce nel database, mai il valore in chiaro — vedi
+    # generate_api_token). Falso positivo del SAST (py/clear-text-logging-
+    # sensitive-data), che non distingue uno script CLI interattivo da un
+    # logger applicativo.
+    print(f"Token ({owner_type.value}) creato: {plaintext}")  # lgtm[py/clear-text-logging-sensitive-data]
     print("Salvalo ora: non sarà più recuperabile in chiaro.")
 
 

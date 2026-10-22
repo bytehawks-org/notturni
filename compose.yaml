@@ -180,6 +180,31 @@ services:
       mailhog:
         condition: service_started
 
+  # Consumer della coda newsletter_send (app/workers/newsletter_consumer.py):
+  # email di conferma iscrizione e invio delle campagne agli iscritti — a
+  # differenza di worker-email-otp/worker-post-backup accede anche al
+  # database (iscritti, post/blog, stato della campagna), quindi dipende
+  # anche da postgres.
+  worker-newsletter:
+    build:
+      context: ./backend
+    restart: on-failure
+    env_file: .env
+    environment:
+      NOCT_POSTGRES_HOST: postgres
+      NOCT_RABBITMQ_HOST: rabbitmq
+      NOCT_SMTP_HOST: mailhog
+      NOCT_SMTP_PORT: "1025"
+      NOCT_SMTP_USE_TLS: "false"
+    command: ["python", "-m", "app.workers.newsletter_consumer"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+
   worker-audit-maintenance:
     build:
       context: ./backend

@@ -15,6 +15,7 @@ from app.api.v1.blogs._router import router
 from app.core.database import get_session
 from app.core.storage import blog_storage_bytes
 from app.domain.authorization import get_membership_role
+from app.domain.platform_config import get_platform_config
 from app.models.blog import BlogMembership
 from app.models.comment import Comment, CommentStatus
 from app.models.follow import BlogFollow
@@ -46,6 +47,9 @@ class BlogOverviewOut(BaseModel):
     reads_30d: list[DailyReads]
     reads_total_30d: int
     storage_bytes: int | None
+    # Limite impostato da un Super Admin (platform_config.max_blog_storage_mb),
+    # null = nessun limite.
+    storage_limit_mb: int | None
 
 
 async def _count(session: AsyncSession, stmt) -> int:
@@ -101,10 +105,12 @@ async def blog_overview(
     except Exception:  # noqa: BLE001 — storage irraggiungibile: la card mostra "n/d", non un 500
         storage_bytes = None
 
+    platform = await get_platform_config(session)
     return BlogOverviewOut(
         reads_30d=reads_30d,
         reads_total_30d=sum(d.reads for d in reads_30d),
         storage_bytes=storage_bytes,
+        storage_limit_mb=platform.max_blog_storage_mb,
         posts_total=await _count(session, posts_by()),
         posts_published=await _count(session, posts_by(Post.status == PostStatus.PUBLISHED, Post.published_at <= now)),
         posts_scheduled=await _count(session, posts_by(Post.status == PostStatus.PUBLISHED, Post.published_at > now)),

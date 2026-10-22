@@ -2,81 +2,69 @@
 
 import { useTranslations } from "next-intl";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
 
+import { OtpInput, OTP_INPUT_LENGTH } from "@/components/auth/OtpInput";
+import { SsoButtons } from "@/components/auth/SsoButtons";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { FieldGroup, Input, Label } from "@/components/ui/Field";
-import { ApiClientError } from "@/lib/api";
+import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { isMfaRequired } from "@/lib/types";
 
-const OTP_LENGTH = 6;
+const OTP_LENGTH = OTP_INPUT_LENGTH;
 
-/** Sei caselle per cifra (mockup 1h) invece di un unico campo testuale. */
-function OtpInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  const refs = useRef<(HTMLInputElement | null)[]>([]);
-  const digits = Array.from({ length: OTP_LENGTH }, (_, i) => value[i] ?? "");
-
-  function setDigit(index: number, digit: string) {
-    const next = digits.slice();
-    next[index] = digit;
-    onChange(next.join(""));
-    if (digit && index < OTP_LENGTH - 1) refs.current[index + 1]?.focus();
-  }
-
-  function handleKeyDown(index: number, event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "Backspace" && !digits[index] && index > 0) {
-      refs.current[index - 1]?.focus();
-    }
-  }
-
-  function handlePaste(event: React.ClipboardEvent<HTMLInputElement>) {
-    const pasted = event.clipboardData.getData("text").replace(/\D/g, "").slice(0, OTP_LENGTH);
-    if (!pasted) return;
-    event.preventDefault();
-    onChange(pasted.padEnd(value.length, ""));
-    refs.current[Math.min(pasted.length, OTP_LENGTH - 1)]?.focus();
-  }
-
+export default function LoginPage() {
   return (
-    <div className="grid grid-cols-6 gap-2">
-      {digits.map((digit, i) => (
-        <input
-          key={i}
-          ref={(el) => {
-            refs.current[i] = el;
-          }}
-          type="text"
-          inputMode="numeric"
-          maxLength={1}
-          autoFocus={i === 0}
-          value={digit}
-          onChange={(e) => setDigit(i, e.target.value.replace(/\D/g, "").slice(-1))}
-          onKeyDown={(e) => handleKeyDown(i, e)}
-          onPaste={handlePaste}
-          className="h-[52px] rounded-xl border border-border bg-surface text-center font-serif text-2xl text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
-        />
-      ))}
-    </div>
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login, verifyMfa } = useAuth();
   const t = useTranslations("Auth");
   const tc = useTranslations("Common");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [code, setCode] = useState("");
+  const [ssoProviders, setSsoProviders] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
-  const [challenge, setChallenge] = useState<string | null>(null);
-  const [mfaMethod, setMfaMethod] = useState<string | null>(null);
-  const [code, setCode] = useState("");
+  // Arrivo da un redirect del backend dopo un login SSO (navigazione vera
+  // del browser, non una fetch — backend/app/api/v1/auth.py::sso_callback
+  // non può restituire il challenge nel corpo di una risposta letta da JS,
+  // lo passa in query string): stato iniziale letto direttamente da
+  // useSearchParams(), disponibile già al primo render, non da un effect
+  // che chiamerebbe setState sincronicamente. `mfa_challenge`/`mfa_method`
+  // arrivano quando l'account ha già l'MFA attivo (collegamento del
+  // provider in sospeso); `sso_error` per un provider non configurato,
+  // negato dall'utente o senza email disponibile.
+  const [challenge, setChallenge] = useState<string | null>(() => searchParams.get("mfa_challenge"));
+  const [mfaMethod, setMfaMethod] = useState<string | null>(() => searchParams.get("mfa_method"));
+  const [error, setError] = useState<string | null>(() => (searchParams.get("sso_error") ? t("ssoError") : null));
+
+  useEffect(() => {
+    api.config
+      .get()
+      .then((c) => setSsoProviders(c.sso_providers ?? []))
+      .catch(() => undefined);
+  }, []);
+
+  // Ripulisce la query string letta sopra, non lasciarla visibile/
+  // ricaricabile dalla history del browser.
+  useEffect(() => {
+    if (searchParams.get("mfa_challenge") || searchParams.get("sso_error")) {
+      router.replace("/login");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleLogin(event: FormEvent) {
     event.preventDefault();
@@ -155,6 +143,9 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
+                <Link href="/forgot-password" className="mt-1 self-end text-[13px] text-muted no-underline hover:text-primary hover:underline">
+                  {t("forgotPassword")}
+                </Link>
               </FieldGroup>
             </div>
 
@@ -163,6 +154,8 @@ export default function LoginPage() {
             <Button type="submit" size="lg" disabled={submitting}>
               {submitting ? t("signingIn") : t("continue")}
             </Button>
+
+            <SsoButtons providers={ssoProviders} />
 
             <p className="text-center text-[13px] leading-relaxed text-muted">
               {t("noAccount")}{" "}
@@ -193,7 +186,12 @@ export default function LoginPage() {
               </p>
             </div>
 
-            <OtpInput value={code} onChange={setCode} />
+            <OtpInput
+              value={code}
+              onChange={setCode}
+              legend={t("otpLegend")}
+              digitLabel={(index, total) => t("otpDigitLabel", { index, total })}
+            />
 
             {error && <Alert kind="error">{error}</Alert>}
 

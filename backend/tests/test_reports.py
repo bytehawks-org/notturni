@@ -29,6 +29,28 @@ async def test_readers_report_blog_and_post_once(client: AsyncClient, make_user:
     assert p.status_code == 201 and p.json()["target_type"] == "post"
 
 
+async def test_cannot_report_private_blog_or_its_posts(client: AsyncClient, make_user: Callable) -> None:
+    """is_blog_publicly_readable copre solo sospensione/pausa/cancellazione,
+    non la visibilità (todo/BLOG.md #2) — un utente autenticato ma senza
+    membership su un blog privato non deve poter segnalare un blog/post che
+    non può nemmeno vedere (bug corretto: usava quella invece di
+    can_view_blog)."""
+    owner: AuthedUser = await make_user("priv-owner")
+    outsider: AuthedUser = await make_user("priv-outsider")
+    await _blog(client, owner, "priv-blog", visibility="private")
+    post = await _post(client, owner, "priv-blog", "segreto")
+
+    blog_report = await client.post(
+        "/api/v1/blogs/priv-blog/report", json={"reason": "spam"}, headers=outsider.headers
+    )
+    assert blog_report.status_code == 404
+
+    post_report = await client.post(
+        f"/api/v1/posts/{post['id']}/report", json={"reason": "spam"}, headers=outsider.headers
+    )
+    assert post_report.status_code == 404
+
+
 async def test_admin_sees_reports_and_acts_with_mandatory_note(
     client: AsyncClient, make_user: Callable, make_admin: Callable
 ) -> None:

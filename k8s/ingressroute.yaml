@@ -1,0 +1,48 @@
+# IngressRoute Traefik dinamico per il routing per-sottodominio dei blog
+# (slug.notturni.eu -> frontend, CLAUDE.md #6/#1, ROADMAP.md "Blog utente su
+# nomeutente.notturni.eu"): un host jolly non è esprimibile con un singolo
+# host fisso di networking.k8s.io/v1 Ingress (ingress.yaml, che resta il
+# fallback path-based catch-all usato anche in sviluppo/test senza DNS — le
+# due risorse convivono, questa non lo sostituisce). Applicato dalla
+# risoluzione lato Next.js in frontend/src/proxy.ts, che riscrive
+# {slug}.notturni.eu/... su /{slug}/... internamente (route già esistenti
+# sotto frontend/src/app/[blogSlug]/).
+#
+# entryPoint "websecure" (https), TLS condiviso con ingress.yaml (Secret
+# notturni-eu-tls, provisionato dalla Certificate esplicita in
+# certificate.yaml — un host jolly non può passare dall'annotazione
+# cert-manager.io/cluster-issuer di un singolo Ingress, serve una
+# Certificate a sé che copra anche questo IngressRoute). Il regex qui sotto
+# NON esclude le etichette
+# riservate (www, blog, mail, ...): Traefik usa RE2 (motore regex di Go), che
+# non supporta i lookahead negativi necessari per farlo in una singola
+# espressione. L'esclusione è comunque applicata — lato Next.js
+# (frontend/src/proxy.ts::RESERVED_SUBDOMAINS, stessa lista di
+# backend/app/domain/blog_rules.py::RESERVED_BLOG_SLUGS): un sottodominio
+# riservato arriva comunque al frontend ma non viene riscritto su un blog,
+# resta sulla home di piattaforma. Quando un sottodominio riservato avrà una
+# sua destinazione reale (es. blog.notturni.eu verso un servizio dedicato,
+# ROADMAP.md), andrà aggiunta una `IngressRoute` propria con priorità
+# maggiore (campo `priority`), non modificato questo regex.
+#
+# NOCT_CORS_ORIGIN_REGEX/NOCT_SESSION_COOKIE_DOMAIN in configmap.yaml sono
+# già valorizzati per notturni.eu (vedi commenti lì) — da rivedere solo se
+# il dominio cambia.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: notturni-blog-subdomains
+  namespace: notturni
+spec:
+  entryPoints:
+    - websecure
+  tls:
+    secretName: notturni-eu-tls
+  routes:
+    - kind: Rule
+      match: "HostRegexp(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?\\.notturni\\.eu$`)"
+      middlewares:
+        - name: security-headers
+      services:
+        - name: frontend
+          port: 3000

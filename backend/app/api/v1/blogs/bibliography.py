@@ -1,7 +1,7 @@
 """Bibliografie automatiche del blog: note a piè di pagina, media e link
 citati nel corpo dei post pubblicati (CLAUDE.md #4, todo/EDITOR.md)."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import Depends
 from pydantic import BaseModel
@@ -12,13 +12,24 @@ from app.api.deps import get_optional_current_user
 from app.api.v1.blogs._common import _get_blog_or_404, _require_blog_viewable
 from app.api.v1.blogs._router import router
 from app.core.database import get_session
+from app.domain.authorization import publicly_visible_clause
 from app.domain.permalinks import build_permalink
 from app.models.blog_note import BlogNote
-from app.models.post import Post, PostStatus
+from app.models.post import Post
 from app.models.post_link import post_links
 from app.models.post_media import post_media
 from app.models.post_note import post_notes
 from app.models.user import User
+
+
+def _safe_note_url(url: str | None) -> str | None:
+    """Righe `BlogNote.url` create prima della validazione di schema in
+    app/domain/notes.py::_clean_url possono ancora contenere un valore non
+    http(s) (es. `javascript:`): questo valore finisce in un `href` lato
+    frontend, va filtrato qui in lettura e non solo bloccato in scrittura."""
+    if url is None or url.startswith("http://") or url.startswith("https://"):
+        return url
+    return None
 
 
 class BibliographyCitationOut(BaseModel):
@@ -76,12 +87,7 @@ async def get_blog_bibliography(
         )
         .join(post_notes, post_notes.c.post_id == Post.id)
         .outerjoin(BlogNote, BlogNote.id == post_notes.c.note_id)
-        .where(
-            Post.blog_id == blog.id,
-            Post.status == PostStatus.PUBLISHED,
-            Post.published_at <= datetime.now(timezone.utc),
-            Post.is_hidden.is_(False),
-        )
+        .where(Post.blog_id == blog.id, publicly_visible_clause())
         .order_by(Post.published_at.desc(), post_notes.c.idx.asc())
     )
 
@@ -93,7 +99,7 @@ async def get_blog_bibliography(
             entry = BibliographyEntryOut(
                 content=content,
                 kind=kind,
-                url=url,
+                url=_safe_note_url(url),
                 title=title,
                 author=author,
                 isbn=isbn,
@@ -128,6 +134,7 @@ class MediaBibliographyEntryOut(BaseModel):
     url: str
     alt_text: str
     categories: list[str]
+    is_sensitive: bool
     citations: list[ContentCitationOut]
 
 
@@ -145,23 +152,28 @@ async def get_blog_media_bibliography(
     await _require_blog_viewable(session, current_user, blog)
 
     rows = await session.execute(
-        select(Post, post_media.c.alt_text, post_media.c.categories, post_media.c.url)
+        select(Post, post_media.c.alt_text, post_media.c.categories, post_media.c.is_sensitive, post_media.c.url)
         .join(post_media, post_media.c.post_id == Post.id)
-        .where(
-            Post.blog_id == blog.id,
-            Post.status == PostStatus.PUBLISHED,
-            Post.published_at <= datetime.now(timezone.utc),
-            Post.is_hidden.is_(False),
-        )
+        .where(Post.blog_id == blog.id, publicly_visible_clause())
         .order_by(Post.published_at.desc(), post_media.c.position.asc())
     )
 
     entries: dict[str, MediaBibliographyEntryOut] = {}
-    for post, alt_text, categories, url in rows.all():
+    for post, alt_text, categories, is_sensitive, url in rows.all():
         entry = entries.get(url)
         if entry is None:
-            entry = MediaBibliographyEntryOut(url=url, alt_text=alt_text, categories=categories, citations=[])
+            entry = MediaBibliographyEntryOut(
+                url=url, alt_text=alt_text, categories=categories, is_sensitive=is_sensitive, citations=[]
+            )
             entries[url] = entry
+        elif is_sensitive and not entry.is_sensitive:
+            # Stesso URL citato in più post: se una qualunque citazione è
+            # segnalata come sensibile, l'intera voce raggruppata lo resta —
+            # mai far vincere una citazione "pulita" su una sensibile (vedi
+            # Copilot review: raggruppare per URL prendeva il flag solo dalla
+            # prima riga incontrata, nascondendo un'immagine sensibile se la
+            # prima citazione trovata non lo era).
+            entry.is_sensitive = True
         entry.citations.append(
             ContentCitationOut(
                 post_title=post.title,
@@ -194,12 +206,7 @@ async def get_blog_links_bibliography(
     rows = await session.execute(
         select(Post, post_links.c.link_text, post_links.c.url)
         .join(post_links, post_links.c.post_id == Post.id)
-        .where(
-            Post.blog_id == blog.id,
-            Post.status == PostStatus.PUBLISHED,
-            Post.published_at <= datetime.now(timezone.utc),
-            Post.is_hidden.is_(False),
-        )
+        .where(Post.blog_id == blog.id, publicly_visible_clause())
         .order_by(Post.published_at.desc(), post_links.c.position.asc())
     )
 

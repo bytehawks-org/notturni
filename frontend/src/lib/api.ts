@@ -33,12 +33,24 @@ import type {
   GdprRequestStatus,
   GdprRequestType,
   InstanceConfig,
+  Interest,
   LinkBibliographyEntry,
   LoginResponse,
   MediaBibliographyEntry,
   MediaFile,
   MediaLibrary,
   MembershipBlog,
+  MyBibliographyEntry,
+  MyLinkBibliographyEntry,
+  MyMediaFile,
+  MyPublication,
+  AdminNewsletterSettings,
+  AdminNewsletterSettingsUpdate,
+  NewsletterCampaign,
+  NewsletterCampaignUpdate,
+  NewsletterSettings,
+  NewsletterSettingsUpdate,
+  NewsletterStats,
   NoteKind,
   Page,
   PageTranslationSummary,
@@ -145,6 +157,12 @@ export const api = {
   auth: {
     register: (payload: { username: string; email: string; password: string }) =>
       request<CurrentUser>("/api/v1/auth/register", { method: "POST", body: payload }),
+    /** Verifica in tempo reale durante la registrazione, prima di inviare il
+     * form: `reason` distingue formato non valido da username già preso. */
+    usernameAvailable: (username: string) =>
+      request<{ available: boolean; reason: "invalid_format" | "taken" | null }>(
+        `/api/v1/auth/username-available?username=${encodeURIComponent(username)}`
+      ),
     login: (payload: { email: string; password: string }) =>
       request<LoginResponse>("/api/v1/auth/login", { method: "POST", body: payload, withCredentials: true }),
     verifyMfa: (payload: { challenge: string; code: string }) =>
@@ -170,6 +188,17 @@ export const api = {
     emailConfirm: (token: string, code: string) =>
       request<void>("/api/v1/auth/mfa/email/confirm", { method: "POST", token, body: { code } }),
     disableMfa: (token: string) => request<void>("/api/v1/auth/mfa/disable", { method: "POST", token }),
+    forgotPassword: (payload: { email: string }) =>
+      request<void>("/api/v1/auth/password/forgot", { method: "POST", body: payload }),
+    resetPassword: (payload: { email: string; code: string; new_password: string }) =>
+      request<void>("/api/v1/auth/password/reset", { method: "POST", body: payload }),
+  },
+
+  interests: {
+    /** Pubblico, nessun token — elenco di interessi correnti (blocco
+     * "interessi utente"): usato dal selettore del profilo e dalla
+     * directory utenti, entrambi client component. */
+    list: () => request<Interest[]>("/api/v1/interests"),
   },
 
   blogs: {
@@ -264,9 +293,14 @@ export const api = {
       formData.append("file", file);
       return request<Blog>(`/api/v1/blogs/${slug}/cover-image`, { method: "POST", token, formData });
     },
-    /** Avviso manuale sui contenuti della cover già caricata, senza ricaricarla. */
-    updateCoverImageCategories: (token: string, slug: string, categories: string[]) =>
-      request<Blog>(`/api/v1/blogs/${slug}/cover-image`, { method: "PATCH", token, body: { categories } }),
+    /** Avviso manuale sui contenuti della cover già caricata, senza ricaricarla.
+     * `altText` assente: non tocca l'alt text attuale. */
+    updateCoverImageCategories: (token: string, slug: string, categories: string[], altText?: string) =>
+      request<Blog>(`/api/v1/blogs/${slug}/cover-image`, {
+        method: "PATCH",
+        token,
+        body: altText === undefined ? { categories } : { categories, alt_text: altText },
+      }),
     deleteCoverImage: (token: string, slug: string) =>
       request<Blog>(`/api/v1/blogs/${slug}/cover-image`, { method: "DELETE", token }),
     /** Favicon dedicata del blog (facoltativa): nessuna moderazione, icona di identità. */
@@ -426,6 +460,7 @@ export const api = {
         cover_image_url?: string | null;
         cover_image_is_sensitive?: boolean;
         cover_image_categories?: SensitivityCategory[];
+        cover_image_alt_text?: string;
         tags?: string[];
         category_id?: string | null;
         publication_id?: string | null;
@@ -444,6 +479,9 @@ export const api = {
          * — indipendente da cover_image_url, a differenza di
          * cover_image_is_sensitive (vedi backend/API.md). */
         cover_image_categories?: SensitivityCategory[];
+        /** assente: non tocca; presente (anche null/""): azzera o sostituisce
+         * — indipendente da cover_image_url, come cover_image_categories. */
+        cover_image_alt_text?: string | null;
         tags?: string[];
         /** assente: non tocca la categoria; null: la rimuove; id: la imposta. */
         category_id?: string | null;
@@ -485,6 +523,7 @@ export const api = {
         content: string;
         cover_image_url?: string | null;
         cover_image_categories?: SensitivityCategory[];
+        cover_image_alt_text?: string;
         tags?: string[];
         category_id?: string | null;
         notes?: PostNote[];
@@ -566,6 +605,10 @@ export const api = {
         country?: string;
         native_language?: string;
         fallback_languages?: string[];
+        /** Opt-out dalla directory pubblica (`GET /users`); assente non tocca. */
+        directory_listed?: boolean;
+        /** Chiavi canoniche (blocco "interessi utente"), al più 5; assente non tocca. */
+        interests?: string[];
       }
     ) => request<MeProfile>("/api/v1/users/me", { method: "PATCH", token, body: payload }),
     followStats: (token: string) => request<FollowStats>("/api/v1/users/me/follow-stats", { token }),
@@ -627,6 +670,9 @@ export const api = {
         token,
         body: { code },
       }),
+    /** Annulla una richiesta di cambio email pending, a qualunque passo. */
+    cancelEmailChange: (token: string) =>
+      request<void>("/api/v1/users/me/email/request", { method: "DELETE", token }),
     /** Registra/sostituisce il dominio custom (stato `pending`), ritorna le
      * istruzioni per il record TXT da pubblicare sul DNS. */
     setDomain: (token: string, domain: string) =>
@@ -635,6 +681,18 @@ export const api = {
       request<DomainOut>("/api/v1/users/me/domain/verify", { method: "POST", token }),
     deleteDomain: (token: string) =>
       request<void>("/api/v1/users/me/domain", { method: "DELETE", token }),
+    /** Cambio password autenticato (richiede la password attuale): invalida
+     * ogni sessione già aperta, anche quella corrente — il chiamante deve
+     * rifare login subito dopo. */
+    changePassword: (token: string, payload: { current_password: string; new_password: string }) =>
+      request<{ status: string }>("/api/v1/users/me/password", { method: "POST", token, body: payload }),
+    /** Vista aggregata "tutti i miei blog": tutti i post (qualunque stato),
+     * dal più recente — generalizza `posts.list` a più blog insieme. */
+    myPosts: (token: string) => request<Post[]>("/api/v1/users/me/posts", { token }),
+    myMedia: (token: string) => request<MyMediaFile[]>("/api/v1/users/me/media", { token }),
+    myPublications: (token: string) => request<MyPublication[]>("/api/v1/users/me/publications", { token }),
+    myLinks: (token: string) => request<MyLinkBibliographyEntry[]>("/api/v1/users/me/links", { token }),
+    myBibliography: (token: string) => request<MyBibliographyEntry[]>("/api/v1/users/me/bibliography", { token }),
   },
 
   fragments: {
@@ -716,6 +774,11 @@ export const api = {
       userId: string,
       payload: Partial<{ platform_role: PlatformRole; is_active: boolean; note: string }>
     ) => request<AdminUser>(`/api/v1/admin/users/${userId}`, { method: "PATCH", token, body: payload }),
+    /** Reset forzoso della password: innesca verso l'utente lo stesso ciclo
+     * email di "password dimenticata" — l'admin non imposta una password,
+     * solo avvia l'invio. Sempre 202, nessun corpo. */
+    resetUserPassword: (token: string, userId: string) =>
+      request<void>(`/api/v1/admin/users/${userId}/reset-password`, { method: "POST", token }),
     listBlogs: (token: string, q?: string) =>
       request<AdminBlog[]>(withQuery("/api/v1/admin/blogs", { q }), { token }),
     /** B5: `state` filtra per stato, `reported` = solo con segnalazioni aperte. */
@@ -757,5 +820,82 @@ export const api = {
       request<ApiTokenCreated>("/api/v1/tokens", { method: "POST", token, body: { name } }),
     revoke: (token: string, tokenId: string) =>
       request<void>(`/api/v1/tokens/${tokenId}`, { method: "DELETE", token }),
+  },
+
+  newsletter: {
+    /** Pubblico, nessuna autenticazione: doppio opt-in. Risposta sempre
+     * generica (202 `{status:"ok"}`), anche se l'indirizzo è già iscritto —
+     * anti-enumerazione, vedi backend/app/api/v1/newsletter.py. */
+    subscribe: (payload: { email: string; blog_slug?: string | null; locale?: string | null }) =>
+      request<{ status: string }>("/api/v1/newsletter/subscribe", { method: "POST", body: payload }),
+    confirm: (token: string) =>
+      request<{ status: "confirmed" | "already_confirmed" | "invalid" }>(
+        `/api/v1/newsletter/confirm?token=${encodeURIComponent(token)}`
+      ),
+    unsubscribe: (payload: { token: string; reason?: string | null }) =>
+      request<{ status: string }>("/api/v1/newsletter/unsubscribe", { method: "POST", body: payload }),
+    /** Cancellazione GDPR self-service (Art. 17), idempotente, senza login:
+     * chi riceve l'email è già identificato dal token firmato del link. */
+    unsubscribeAndDelete: (payload: { token: string }) =>
+      request<{ status: string }>("/api/v1/newsletter/unsubscribe/delete", { method: "POST", body: payload }),
+    blogStats: (token: string, slug: string) =>
+      request<NewsletterStats>(`/api/v1/blogs/${slug}/newsletter/stats`, { token }),
+    blogCampaigns: (token: string, slug: string) =>
+      request<NewsletterCampaign[]>(`/api/v1/blogs/${slug}/newsletter/campaigns`, { token }),
+    createBlogCampaign: (
+      token: string,
+      slug: string,
+      payload: { subject: string; body_markdown: string; scheduled_at?: string | null }
+    ) =>
+      request<NewsletterCampaign>(`/api/v1/blogs/${slug}/newsletter/campaigns`, {
+        method: "POST",
+        token,
+        body: payload,
+      }),
+    /** Solo mentre `status === "scheduled"` (409 altrimenti, vedi
+     * NewsletterCampaignUpdate). */
+    updateBlogCampaign: (token: string, slug: string, campaignId: string, payload: NewsletterCampaignUpdate) =>
+      request<NewsletterCampaign>(`/api/v1/blogs/${slug}/newsletter/campaigns/${campaignId}`, {
+        method: "PATCH",
+        token,
+        body: payload,
+      }),
+    cancelBlogCampaign: (token: string, slug: string, campaignId: string) =>
+      request<NewsletterCampaign>(`/api/v1/blogs/${slug}/newsletter/campaigns/${campaignId}`, {
+        method: "DELETE",
+        token,
+      }),
+    blogSettings: (token: string, slug: string) =>
+      request<NewsletterSettings>(`/api/v1/blogs/${slug}/newsletter/settings`, { token }),
+    updateBlogSettings: (token: string, slug: string, payload: NewsletterSettingsUpdate) =>
+      request<NewsletterSettings>(`/api/v1/blogs/${slug}/newsletter/settings`, {
+        method: "PATCH",
+        token,
+        body: payload,
+      }),
+    adminStats: (token: string) => request<NewsletterStats>("/api/v1/admin/newsletter/stats", { token }),
+    adminCampaigns: (token: string) => request<NewsletterCampaign[]>("/api/v1/admin/newsletter/campaigns", { token }),
+    createAdminCampaign: (
+      token: string,
+      payload: { subject: string; body_markdown: string; scheduled_at?: string | null }
+    ) => request<NewsletterCampaign>("/api/v1/admin/newsletter/campaigns", { method: "POST", token, body: payload }),
+    updateAdminCampaign: (token: string, campaignId: string, payload: NewsletterCampaignUpdate) =>
+      request<NewsletterCampaign>(`/api/v1/admin/newsletter/campaigns/${campaignId}`, {
+        method: "PATCH",
+        token,
+        body: payload,
+      }),
+    cancelAdminCampaign: (token: string, campaignId: string) =>
+      request<NewsletterCampaign>(`/api/v1/admin/newsletter/campaigns/${campaignId}`, {
+        method: "DELETE",
+        token,
+      }),
+    adminSettings: (token: string) => request<AdminNewsletterSettings>("/api/v1/admin/newsletter/settings", { token }),
+    updateAdminSettings: (token: string, payload: AdminNewsletterSettingsUpdate) =>
+      request<AdminNewsletterSettings>("/api/v1/admin/newsletter/settings", {
+        method: "PATCH",
+        token,
+        body: payload,
+      }),
   },
 };

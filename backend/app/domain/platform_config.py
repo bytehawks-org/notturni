@@ -4,10 +4,12 @@ registrazione, creazione blog, commenti anonimi, SSO e accesso admin."""
 
 from datetime import datetime, timezone
 
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.domain.blog_rules import MAX_BLOGS_PER_USER
+from app.domain.interests import DEFAULT_INTERESTS, default_interests_from_env
 from app.models.platform_config import PlatformConfig
 
 REGISTRATION_MODES = ("open", "invite", "closed")
@@ -27,27 +29,40 @@ MAX_FOOTER_MARKDOWN_LENGTH = 5000
 async def get_platform_config(session: AsyncSession) -> PlatformConfig:
     config = await session.get(PlatformConfig, 1)
     if config is None:
-        config = PlatformConfig(
-            id=1,
-            default_locale=settings.default_locale,
-            registration_mode="open",
-            sso_providers=[],
-            mfa_required_for_admins=False,
-            reserved_blog_names=[],
-            moderation_threshold=0.8,
-            max_blogs_per_user=MAX_BLOGS_PER_USER,
-            anonymous_comments_allowed=True,
-            audit_retention_days=settings.audit_retention_days,
-            # Stesso contenuto che la SiteFooter mostrava in modo fisso prima
-            # di questo blocco (link al repository + "fatto in UE"): seminato
-            # qui solo per non perdere quella riga su un'installazione nuova,
-            # resta comunque un campo come gli altri, modificabile o
-            # azzerabile da un Super Admin in qualsiasi momento.
-            footer_bottom_bar_markdown="[Notturni su GitHub](https://github.com/bytehawks-org/notturni) · 🇪🇺 Fatto in UE",
+        # ON CONFLICT DO NOTHING invece di un add()+commit() diretto: su
+        # un'installazione appena avviata, due prime richieste concorrenti
+        # possono entrambe superare il `get` sopra prima che una delle due
+        # faccia commit — un insert semplice fa fallire la seconda con un
+        # IntegrityError sulla PK invece di limitarsi a non fare nulla e
+        # rileggere la riga che l'altra ha appena creato.
+        stmt = (
+            pg_insert(PlatformConfig)
+            .values(
+                id=1,
+                default_locale=settings.default_locale,
+                registration_mode="open",
+                sso_providers=[],
+                mfa_required_for_admins=False,
+                reserved_blog_names=[],
+                moderation_threshold=0.8,
+                max_blogs_per_user=MAX_BLOGS_PER_USER,
+                anonymous_comments_allowed=True,
+                audit_retention_days=settings.audit_retention_days,
+                # Stesso contenuto che la SiteFooter mostrava in modo fisso
+                # prima di questo blocco (link al repository + "fatto in
+                # UE"): seminato qui solo per non perdere quella riga su
+                # un'installazione nuova, resta comunque un campo come gli
+                # altri, modificabile o azzerabile da un Super Admin in
+                # qualsiasi momento.
+                footer_bottom_bar_markdown="[Notturni su GitHub](https://github.com/bytehawks-org/notturni) · 🇪🇺 Fatto in UE",
+                interests=default_interests_from_env(settings.default_interests) or DEFAULT_INTERESTS,
+            )
+            .on_conflict_do_nothing(index_elements=["id"])
         )
-        session.add(config)
+        await session.execute(stmt)
         await session.commit()
-        await session.refresh(config)
+        config = await session.get(PlatformConfig, 1)
+        assert config is not None
     return config
 
 

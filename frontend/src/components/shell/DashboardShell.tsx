@@ -22,17 +22,38 @@ const COLLAPSE_STORAGE_KEY = "notturni_dashboard_sidebar_collapsed";
  * finestra invece di allungarsi fino in fondo al contenuto centrale su
  * pagine lunghe (es. il profilo).
  */
+export interface ExternalLink {
+  href: string;
+  label: string;
+  /** Icona compatta mostrata a sidebar collassata (un solo carattere, come `NavItem.icon`). */
+  icon?: string;
+}
+
 export function DashboardShell({
   items,
   eyebrow,
   homeHref = "/dashboard",
+  /** Link verso la piattaforma generale (homepage pubblica) — sempre
+   * presente, non legato al contesto della pagina corrente. */
+  platformLink,
+  /** Link verso il blog pubblico su cui si sta lavorando: valorizzato solo
+   * dalle pagine che operano nel contesto di un blog specifico (es.
+   * l'editor di un post), assente altrove — permette di capire subito quale
+   * blog è "attivo" senza doverlo dedurre dallo slug nell'URL. */
+  blogLink,
   footer,
   children,
 }: {
   items: NavItem[];
   eyebrow?: string;
   homeHref?: string;
-  footer?: ReactNode;
+  platformLink?: ExternalLink;
+  blogLink?: ExternalLink;
+  /** Sia il nodo espanso sia un compattatore `(collapsed) => ReactNode`: il
+   * footer porta azioni sempre raggiungibili (logout, tema) — con il solo
+   * `ReactNode` sparivano del tutto a sidebar collassata, non solo
+   * ridimensionate. */
+  footer?: ReactNode | ((collapsed: boolean) => ReactNode);
   children: ReactNode;
 }) {
   const path = usePathname();
@@ -66,6 +87,30 @@ export function DashboardShell({
           <span className="font-serif text-xl font-semibold text-foreground">{collapsed ? "N" : "Notturni"}</span>
           {!collapsed && eyebrow && <span className="font-mono text-xs tracking-[.06em] text-muted">{eyebrow}</span>}
         </Link>
+        {(platformLink || blogLink) && (
+          <div className={`mb-2 flex flex-col gap-1 ${collapsed ? "items-center" : ""}`}>
+            {platformLink && (
+              <Link
+                href={platformLink.href}
+                title={collapsed ? platformLink.label : undefined}
+                className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] text-muted hover:text-foreground ${collapsed ? "justify-center" : ""}`}
+              >
+                <span aria-hidden="true">{platformLink.icon ?? "↩"}</span>
+                {!collapsed && <span className="truncate">{platformLink.label}</span>}
+              </Link>
+            )}
+            {blogLink && (
+              <Link
+                href={blogLink.href}
+                title={collapsed ? blogLink.label : undefined}
+                className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] text-muted hover:text-foreground ${collapsed ? "justify-center" : ""}`}
+              >
+                <span aria-hidden="true">{blogLink.icon ?? "↗"}</span>
+                {!collapsed && <span className="truncate">{blogLink.label}</span>}
+              </Link>
+            )}
+          </div>
+        )}
         {items.map((i) => (
           <Link
             key={i.href}
@@ -88,7 +133,11 @@ export function DashboardShell({
           </Link>
         ))}
         <div className="mt-auto flex flex-col gap-3">
-          {footer && !collapsed && <div className="border-t border-border pt-4">{footer}</div>}
+          {footer && (
+            <div className={collapsed ? "" : "border-t border-border pt-4"}>
+              {typeof footer === "function" ? footer(collapsed) : !collapsed && footer}
+            </div>
+          )}
           <button
             type="button"
             onClick={toggleCollapsed}

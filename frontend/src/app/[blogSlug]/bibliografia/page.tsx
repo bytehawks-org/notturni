@@ -10,6 +10,7 @@ import { BlogHeaderActions } from "@/components/blog/PostHeaderActions";
 import { BlogHeader } from "@/components/shell/BlogHeader";
 import { FilterChip } from "@/components/ui/Pill";
 import { renderNoteInline } from "@/lib/markdown";
+import { blogLinks } from "@/lib/blog-path";
 import { getBlogBibliography, getPublicBlog, getPublicBlogConfig, getPublicPublications } from "@/lib/server-api";
 
 interface PageParams {
@@ -40,18 +41,19 @@ export default async function BlogBibliographyPage({
   searchParams: Promise<{ sort?: string; kind?: string }>;
 }) {
   const [{ blogSlug }, { sort, kind }] = await Promise.all([params, searchParams]);
-  const [blog, entries, config, t] = await Promise.all([
+  const [blog, entries, config, t, links] = await Promise.all([
     getPublicBlog(blogSlug),
     getBlogBibliography(blogSlug),
     getPublicBlogConfig(blogSlug),
     getTranslations("BibliographyPage"),
+    blogLinks(blogSlug),
   ]);
   if (!blog) notFound();
   const hasPublications = (await getPublicPublications(blogSlug).catch(() => [])).length > 0;
   if (blogIsOffline(blog)) {
     return (
       <BlogPageShell config={config}>
-        <BlogHeader slug={blogSlug} name={blog.title} hasPublications={hasPublications} current="bibliography" />
+        <BlogHeader basePath={links.basePath} name={blog.title} hasPublications={hasPublications} current="bibliography" />
         <BlogStateNotice blog={blog} />
       </BlogPageShell>
     );
@@ -68,13 +70,13 @@ export default async function BlogBibliographyPage({
     if (k) p.set("kind", k);
     if (so) p.set("sort", so);
     const qs = p.toString();
-    return `/${blogSlug}/bibliografia${qs ? `?${qs}` : ""}`;
+    return `${links.basePath}/bibliografia${qs ? `?${qs}` : ""}`;
   };
   const postCount = new Set(entries.flatMap((e) => e.citations.map((c) => c.permalink))).size;
 
   return (
     <BlogPageShell config={config}>
-      <BlogHeader slug={blogSlug} name={blog.title} hasPublications={hasPublications} current="bibliography" actions={<BlogHeaderActions slug={blogSlug} />} />
+      <BlogHeader basePath={links.basePath} name={blog.title} hasPublications={hasPublications} current="bibliography" actions={<BlogHeaderActions slug={blogSlug} />} />
       <main className="mx-auto w-full max-w-[1184px] flex-1 px-5 py-10 lg:px-12 lg:py-14">
         <div className="flex flex-col gap-1.5">
           <h1 className="font-serif text-[34px] font-medium leading-[1.12] tracking-tight md:text-[40px]">{t("title")}</h1>
@@ -155,7 +157,7 @@ export default async function BlogBibliographyPage({
                     )}
                     <span>{tb("citedIn")}</span>
                     {entry.citations.map((c, j) => (
-                      <Link key={`${c.permalink}-${c.idx}`} href={`${c.permalink}#fn-${c.idx}`} className="no-underline hover:underline">
+                      <Link key={`${c.permalink}-${c.idx}`} href={`${links.fromPermalink(c.permalink)}#fn-${c.idx}`} className="no-underline hover:underline">
                         {c.post_title}
                         {c.locale !== blog.default_locale ? ` (${c.locale})` : ""}
                         {j < entry.citations.length - 1 ? "," : ""}

@@ -17,6 +17,7 @@ from app.domain.authorization import get_membership_role
 from app.domain.content_media import SENSITIVITY_CATEGORIES
 from app.domain.moderation import classify_image
 from app.domain.platform_config import get_platform_config
+from app.domain.storage_quota import assert_blog_storage_quota
 from app.models.blog import Blog, BlogMembership
 from app.models.follow import BlogFollow
 from app.models.media_file import MediaFile
@@ -48,6 +49,8 @@ async def upload_blog_media(
     await _require_blog_write_access(session, current_user, blog)
 
     content = await file.read()
+    platform = await get_platform_config(session)
+    await assert_blog_storage_quota(session, blog=blog, config=platform, extra_bytes=len(content))
     try:
         object_key = upload_media(
             user_id=blog.owner_id,
@@ -58,7 +61,6 @@ async def upload_blog_media(
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
-    platform = await get_platform_config(session)
     is_sensitive = await classify_image(
         content, file.filename or "image", file.content_type or "", threshold=platform.moderation_threshold
     )
@@ -105,6 +107,9 @@ class MediaFileOut(BaseModel):
     uploader_username: str | None
     created_at: datetime
     used_in: list[MediaUsageOut]
+    # True se questa immagine è l'attuale cover del blog (Blog.cover_image_url,
+    # app/api/v1/blogs/branding.py) — distinto da used_in, che copre solo i post.
+    used_as_blog_cover: bool
 
 
 class MediaLibraryOut(BaseModel):
@@ -126,18 +131,29 @@ async def _require_blog_member(session: AsyncSession, user: User, blog: Blog) ->
 
 
 async def _usages(session: AsyncSession, blog: Blog, urls: list[str]) -> dict[str, list[MediaUsageOut]]:
+    """Post che usano ciascun URL — nel contenuto (`post_media`) o come
+    propria cover (`Post.cover_image_url`): quest'ultima non è mai stata
+    tracciata qui prima, così un'immagine usata solo come cover di un post
+    risultava "non usata da nessuno" in libreria (poteva essere cancellata
+    mentre era ancora la cover live del post, bug trovato dal vivo)."""
     if not urls:
         return {}
-    rows = (
+    content_rows = (
         await session.execute(
             select(post_media.c.url, Post.id, Post.slug, Post.title)
             .join(Post, Post.id == post_media.c.post_id)
             .where(Post.blog_id == blog.id, post_media.c.url.in_(urls))
         )
     ).all()
+    cover_rows = (
+        await session.execute(
+            select(Post.cover_image_url, Post.id, Post.slug, Post.title)
+            .where(Post.blog_id == blog.id, Post.cover_image_url.in_(urls))
+        )
+    ).all()
     out: dict[str, list[MediaUsageOut]] = {}
     seen: set[tuple[str, uuid.UUID]] = set()
-    for url, post_id, slug, title in rows:
+    for url, post_id, slug, title in (*content_rows, *cover_rows):
         if (url, post_id) in seen:
             continue
         seen.add((url, post_id))
@@ -164,6 +180,7 @@ async def _media_out(session: AsyncSession, blog: Blog, files: list[MediaFile]) 
             uploader_username=names.get(f.uploader_id) if f.uploader_id else None,
             created_at=f.created_at,
             used_in=usages.get(f.url, []),
+            used_as_blog_cover=f.url == blog.cover_image_url,
         )
         for f in files
     ]
@@ -198,17 +215,28 @@ async def sync_blog_media(
     known = set((await session.execute(select(MediaFile.url).where(MediaFile.blog_id == blog.id))).scalars().all())
     rows = (
         await session.execute(
-            select(post_media.c.url, post_media.c.alt_text, post_media.c.categories)
+            select(post_media.c.url, post_media.c.alt_text, post_media.c.categories, post_media.c.is_sensitive)
             .join(Post, Post.id == post_media.c.post_id)
             .where(Post.blog_id == blog.id)
         )
     ).all()
-    for url, alt_text, categories in rows:
+    # La stessa immagine può ricorrere in più post con `is_sensitive`
+    # diverso (nessun ORDER BY qui, ordine non deterministico): raggruppare
+    # per URL prima di inserire, così una sola citazione sensibile basta a
+    # marcare l'intera riga importata, invece di dipendere da quale post
+    # viene incontrato per primo (bug segnalato dalla review Copilot).
+    to_import: dict[str, tuple[str, list[str], bool]] = {}
+    for url, alt_text, categories, is_sensitive in rows:
         if url in known:
             continue
-        known.add(url)
+        existing = to_import.get(url)
+        if existing is None:
+            to_import[url] = (alt_text or "", list(categories or []), is_sensitive)
+        elif is_sensitive and not existing[2]:
+            to_import[url] = (existing[0], existing[1], True)
+    for url, (alt_text, categories, is_sensitive) in to_import.items():
         session.add(
-            MediaFile(blog_id=blog.id, uploader_id=None, object_key=None, url=url, content_type="", size_bytes=0, alt_text=alt_text or "", categories=list(categories or []), is_sensitive=bool(categories))
+            MediaFile(blog_id=blog.id, uploader_id=None, object_key=None, url=url, content_type="", size_bytes=0, alt_text=alt_text, categories=categories, is_sensitive=is_sensitive)
         )
     await session.commit()
     return await list_blog_media(slug, current_user, session)
@@ -256,12 +284,28 @@ async def delete_blog_media(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> None:
-    """Cancella un'immagine non usata da nessun post (`409` altrimenti):
-    rimuove la riga e, se caricata tramite la libreria, l'oggetto su storage."""
+    """Cancella un'immagine non usata da nessun post né come cover del blog
+    (`409` altrimenti): rimuove la riga e, se caricata tramite la libreria,
+    l'oggetto su storage. Il controllo copre anche `Post.cover_image_url`/
+    `Blog.cover_image_url`, non solo `post_media` — altrimenti un'immagine
+    usata solo come cover risultava "libera" e la cancellazione la rompeva
+    (bug trovato dal vivo, stesso problema di _usages sopra)."""
     blog = await _get_blog_or_404(session, slug)
     await _require_blog_write_access(session, current_user, blog)
     media = await _get_media_or_404(session, blog, media_id)
-    used = (await session.execute(select(func.count()).select_from(post_media).join(Post, Post.id == post_media.c.post_id).where(Post.blog_id == blog.id, post_media.c.url == media.url))).scalar_one()
+    if media.url == blog.cover_image_url:
+        raise HTTPException(status.HTTP_409_CONFLICT, "L'immagine è ancora la cover del blog: rimuovila prima da lì.")
+    used = (
+        await session.execute(
+            select(func.count())
+            .select_from(Post)
+            .outerjoin(post_media, post_media.c.post_id == Post.id)
+            .where(
+                Post.blog_id == blog.id,
+                (post_media.c.url == media.url) | (Post.cover_image_url == media.url),
+            )
+        )
+    ).scalar_one()
     if used:
         raise HTTPException(status.HTTP_409_CONFLICT, "L'immagine è ancora usata in un post: rimuovila prima dal contenuto.")
     if media.object_key:

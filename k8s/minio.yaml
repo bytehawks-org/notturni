@@ -5,7 +5,7 @@ metadata:
   namespace: notturni
 spec:
   accessModes: ["ReadWriteOnce"]
-  storageClassName: longhorn
+  storageClassName: local-path
   resources:
     requests:
       storage: 10Gi
@@ -29,7 +29,7 @@ spec:
     spec:
       containers:
         - name: minio
-          image: docker.io/minio/minio:latest
+          image: quay.io/minio/minio:latest
           args: ["server", "/data", "--console-address", ":9001"]
           ports:
             - containerPort: 9000

@@ -28,14 +28,20 @@ export function FilterChip({
   children: ReactNode;
   onClick?: () => void;
 }) {
+  const className = `rounded-full px-2.5 py-1 text-xs whitespace-nowrap ${
+    active ? "bg-foreground text-background" : "border border-border text-muted hover:text-foreground"
+  }`;
+  // Senza `onClick` il filtro è mosso da un `<Link>` esterno che avvolge il
+  // chip (URL-based, es. `/?locale=...`): un `<button>` qui annidato dentro
+  // quell'`<a>` è HTML non valido e rende l'attivazione da tastiera/screen
+  // reader inaffidabile — un elemento non interattivo lascia il link fare
+  // il suo lavoro. Con `onClick` (filtro stateful lato client, nessun
+  // `<Link>` intorno) resta un vero `<button>`.
+  if (!onClick) {
+    return <span className={className}>{children}</span>;
+  }
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-full px-2.5 py-1 text-xs whitespace-nowrap ${
-        active ? "bg-foreground text-background" : "border border-border text-muted hover:text-foreground"
-      }`}
-    >
+    <button type="button" onClick={onClick} className={className}>
       {children}
     </button>
   );

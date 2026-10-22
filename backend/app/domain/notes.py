@@ -58,6 +58,19 @@ def _clean_optional(value: str | None, *, max_length: int, label: str) -> str | 
     return text
 
 
+def _clean_url(value: str | None, *, max_length: int) -> str | None:
+    """Come `_clean_optional`, ma per `url` valida anche lo schema — questo
+    valore finisce in un `href` lato frontend (markdown.ts::
+    buildNoteCitationElement) dopo l'ultimo passaggio di DOMPurify della
+    pipeline: senza questo controllo un `javascript:` salvato qui verrebbe
+    eseguito al click, stessa policy già applicata a BlogNote.url in
+    app/api/v1/blogs/notes.py::_validate."""
+    text = _clean_optional(value, max_length=max_length, label="URL")
+    if text is not None and not (text.startswith("http://") or text.startswith("https://")):
+        raise ValueError("L'URL della nota deve iniziare con http:// o https://.")
+    return text
+
+
 def normalize_notes(notes: list[NoteInput]) -> list[NoteInput]:
     """Valida e normalizza l'elenco di note. Solleva ValueError se non valido.
     Ritorna le note ordinate per `idx`, senza duplicati di `idx`, con il
@@ -97,7 +110,7 @@ def normalize_notes(notes: list[NoteInput]) -> list[NoteInput]:
                 kind=kind,
                 source=_clean_optional(note.source, max_length=MAX_NOTE_SOURCE_LENGTH, label="editore/rivista/sito"),
                 issued=_clean_optional(note.issued, max_length=MAX_NOTE_ISSUED_LENGTH, label="anno/data"),
-                url=_clean_optional(note.url, max_length=MAX_NOTE_URL_LENGTH, label="URL"),
+                url=_clean_url(note.url, max_length=MAX_NOTE_URL_LENGTH),
             )
         )
 
