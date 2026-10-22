@@ -27,6 +27,7 @@ preferisce, senza account). Lasciati intatti: blog di proprietà, post, commenti
 subito con l'autore "Utente eliminato" ovunque (stessa risoluzione dinamica
 già usata per gli alias, `app/domain/display_names.py`)."""
 
+import asyncio
 from typing import Any
 
 from sqlalchemy import delete, select
@@ -238,7 +239,7 @@ async def anonymize_and_deactivate_user(session: AsyncSession, user: User) -> No
     docstring del modulo per cosa resta e perché). Non fa il `commit`: il
     chiamante lo fa nella stessa transazione dell'evento di audit."""
     if user.avatar_object_key is not None:
-        delete_avatar(user.avatar_object_key)
+        await asyncio.to_thread(delete_avatar, user.avatar_object_key)
 
     await session.execute(delete(UserSession).where(UserSession.user_id == user.id))
     await session.execute(delete(ApiToken).where(ApiToken.user_id == user.id))

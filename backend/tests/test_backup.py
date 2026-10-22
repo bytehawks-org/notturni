@@ -44,12 +44,12 @@ def test_backup_postgres_uploads_dump(monkeypatch: pytest.MonkeyPatch) -> None:
     assert backup_client.objects[("notturni-backups-test", key)] == b"contenuto-dump"
 
 
-def test_mirror_minio_skips_when_localstorage(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_mirror_s3_skips_when_localstorage(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "storage_backend", "localstorage")
-    assert backup.mirror_minio(FakeS3Client()) == {}
+    assert backup.mirror_s3(FakeS3Client()) == {}
 
 
-def test_mirror_minio_copies_objects_between_buckets(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_mirror_s3_copies_objects_between_buckets(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "storage_backend", "s3")
     monkeypatch.setattr(settings, "backup_s3_bucket", "notturni-backups-test")
 
@@ -61,13 +61,13 @@ def test_mirror_minio_copies_objects_between_buckets(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(backup, "get_s3_client", lambda: source)
 
     backup_client = FakeS3Client()
-    counts = backup.mirror_minio(backup_client)
+    counts = backup.mirror_s3(backup_client)
 
     assert counts[settings.s3_bucket_content] == 1
     assert counts[settings.s3_bucket_avatars] == 0
     assert counts[settings.s3_bucket_audit] == 0
     assert backup_client.objects[
-        ("notturni-backups-test", f"minio/{settings.s3_bucket_content}/a/b.png")
+        ("notturni-backups-test", f"s3/{settings.s3_bucket_content}/a/b.png")
     ] == b"immagine"
 
 

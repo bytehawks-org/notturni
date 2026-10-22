@@ -1162,7 +1162,7 @@ o-`publisher`/`year`/`isbn`/`doi`, oppure `note` per il testo libero;
 ## Media e backup
 
 Backend di storage selezionabile via `NOCT_STORAGE_BACKEND`: `s3` (default,
-MinIO/AWS S3/qualunque endpoint S3-compatible) oppure `localstorage`
+Garage/AWS S3/qualunque endpoint S3-compatible) oppure `localstorage`
 (filesystem locale, servito dal backend stesso su `/storage` — pensato per
 installazioni `solo` senza storage S3). Tutto sotto un unico bucket/namespace
 (`NOCT_S3_BUCKET_CONTENT`), con un prefisso
@@ -1852,7 +1852,7 @@ conteggio/elenco della singola entità, senza mai collegarli tra loro.
 
 **`POST /api/v1/users/me/avatar`** — richiede sessione, `multipart/form-data`
 con campo `file`. Formati ammessi: PNG, JPEG, WEBP; max 2 MiB (`400`
-altrimenti). Carica sul backend di storage configurato (S3/MinIO con
+altrimenti). Carica sul backend di storage configurato (S3/Garage con
 endpoint custom sempre iniettato, o filesystem locale — bucket/namespace
 `avatars` reso pubblico in lettura), sostituisce ed elimina l'eventuale
 avatar precedente. Ritorna `{"avatar_url": "..."}`.

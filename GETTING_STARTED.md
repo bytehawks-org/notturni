@@ -20,7 +20,7 @@ dettaglio di ogni pezzo vedi [README.md](README.md) (panoramica e struttura),
   # poi usa /tmp/podman-compose-venv/bin/podman-compose al posto di "podman compose"
   ```
 
-Non serve altro installato a mano: Postgres, Redis, RabbitMQ, MinIO, backend
+Non serve altro installato a mano: Postgres, Redis, RabbitMQ, Garage (storage S3), backend
 e frontend girano tutti in container.
 
 ## 1. Configurazione
@@ -38,6 +38,12 @@ essere notate:
   chiude dopo il primo utente, che diventa automaticamente Super Admin: utile
   per provare rapidamente il caso d'uso "blog personale" invece che quello
   multiutente. Per questa guida si assume `platform`.
+- `NOCT_S3_ACCESS_KEY_ID` / `NOCT_S3_SECRET_ACCESS_KEY` /
+  `NOCT_GARAGE_RPC_SECRET` / `NOCT_GARAGE_ADMIN_TOKEN` — credenziali di
+  Garage, lo storage S3-compatible. I segnaposto di `.env.example` hanno già
+  il formato richiesto da Garage (`GK` + 24 hex / 64 hex) e vanno bene in
+  locale; per un ambiente esposto generarne di veri (comandi nei commenti
+  del file).
 - `NOCT_JWT_SECRET` / `NOCT_SESSION_SECRET` — vanno bene i default (`foo`) per
   un test locale; **non riusarli mai in un ambiente esposto** (vedi i commenti
   nel file per generarne di veri).
@@ -55,13 +61,15 @@ podman-compose up -d --build
 ```
 
 La prima volta impiega qualche minuto (build delle immagini + download di
-Postgres/Redis/RabbitMQ/MinIO). Al termine dovresti avere 9 container su:
+Postgres/Redis/RabbitMQ/Garage). `garage-bootstrap` è un job one-shot
+(layout, chiave e bucket di Garage): termina da solo con exit 0, è normale che
+non risulti `Up`. Al termine i servizi raggiungibili sono:
 
 - Frontend (dashboard e amministrazione incluse): <http://localhost:3000>
 - Backend — Swagger UI: <http://localhost:8000/docs>
 - Backend — health check: <http://localhost:8000/api/v1/health>
 - RabbitMQ — console: <http://localhost:15672> (admin/foo)
-- MinIO — console: <http://localhost:9001> (admin/foobarfoobar)
+- Storage S3 (Garage) — API: <http://localhost:3900>; letture pubbliche (avatar/media): <http://localhost:9000>
 
 Verifica rapida che il backend risponda e veda il database:
 
@@ -192,10 +200,13 @@ podman compose down -v       # ferma e cancella anche i dati (riparti da zero)
   console)** — succede se il frontend gira su un URL diverso da
   `http://localhost:3000`: `NOCT_CORS_ORIGINS` nel `.env` deve includerlo.
 - **Upload avatar/media/aspetto non funziona** — con il backend di storage
-  di default (`NOCT_STORAGE_BACKEND=s3`) verifica che il container `minio`
-  sia `Up` (`podman ps`); i bucket si creano automaticamente al primo upload.
+  di default (`NOCT_STORAGE_BACKEND=s3`) verifica che `garage` sia `Up` e `garage-bootstrap` sia terminato con
+  successo (`podman ps -a`; in caso contrario `podman compose logs garage-bootstrap`
+  — di solito `NOCT_S3_ACCESS_KEY_ID`/`_SECRET_ACCESS_KEY` non rispettano il
+  formato Garage, vedi `.env.example`). Un'immagine caricata ma non visibile
+  nel browser si controlla su <http://localhost:9000/avatars/...>.
   In alternativa esiste `NOCT_STORAGE_BACKEND=localstorage` (filesystem
-  locale servito dal backend stesso, senza bisogno di MinIO/S3 — vedi
+  locale servito dal backend stesso, senza bisogno di Garage/S3 — vedi
   `.env.example`), non usato di default in questo stack.
 - **Il codice MFA via email non arriva mai per email vera** — atteso in
   locale: il consumer (`worker-email-otp` nel `compose.yaml`) invia davvero

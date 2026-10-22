@@ -125,7 +125,7 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     fallback_languages: Mapped[list[str]] = mapped_column(ARRAY(String(2)), default=list, nullable=False)
     # object key sul backend di storage attivo (bucket avatars), non l'URL:
     # quello si genera al volo (app/core/storage.py) per restare compatibile
-    # tra S3/MinIO e storage locale su filesystem senza persistere un host
+    # tra S3 e storage locale su filesystem senza persistere un host
     # specifico.
     avatar_object_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # B6: lingua dell'interfaccia scelta dall'utente (null = default di

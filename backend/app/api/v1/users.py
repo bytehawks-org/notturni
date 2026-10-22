@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -551,8 +552,8 @@ async def upload_my_avatar(
 ) -> AvatarOut:
     content = await file.read()
     try:
-        object_key = upload_avatar(
-            user_id=current_user.id, content=content, content_type=file.content_type or ""
+        object_key = await asyncio.to_thread(
+            upload_avatar, user_id=current_user.id, content=content, content_type=file.content_type or ""
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
@@ -562,7 +563,7 @@ async def upload_my_avatar(
     await session.commit()
 
     if old_key is not None:
-        delete_avatar(old_key)
+        await asyncio.to_thread(delete_avatar, old_key)
 
     return AvatarOut(avatar_url=avatar_public_url(object_key))
 
@@ -573,7 +574,7 @@ async def delete_my_avatar(
     session: AsyncSession = Depends(get_session),
 ) -> None:
     if current_user.avatar_object_key is not None:
-        delete_avatar(current_user.avatar_object_key)
+        await asyncio.to_thread(delete_avatar, current_user.avatar_object_key)
         current_user.avatar_object_key = None
         await session.commit()
 

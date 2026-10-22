@@ -1,4 +1,4 @@
-"""Backup infrastrutturale periodico di Postgres e MinIO/S3 verso uno storage
+"""Backup infrastrutturale periodico di Postgres e dello storage S3 verso uno storage
 S3 **esterno** dedicato (ROADMAP.md §3), distinto dal backup applicativo dei
 singoli post già gestito da `worker-post-backup` (quello scrive nello stesso
 bucket applicativo, pensato come fallback rapido del Markdown — questo è un
@@ -106,7 +106,7 @@ def _mirror_bucket(source_client, backup_client, bucket: str) -> int:
             for obj in page.get("Contents", []):
                 key = obj["Key"]
                 body = source_client.get_object(Bucket=bucket, Key=key)["Body"].read()
-                backup_client.put_object(Bucket=settings.backup_s3_bucket, Key=f"minio/{bucket}/{key}", Body=body)
+                backup_client.put_object(Bucket=settings.backup_s3_bucket, Key=f"s3/{bucket}/{key}", Body=body)
                 count += 1
     except source_client.exceptions.ClientError as exc:
         if exc.response.get("Error", {}).get("Code") in {"NoSuchBucket", "404"}:
@@ -117,10 +117,10 @@ def _mirror_bucket(source_client, backup_client, bucket: str) -> int:
     return count
 
 
-def mirror_minio(backup_client) -> dict[str, int]:
+def mirror_s3(backup_client) -> dict[str, int]:
     if settings.storage_backend != "s3":
         logger.info(
-            "NOCT_STORAGE_BACKEND=%s: nessun MinIO/S3 applicativo da rispecchiare, salto.",
+            "NOCT_STORAGE_BACKEND=%s: nessuno storage S3 applicativo da rispecchiare, salto.",
             settings.storage_backend,
         )
         return {}
@@ -139,7 +139,7 @@ def run_once() -> dict[str, Any]:
     backup_client = get_backup_s3_client()
     _ensure_backup_bucket(backup_client)
     postgres_key = backup_postgres(backup_client)
-    mirrored = mirror_minio(backup_client)
+    mirrored = mirror_s3(backup_client)
     return {"postgres_key": postgres_key, "mirrored_objects": mirrored}
 
 
@@ -153,7 +153,7 @@ def _loop_forever(interval: int) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Backup infrastrutturale di Postgres e MinIO/S3 verso S3 esterno.")
+    parser = argparse.ArgumentParser(description="Backup infrastrutturale di Postgres e dello storage S3 verso S3 esterno.")
     parser.add_argument("--loop", action="store_true", help="esegue in continuo, un giro ogni --interval secondi")
     parser.add_argument("--interval", type=int, default=86400, help="secondi tra un giro e l'altro in modalità --loop")
     args = parser.parse_args()

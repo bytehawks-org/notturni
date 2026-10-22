@@ -1,5 +1,6 @@
 """Upload di media per l'editor e autocomplete delle @menzioni."""
 
+import asyncio
 import uuid
 from datetime import datetime
 
@@ -52,7 +53,8 @@ async def upload_blog_media(
     platform = await get_platform_config(session)
     await assert_blog_storage_quota(session, blog=blog, config=platform, extra_bytes=len(content))
     try:
-        object_key = upload_media(
+        object_key = await asyncio.to_thread(
+            upload_media,
             user_id=blog.owner_id,
             blog_id=blog.id,
             content=content,
@@ -310,7 +312,7 @@ async def delete_blog_media(
         raise HTTPException(status.HTTP_409_CONFLICT, "L'immagine è ancora usata in un post: rimuovila prima dal contenuto.")
     if media.object_key:
         try:
-            delete_content_object(media.object_key)
+            await asyncio.to_thread(delete_content_object, media.object_key)
         except Exception:  # noqa: BLE001 — l'oggetto può essere già sparito; la riga va comunque via
             pass
     await session.delete(media)

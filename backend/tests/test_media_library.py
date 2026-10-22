@@ -67,7 +67,9 @@ async def test_sync_imports_legacy_post_media(client: AsyncClient, make_user: Ca
     assert len(again.json()["items"]) == 1
 
 
-async def test_image_used_only_as_post_cover_is_not_deletable(client: AsyncClient, make_user: Callable) -> None:
+async def test_image_used_only_as_post_cover_is_not_deletable(
+    client: AsyncClient, make_user: Callable, fake_s3: FakeS3Client
+) -> None:
     """Bug trovato dal vivo: used_in era calcolato solo da post_media (immagini
     incorporate nel contenuto), mai da Post.cover_image_url — un'immagine
     usata solo come cover risultava "libera" e cancellabile mentre era
@@ -98,7 +100,9 @@ async def test_image_used_only_as_post_cover_is_not_deletable(client: AsyncClien
     assert (await client.delete(f"/api/v1/blogs/mc-blog/media/{media_id}", headers=owner.headers)).status_code == 204
 
 
-async def test_blog_cover_upload_lands_in_library_and_is_protected(client: AsyncClient, make_user: Callable) -> None:
+async def test_blog_cover_upload_lands_in_library_and_is_protected(
+    client: AsyncClient, make_user: Callable, fake_s3: FakeS3Client
+) -> None:
     owner: AuthedUser = await make_user("bc-owner")
     await _blog(client, owner, "bc-blog")
     up = await client.post(

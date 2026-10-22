@@ -95,14 +95,14 @@ class Settings(BaseSettings):
     oauth_linkedin_client_secret: str | None = None
 
     # Backend di storage per media/avatar/backup post: "s3" (default, vedi
-    # sotto — MinIO/AWS S3/Cloudflare R2, qualunque endpoint S3-compatible)
+    # sotto — Garage/AWS S3/Cloudflare R2, qualunque endpoint S3-compatible)
     # oppure "localstorage" (filesystem locale, servito direttamente dal
     # backend su /storage — pensato per installazioni "solo" self-hosted
     # senza hardware/competenze per gestire uno storage S3-compatible).
     storage_backend: Literal["s3", "localstorage"] = "s3"
 
-    # Storage S3-compatible (CLAUDE.md #4: endpoint custom sempre iniettato,
-    # per compatibilità trasparente tra MinIO locale e AWS/Cloudflare in
+    # Storage S3-compatible (CLAUDE.md #3: endpoint custom sempre iniettato,
+    # per compatibilità trasparente tra Garage locale e AWS/Cloudflare in
     # prod). Auth: access key + secret se entrambe valorizzate, altrimenti
     # ruolo AWS (default credential chain di boto3: instance profile/IRSA,
     # variabili AWS_* d'ambiente, ecc. — vedi get_s3_client in storage.py).
@@ -110,7 +110,19 @@ class Settings(BaseSettings):
     # URL usato per costruire i link pubblici agli oggetti: in locale coincide
     # con l'endpoint, in produzione può essere un dominio/CDN diverso davanti al bucket
     s3_public_url: str | None = None
+    # Garage valida la regione della firma SigV4 contro `s3_region` del proprio
+    # garage.toml (default "garage"): deve coincidere, altrimenti ogni
+    # richiesta fallisce con "Authorization header malformed".
     s3_region: str | None = None
+    # Come rendere leggibili senza credenziali gli oggetti dei bucket
+    # pubblici (avatar, media dei post):
+    #  - "policy": bucket policy S3 con s3:GetObject anonimo (AWS S3, e in
+    #    genere gli S3-compatible che implementano PutBucketPolicy);
+    #  - "website": abilita l'hosting statico del bucket (PutBucketWebsite) —
+    #    Garage non implementa le bucket policy e serve i bucket pubblici solo
+    #    dal suo web endpoint (porta 3902), raggiunto tramite il proxy di
+    #    lettura (compose.yaml: s3-public, k8s/s3-public.yaml).
+    s3_public_access: Literal["policy", "website"] = "policy"
     s3_access_key_id: str | None = "admin"
     s3_secret_access_key: str | None = "foo"
     s3_bucket_avatars: str = "avatars"
@@ -150,7 +162,7 @@ class Settings(BaseSettings):
     # visitatori (a differenza di s3_bucket_avatars/_content).
     s3_bucket_audit: str = "notturni-audit"
 
-    # Backup infrastrutturale periodico di Postgres e MinIO/S3 verso uno
+    # Backup infrastrutturale periodico di Postgres e dello storage S3 verso uno
     # storage S3 **esterno**, distinto da quello applicativo sopra (ROADMAP.md
     # §3) — in produzione deve poter essere un provider diverso da quello che
     # ospita i contenuti, così un incidente su quest'ultimo non porta via
@@ -163,6 +175,15 @@ class Settings(BaseSettings):
     backup_s3_region: str | None = None
     backup_s3_access_key_id: str | None = None
     backup_s3_secret_access_key: str | None = None
+
+    # Admin API di Garage, usata solo da scripts/garage_bootstrap.py (layout
+    # del nodo, chiave applicativa, bucket con alias globale): il backend a
+    # runtime non la usa mai.
+    garage_admin_url: str = "http://localhost:3903"
+    garage_admin_token: str | None = None
+    # Capacità (byte) assegnata al nodo nel layout Garage — limite logico
+    # dello spazio usabile, non una riserva su disco.
+    garage_node_capacity_bytes: int = 10 * 1024**3
 
     # origini ammesse per le chiamate del frontend dal browser (CORS), separate da virgola
     cors_origins: str = "http://localhost:3000"

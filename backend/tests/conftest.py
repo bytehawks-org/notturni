@@ -229,6 +229,8 @@ class FakeS3Client:
     def __init__(self) -> None:
         self.objects: dict[tuple[str, str], bytes] = {}
         self.buckets: set[str] = set()
+        self.policies: dict[str, str] = {}
+        self.websites: dict[str, dict] = {}
         self.exceptions = _FakeExceptions()
 
     def head_bucket(self, Bucket: str) -> None:  # noqa: N803 (nomi boto3)
@@ -239,7 +241,10 @@ class FakeS3Client:
         self.buckets.add(Bucket)
 
     def put_bucket_policy(self, Bucket: str, Policy: str) -> None:  # noqa: N803
-        pass
+        self.policies[Bucket] = Policy
+
+    def put_bucket_website(self, Bucket: str, WebsiteConfiguration: dict) -> None:  # noqa: N803
+        self.websites[Bucket] = WebsiteConfiguration
 
     def put_object(self, Bucket: str, Key: str, Body: bytes, ContentType: str = "") -> None:  # noqa: N803
         self.buckets.add(Bucket)
@@ -258,6 +263,9 @@ class FakeS3Client:
 @pytest.fixture
 def fake_s3(monkeypatch: pytest.MonkeyPatch) -> FakeS3Client:
     fake_client = FakeS3Client()
+    # ensure_*_bucket memorizza i bucket già configurati per processo: un
+    # FakeS3Client nuovo per test non deve ereditarlo dal test precedente
+    monkeypatch.setattr("app.core.storage._ensured_buckets", set())
     monkeypatch.setattr("app.core.storage.get_s3_client", lambda: fake_client)
     return fake_client
 

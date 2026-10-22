@@ -1,0 +1,64 @@
+# Proxy di lettura pubblica davanti a Garage: traduce gli URL path-style
+# `{NOCT_S3_PUBLIC_URL}/{bucket}/{key}` nel web endpoint di Garage ed espone
+# solo i prefissi pubblici (avatar, media dei post), solo in lettura. Config in
+# s3-public.conf.template (kustomize configMapGenerator; stessa fonte di
+# s3-public/ usata da compose.yaml). Esposto da ingressroute-s3.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: s3-public
+  namespace: notturni
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: s3-public
+  template:
+    metadata:
+      labels:
+        app: s3-public
+    spec:
+      containers:
+        - name: nginx
+          image: docker.io/nginxinc/nginx-unprivileged:1.28-alpine
+          ports:
+            - containerPort: 8080
+          env:
+            - name: NGINX_ENVSUBST_FILTER
+              value: "^NOCT_"
+            - name: NOCT_S3_BUCKET_AVATARS
+              valueFrom:
+                configMapKeyRef: {name: notturni-config, key: NOCT_S3_BUCKET_AVATARS}
+            - name: NOCT_S3_BUCKET_CONTENT
+              valueFrom:
+                configMapKeyRef: {name: notturni-config, key: NOCT_S3_BUCKET_CONTENT}
+            - name: NOCT_GARAGE_WEB_UPSTREAM
+              value: "garage:3902"
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8080}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8080}
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nginx/templates/default.conf.template
+              subPath: default.conf.template
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: s3-public-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: s3-public
+  namespace: notturni
+spec:
+  selector:
+    app: s3-public
+  ports:
+    - port: 8080
+      targetPort: 8080

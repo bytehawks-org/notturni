@@ -1,6 +1,12 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# Necessario perché kustomize riscriva i riferimenti ai nomi delle ConfigMap
+# generate (suffisso hash): i manifest dichiarano `namespace: notturni` ma le
+# ConfigMap generate no, e senza questo i volumi continuerebbero a puntare al
+# nome senza hash (inesistente).
+namespace: notturni
+
 resources:
   - namespace.yaml
   - configmap.yaml
@@ -8,7 +14,8 @@ resources:
   - postgres.yaml
   - redis.yaml
   - rabbitmq.yaml
-  - minio.yaml
+  - garage.yaml
+  - s3-public.yaml
   #- smtp-relay.yaml
   - backend.yaml
   - worker-post-backup.yaml
@@ -23,7 +30,20 @@ resources:
   - ingress.yaml
   - middleware-security-headers.yaml
   - ingressroute.yaml
-  - ingressroute-minio.yaml
+  - ingressroute-s3.yaml
+
+# Config di Garage e del proxy di lettura pubblica come ConfigMap generate dai
+# file di questa directory (il suffisso hash nel nome fa ripartire i pod al
+# cambio di contenuto). Copie di ../garage/garage.toml e
+# ../s3-public/default.conf.template (kustomize non legge fuori da questa
+# directory): tenere allineate — backend/tests/test_deploy_configs.py lo verifica.
+configMapGenerator:
+  - name: garage-config
+    files:
+      - garage.toml
+  - name: s3-public-config
+    files:
+      - default.conf.template=s3-public.conf.template
 
 # Tag delle immagini in un solo posto invece che in ogni singolo manifest:
 # kustomize sostituisce il tag di *ogni* image: che referenzia quel nome

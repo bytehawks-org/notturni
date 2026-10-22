@@ -1249,7 +1249,7 @@
     "openQueues": "Code aperte",
     "open": "Apri →",
     "services": "Servizi",
-    "servicesNote": "Lo stato di Postgres, Redis, RabbitMQ, MinIO e del servizio di moderazione arriverà con l'endpoint di panoramica della piattaforma.",
+    "servicesNote": "Lo stato di Postgres, Redis, RabbitMQ, lo storage a oggetti e del servizio di moderazione arriverà con l'endpoint di panoramica della piattaforma.",
     "queue": {
       "comments": "Commenti in attesa",
       "review": "Post in revisione",

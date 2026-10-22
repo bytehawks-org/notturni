@@ -40,7 +40,7 @@ jobs:
         # stack, non serve altro per una scansione black-box.
         run: cp .env.example .env
 
-      - name: Avvia lo stack (Postgres, Redis, RabbitMQ, MinIO, backend, frontend, ...)
+      - name: Avvia lo stack (Postgres, Redis, RabbitMQ, Garage, backend, frontend, ...)
         run: docker compose -f compose.yaml up -d --build
 
       - name: Attendi Postgres

@@ -64,11 +64,15 @@ email non lasciano la macchina, sono ispezionabili su `http://localhost:8025`.
 
 L'upload avatar (`POST /users/me/avatar`) e i media incorporati nei post
 (`POST /blogs/{slug}/media`) richiedono il backend di storage configurato
-(`NOCT_STORAGE_BACKEND`, default `s3`) raggiungibile. Con `s3` (MinIO in
-locale): i bucket (`avatars`, `notturni-content`) vengono creati
-automaticamente al primo upload, con policy pubblica in lettura (solo sul
-prefisso `.../media/...` per il bucket contenuti — i backup dei post restano
-privati). Con `localstorage`: i file vengono scritti su
+(`NOCT_STORAGE_BACKEND`, default `s3`) raggiungibile. Con `s3` (Garage in
+locale): i bucket (`avatars`, `notturni-content`, `notturni-audit`) li crea
+`scripts/garage_bootstrap.py` (job `garage-bootstrap` in `compose.yaml`,
+initContainer del backend in K8s) insieme a layout del nodo e chiave
+applicativa; la lettura pubblica è via website access (`NOCT_S3_PUBLIC_ACCESS=website`)
+e il proxy `s3-public` espone solo gli avatar e il prefisso `.../media/...`
+del bucket contenuti — i backup dei post restano privati. Su AWS S3 e simili
+(`NOCT_S3_PUBLIC_ACCESS=policy`, default) i bucket si creano al primo upload
+con una bucket policy `s3:GetObject`. Con `localstorage`: i file vengono scritti su
 `NOCT_LOCAL_STORAGE_BASE_PATH` e serviti direttamente dal backend su
 `/storage`, nessun bucket/policy da creare.
 
@@ -82,7 +86,7 @@ python -m app.workers.post_backup_consumer
 ```
 
 Distinto da quest'ultimo, il backup **infrastrutturale** periodico di
-Postgres (`pg_dump`) e di tutti i bucket MinIO/S3 verso uno storage S3
+Postgres (`pg_dump`) e di tutti i bucket S3 verso uno storage S3
 esterno (`NOCT_BACKUP_S3_BUCKET`, vuoto per disattivarlo) si avvia con:
 
 ```bash
@@ -105,7 +109,7 @@ pip install -r requirements-dev.txt
 Serve un Postgres raggiungibile (stessa istanza di sviluppo va bene: i test
 usano un database separato, `notturni_test` di default — vedi `.env.test`,
 valori fissi e non sensibili, già pronto senza doverlo copiare). Non serve né
-lo storage S3/MinIO né RabbitMQ: nei test sono sostituiti da fake/mock (vedi
+lo storage S3 né RabbitMQ: nei test sono sostituiti da fake/mock (vedi
 `tests/conftest.py`). Redis è opzionale (il rate limiting, vedi sotto, fallisce
 aperto se irraggiungibile) ma se presente va usato con un DB dedicato diverso
 da quello di sviluppo (`NOCT_REDIS_DB=1` in `.env.test`): i contatori vengono

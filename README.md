@@ -17,7 +17,7 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
 - **Database:** PostgreSQL 16+
 - **Cache & State:** Redis 7+
 - **Message Broker:** RabbitMQ
-- **Object Storage:** backend S3-compatible via boto3 (MinIO in locale, scelta primaria del progetto — configurabile verso qualunque endpoint S3-compatible/AWS S3 in produzione, con auth via access key o ruolo AWS) oppure filesystem locale (`NOCT_STORAGE_BACKEND=localstorage`, alternativa per installazioni `solo` senza storage S3)
+- **Object Storage:** backend S3-compatible via boto3 (Garage in locale e in produzione, scelta primaria del progetto — configurabile verso qualunque endpoint S3-compatible/AWS S3 in produzione, con auth via access key o ruolo AWS) oppure filesystem locale (`NOCT_STORAGE_BACKEND=localstorage`, alternativa per installazioni `solo` senza storage S3)
 - **Dev locale:** Podman (rootless, senza Kubernetes)
 - **Produzione:** Kubernetes (K3s), Traefik (ingress), Longhorn (storage), cert-manager
 
@@ -112,7 +112,7 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   doppia verifica (codice alla vecchia casella e poi alla nuova), alias
   pubblico globale alternativo allo username, scelta di cosa mostrare come
   nome autore sui propri post (username, nome e cognome, o alias), avatar
-  (upload su MinIO/S3), link social fissi con icona monocromatica da un file
+  (upload su Garage/S3), link social fissi con icona monocromatica da un file
   di configurazione facilmente editabile. **Verifica del profilo:** dominio
   personalizzato verificato tramite record DNS (stile Bluesky) assegna un
   sigillo di verifica bronzo (argento/oro/blu riservati per il futuro); ID
@@ -245,7 +245,7 @@ Servizi esposti:
 - Backend (health): <http://localhost:8000/api/v1/health>
 - Moderazione immagini (health): <http://localhost:8100/health>
 - RabbitMQ (console): <http://localhost:15672>
-- MinIO (console): <http://localhost:9001>
+- Storage S3 (Garage): API <http://localhost:3900>, letture pubbliche <http://localhost:9000>
 
 Al primo avvio le migrazioni del database non vengono applicate automaticamente;
 vanno eseguite manualmente (vedi [backend/README.md](backend/README.md)):
@@ -285,7 +285,7 @@ python -m pytest
 ```
 
 Serve solo Postgres raggiungibile (usa un database separato, `notturni_test`
-di default); MinIO e RabbitMQ sono sostituiti da fake/mock nei test, non
+di default); lo storage S3 e RabbitMQ sono sostituiti da fake/mock nei test, non
 servono in esecuzione. Dettagli in [backend/README.md](backend/README.md#test).
 
 ## CI e sicurezza

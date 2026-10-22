@@ -4,7 +4,7 @@ Primo draft dei manifest per un singolo nodo K3s (vedi
 [ROADMAP.md](../ROADMAP.md#3-architettura-stack-e-infrastruttura)). Richiede
 una `StorageClass` e Traefik come IngressController (quest'ultimo già incluso
 in una installazione K3s standard, salvo lo si sia disattivato
-esplicitamente). `postgres.yaml`/`minio.yaml` puntano di default a
+esplicitamente). `postgres.yaml`/`garage.yaml` puntano di default a
 `storageClassName: local-path` (il provisioner incluso di serie in K3s,
 adatto a un nodo singolo senza componenti aggiuntivi da installare); Longhorn
 resta l'obiettivo per un futuro cluster multi-nodo, da riabilitare
@@ -46,6 +46,38 @@ conferma che il solver DNS-01/il token Cloudflare funzionano), poi tornare
 a `letsencrypt-prod` e cancellare il Secret `notturni-eu-tls` per far
 ripartire l'emissione con l'issuer giusto
 (`kubectl delete secret notturni-eu-tls -n notturni`).
+
+## Migrazione dei dati da MinIO a Garage
+
+Solo per chi ha già un'istanza con dati su MinIO (l'immagine ufficiale non è
+più pubblicata). I nomi dei bucket e le chiavi degli oggetti restano
+invariati, quindi i riferimenti nel database (`object_key` degli avatar/media)
+non cambiano: si copiano solo gli oggetti. **Non verificata contro un MinIO
+reale** — il lato Garage è stato provato; provare prima su una copia.
+
+1. Tenere in esecuzione il Deployment/pod MinIO esistente (con l'immagine già
+   presente sul nodo), rinominandolo se serve (`minio-legacy`) per non
+   confonderlo col nuovo, e applicare i nuovi manifest (`kubectl apply -k .`)
+   con chiavi Garage generate come descritto sotto. Il backend riparte con
+   Garage vuoto: bucket e layout li crea il bootstrap.
+2. Copiare gli oggetti con `rclone` (da un pod/host che raggiunga entrambi):
+
+   ```bash
+   export RCLONE_CONFIG_OLD_TYPE=s3 RCLONE_CONFIG_OLD_PROVIDER=Minio \
+          RCLONE_CONFIG_OLD_ENDPOINT=http://minio-legacy:9000 \
+          RCLONE_CONFIG_OLD_ACCESS_KEY_ID=<vecchia chiave> RCLONE_CONFIG_OLD_SECRET_ACCESS_KEY=<vecchio secret>
+   export RCLONE_CONFIG_NEW_TYPE=s3 RCLONE_CONFIG_NEW_PROVIDER=Other \
+          RCLONE_CONFIG_NEW_ENDPOINT=http://garage:3900 RCLONE_CONFIG_NEW_REGION=garage \
+          RCLONE_CONFIG_NEW_ACCESS_KEY_ID=<GK...> RCLONE_CONFIG_NEW_SECRET_ACCESS_KEY=<64 hex>
+   for b in avatars notturni-content notturni-audit; do rclone copy OLD:$b NEW:$b --progress; done
+   rclone check OLD:avatars NEW:avatars   # idem per gli altri bucket
+   ```
+
+3. Verificare un avatar e un media esistenti da `https://s3.notturni.eu/...`,
+   poi rimuovere MinIO e il suo PVC (`minio-data`).
+
+Nota: i backup infrastrutturali già scritti sotto il prefisso `minio/` del
+bucket di backup restano dove sono; i nuovi usano `s3/`.
 
 ## Setup
 
@@ -110,17 +142,34 @@ build, non a runtime — vedi nota più sotto).
   parti) — bug scoperto in produzione: pagina servita (200) ma nessun
   form/bottone rispondeva, login e registrazione inclusi. La CSP è ora
   generata per-richiesta con un nonce fresco in `frontend/src/proxy.ts`.
-- MinIO è esposto pubblicamente in lettura da `ingressroute-minio.yaml`
-  (`IngressRoute` Traefik, solo la porta 9000/API S3, mai la 9001/console
-  admin) sull'host configurato in `NOCT_S3_PUBLIC_URL` (`configmap.yaml`,
-  di default `s3.notturni.eu`) — priorità esplicita più alta del match
-  jolly di `ingressroute.yaml`, altrimenti quell'host ricadrebbe sul
-  frontend (404, bug osservato in produzione: upload riuscito ma media
-  irraggiungibili). Sicuro perché le policy dei bucket
-  (`app/core/storage.py::ensure_public_bucket`/`ensure_content_bucket`)
-  concedono solo `s3:GetObject` anonimo, mai scrittura — quella resta dietro
-  le credenziali `NOCT_S3_ACCESS_KEY_ID`/`_SECRET_ACCESS_KEY`, solo
-  server-side. `s3` è anche in `RESERVED_SUBDOMAINS`/`RESERVED_BLOG_SLUGS`
+- Lo storage a oggetti è **Garage** (`garage.yaml`, nodo singolo, config in
+  `garage.toml`). Un Garage appena avviato non è utilizzabile (nessun layout,
+  nessuna chiave): l'initContainer `garage-bootstrap` di `backend.yaml`
+  (`backend/scripts/garage_bootstrap.py`, idempotente) assegna il nodo al
+  layout, importa la chiave applicativa e crea i bucket con alias globale.
+  La chiave deve avere il formato Garage: `NOCT_S3_ACCESS_KEY_ID` (in
+  `configmap.yaml`) = `GK` + 24 hex, `NOCT_S3_SECRET_ACCESS_KEY` (in
+  `secret.yaml`) = 64 hex — `echo "GK$(openssl rand -hex 12)"` e
+  `openssl rand -hex 32`; idem `NOCT_GARAGE_RPC_SECRET` (64 hex) e
+  `NOCT_GARAGE_ADMIN_TOKEN`. I valori committati sono segnaposto.
+- Garage **non implementa le bucket policy S3**: avatar e media si servono dal
+  suo web endpoint tramite il proxy `s3-public.yaml` (nginx, config in
+  `s3-public.conf.template`), che traduce `/{bucket}/{key}` in
+  `Host: {bucket}` e inoltra solo GET/HEAD sui prefissi pubblici (bucket
+  avatar; `.../userdata/*/*/media/*` del bucket contenuti — backup dei post
+  e archivi di audit restano irraggiungibili). `garage.toml` e
+  `s3-public.conf.template` sono copie di `garage/garage.toml` e
+  `s3-public/default.conf.template` (usati da `compose.yaml`; kustomize non
+  legge fuori da questa directory): `backend/tests/test_deploy_configs.py`
+  verifica che non divergano.
+- `ingressroute-s3.yaml` (`IngressRoute` Traefik) espone il solo proxy
+  `s3-public` sull'host configurato in `NOCT_S3_PUBLIC_URL` (`configmap.yaml`,
+  di default `s3.notturni.eu`; mai l'API S3 né l'admin API di Garage) —
+  priorità esplicita più alta del match jolly di `ingressroute.yaml`,
+  altrimenti quell'host ricadrebbe sul frontend (404, bug osservato in
+  produzione: upload riuscito ma media irraggiungibili). Le scritture
+  restano dietro le credenziali `NOCT_S3_ACCESS_KEY_ID`/`_SECRET_ACCESS_KEY`,
+  solo server-side. `s3` è anche in `RESERVED_SUBDOMAINS`/`RESERVED_BLOG_SLUGS`
   (`frontend/src/proxy.ts`, `backend/app/domain/blog_rules.py`): un utente
   non può registrare un blog con quello slug.
 - Il backend di storage alternativo (`NOCT_STORAGE_BACKEND=localstorage`,
@@ -157,7 +206,7 @@ build, non a runtime — vedi nota più sotto).
   l'equivalente è il servizio `worker-audit-maintenance` di `compose.yaml`
   (stesso modulo con `--loop`).
 - `backup.yaml` è un altro `CronJob`: backup infrastrutturale di Postgres
-  (`pg_dump`) e mirror di tutti i bucket MinIO/S3 applicativi verso uno
+  (`pg_dump`) e mirror di tutti i bucket S3 applicativi verso uno
   storage S3 **esterno** (`app/workers/backup.py`, distinto dal backup
   applicativo dei singoli post di `worker-post-backup`, che resta nello
   stesso bucket applicativo). Senza `NOCT_BACKUP_S3_BUCKET` configurato
@@ -165,7 +214,7 @@ build, non a runtime — vedi nota più sotto).
   va puntato a un provider S3 realmente esterno e separato da quello dei
   contenuti prima della produzione. In locale l'equivalente è il servizio
   `worker-backup` di `compose.yaml` (stesso modulo con `--loop`, verso lo
-  stesso MinIO locale su un bucket dedicato solo per avere qualcosa di
+  stesso Garage locale su un bucket dedicato solo per avere qualcosa di
   verificabile in sviluppo).
 - `smtp-relay.yaml` è invece un Deployment+Service, sempre attivo: un
   servizio SMTP containerizzato (`boky/postfix`) come alternativa a puntare

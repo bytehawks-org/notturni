@@ -3,6 +3,8 @@ distinte dal contenuto dei post (app/api/v1/blogs/media.py) e dall'avatar
 personale dell'utente (app/api/v1/users.py). Entrambe facoltative, solo il
 proprietario può gestirle."""
 
+import asyncio
+
 from fastapi import Depends, HTTPException, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,8 +53,8 @@ async def upload_blog_cover_image(
     platform = await get_platform_config(session)
     await assert_blog_storage_quota(session, blog=blog, config=platform, extra_bytes=len(content))
     try:
-        object_key = upload_media(
-            user_id=blog.owner_id, blog_id=blog.id, content=content, content_type=file.content_type or ""
+        object_key = await asyncio.to_thread(
+            upload_media, user_id=blog.owner_id, blog_id=blog.id, content=content, content_type=file.content_type or ""
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
@@ -145,7 +147,9 @@ async def upload_blog_favicon_route(
 
     content = await file.read()
     try:
-        object_key = upload_blog_favicon(blog_id=blog.id, content=content, content_type=file.content_type or "")
+        object_key = await asyncio.to_thread(
+            upload_blog_favicon, blog_id=blog.id, content=content, content_type=file.content_type or ""
+        )
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
@@ -153,7 +157,7 @@ async def upload_blog_favicon_route(
     blog.favicon_object_key = object_key
     await session.commit()
     if old_key is not None:
-        delete_blog_favicon(old_key)
+        await asyncio.to_thread(delete_blog_favicon, old_key)
     await session.refresh(blog)
     await revalidate_frontend([blog_tag(slug)])
     return _to_blog_out(blog, current_user)

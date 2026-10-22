@@ -22,15 +22,26 @@ def build_s3_client(
     access_key_id: str | None,
     secret_access_key: str | None,
 ):
-    # CLAUDE.md #4: endpoint custom sempre iniettato (se impostato), per
-    # compatibilità trasparente tra MinIO locale e AWS/Cloudflare R2 in
+    # CLAUDE.md #3: endpoint custom sempre iniettato (se impostato), per
+    # compatibilità trasparente tra Garage locale e AWS/Cloudflare R2 in
     # produzione. Credenziali esplicite solo se entrambe presenti: altrimenti
     # ci si affida alla default credential chain di boto3 (ruolo AWS —
     # instance profile/IRSA, variabili AWS_* d'ambiente, ecc.). Parametrizzata
     # (invece di leggere `settings` direttamente) così il backup su S3
     # esterno (app/workers/backup.py) può costruire un client verso un
     # provider diverso da quello applicativo, con le stesse regole.
-    kwargs: dict = {"config": Config(signature_version="s3v4")}
+    # path-style esplicito: Garage (e gli S3-compatible self-hosted in genere)
+    # non risolvono `bucket.host` in DNS. Checksum solo quando richiesti dalla
+    # singola operazione: i default di boto3 >= 1.36 aggiungono CRC32 a ogni
+    # put_object, che non tutti gli S3-compatible accettano.
+    kwargs: dict = {
+        "config": Config(
+            signature_version="s3v4",
+            s3={"addressing_style": "path"},
+            request_checksum_calculation="when_required",
+            response_checksum_validation="when_required",
+        )
+    }
     if endpoint_url:
         kwargs["endpoint_url"] = endpoint_url
     if region:
@@ -50,19 +61,32 @@ def get_s3_client():
     )
 
 
-def ensure_public_bucket(bucket: str) -> None:
-    """Crea il bucket se manca e vi applica una policy public-read: gli
-    avatar sono pensati per essere serviti direttamente via URL, non tramite
-    presigned URL con scadenza. No-op sul backend "localstorage" (niente
-    bucket/policy su filesystem)."""
-    if settings.storage_backend != "s3":
-        return
-    client = get_s3_client()
+# Bucket già verificati/configurati in questo processo: ensure_* girava ad
+# ogni upload (head_bucket + put_bucket_policy = 2 round trip verso lo storage
+# in più per ogni file caricato), ma la configurazione di un bucket non cambia
+# durante la vita del processo.
+_ensured_buckets: set[tuple[str, str]] = set()
+
+
+def _ensure_bucket(client, bucket: str) -> None:
     try:
         client.head_bucket(Bucket=bucket)
     except Exception:
         client.create_bucket(Bucket=bucket)
 
+
+def _make_public_readable(client, bucket: str, *, resource: str) -> None:
+    """Lettura anonima dei soli oggetti che corrispondono a `resource`
+    (ARN S3), secondo `settings.s3_public_access`."""
+    if settings.s3_public_access == "website":
+        # Garage: niente bucket policy (PutBucketPolicy -> 501). L'hosting
+        # statico rende il bucket servibile dal web endpoint; la restrizione
+        # per prefisso (`resource`) è applicata dal proxy di lettura
+        # (s3-public), non dallo storage. Il bucket deve avere un alias
+        # globale (garage_bootstrap.py): quelli creati via S3 hanno solo un
+        # alias locale alla chiave e il web endpoint non li risolve.
+        client.put_bucket_website(Bucket=bucket, WebsiteConfiguration={"IndexDocument": {"Suffix": "index.html"}})
+        return
     policy = {
         "Version": "2012-10-17",
         "Statement": [
@@ -70,11 +94,24 @@ def ensure_public_bucket(bucket: str) -> None:
                 "Effect": "Allow",
                 "Principal": "*",
                 "Action": "s3:GetObject",
-                "Resource": f"arn:aws:s3:::{bucket}/*",
+                "Resource": resource,
             }
         ],
     }
     client.put_bucket_policy(Bucket=bucket, Policy=json.dumps(policy))
+
+
+def ensure_public_bucket(bucket: str) -> None:
+    """Crea il bucket se manca e lo rende leggibile pubblicamente: gli
+    avatar sono pensati per essere serviti direttamente via URL, non tramite
+    presigned URL con scadenza. No-op sul backend "localstorage" (niente
+    bucket/policy su filesystem)."""
+    if settings.storage_backend != "s3" or ("public", bucket) in _ensured_buckets:
+        return
+    client = get_s3_client()
+    _ensure_bucket(client, bucket)
+    _make_public_readable(client, bucket, resource=f"arn:aws:s3:::{bucket}/*")
+    _ensured_buckets.add(("public", bucket))
 
 
 def ensure_content_bucket(bucket: str) -> None:
@@ -82,39 +119,22 @@ def ensure_content_bucket(bucket: str) -> None:
     .../media/... (embed nei post) — .../posts/... (backup markdown) resta
     privato: è un fallback interno, non un asset da servire ai visitatori.
     No-op sul backend "localstorage"."""
-    if settings.storage_backend != "s3":
+    if settings.storage_backend != "s3" or ("content", bucket) in _ensured_buckets:
         return
     client = get_s3_client()
-    try:
-        client.head_bucket(Bucket=bucket)
-    except Exception:
-        client.create_bucket(Bucket=bucket)
-
-    policy = {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Principal": "*",
-                "Action": "s3:GetObject",
-                "Resource": f"arn:aws:s3:::{bucket}/*/userdata/*/*/media/*",
-            }
-        ],
-    }
-    client.put_bucket_policy(Bucket=bucket, Policy=json.dumps(policy))
+    _ensure_bucket(client, bucket)
+    _make_public_readable(client, bucket, resource=f"arn:aws:s3:::{bucket}/*/userdata/*/*/media/*")
+    _ensured_buckets.add(("content", bucket))
 
 
 def ensure_private_bucket(bucket: str) -> None:
     """Crea il bucket se manca, senza alcuna policy di lettura pubblica: gli
     archivi di audit non vanno mai serviti ai visitatori. No-op sul backend
     "localstorage" (niente bucket/policy su filesystem)."""
-    if settings.storage_backend != "s3":
+    if settings.storage_backend != "s3" or ("private", bucket) in _ensured_buckets:
         return
-    client = get_s3_client()
-    try:
-        client.head_bucket(Bucket=bucket)
-    except Exception:
-        client.create_bucket(Bucket=bucket)
+    _ensure_bucket(get_s3_client(), bucket)
+    _ensured_buckets.add(("private", bucket))
 
 
 def _userdata_prefix(user_id: str, blog_id: str) -> str:

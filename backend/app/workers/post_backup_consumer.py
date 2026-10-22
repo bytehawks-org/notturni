@@ -1,5 +1,5 @@
 """Consumer della coda post_backup: scrive sul backend di storage attivo
-(S3/MinIO o filesystem locale) la copia di backup/fallback del Markdown di
+(S3 o filesystem locale) la copia di backup/fallback del Markdown di
 ogni post creato/modificato (app/api/v1/posts.py). A differenza del consumer
 OTP email, qui la scrittura è reale e funzionante (riusa l'integrazione già
 in app/core/storage.py) — non è un placeholder.

@@ -2,7 +2,7 @@
 # localmente sul nodo finché non c'è un registro in CI/CD.
 #
 # Job schedulato (non un Deployment), come audit-maintenance.yaml: backup
-# infrastrutturale di Postgres e MinIO verso uno storage S3 esterno
+# infrastrutturale di Postgres e dello storage S3 verso uno storage S3 esterno
 # (app/workers/backup.py, ROADMAP.md §3). Senza NOCT_BACKUP_S3_BUCKET
 # configurato (configmap.yaml) il job termina immediatamente senza fare
 # nulla — placeholder finché non si punta a un provider S3 realmente esterno.

@@ -1,3 +1,13 @@
+# Env comune ai servizi che parlano con lo storage S3 (rete interna di compose:
+# i servizi si raggiungono per nome, non per localhost). Sovrascrive i valori di
+# .env pensati per un backend avviato fuori da compose.
+x-s3-env: &s3-env
+  NOCT_S3_ENDPOINT_URL: http://garage:3900
+  NOCT_S3_REGION: garage
+  NOCT_S3_PUBLIC_ACCESS: website
+  # URL pubblico: il browser risolve solo la porta esposta da s3-public
+  NOCT_S3_PUBLIC_URL: http://localhost:9000
+
 services:
   postgres:
     image: docker.io/library/postgres:16-alpine
@@ -76,18 +86,64 @@ services:
     ports:
       - "1587:587"
 
-  minio:
-    image: docker.io/minio/minio:latest
+  # Object storage S3-compatible (Garage, nodo singolo): config in
+  # garage/garage.toml, segreti da env. L'immagine è `scratch` (solo il
+  # binario /garage, niente shell). Appena avviato non è utilizzabile (nessun
+  # layout, nessuna chiave): ci pensa garage-bootstrap qui sotto.
+  garage:
+    image: docker.io/dxflrs/garage:v2.4.1
     restart: on-failure
-    command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${NOCT_S3_ACCESS_KEY_ID}
-      MINIO_ROOT_PASSWORD: ${NOCT_S3_SECRET_ACCESS_KEY}
+      GARAGE_RPC_SECRET: ${NOCT_GARAGE_RPC_SECRET}
+      GARAGE_ADMIN_TOKEN: ${NOCT_GARAGE_ADMIN_TOKEN}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      # API S3 (solo per strumenti/backend avviati fuori da compose); l'admin
+      # API (3903) resta nella rete interna, e le letture pubbliche passano
+      # da s3-public
+      - "3900:3900"
     volumes:
-      - minio_data:/data
+      - ./garage/garage.toml:/etc/garage.toml:ro,z
+      - garage_meta:/var/lib/garage/meta
+      - garage_data:/var/lib/garage/data
+
+  # Job one-shot idempotente (backend/scripts/garage_bootstrap.py): layout del
+  # nodo, chiave applicativa (NOCT_S3_ACCESS_KEY_ID/_SECRET_ACCESS_KEY, formato
+  # Garage GK+24hex / 64hex) e bucket con alias globale. Va rieseguito solo se
+  # cambiano bucket/chiave: `podman compose up -d garage-bootstrap`.
+  garage-bootstrap:
+    build:
+      context: ./backend
+    restart: "no"
+    env_file: .env
+    environment:
+      NOCT_GARAGE_ADMIN_URL: http://garage:3903
+      NOCT_S3_ENDPOINT_URL: http://garage:3900
+      NOCT_BACKUP_S3_ENDPOINT_URL: http://garage:3900
+      # stesso bucket di worker-backup: va creato (con alias globale) qui
+      NOCT_BACKUP_S3_BUCKET: notturni-backups
+    command: ["python", "-m", "scripts.garage_bootstrap"]
+    depends_on:
+      garage:
+        condition: service_started
+
+  # Letture pubbliche (avatar, media dei post) davanti a Garage: traduce gli
+  # URL path-style `{NOCT_S3_PUBLIC_URL}/{bucket}/{key}` nel web endpoint di
+  # Garage ed espone solo i prefissi pubblici — vedi s3-public/default.conf.template.
+  s3-public:
+    image: docker.io/nginxinc/nginx-unprivileged:1.28-alpine
+    restart: on-failure
+    environment:
+      NGINX_ENVSUBST_FILTER: ^NOCT_
+      NOCT_S3_BUCKET_AVATARS: ${NOCT_S3_BUCKET_AVATARS:-avatars}
+      NOCT_S3_BUCKET_CONTENT: ${NOCT_S3_BUCKET_CONTENT:-notturni-content}
+      NOCT_GARAGE_WEB_UPSTREAM: garage:3902
+    ports:
+      - "9000:8080"
+    volumes:
+      - ./s3-public/default.conf.template:/etc/nginx/templates/default.conf.template:ro,z
+    depends_on:
+      garage:
+        condition: service_started
 
   # Moderazione automatica delle immagini (nudità/contenuti sensibili),
   # self-hosted — vedi moderation/. Container separato apposta: le
@@ -118,10 +174,7 @@ services:
       NOCT_POSTGRES_HOST: postgres
       NOCT_RABBITMQ_HOST: rabbitmq
       NOCT_REDIS_HOST: redis
-      # endpoint interno (il backend gira nella rete di compose) diverso
-      # dall'URL pubblico (il browser risolve solo l'host esposto)
-      NOCT_S3_ENDPOINT_URL: http://minio:9000
-      NOCT_S3_PUBLIC_URL: http://localhost:9000
+      <<: *s3-env
       NOCT_MODERATION_SERVICE_URL: http://moderation:8100
       # invalidazione on-demand della cache del frontend dopo publish/update
       # di contenuti pubblici (vedi backend/app/core/revalidation.py). Il
@@ -137,8 +190,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
-      minio:
-        condition: service_started
+      garage-bootstrap:
+        condition: service_completed_successfully
       moderation:
         condition: service_started
 
@@ -150,14 +203,13 @@ services:
     environment:
       NOCT_POSTGRES_HOST: postgres
       NOCT_RABBITMQ_HOST: rabbitmq
-      NOCT_S3_ENDPOINT_URL: http://minio:9000
-      NOCT_S3_PUBLIC_URL: http://localhost:9000
+      <<: *s3-env
     command: ["python", "-m", "app.workers.post_backup_consumer"]
     depends_on:
       rabbitmq:
         condition: service_healthy
-      minio:
-        condition: service_started
+      garage-bootstrap:
+        condition: service_completed_successfully
 
   worker-email-otp:
     build:
@@ -212,20 +264,19 @@ services:
     env_file: .env
     environment:
       NOCT_POSTGRES_HOST: postgres
-      NOCT_S3_ENDPOINT_URL: http://minio:9000
-      NOCT_S3_PUBLIC_URL: http://localhost:9000
+      <<: *s3-env
     # non è un consumer di coda: archivia su storage le settimane ISO chiuse
     # di audit_log e cancella gli eventi oltre la retention, un giro al giorno
     command: ["python", "-m", "app.workers.audit_maintenance", "--loop", "--interval", "86400"]
     depends_on:
       postgres:
         condition: service_healthy
-      minio:
-        condition: service_started
+      garage-bootstrap:
+        condition: service_completed_successfully
 
-  # Backup infrastrutturale di Postgres e MinIO verso uno storage S3
-  # "esterno" (app/workers/backup.py, ROADMAP.md §3) — qui la destinazione è
-  # lo stesso MinIO locale, su un bucket dedicato, solo per avere qualcosa di
+  # Backup infrastrutturale di Postgres e dello storage S3 verso uno storage
+  # S3 "esterno" (app/workers/backup.py, ROADMAP.md §3) — qui la destinazione è
+  # lo stesso Garage locale, su un bucket dedicato, solo per avere qualcosa di
   # verificabile in sviluppo: in produzione NOCT_BACKUP_S3_ENDPOINT_URL/
   # _ACCESS_KEY_ID/_SECRET_ACCESS_KEY vanno sovrascritti con un provider S3
   # realmente esterno e separato.
@@ -236,9 +287,9 @@ services:
     env_file: .env
     environment:
       NOCT_POSTGRES_HOST: postgres
-      NOCT_S3_ENDPOINT_URL: http://minio:9000
-      NOCT_S3_PUBLIC_URL: http://localhost:9000
-      NOCT_BACKUP_S3_ENDPOINT_URL: http://minio:9000
+      <<: *s3-env
+      NOCT_BACKUP_S3_ENDPOINT_URL: http://garage:3900
+      NOCT_BACKUP_S3_REGION: garage
       NOCT_BACKUP_S3_ACCESS_KEY_ID: ${NOCT_S3_ACCESS_KEY_ID}
       NOCT_BACKUP_S3_SECRET_ACCESS_KEY: ${NOCT_S3_SECRET_ACCESS_KEY}
       NOCT_BACKUP_S3_BUCKET: notturni-backups
@@ -246,8 +297,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      minio:
-        condition: service_started
+      garage-bootstrap:
+        condition: service_completed_successfully
 
   frontend:
     build:
@@ -278,4 +329,5 @@ services:
 
 volumes:
   postgres_data:
-  minio_data:
+  garage_meta:
+  garage_data:

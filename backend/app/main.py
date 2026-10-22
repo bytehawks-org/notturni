@@ -67,7 +67,7 @@ app.include_router(interests_router, prefix="/api/v1/interests", tags=["interest
 app.include_router(search_router, prefix="/api/v1/search", tags=["search"])
 app.include_router(newsletter_router, prefix="/api/v1", tags=["newsletter"])
 
-# Backend di storage "localstorage" (alternativa a S3/MinIO, vedi
+# Backend di storage "localstorage" (alternativa a S3, vedi
 # app/core/storage.py): serve media/avatar direttamente dal filesystem
 # locale sotto /storage, con lo stesso schema {bucket}/{key} usato per gli
 # URL pubblici generati da _public_url.

@@ -1249,7 +1249,7 @@
     "openQueues": "Open queues",
     "open": "Open →",
     "services": "Services",
-    "servicesNote": "Health of Postgres, Redis, RabbitMQ, MinIO and the moderation service will come with the platform overview endpoint.",
+    "servicesNote": "Health of Postgres, Redis, RabbitMQ, the object storage and the moderation service will come with the platform overview endpoint.",
     "queue": {
       "comments": "Pending comments",
       "review": "Posts in review",

@@ -86,7 +86,7 @@ Da rispettare sempre, indipendentemente dal blocco in corso:
 * **Compatibilità S3**: ogni interazione con lo storage S3-compatible
   (`boto3`) deve iniettare un endpoint custom configurabile via env — mai
   `localhost`/l'endpoint AWS hard-coded — per restare intercambiabile tra
-  MinIO locale e S3/R2 in produzione. Autenticazione via
+  Garage locale e S3/R2 in produzione. Autenticazione via
   `NOCT_S3_ACCESS_KEY_ID`/`NOCT_S3_SECRET_ACCESS_KEY` se entrambe valorizzate,
   altrimenti ruolo AWS (default credential chain di boto3); `NOCT_S3_REGION`
   opzionale. In alternativa a S3, `NOCT_STORAGE_BACKEND=localstorage` scrive
@@ -181,7 +181,7 @@ Anche se inizialmente sarà un sistema locale e successivamente su un singolo no
 In questa fase iniziale si predilige Python per la parte di backend. La roadmap dei prossimi 3 anni prevede già la sostituzione dei microservizi con applicativi scritti in Rust.
 Come ingress verrà utilizzato Traefik.
 Per la parte storage, anche su nodo singolo, si prevede di utilizzare comunque Longhorn.
-Prevedere un backup su storage S3 esterno delle risorse fondamentali quali database e MinIO.
+Prevedere un backup su storage S3 esterno delle risorse fondamentali quali database e dello storage a oggetti (Garage).
 I blog/pubblicazioni dell'utente saranno nella forma `https://nomeutente.notturni.eu`.
 All'indirizzo `https://notturni.eu` ci sarà una sorta di raccolta degli articoli nella lingua dell'utente come avviene sulla piattaforma dev.to. All'indirizzo `https://blog.notturni.eu` ci sarà il blog vero e proprio della piattaforma su cui comunicare news e aggiornamenti.
 Prevedere un blocco al nome dei blog: devono essere di minimo 4 caratteri alfanumerici (può essere utilizzato il simbolo -). I nomi di 3 caratteri o meno sono riservati alla piattaforma (futura funzionalità premium per i sostenitori).
@@ -197,7 +197,7 @@ esempi/script pensati per girare in locale.
 **Database:** PostgreSQL 16+ (Estensione `pgcrypto` o `uuid-ossp`).
 **Cache & State:** Redis 7+ (Rate limiting, lock distribuiti).
 **Message Broker:** RabbitMQ (Code asincrone, AMQP).
-**Object Storage:** MinIO (S3-compatible, drop-in replacement per AWS S3 / Cloudflare R2).
+**Object Storage:** Garage (S3-compatible, drop-in replacement per AWS S3 / Cloudflare R2). Garage non implementa le bucket policy S3: le letture pubbliche passano dal suo web endpoint, dietro un proxy che espone solo i prefissi pubblici.
 
 In produzione i certificati saranno gestiti tramite cert-manager di Let's Encrypt.
 Sarà presente un record dns *.notturni.eu che punterà al server o al bilanciatore dei server di produzione.
@@ -231,7 +231,7 @@ end-to-end senza credenziali OAuth reali) ed endpoint:
 
 ## 8. Ambiente locale
 
-Lo stack locale (Postgres, Redis, RabbitMQ, MinIO, servizio di moderazione,
+Lo stack locale (Postgres, Redis, RabbitMQ, Garage, servizio di moderazione,
 backend, worker, frontend) è definito per intero in [compose.yaml](compose.yaml)
 e si avvia con `podman compose up -d --build`. Non avviare i singoli
 componenti a mano con `podman run`/`podman pod create`: `compose.yaml` include
