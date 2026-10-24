@@ -197,8 +197,8 @@ consegna federata con retry (AT Protocol/ActivityPub).
 
 | # | Fase | Output / DoD |
 |---|---|---|
-| 0 | Decisioni | formato manifest (ADR), confine core/moduli, politica API (§9) |
-| 1 | **Spike verticale** | workspace, parser+validator manifest, motore migrazioni (additivo), codegen rotte→axum+OpenAPI, **un modulo reale piccolo** (`pages` o `taxonomy`) end-to-end con DB vero. **Go/no-go** sull'approccio dichiarativo |
+| 0 | Decisioni | ✅ prese (§9) |
+| 1 | **Spike verticale** | `backend/` → `legacy/backend/`, workspace, parser+validator manifest, motore migrazioni (additivo), codegen rotte→axum+OpenAPI, **un modulo reale piccolo** (`pages` o `taxonomy`) end-to-end con DB vero. **Go/no-go** sull'approccio dichiarativo |
 | 2 | Core infrastruttura | storage, cache, bus (NATS + outbox), mail, markdown, config; health; `noct-ctl` |
 | 3 | Core auth | utenti, sessioni, JWT, API token, ruoli, audit, bootstrap super admin |
 | 4 | Core contenuti | `blogs`, `posts`, media, permalink |
@@ -215,10 +215,35 @@ l'investimento nel DSL è giustificato prima di scrivere il resto.
 Resta il servizio Python (microservizio già isolato, fail open). Rivalutare in Fase 8
 la conversione del modello in ONNX con `ort`; `candle` è più rischioso per parità.
 
-## 9. Decisioni aperte
+## 9. Decisioni prese
 
-1. **API**: ripartire da `API.md` v1 come baseline (meno lavoro sul frontend) o ridisegnare API e frontend insieme? Consiglio: baseline v1 con correzioni mirate, versione `/api/v1` mantenuta.
-2. **Core**: confermi `blogs`/`posts` core e `taxonomy` modulo?
-3. **Toggle moduli**: solo env/config all'avvio (consigliato) o anche da dashboard admin a caldo (richiede mount/unmount dinamico del router: più complesso)?
-4. **NATS**: confermi come broker unico?
-5. **Legacy**: spostare subito `backend/` in `legacy/` (consigliato)?
+| # | Tema | Decisione |
+|---|---|---|
+| 1 | API | Compatibilità con il frontend attuale (`/api/v1`, `API.md` come baseline). Durante il porting si tiene `todo/API_CHANGES.md` con le modifiche *suggerite* (prestazioni, coerenza, N+1, paginazione) da approvare caso per caso: nessuna rottura silenziosa |
+| 2 | Core | Come da §3, con **utenti** esplicitamente nel core: entità utente, profilo, visibilità, sessioni, cambio email/password, ruoli piattaforma. Modulo `interests` e `gdpr` restano separati |
+| 3 | Toggle moduli | Sia all'avvio sia **a caldo** (§10) |
+| 4 | Broker | NATS JetStream, unico broker, dietro `EventBus`/`JobQueue` |
+| 5 | Legacy | `backend/` → `legacy/backend/` come primo passo della Fase 1 (nello stesso commit della creazione del workspace, per non lasciare compose/k8s a metà) |
+
+## 10. Attivazione a caldo dei moduli
+
+Stato desiderato in tabella core `noct_modules(name, enabled, enabled_at, enabled_by)`;
+all'avvio `NOCT_MODULES` fornisce il valore iniziale (seed), poi vale il DB.
+
+Flusso di attivazione (admin → `POST /api/v1/admin/modules/{name}/enable`):
+1. verifica `requires` (moduli e versioni) e che il modulo sia compilato nel binario;
+2. migrazione dello schema del modulo sotto advisory lock (solo additiva, come §2);
+3. registrazione di sottoscrizioni evento e consumer job JetStream;
+4. pubblicazione dell'evento `noct.modules.changed` su NATS;
+5. ogni replica dell'API ricostruisce il router dei moduli attivi e lo scambia
+   atomicamente (`ArcSwap<Router>` dietro un servizio `tower` unico): le richieste
+   in corso terminano sul router vecchio, nessun downtime.
+
+Disattivazione: stesso flusso al contrario (rotte smontate → 404/`module_disabled`,
+consumer fermati con drain, **dati e tabelle intatti**). Si rifiuta se un altro
+modulo attivo ne dipende. Il core non dipende mai da un modulo, quindi è sempre sicuro.
+
+Punti di attenzione: audit di ogni toggle; solo Super Admin; la route di
+amministrazione dei moduli è core e non disattivabile; migrazioni distruttive mai
+a caldo; in cluster l'attivazione è completata solo quando tutte le repliche
+confermano (ack su subject dedicato) — altrimenti stato `pending` visibile in admin.
