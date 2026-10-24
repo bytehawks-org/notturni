@@ -202,7 +202,7 @@ consegna federata con retry (AT Protocol/ActivityPub).
 | 2 | Core infrastruttura ✅ (§12) | storage, cache, bus (NATS + outbox), mail, markdown, config; health; `noct-ctl` |
 | 3 | Core auth ✅ (§13) | utenti, sessioni, JWT, API token, ruoli, audit, bootstrap super admin |
 | 4 | Core contenuti ✅ (§14) | `blogs`, `posts`, media, permalink, punti di estensione per i moduli |
-| 5 | Moduli, ondata 1 | comments, taxonomy, pages, discovery, publications, notes, fragments, link-preview |
+| 5 | Moduli, ondata 1 | divisa in tre blocchi, uno per sessione (§15): **5a** ✅ taxonomy, publications, pages, link_preview · **5b** notes, fragments, comments · **5c** discovery (directory, follow, panoramica, feed, ricerca globale, conteggio letture, mentionable-users), interests |
 | 6 | Moduli, ondata 2 | auth-mfa, auth-sso, newsletter, gdpr, reports, custom-domains, image-moderation |
 | 7 | Operazioni | worker, ops-backup, audit-maintenance, Dockerfile (cargo-chef, multi-arch), compose, k8s, CI (fmt, clippy, test, deny, audit, CodeQL, SBOM), documentazione |
 | 8 | Chiusura | rimozione `legacy/`, benchmark, valutazione `moderation` in Rust (ONNX/`ort`) |
@@ -475,3 +475,30 @@ Nuovi: 9 su blog, 8 su post, 6 su media, 3 sulle estensioni (end-to-end con Post
 * La coerenza `slug ≥ 4 caratteri` non è un CHECK del database ma una regola applicativa (la lista dei nomi riservati è configurabile).
 * La moderazione e il revalidate usano `reqwest` (rustls); `cargo geiger`/`deny` in CI (Fase 7) dovranno includerlo.
 
+## 15. Fase 5 — moduli, ondata 1
+
+### Divisione in blocchi
+
+| Blocco | Moduli | Perché insieme |
+|---|---|---|
+| **5a** ✅ | `taxonomy`, `publications`, `pages`, `link_preview` | si agganciano a blog/post solo con `EntityExtension` o sono autonomi: nessuna modifica al core |
+| **5b** | `notes`, `fragments`, `comments` | toccano il contenuto del post (marcatori nel testo, note a piè di pagina, commenti con moderazione e modalità per post) e condividono regole di sanificazione |
+| **5c** | `discovery`, `interests` | letture aggregate trasversali (feed, ricerca globale, directory dei blog, follow, panoramica, letture): dipendono da tutti i campi dei moduli precedenti e sono quelle dove contano le prestazioni |
+
+### 5a — completato
+
+* **`taxonomy`** (già nello spike): ora estende il post. `category_id` tri-stato (assente non tocca, `null` rimuove) in create/update/traduzione, `category_id` e `category` in uscita (una query per elenco). Tabella `post_categories` con cascade: cancellare la categoria lascia il post senza. Categoria di un altro blog o non UUID → 400 e nessun post creato. La traduzione eredita la categoria dell'originale se non ne indica una.
+* **`publications`**: CRUD per blog (`name` = segmento URL, risolto anche per id), indice dei capitoli (ai lettori solo i pubblicati, a chi scrive anche bozze e pianificati con `is_public=false`), ordine esplicito con `PUT …/order` sotto lock di riga (i non elencati seguono in ordine cronologico), conteggi totali/pubblicati. Estensione del post: `publication_id`, `publication {id,name,title}`, `chapter_order`; cambiare pubblicazione azzera la posizione; la traduzione resta nella pubblicazione dell'originale. Tabelle `publications` e `post_publications`.
+* **`pages`**: pagine statiche dei blog (attivabili per blog con il campo `static_pages_enabled`, aggiunto al blog da un'estensione) e del sito (gestione riservata ad `amministratore`/`super_admin`; bozze visibili solo a loro). Due tabelle con lo stesso schema (`blog_pages`, `platform_pages`) invece di una con `blog_id` nullo: l'unicità di slug e lingua vale senza indici parziali, che il manifest non esprime. Traduzioni per gruppo, audit `page.created|updated|deleted`, revalidate dei tag del frontend (anche del vecchio slug se cambia). Creazione di pagine e traduzioni 403 a funzione spenta; modifica e rimozione restano possibili.
+* **`link_preview`** (nome con `_`: i nomi modulo ammettono solo minuscole, cifre e `_`): `GET /link-preview?url=`, pubblico, 30 richieste/minuto per IP. Fetch lato server rigido contro SSRF: solo http/https, l'host è risolto una volta sola e **la connessione va a quell'indirizzo verificato** (`ClientBuilder::resolve`: nessun secondo DNS, quindi nessun rebinding), blocco di loopback, reti private, link-local, CGNAT, multicast, riservati, documentazione, IPv4-mapped e NAT64, nessun proxy di sistema, nessun redirect seguito, timeout 8 s, corpo fermato a `</head` o 3 MB. Cache a due livelli (Redis 6 h → tabella `link_preview_cache` deduplicata per `sha256(url)`: valida 7 giorni se con dati, 6 ore se vuota). `NOCT_LINK_PREVIEW_ALLOW_PRIVATE` (default `false`) serve solo a prove locali e test.
+* **Manifest**: nessuna novità al linguaggio; migrazioni generate dal diff (taxonomy 0002, publications 0001, pages 0001, link_preview 0001).
+
+### Test e verifica
+
+13 test end-to-end nuovi (`bins/noct-api/tests/content_modules.rs`: categoria tri-stato/ereditata/validata, modulo spento, CRUD e visibilità delle pubblicazioni, ordine dei capitoli e tri-stato sul post, pagine di blog e di sito, flag del blog, anteprime con un server HTTP reale, cache calda/persistente/scadenza, redirect non seguiti) più 4 unit test (IP bloccati, URL ammessi, parsing Open Graph, regex lineare su input patologico). Suite completa 210 test verdi, `clippy -D warnings` e `fmt` puliti, `noct-ctl validate` senza drift (12 moduli, 80 rotte, 25 tabelle). Verifica dal vivo con `noct-api` e `curl`: categoria e pubblicazione sul post, pubblicazione, indice dei capitoli, pagina di blog, `POST /pages` negato a un utente, anteprima Open Graph di un server locale, `file://` respinto, OpenAPI con le nuove rotte.
+
+### Limiti noti / da fare
+
+* Le pagine di sito non hanno `DELETE` (come in v1).
+* Il fetch dell'anteprima non decodifica le entità HTML (`&amp;`) nei meta tag, come in v1.
+* La cache calda dell'anteprima non è invalidata alla modifica di un post: scade da sola.

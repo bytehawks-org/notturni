@@ -1,0 +1,17 @@
+# Una riga per URL, condivisa da qualunque post o utente lo citi (dedup su `url_hash`).
+# `updated_at` è anche l'istante dell'ultimo fetch dal vivo.
+[[table]]
+name = "link_preview_cache"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  # sha256 esadecimale dell'URL: un URL molto lungo non entra in un indice btree
+  { name = "url_hash", type = "varchar(64)" },
+  { name = "url", type = "text" },
+  { name = "title", type = "text", null = true },
+  { name = "description", type = "text", null = true },
+  { name = "image", type = "text", null = true },
+  # false se il fetch non ha trovato dati Open Graph: si ripete prima (STALE_AFTER_EMPTY)
+  { name = "fetch_ok", type = "boolean", default = "false" },
+]
+uniques = [{ name = "uq_link_preview_url_hash", columns = ["url_hash"] }]

@@ -18,6 +18,7 @@ sqlx.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 regex.workspace = true
+async-trait.workspace = true
 
 [build-dependencies]
 noct-codegen.workspace = true

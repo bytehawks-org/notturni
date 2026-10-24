@@ -1,0 +1,107 @@
+# Compatibile con /api/v1/blogs/{slug}/publications della v1.
+
+[type.PublicationCreate]
+name = { type = "string", min = 2, max = 60, pattern = "^[a-z0-9]+(-[a-z0-9]+)*$", message = "Il nome può contenere solo lettere minuscole, numeri e trattini (2-60 caratteri)." }
+title = { type = "string", max = 255, non_blank = true, message = "Il titolo è obbligatorio (max 255 caratteri)." }
+description = { type = "string", max = 5000, optional = true }
+
+[type.PublicationUpdate]
+name = { type = "string", min = 2, max = 60, pattern = "^[a-z0-9]+(-[a-z0-9]+)*$", optional = true, message = "Il nome può contenere solo lettere minuscole, numeri e trattini (2-60 caratteri)." }
+title = { type = "string", max = 255, non_blank = true, optional = true, message = "Il titolo è obbligatorio (max 255 caratteri)." }
+description = { type = "string", max = 5000, optional = true }
+
+[type.PublicationOrder]
+post_ids = "string[]"
+
+[type.PublicationOut]
+id = "uuid"
+name = "string"
+title = "string"
+description = { type = "string", nullable = true }
+chapters_total = "int"
+chapters_published = "int"
+created_at = "timestamp"
+
+# PublicationOut + `chapters: [{n, post_id, slug, title, locale, status, published_at, permalink, reading_minutes, is_public}]`
+[type.PublicationDetailOut]
+id = "uuid"
+name = "string"
+title = "string"
+description = { type = "string", nullable = true }
+chapters_total = "int"
+chapters_published = "int"
+created_at = "timestamp"
+chapters = "json"
+
+# I lettori vedono solo le pubblicazioni con almeno un capitolo pubblicato; chi scrive tutte.
+[[route]]
+id = "list_publications"
+method = "GET"
+path = "/blogs/{slug}/publications"
+auth = "public"
+kind = "custom"
+handler = "list_publications"
+scope = { blog = "slug" }
+response = "PublicationOut[]"
+summary = "Pubblicazioni del blog con i conteggi dei capitoli"
+
+[[route]]
+id = "create_publication"
+method = "POST"
+path = "/blogs/{slug}/publications"
+auth = "blog_write"
+kind = "custom"
+handler = "create_publication"
+scope = { blog = "slug" }
+request = "PublicationCreate"
+response = "PublicationOut"
+status = 201
+summary = "Crea una pubblicazione"
+
+# `ref` = nome oppure id. Ai lettori solo i capitoli pubblicati; a chi scrive anche bozze e pianificati (`is_public = false`).
+[[route]]
+id = "get_publication"
+method = "GET"
+path = "/blogs/{slug}/publications/{ref}"
+auth = "public"
+kind = "custom"
+handler = "get_publication"
+scope = { blog = "slug" }
+response = "PublicationDetailOut"
+summary = "Indice dei capitoli di una pubblicazione"
+
+[[route]]
+id = "update_publication"
+method = "PATCH"
+path = "/blogs/{slug}/publications/{ref}"
+auth = "blog_write"
+kind = "custom"
+handler = "update_publication"
+scope = { blog = "slug" }
+request = "PublicationUpdate"
+response = "PublicationOut"
+summary = "Modifica nome, titolo o descrizione"
+
+# Ordine esplicito dei capitoli: `post_ids` nell'ordine voluto, i non elencati seguono in ordine cronologico.
+[[route]]
+id = "order_publication"
+method = "PUT"
+path = "/blogs/{slug}/publications/{ref}/order"
+auth = "blog_write"
+kind = "custom"
+handler = "order_publication"
+scope = { blog = "slug" }
+request = "PublicationOrder"
+response = "PublicationDetailOut"
+summary = "Imposta l'ordine dei capitoli"
+
+[[route]]
+id = "delete_publication"
+method = "DELETE"
+path = "/blogs/{slug}/publications/{ref}"
+auth = "blog_write"
+kind = "custom"
+handler = "delete_publication"
+status = 204
+scope = { blog = "slug" }
+summary = "Elimina la pubblicazione (i post restano, senza pubblicazione)"

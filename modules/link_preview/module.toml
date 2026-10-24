@@ -1,0 +1,11 @@
+[module]
+name = "link_preview"
+version = "0.1.0"
+kind = "optional"
+default_enabled = true
+requires = []
+description = "Anteprima Open Graph dei link incollati nell'editor e delle card nei post (fetch lato server, protetto da SSRF)"
+
+[config]
+# Solo per prove locali e test: consente di leggere anteprime da indirizzi privati/loopback.
+allow_private_hosts = { type = "bool", env = "NOCT_LINK_PREVIEW_ALLOW_PRIVATE", default = false }

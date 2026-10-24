@@ -1,0 +1,141 @@
+{
+  "enums": [],
+  "tables": [
+    {
+      "name": "post_publications",
+      "columns": [
+        {
+          "name": "post_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "posts",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "publication_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "publications",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "chapter_order",
+          "type": "integer",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "post_id"
+      ],
+      "indexes": [
+        {
+          "name": "ix_post_publications_publication_id",
+          "columns": [
+            "publication_id"
+          ],
+          "unique": false
+        }
+      ],
+      "uniques": []
+    },
+    {
+      "name": "publications",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "null": false,
+          "default": "gen_random_uuid()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "blog_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "blogs",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "name",
+          "type": "varchar(60)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "title",
+          "type": "varchar(255)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "ix_publications_blog_id",
+          "columns": [
+            "blog_id"
+          ],
+          "unique": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "uq_publication_blog_name",
+          "columns": [
+            "blog_id",
+            "name"
+          ]
+        }
+      ]
+    }
+  ]
+}

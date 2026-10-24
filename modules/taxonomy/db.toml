@@ -8,3 +8,14 @@ columns = [
   { name = "slug", type = "varchar(60)" },
 ]
 uniques = [{ name = "uq_category_blog_slug", columns = ["blog_id", "slug"] }]
+
+# Categoria di un post (al più una). Una riga per post con categoria: assente = nessuna.
+# Cancellare la categoria lascia il post senza categoria (cascade sulla riga).
+[[table]]
+name = "post_categories"
+primary_key = ["post_id"]
+columns = [
+  { name = "post_id", type = "uuid", ref = "posts.id", on_delete = "cascade" },
+  { name = "category_id", type = "uuid", ref = "categories.id", on_delete = "cascade" },
+]
+indexes = [{ columns = ["category_id"] }]

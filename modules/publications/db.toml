@@ -1,0 +1,25 @@
+[[table]]
+name = "publications"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "blog_id", type = "uuid", ref = "blogs.id", on_delete = "cascade" },
+  # segmento URL: /{blog}/pub/{name}
+  { name = "name", type = "varchar(60)" },
+  { name = "title", type = "varchar(255)" },
+  { name = "description", type = "text", null = true },
+]
+uniques = [{ name = "uq_publication_blog_name", columns = ["blog_id", "name"] }]
+indexes = [{ columns = ["blog_id"] }]
+
+# Appartenenza di un post a una pubblicazione (al più una) e posizione esplicita del capitolo.
+# Cancellare la pubblicazione lascia i post senza pubblicazione (cascade sulla riga).
+[[table]]
+name = "post_publications"
+primary_key = ["post_id"]
+columns = [
+  { name = "post_id", type = "uuid", ref = "posts.id", on_delete = "cascade" },
+  { name = "publication_id", type = "uuid", ref = "publications.id", on_delete = "cascade" },
+  { name = "chapter_order", type = "integer", null = true },
+]
+indexes = [{ columns = ["publication_id"] }]

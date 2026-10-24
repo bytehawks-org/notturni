@@ -39,6 +39,9 @@ noct-security = { path = "crates/noct-security" }
 noct-audit = { path = "crates/noct-audit" }
 noct-auth = { path = "crates/noct-auth" }
 noct-taxonomy = { path = "modules/taxonomy" }
+noct-publications = { path = "modules/publications" }
+noct-pages = { path = "modules/pages" }
+noct-link-preview = { path = "modules/link_preview" }
 noct-sandbox = { path = "modules/sandbox" }
 noct-bundle = { path = "crates/noct-bundle" }
 noct-storage = { path = "crates/noct-storage" }

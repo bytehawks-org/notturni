@@ -3,5 +3,8 @@ name = "taxonomy"
 version = "0.1.0"
 kind = "optional"
 default_enabled = true
-requires = ["blogs"]
-description = "Categorie per-blog dei post (i tag arriveranno qui con il modulo posts)"
+requires = ["blogs", "posts"]
+description = "Categorie per-blog dei post (campi category_id/category in create/update/risposta di post)"
+
+[lifecycle]
+extensions = true

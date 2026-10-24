@@ -70,6 +70,48 @@
           ]
         }
       ]
+    },
+    {
+      "name": "post_categories",
+      "columns": [
+        {
+          "name": "post_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "posts",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "category_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "categories",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "post_id"
+      ],
+      "indexes": [
+        {
+          "name": "ix_post_categories_category_id",
+          "columns": [
+            "category_id"
+          ],
+          "unique": false
+        }
+      ],
+      "uniques": []
     }
   ]
 }

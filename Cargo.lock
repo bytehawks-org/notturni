@@ -2189,6 +2189,7 @@ dependencies = [
  "noct-manifest",
  "noct-security",
  "serde_json",
+ "sha2 0.11.1",
  "sqlx",
  "tokio",
  "tower",
@@ -2263,9 +2264,12 @@ dependencies = [
  "noct-blogs",
  "noct-core",
  "noct-events",
+ "noct-link-preview",
  "noct-media",
+ "noct-pages",
  "noct-platform",
  "noct-posts",
+ "noct-publications",
  "noct-sandbox",
  "noct-taxonomy",
  "noct-users",
@@ -2377,6 +2381,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "noct-link-preview"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "hex",
+ "noct-codegen",
+ "noct-core",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "noct-mail"
 version = "0.1.0"
 dependencies = [
@@ -2443,6 +2467,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "noct-pages"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "chrono",
+ "noct-audit",
+ "noct-codegen",
+ "noct-core",
+ "regex",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "uuid",
+]
+
+[[package]]
 name = "noct-platform"
 version = "0.1.0"
 dependencies = [
@@ -2471,6 +2512,23 @@ dependencies = [
  "serde_json",
  "sqlx",
  "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "noct-publications"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "chrono",
+ "noct-codegen",
+ "noct-core",
+ "noct-posts",
+ "regex",
+ "serde",
+ "serde_json",
+ "sqlx",
  "uuid",
 ]
 
@@ -2525,6 +2583,7 @@ dependencies = [
 name = "noct-taxonomy"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "axum",
  "chrono",
  "noct-codegen",

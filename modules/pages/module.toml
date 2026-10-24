@@ -1,0 +1,10 @@
+[module]
+name = "pages"
+version = "0.1.0"
+kind = "optional"
+default_enabled = true
+requires = ["users", "blogs", "audit"]
+description = "Pagine statiche: del sito (solo amministratori) e dei blog che le attivano (campo static_pages_enabled del blog)"
+
+[lifecycle]
+extensions = true

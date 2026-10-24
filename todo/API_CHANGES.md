@@ -19,6 +19,12 @@ Nessuna è una rottura silenziosa.
 | Creazione blog | Il limite per utente è `platform_config.max_blogs_per_user` anche nel trasferimento (v1 usava la costante) | coerenza con l'impostazione del Super Admin |
 | Pubblicazione | Il post pubblica `posts.post.published` nella stessa transazione (outbox) | in v1 il messaggio partiva dopo il commit e un broker spento lo perdeva |
 | Campi di moduli spenti | `comments_mode`, `category`, `notes`, `publication`… compaiono solo se il modulo è attivo | modularità; i moduli di default li attivano tutti |
+| `PATCH /posts/{id}` | `category_id` e `publication_id` non UUID → `400` (FastAPI: `422`); categoria o pubblicazione di un altro blog → `400` come in v1 | un solo formato d'errore per i campi dei moduli |
+| Pagine | `slug` validato anche per le pagine di sito (v1 solo per quelle di blog); `locale` e `title` ≤ 255 con `400` invece di `500` | uno slug con spazi o `/` rendeva la pagina irraggiungibile |
+| `GET /pages/{slug}`, `GET /blogs/{slug}/pages` | `?locale=` mancante → `422` | invariato rispetto a v1, ma esplicito |
+| `GET /blogs/{slug}/pages/{id}/translations` | segue la visibilità del blog (`404` se non visibile) | in v1 non controllava la visibilità e rivelava slug di pagine di blog privati |
+| `GET /blogs/{slug}/publications/{ref}` | capitoli ordinati con `chapter_order` poi cronologico, a parità per `id` | v1 ordinava in Python senza criterio finale |
+| `GET /link-preview` | `?url=` mancante → `422`; il blocco SSRF copre anche CGNAT, IPv4-mapped e NAT64, e nessun proxy di sistema | difesa più completa; stessa risposta di v1 per gli URL validi |
 
 ## Suggerite (non applicate)
 

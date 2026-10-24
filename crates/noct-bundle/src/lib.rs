@@ -18,6 +18,12 @@ pub fn all() -> Vec<ModuleDef> {
     ];
     #[cfg(feature = "taxonomy")]
     modules.push(noct_taxonomy::module());
+    #[cfg(feature = "publications")]
+    modules.push(noct_publications::module());
+    #[cfg(feature = "pages")]
+    modules.push(noct_pages::module());
+    #[cfg(feature = "link-preview")]
+    modules.push(noct_link_preview::module());
     #[cfg(feature = "sandbox")]
     modules.push(noct_sandbox::module());
     modules

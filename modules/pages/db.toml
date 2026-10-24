@@ -1,0 +1,54 @@
+# Pagine statiche. Due tabelle con lo stesso schema: quelle dei blog (`blog_pages`) e quelle del
+# sito (`platform_pages`, senza blog), così l'unicità di slug e lingua vale in entrambi i casi
+# senza ricorrere a indici parziali.
+
+[[table]]
+name = "blog_pages"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "blog_id", type = "uuid", ref = "blogs.id", on_delete = "cascade" },
+  { name = "slug", type = "varchar(255)" },
+  { name = "locale", type = "varchar(2)" },
+  # le traduzioni di una pagina condividono il gruppo
+  { name = "translation_group_id", type = "uuid", default = "gen_random_uuid()" },
+  { name = "title", type = "varchar(255)" },
+  { name = "content", type = "text" },
+  { name = "is_published", type = "boolean", default = "false" },
+  # ultimo utente che l'ha modificata
+  { name = "updated_by_id", type = "uuid", null = true, ref = "users.id", on_delete = "set_null" },
+]
+uniques = [
+  { name = "uq_blog_page_slug_locale", columns = ["blog_id", "slug", "locale"] },
+  { name = "blog_page_translation_locale", columns = ["translation_group_id", "locale"] },
+]
+indexes = [{ columns = ["blog_id"] }]
+
+[[table]]
+name = "platform_pages"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "slug", type = "varchar(255)" },
+  { name = "locale", type = "varchar(2)" },
+  # le traduzioni di una pagina condividono il gruppo
+  { name = "translation_group_id", type = "uuid", default = "gen_random_uuid()" },
+  { name = "title", type = "varchar(255)" },
+  { name = "content", type = "text" },
+  { name = "is_published", type = "boolean", default = "false" },
+  # ultimo utente che l'ha modificata
+  { name = "updated_by_id", type = "uuid", null = true, ref = "users.id", on_delete = "set_null" },
+]
+uniques = [
+  { name = "uq_platform_page_slug_locale", columns = ["slug", "locale"] },
+  { name = "platform_page_translation_locale", columns = ["translation_group_id", "locale"] },
+]
+
+# Attivazione delle pagine statiche per blog (campo `static_pages_enabled` del blog).
+[[table]]
+name = "blog_pages_settings"
+primary_key = ["blog_id"]
+columns = [
+  { name = "blog_id", type = "uuid", ref = "blogs.id", on_delete = "cascade" },
+  { name = "static_pages_enabled", type = "boolean", default = "false" },
+]

@@ -1,0 +1,20 @@
+# Compatibile con GET /api/v1/link-preview della v1.
+
+[type.LinkPreview]
+url = "string"
+title = { type = "string", nullable = true }
+description = { type = "string", nullable = true }
+image = { type = "string", nullable = true }
+
+# Pubblico (serve anche al rendering delle card nel post). Ogni anteprima non in cache fa un fetch
+# lato server verso un URL scelto dal chiamante: limite stretto per non farne un proxy.
+[[route]]
+id = "get_link_preview"
+method = "GET"
+path = "/link-preview"
+auth = "public"
+kind = "custom"
+handler = "get_link_preview"
+response = "LinkPreview"
+rate_limit = { key = "ip", max = 30, window = "1m" }
+summary = "Anteprima Open Graph di un URL (`?url=`)"
