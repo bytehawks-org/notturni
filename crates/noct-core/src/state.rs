@@ -1,4 +1,4 @@
-use crate::{Config, Extensions, RateLimiter, Services};
+use crate::{Config, Extensions, LoginGates, RateLimiter, Services};
 use noct_manifest::ConfigValue;
 use sqlx::PgPool;
 use std::{
@@ -17,6 +17,8 @@ pub struct AppState {
     pub module_config: Arc<BTreeMap<String, BTreeMap<String, ConfigValue>>>,
     /// Estensioni di blog e post dei moduli attivi.
     pub extensions: Extensions,
+    /// Gate del login dei moduli attivi (sfida MFA...).
+    pub login_gates: LoginGates,
     /// Nomi dei moduli attivi: un modulo che legge dati di un altro opzionale (conteggi dei
     /// commenti, filtro per categoria) controlla qui che sia attivo.
     pub modules: Arc<BTreeSet<String>>,
@@ -37,8 +39,14 @@ impl AppState {
             limiter,
             module_config: Arc::new(module_config),
             extensions: Extensions::default(),
+            login_gates: LoginGates::default(),
             modules: Arc::new(BTreeSet::new()),
         }
+    }
+
+    pub fn with_login_gates(mut self, gates: LoginGates) -> Self {
+        self.login_gates = gates;
+        self
     }
 
     pub fn with_modules(mut self, names: impl IntoIterator<Item = String>) -> Self {

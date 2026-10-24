@@ -1,0 +1,27 @@
+[module]
+name = "auth_sso"
+version = "0.1.0"
+kind = "optional"
+default_enabled = true
+requires = ["users", "audit", "auth"]
+description = "Accesso con provider esterni (Google, Microsoft, GitHub, LinkedIn) e collegamento degli account per email"
+
+[config]
+# Origine pubblica del backend (per il redirect_uri registrato presso i provider) e del frontend
+# (dove si chiude il flusso, perché il callback è una navigazione del browser e non una fetch).
+redirect_base_url = { type = "string", env = "NOCT_OAUTH_REDIRECT_BASE_URL", default = "http://localhost:8000" }
+frontend_url = { type = "string", env = "NOCT_FRONTEND_URL", default = "http://localhost:3000" }
+google_client_id = { type = "string", env = "NOCT_OAUTH_GOOGLE_CLIENT_ID", default = "" }
+google_client_secret = { type = "string", env = "NOCT_OAUTH_GOOGLE_CLIENT_SECRET", default = "" }
+microsoft_client_id = { type = "string", env = "NOCT_OAUTH_MICROSOFT_CLIENT_ID", default = "" }
+microsoft_client_secret = { type = "string", env = "NOCT_OAUTH_MICROSOFT_CLIENT_SECRET", default = "" }
+github_client_id = { type = "string", env = "NOCT_OAUTH_GITHUB_CLIENT_ID", default = "" }
+github_client_secret = { type = "string", env = "NOCT_OAUTH_GITHUB_CLIENT_SECRET", default = "" }
+linkedin_client_id = { type = "string", env = "NOCT_OAUTH_LINKEDIN_CLIENT_ID", default = "" }
+linkedin_client_secret = { type = "string", env = "NOCT_OAUTH_LINKEDIN_CLIENT_SECRET", default = "" }
+# Solo prove e test: se impostato, gli endpoint di ogni provider sono `<base>/<provider>/…`
+# (authorize, token, userinfo, emails) invece di quelli reali.
+endpoint_base = { type = "string", env = "NOCT_OAUTH_ENDPOINT_BASE", default = "" }
+
+[lifecycle]
+login_gates = true

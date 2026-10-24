@@ -35,6 +35,9 @@ pub struct Claims {
     /// Emissione e scadenza, in secondi Unix.
     pub iat: i64,
     pub exp: i64,
+    /// Claim aggiuntivi del tipo di token (es. il metodo di una sfida MFA); vuoti per gli access token.
+    #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 fn mac(secret: &[u8]) -> HmacSha256 {
@@ -44,7 +47,23 @@ fn mac(secret: &[u8]) -> HmacSha256 {
 
 /// Emette un token di tipo `typ` per `sub`, valido `ttl_secs` da `now`.
 pub fn encode(secret: &[u8], typ: &str, sub: Uuid, now: i64, ttl_secs: i64) -> String {
-    let claims = Claims { sub, typ: typ.to_string(), iat: now, exp: now + ttl_secs };
+    encode_with(secret, typ, sub, now, ttl_secs, serde_json::Map::new())
+}
+
+/// Come [`encode`], con claim aggiuntivi. I nomi riservati (`sub`, `type`, `iat`, `exp`) non si
+/// possono sovrascrivere: i claim standard hanno la precedenza.
+pub fn encode_with(
+    secret: &[u8],
+    typ: &str,
+    sub: Uuid,
+    now: i64,
+    ttl_secs: i64,
+    mut extra: serde_json::Map<String, serde_json::Value>,
+) -> String {
+    for reserved in ["sub", "type", "iat", "exp"] {
+        extra.remove(reserved);
+    }
+    let claims = Claims { sub, typ: typ.to_string(), iat: now, exp: now + ttl_secs, extra };
     let payload = serde_json::to_vec(&claims).expect("claims serializzabili");
     let signing_input = format!("{}.{}", URL_SAFE_NO_PAD.encode(HEADER), URL_SAFE_NO_PAD.encode(payload));
     let mut m = mac(secret);
@@ -90,6 +109,22 @@ mod tests {
     }
 
     #[test]
+    fn extra_claims_round_trip_but_cannot_override_the_standard_ones() {
+        let mut extra = serde_json::Map::new();
+        extra.insert("method".into(), "totp".into());
+        extra.insert("sub".into(), "00000000-0000-0000-0000-000000000000".into());
+        extra.insert("exp".into(), 9_999_999_999i64.into());
+        let token = encode_with(SECRET, "mfa_challenge", user(), 1_000, 300, extra);
+        let claims = decode(SECRET, &token, "mfa_challenge", 1_100).unwrap();
+        assert_eq!((claims.sub, claims.exp), (user(), 1_300));
+        assert_eq!(claims.extra.get("method").and_then(|v| v.as_str()), Some("totp"));
+        assert_eq!(claims.extra.len(), 1, "i nomi riservati sono scartati");
+        // un access token non porta claim extra
+        let plain = decode(SECRET, &encode(SECRET, "access", user(), 1_000, 300), "access", 1_100).unwrap();
+        assert!(plain.extra.is_empty());
+    }
+
+    #[test]
     fn roundtrip() {
         let t = encode(SECRET, "access", user(), 1_000, 900);
         let c = decode(SECRET, &t, "access", 1_500).unwrap();
@@ -123,7 +158,8 @@ mod tests {
         let t = encode(SECRET, "access", user(), 1_000, 900);
         let parts: Vec<&str> = t.split('.').collect();
         // payload alterato (stesso sub, exp molto più lontana) con la firma originale
-        let forged = Claims { sub: user(), typ: "access".into(), iat: 1_000, exp: 99_999_999 };
+        let forged =
+            Claims { sub: user(), typ: "access".into(), iat: 1_000, exp: 99_999_999, extra: Default::default() };
         let forged_p = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&forged).unwrap());
         assert_eq!(
             decode(SECRET, &format!("{}.{forged_p}.{}", parts[0], parts[2]), "access", 1_100),
@@ -137,7 +173,14 @@ mod tests {
     #[test]
     fn alg_none_and_other_algorithms_are_rejected() {
         let payload = URL_SAFE_NO_PAD.encode(
-            serde_json::to_vec(&Claims { sub: user(), typ: "access".into(), iat: 1_000, exp: 99_999 }).unwrap(),
+            serde_json::to_vec(&Claims {
+                sub: user(),
+                typ: "access".into(),
+                iat: 1_000,
+                exp: 99_999,
+                extra: Default::default(),
+            })
+            .unwrap(),
         );
         for alg in ["none", "HS512", "RS256", "hs256"] {
             let h = URL_SAFE_NO_PAD.encode(format!(r#"{{"alg":"{alg}","typ":"JWT"}}"#));

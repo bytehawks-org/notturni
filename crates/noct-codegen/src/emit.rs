@@ -45,7 +45,7 @@ pub fn emit(
     let opt = |present: bool, file: &str| if present { format!("Some({})", inc(file)) } else { "None".to_string() };
     writeln!(
         out,
-        "pub fn module() -> noct_core::ModuleDef {{\n    noct_core::ModuleDef {{\n        name: MODULE_NAME,\n        module_toml: {},\n        api_toml: {},\n        db_toml: {},\n        lock_json: {},\n        migrations: __MIGRATIONS,\n        router: __router,\n        consumers: __consumers,\n        startup: __startup,\n        extensions: __extensions,\n        source_dir: env!(\"CARGO_MANIFEST_DIR\"),\n    }}\n}}\n",
+        "pub fn module() -> noct_core::ModuleDef {{\n    noct_core::ModuleDef {{\n        name: MODULE_NAME,\n        module_toml: {},\n        api_toml: {},\n        db_toml: {},\n        lock_json: {},\n        migrations: __MIGRATIONS,\n        router: __router,\n        consumers: __consumers,\n        startup: __startup,\n        extensions: __extensions,\n        login_gates: __login_gates,\n        source_dir: env!(\"CARGO_MANIFEST_DIR\"),\n    }}\n}}\n",
         inc("module.toml"),
         opt(has_api, "api.toml"),
         opt(has_db, "db.toml"),
@@ -106,6 +106,16 @@ pub fn emit(
             "fn __extensions() -> Vec<std::sync::Arc<dyn noct_core::EntityExtension>> {{\n    Vec::new()\n}}\n"
         )
         .unwrap();
+    }
+    if m.module.lifecycle.login_gates {
+        writeln!(
+            out,
+            "fn __login_gates() -> Vec<std::sync::Arc<dyn noct_core::LoginGate>> {{\n    crate::gates::all()\n}}\n"
+        )
+        .unwrap();
+    } else {
+        writeln!(out, "fn __login_gates() -> Vec<std::sync::Arc<dyn noct_core::LoginGate>> {{\n    Vec::new()\n}}\n")
+            .unwrap();
     }
     // il codice generato non deve sottostare ai lint stilistici del crate che lo include
     Ok(format!(

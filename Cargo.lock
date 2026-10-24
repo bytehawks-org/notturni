@@ -2184,6 +2184,7 @@ dependencies = [
  "chrono",
  "futures",
  "http-body-util",
+ "noct-auth-mfa",
  "noct-bundle",
  "noct-core",
  "noct-manifest",
@@ -2236,6 +2237,53 @@ dependencies = [
 ]
 
 [[package]]
+name = "noct-auth-mfa"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "base64 0.23.1",
+ "chrono",
+ "getrandom 0.4.3",
+ "hmac 0.13.0",
+ "noct-audit",
+ "noct-auth",
+ "noct-codegen",
+ "noct-core",
+ "qrcode",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha1 0.11.0",
+ "sqlx",
+ "subtle",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "noct-auth-sso"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "base64 0.23.1",
+ "chrono",
+ "noct-audit",
+ "noct-auth",
+ "noct-codegen",
+ "noct-core",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "sqlx",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "noct-blogs"
 version = "0.1.0"
 dependencies = [
@@ -2261,6 +2309,8 @@ version = "0.1.0"
 dependencies = [
  "noct-audit",
  "noct-auth",
+ "noct-auth-mfa",
+ "noct-auth-sso",
  "noct-blogs",
  "noct-comments",
  "noct-core",
@@ -3045,6 +3095,12 @@ name = "pulldown-cmark-escape"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "007d8adb5ddab6f8e3f491ac63566a7d5002cc7ed73901f72057943fa71ae1ae"
+
+[[package]]
+name = "qrcode"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
 
 [[package]]
 name = "quinn"

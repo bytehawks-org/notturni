@@ -63,7 +63,7 @@ async fn user_out(conn: &mut PgConnection, id: Uuid) -> Result<UserOut, ApiError
 
 /// Crea una sessione: riga con l'hash del refresh token + access token JWT.
 /// Restituisce `(access_token, refresh_token_in_chiaro)`.
-async fn issue_session(
+pub async fn issue_session(
     conn: &mut PgConnection,
     st: &AppState,
     s: &AuthSettings,
@@ -86,7 +86,7 @@ async fn issue_session(
     Ok((access, refresh))
 }
 
-fn session_response(access: String, refresh: &str, s: &AuthSettings) -> Result<Response, ApiError> {
+pub fn session_response(access: String, refresh: &str, s: &AuthSettings) -> Result<Response, ApiError> {
     let mut res = noct_core::json_response(200, &SessionResponse { access_token: access, token_type: "bearer".into() });
     set_session_cookies(&mut res, s, refresh)?;
     Ok(res)
@@ -221,6 +221,10 @@ pub async fn login(ctx: RouteCtx, body: LoginRequest) -> Result<Response, ApiErr
     }
 
     let (id, username): (Uuid, String) = (row.get("id"), row.get("username"));
+    // un modulo (es. auth_mfa) può chiedere un secondo passaggio prima di emettere la sessione
+    if let Some(challenge) = ctx.state.login_gates.challenge(&ctx.state, id, None).await? {
+        return Ok(noct_core::json_response(200, &challenge));
+    }
     let mut tx = ctx.state.db.begin().await?;
     noct_audit::record(
         &mut tx,

@@ -32,5 +32,6 @@ uuid.workspace = true
 chrono.workspace = true
 futures.workspace = true
 noct-security.workspace = true
+noct-auth-mfa.workspace = true
 http-body-util = "0.1"
 sha2.workspace = true

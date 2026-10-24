@@ -18,6 +18,12 @@ pub mod handlers {
     //! Handler delle rotte `custom` di api.toml.
     pub use crate::handlers_impl::*;
 }
+
+/// Emissione della sessione, per i moduli che completano un login (MFA, SSO).
+pub mod session {
+    pub use crate::handlers_impl::{issue_session, session_response};
+    pub use crate::util::{clear_refresh_cookie, cookie_value, set_session_cookies};
+}
 pub mod jobs;
 pub mod startup;
 

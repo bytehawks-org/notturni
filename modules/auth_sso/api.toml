@@ -1,0 +1,29 @@
+# Compatibile con GET /api/v1/auth/sso/{provider}/{login,callback} della v1. Entrambe sono
+# navigazioni del browser e rispondono sempre con un redirect (303): non c'è JS a leggere un JSON.
+
+[type.SsoRedirect]
+location = "string"
+
+[[route]]
+id = "sso_login"
+method = "GET"
+path = "/auth/sso/{provider}/login"
+auth = "public"
+kind = "custom"
+raw = true
+handler = "sso_login"
+response = "SsoRedirect"
+rate_limit = { key = "ip", max = 30, window = "5m" }
+summary = "Avvia l'accesso con un provider: redirect all'autorizzazione (state e PKCE in un cookie httpOnly)"
+
+[[route]]
+id = "sso_callback"
+method = "GET"
+path = "/auth/sso/{provider}/callback"
+auth = "public"
+kind = "custom"
+raw = true
+handler = "sso_callback"
+response = "SsoRedirect"
+rate_limit = { key = "ip", max = 30, window = "5m" }
+summary = "Chiude l'accesso: sessione e redirect al frontend, oppure la sfida MFA per collegare un account esistente"

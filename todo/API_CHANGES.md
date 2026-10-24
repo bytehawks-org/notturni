@@ -37,6 +37,11 @@ Nessuna è una rottura silenziosa.
 | `GET /blogs/{slug}/overview` | `storage_bytes` è la somma di `media_files.size_bytes` (la stessa della quota); i conteggi dei commenti sono 0 se il modulo `comments` è spento | in v1 si contavano gli oggetti su storage, backup compresi |
 | Ordinamenti | feed, ricerca e directory hanno un ordine di spareggio per `id` | risultati stabili tra una pagina e l'altra |
 | `/users/me/{posts,media,links,publications}` | escludono i blog in cancellazione, come in v1; ora vivono nei moduli proprietari e spariscono con essi | modularità |
+| `POST /auth/mfa/totp/setup` | il nuovo segreto è «in attesa» fino a `confirm`; non sostituisce quello attivo | in v1 rigenerarlo con l'MFA già attiva la rompeva finché non si confermava |
+| `POST /auth/mfa/verify`, `confirm` | lo stesso codice TOTP non si può usare due volte; il metodo della sfida deve essere quello attuale | replay di un codice intercettato |
+| `POST /auth/mfa/{email/setup,disable}` | `auth.mfa_enabled` e `auth.mfa_disabled` finiscono nell'audit; limite di richieste per utente | assenti in v1 |
+| `GET /auth/sso/{provider}/callback` | collega un account esistente solo se il provider garantisce l'email; per GitHub solo l'email primaria verificata; un nuovo account solo a registrazioni aperte; errori sempre come `/login?sso_error=1` | in v1 un provider che non verificava l'email permetteva di prendere un account altrui, e l'SSO aggirava le modalità di registrazione |
+| `GET /auth/sso/{provider}/login` | state e PKCE legati al browser da un cookie `noct_sso_state` (httpOnly, `SameSite=Lax`, path `/api/v1/auth/sso`) | in v1 era la sessione firmata di Starlette |
 
 ## Suggerite (non applicate)
 
@@ -44,3 +49,4 @@ Nessuna è una rottura silenziosa.
 * **Paginazione** di `GET /blogs/{slug}/media` e delle bibliografie.
 * **`GET /blogs/{slug}/members`** potrebbe restituire anche il proprietario con ruolo `autore`, per semplificare il pannello collaboratori.
 * **`DELETE /blogs/{slug}`** con corpo: alcuni proxy scartano il corpo dei `DELETE`; si potrebbe accettare `?confirm_slug=`.
+* **`POST /auth/mfa/disable`** dovrebbe chiedere un codice valido (o la password) invece di spegnere l'MFA a chiunque abbia un access token: un token rubato oggi basta a togliere il secondo fattore. Richiede un campo nel corpo, quindi una modifica del frontend.

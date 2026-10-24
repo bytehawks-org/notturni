@@ -1,0 +1,16 @@
+[module]
+name = "auth_mfa"
+version = "0.1.0"
+kind = "optional"
+default_enabled = true
+requires = ["users", "audit", "auth"]
+description = "Autenticazione a due fattori: app TOTP o codice via email, sfida al login"
+
+# Spedisce il codice via email: il valore si rigenera dal job, non passa da outbox né bus.
+[jobs.send_mfa_email]
+subject = "auth_mfa.email.send"
+max_deliver = 5
+backoff = ["10s", "1m", "5m"]
+
+[lifecycle]
+login_gates = true

@@ -27,6 +27,8 @@ pub struct ModuleDef {
     pub startup: fn(AppState) -> StartupFuture,
     /// Estensioni di blog/post dichiarate in `[lifecycle] extensions` (altrimenti nessuna).
     pub extensions: fn() -> Vec<Arc<dyn EntityExtension>>,
+    /// Gate del login dichiarati in `[lifecycle] login_gates` (altrimenti nessuno).
+    pub login_gates: fn() -> Vec<Arc<dyn crate::LoginGate>>,
     /// Directory dei sorgenti del modulo (solo per gli strumenti di sviluppo).
     pub source_dir: &'static str,
 }
@@ -192,6 +194,11 @@ impl Registry {
             }
         }
         Ok(Background::start(state, consumers))
+    }
+
+    /// Gate del login dei moduli attivi.
+    pub fn login_gates(&self, enabled: &[usize]) -> crate::LoginGates {
+        crate::LoginGates::new(enabled.iter().flat_map(|&i| (self.entries[i].def.login_gates)()).collect())
     }
 
     /// Nomi dei moduli attivi.

@@ -34,6 +34,10 @@ pub fn all() -> Vec<ModuleDef> {
     modules.push(noct_discovery::module());
     #[cfg(feature = "interests")]
     modules.push(noct_interests::module());
+    #[cfg(feature = "auth-mfa")]
+    modules.push(noct_auth_mfa::module());
+    #[cfg(feature = "auth-sso")]
+    modules.push(noct_auth_sso::module());
     #[cfg(feature = "sandbox")]
     modules.push(noct_sandbox::module());
     modules

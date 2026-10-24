@@ -58,6 +58,7 @@ pub async fn setup_with(modules: &[&str], env: &[(&str, &str)], infra: Option<&d
     let extensions = registry.extensions(&enabled).unwrap_or_else(|e| panic!("{e}"));
     let state = AppState::new(pool.clone(), config, services, module_cfg)
         .with_extensions(extensions)
+        .with_login_gates(registry.login_gates(&enabled))
         .with_modules(registry.names(&enabled));
     registry.run_startup(&enabled, &state).await.unwrap_or_else(|e| panic!("{e}"));
     let app = noct_api::app(&registry, &enabled, state.clone());

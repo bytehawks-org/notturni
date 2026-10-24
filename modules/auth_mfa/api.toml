@@ -1,0 +1,87 @@
+# Compatibile con /api/v1/auth/mfa/* della v1. Il login risponde con la sfida (`mfa_required`,
+# `method`, `challenge`) quando l'utente ha l'MFA attiva; `POST /auth/mfa/verify` la completa.
+
+[type.MfaVerify]
+challenge = { type = "string", max = 4096 }
+code = { type = "string", max = 32 }
+
+[type.MfaCode]
+code = { type = "string", max = 32 }
+
+[type.TotpSetup]
+secret = "string"
+provisioning_uri = "string"
+# SVG inline come data URI: il segreto non lascia mai il backend verso servizi di terze parti
+qr_code_data_uri = "string"
+
+[type.MfaSession]
+access_token = "string"
+token_type = "string"
+
+[[route]]
+id = "verify_mfa"
+method = "POST"
+path = "/auth/mfa/verify"
+auth = "public"
+kind = "custom"
+raw = true
+handler = "verify_mfa"
+request = "MfaVerify"
+response = "MfaSession"
+rate_limit = { key = "ip", max = 20, window = "5m" }
+summary = "Completa il login con il codice MFA; il refresh token viaggia in un cookie httpOnly"
+
+[[route]]
+id = "setup_totp"
+method = "POST"
+path = "/auth/mfa/totp/setup"
+auth = "user"
+kind = "custom"
+handler = "setup_totp"
+response = "TotpSetup"
+summary = "Genera un nuovo segreto TOTP (attivo solo dopo la conferma)"
+
+[[route]]
+id = "confirm_totp"
+method = "POST"
+path = "/auth/mfa/totp/confirm"
+auth = "user"
+kind = "custom"
+handler = "confirm_totp"
+request = "MfaCode"
+status = 204
+rate_limit = { key = "ip", max = 20, window = "5m" }
+summary = "Conferma il segreto con un codice e attiva l'MFA via app"
+
+[[route]]
+id = "setup_email"
+method = "POST"
+path = "/auth/mfa/email/setup"
+auth = "user"
+kind = "custom"
+handler = "setup_email"
+status = 202
+rate_limit = { key = "user", max = 5, window = "5m" }
+summary = "Invia un codice alla tua email per confermare l'MFA via email"
+
+[[route]]
+id = "confirm_email"
+method = "POST"
+path = "/auth/mfa/email/confirm"
+auth = "user"
+kind = "custom"
+handler = "confirm_email"
+request = "MfaCode"
+status = 204
+rate_limit = { key = "ip", max = 20, window = "5m" }
+summary = "Conferma il codice ricevuto e attiva l'MFA via email"
+
+[[route]]
+id = "disable_mfa"
+method = "POST"
+path = "/auth/mfa/disable"
+auth = "user"
+kind = "custom"
+handler = "disable_mfa"
+status = 204
+summary = "Disattiva l'MFA"

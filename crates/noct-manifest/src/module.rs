@@ -24,6 +24,10 @@ pub struct Lifecycle {
     /// Il modulo definisce `extensions::all()` con gli [`EntityExtension`] di blog/post.
     #[serde(default)]
     pub extensions: bool,
+    #[serde(default)]
+    /// Il modulo definisce `gates::all()` con i [`LoginGate`] che possono fermare un login
+    /// riuscito (es. sfida MFA).
+    pub login_gates: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
