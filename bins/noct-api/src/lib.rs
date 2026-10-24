@@ -58,7 +58,8 @@ pub async fn bootstrap(env: &dyn Fn(&str) -> Option<String>) -> Result<Runtime> 
         .collect();
     tracing::info!(modules = ?names, "moduli attivi");
     let extensions = registry.extensions(&enabled).map_err(anyhow::Error::msg).context("estensioni dei moduli")?;
-    let state = AppState::new(pool, config, services, module_cfg).with_extensions(extensions);
+    let state =
+        AppState::new(pool, config, services, module_cfg).with_extensions(extensions).with_modules(names.clone());
     // hook di avvio dei moduli (validazione della configurazione, provisioning del Super Admin...)
     registry.run_startup(&enabled, &state).await.map_err(anyhow::Error::msg)?;
     Ok(Runtime { registry, enabled, state })

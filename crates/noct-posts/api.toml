@@ -237,3 +237,31 @@ handler = "publish_post"
 request = "PublishRequest"
 response = "PostOut"
 summary = "Pubblica (subito o pianificato)"
+
+# ---- viste «tutti i miei blog» (blog di cui sono proprietario o collaboratore, esclusi quelli in cancellazione) ----
+
+# citations: [{post_title, post_slug, permalink, locale, used_at, blog_slug, blog_title}]
+[type.MyLinkEntry]
+url = "string"
+link_text = "string"
+citations = "json"
+
+[[route]]
+id = "my_posts"
+method = "GET"
+path = "/users/me/posts"
+auth = "user"
+kind = "custom"
+handler = "my_posts"
+response = "PostOut[]"
+summary = "Tutti i miei post (qualunque stato) di tutti i miei blog, dal più recente"
+
+[[route]]
+id = "my_links"
+method = "GET"
+path = "/users/me/links"
+auth = "user"
+kind = "custom"
+handler = "my_links"
+response = "MyLinkEntry[]"
+summary = "Link citati nei post (qualunque stato) di tutti i miei blog, raggruppati per URL"

@@ -30,6 +30,10 @@ pub fn all() -> Vec<ModuleDef> {
     modules.push(noct_fragments::module());
     #[cfg(feature = "comments")]
     modules.push(noct_comments::module());
+    #[cfg(feature = "discovery")]
+    modules.push(noct_discovery::module());
+    #[cfg(feature = "interests")]
+    modules.push(noct_interests::module());
     #[cfg(feature = "sandbox")]
     modules.push(noct_sandbox::module());
     modules

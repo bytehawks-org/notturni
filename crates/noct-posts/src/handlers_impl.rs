@@ -1,6 +1,6 @@
 use crate::{
-    LinkBibliographyEntry, MediaBibliographyEntry, PostCreate, PostRow, PostTranslation, PostUpdate, PublishRequest,
-    TranslationSummary, VISIBLE_SQL, render,
+    LinkBibliographyEntry, MediaBibliographyEntry, MyLinkEntry, PostCreate, PostRow, PostTranslation, PostUpdate,
+    PublishRequest, TranslationSummary, VISIBLE_SQL, render,
     rules::{self, UserNames},
 };
 use chrono::{DateTime, Utc};
@@ -732,6 +732,61 @@ pub async fn links_bibliography(ctx: RouteCtx) -> Result<Vec<LinkBibliographyEnt
         let entry = entries.entry(r.url.clone()).or_insert_with(|| {
             order.push(r.url.clone());
             LinkBibliographyEntry { url: r.url.clone(), link_text: r.link_text.clone(), citations: json!([]) }
+        });
+        if let Some(list) = entry.citations.as_array_mut() {
+            list.push(cite);
+        }
+    }
+    Ok(order.into_iter().filter_map(|u| entries.remove(&u)).collect())
+}
+
+// ---- viste dell'autore su tutti i suoi blog ------------------------------------------------------------------------
+
+/// Condizione SQL dei blog dell'utente `$1`: proprietario o collaboratore, non in cancellazione
+/// (una vista aggregata non deve mostrare contenuti di un blog che il proprietario ha già eliminato).
+pub const MY_BLOGS_SQL: &str = "b.deleted_at IS NULL AND (b.owner_id = $1 OR EXISTS (SELECT 1 FROM blog_memberships m WHERE m.blog_id = b.id AND m.user_id = $1))";
+
+pub async fn my_posts(ctx: RouteCtx) -> Result<Vec<Value>, ApiError> {
+    let user = actor(&ctx)?.user_id;
+    let rows: Vec<PostRow> =
+        sqlx::query_as(&format!("{} WHERE {MY_BLOGS_SQL} ORDER BY p.created_at DESC, p.id", PostRow::SELECT))
+            .bind(user)
+            .fetch_all(&ctx.state.db)
+            .await?;
+    render(&ctx.state, rows).await
+}
+
+pub async fn my_links(ctx: RouteCtx) -> Result<Vec<MyLinkEntry>, ApiError> {
+    let user = actor(&ctx)?.user_id;
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        title: String,
+        slug: String,
+        locale: String,
+        published_at: Option<DateTime<Utc>>,
+        link_text: String,
+        url: String,
+        blog_slug: String,
+        blog_title: String,
+    }
+    let rows: Vec<Row> = sqlx::query_as(&format!(
+        "SELECT p.title, p.slug, p.locale, p.published_at, l.link_text, l.url, b.slug AS blog_slug, b.title AS blog_title
+         FROM posts p JOIN blogs b ON b.id = p.blog_id JOIN post_links l ON l.post_id = p.id
+         WHERE {MY_BLOGS_SQL} ORDER BY p.created_at DESC, p.id, l.position"
+    ))
+    .bind(user)
+    .fetch_all(&ctx.state.db)
+    .await?;
+    let mut order: Vec<String> = Vec::new();
+    let mut entries: HashMap<String, MyLinkEntry> = HashMap::new();
+    for r in rows {
+        let cite = json!({
+            "post_title": r.title, "post_slug": r.slug, "permalink": rules::permalink(&r.blog_slug, &r.slug),
+            "locale": r.locale, "used_at": r.published_at, "blog_slug": r.blog_slug, "blog_title": r.blog_title,
+        });
+        let entry = entries.entry(r.url.clone()).or_insert_with(|| {
+            order.push(r.url.clone());
+            MyLinkEntry { url: r.url.clone(), link_text: r.link_text.clone(), citations: json!([]) }
         });
         if let Some(list) = entry.citations.as_array_mut() {
             list.push(cite);

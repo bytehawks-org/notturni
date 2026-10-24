@@ -194,6 +194,11 @@ impl Registry {
         Ok(Background::start(state, consumers))
     }
 
+    /// Nomi dei moduli attivi.
+    pub fn names(&self, enabled: &[usize]) -> Vec<String> {
+        enabled.iter().map(|&i| self.entries[i].manifest.name().to_string()).collect()
+    }
+
     /// Estensioni di blog e post dei moduli attivi.
     pub fn extensions(&self, enabled: &[usize]) -> Result<Extensions, String> {
         Extensions::new(enabled.iter().flat_map(|&i| (self.entries[i].def.extensions)()).collect())

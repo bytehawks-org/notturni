@@ -375,3 +375,60 @@ pub async fn delete_favicon(ctx: RouteCtx) -> Result<Value, ApiError> {
     }
     images_response(&ctx).await
 }
+
+/// Libreria di tutti i blog dell'utente (proprietario o collaboratore, esclusi quelli in
+/// cancellazione), con il blog di appartenenza e i post che citano ogni immagine.
+pub async fn my_media(ctx: RouteCtx) -> Result<Vec<Value>, ApiError> {
+    let st = &ctx.state;
+    let uid = user(&ctx)?;
+    const MINE: &str = "b.deleted_at IS NULL AND (b.owner_id = $1 OR EXISTS \
+        (SELECT 1 FROM blog_memberships mb WHERE mb.blog_id = b.id AND mb.user_id = $1))";
+    #[derive(FromRow)]
+    struct Row {
+        #[sqlx(flatten)]
+        media: MediaRow,
+        blog_slug: String,
+        blog_title: String,
+    }
+    let rows: Vec<Row> = sqlx::query_as(&format!(
+        "SELECT m.id, m.url, m.content_type, m.size_bytes, m.alt_text, m.caption, m.categories, m.is_sensitive,
+                u.username AS uploader_username, m.created_at, b.slug AS blog_slug, b.title AS blog_title
+         FROM media_files m JOIN blogs b ON b.id = m.blog_id LEFT JOIN users u ON u.id = m.uploader_id
+         WHERE {MINE} ORDER BY m.created_at DESC, m.id"
+    ))
+    .bind(uid)
+    .fetch_all(&st.db)
+    .await?;
+    let urls: Vec<String> = rows.iter().map(|r| r.media.url.clone()).collect();
+    let usage: Vec<(String, Uuid, String, String, String)> = sqlx::query_as(&format!(
+        "SELECT pm.url, p.id, p.slug, p.title, b.slug FROM post_media pm JOIN posts p ON p.id = pm.post_id
+         JOIN blogs b ON b.id = p.blog_id WHERE {MINE} AND pm.url = ANY($2)
+         UNION
+         SELECT p.cover_image_url, p.id, p.slug, p.title, b.slug FROM posts p JOIN blogs b ON b.id = p.blog_id
+         WHERE {MINE} AND p.cover_image_url = ANY($2)
+         ORDER BY 1, 4, 2"
+    ))
+    .bind(uid)
+    .bind(&urls)
+    .fetch_all(&st.db)
+    .await?;
+    let mut used: HashMap<String, Vec<Value>> = HashMap::new();
+    for (url, id, slug, title, blog_slug) in usage {
+        used.entry(url).or_default().push(json!({
+            "post_id": id, "post_slug": slug, "post_title": title, "permalink": format!("/{blog_slug}/{slug}"),
+        }));
+    }
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            let m = r.media;
+            json!({
+                "id": m.id, "url": m.url, "content_type": m.content_type, "size_bytes": m.size_bytes,
+                "alt_text": m.alt_text, "caption": m.caption, "categories": m.categories,
+                "is_sensitive": m.is_sensitive, "uploader_username": m.uploader_username,
+                "created_at": m.created_at, "used_in": used.remove(&m.url).unwrap_or_default(),
+                "blog_slug": r.blog_slug, "blog_title": r.blog_title,
+            })
+        })
+        .collect())
+}

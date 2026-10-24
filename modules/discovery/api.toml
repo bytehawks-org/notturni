@@ -1,0 +1,233 @@
+# Compatibile con /api/v1/{feed,search,interests}, la directory /blogs, i follow e la panoramica della v1.
+# I post restituiti hanno la forma completa `PostOut` di `posts` (più i campi dei moduli attivi);
+# qui se ne documenta il sottoinsieme essenziale.
+
+[type.FeedPost]
+id = "uuid"
+blog_id = "uuid"
+blog_slug = "string"
+slug = "string"
+title = "string"
+locale = "string"
+author_display_name = "string"
+permalink = "string"
+published_at = { type = "timestamp", nullable = true }
+
+[type.LocaleCount]
+locale = "string"
+count = "int"
+
+[type.TrendingTag]
+tag = "string"
+post_count = "int"
+
+# BlogOut + post_count, follower_count, last_published_at
+[type.PublicBlog]
+id = "uuid"
+slug = "string"
+title = "string"
+post_count = "int"
+follower_count = "int"
+last_published_at = { type = "timestamp", nullable = true }
+
+[type.Follower]
+username = "string"
+
+# blogs: [{blog_slug, blog_title, alias, followers}]
+[type.FollowStats]
+user_followers = "int"
+blogs = "json"
+total_followers = "int"
+
+# reads_30d: [{day, reads}] (ultimi 30 giorni, i giorni vuoti a 0)
+[type.BlogOverview]
+posts_total = "int"
+posts_published = "int"
+posts_scheduled = "int"
+posts_draft = "int"
+posts_in_review = "int"
+followers = "int"
+members = "int"
+pending_comments = "int"
+approved_comments = "int"
+media = "int"
+last_published_at = { type = "timestamp", nullable = true }
+reads_30d = "json"
+reads_total_30d = "int"
+storage_bytes = { type = "int", nullable = true }
+storage_limit_mb = { type = "int", nullable = true }
+
+[type.MentionableUser]
+username = "string"
+display_name = { type = "string", nullable = true }
+avatar_url = { type = "string", nullable = true }
+
+# ---- feed e ricerca (pubblici: solo post pubblicati di blog pubblici) ----
+
+[[route]]
+id = "list_feed"
+method = "GET"
+path = "/feed/posts"
+auth = "public"
+kind = "custom"
+handler = "list_feed"
+response = "FeedPost[]"
+summary = "Feed del portale, dal più recente (`locale`, `tag`, `category`, `following=true`, `limit` max 50, `offset`)"
+
+[[route]]
+id = "list_feed_locales"
+method = "GET"
+path = "/feed/locales"
+auth = "public"
+kind = "custom"
+handler = "list_feed_locales"
+response = "LocaleCount[]"
+summary = "Le prime 5 lingue per numero di post nel feed"
+
+[[route]]
+id = "list_trending_tags"
+method = "GET"
+path = "/feed/trending"
+auth = "public"
+kind = "custom"
+handler = "list_trending_tags"
+response = "TrendingTag[]"
+summary = "Tag più usati negli ultimi `days` giorni (max 90)"
+
+[[route]]
+id = "search_posts"
+method = "GET"
+path = "/search/posts"
+auth = "public"
+kind = "custom"
+handler = "search_posts"
+response = "FeedPost[]"
+summary = "Ricerca globale in titolo e contenuto (`q`, `limit` max 50, `offset`)"
+
+# ---- directory e follow ----
+
+[[route]]
+id = "list_public_blogs"
+method = "GET"
+path = "/blogs"
+auth = "public"
+kind = "custom"
+handler = "list_public_blogs"
+response = "PublicBlog[]"
+summary = "Directory pubblica dei blog (`q`, `locale`, `sort` = active|new|followers, `limit` max 100, `offset`)"
+
+[[route]]
+id = "follow_blog"
+method = "POST"
+path = "/blogs/{slug}/follow"
+auth = "user"
+kind = "custom"
+handler = "follow_blog"
+scope = { blog = "slug" }
+status = 204
+summary = "Segue un blog (idempotente)"
+
+[[route]]
+id = "unfollow_blog"
+method = "DELETE"
+path = "/blogs/{slug}/follow"
+auth = "user"
+kind = "custom"
+handler = "unfollow_blog"
+status = 204
+summary = "Smette di seguire un blog, anche se nel frattempo non è più visibile"
+
+[[route]]
+id = "list_blog_followers"
+method = "GET"
+path = "/blogs/{slug}/followers"
+auth = "public"
+kind = "custom"
+handler = "list_blog_followers"
+scope = { blog = "slug" }
+response = "Follower[]"
+summary = "Username dei follower del blog"
+
+[[route]]
+id = "follow_user"
+method = "POST"
+path = "/users/{username}/follow"
+auth = "user"
+kind = "custom"
+handler = "follow_user"
+status = 204
+summary = "Segue un utente (idempotente)"
+
+[[route]]
+id = "unfollow_user"
+method = "DELETE"
+path = "/users/{username}/follow"
+auth = "user"
+kind = "custom"
+handler = "unfollow_user"
+status = 204
+summary = "Smette di seguire un utente"
+
+[[route]]
+id = "list_user_followers"
+method = "GET"
+path = "/users/{username}/followers"
+auth = "public"
+kind = "custom"
+handler = "list_user_followers"
+response = "Follower[]"
+summary = "Chi segue l'utente"
+
+[[route]]
+id = "list_user_following"
+method = "GET"
+path = "/users/{username}/following"
+auth = "public"
+kind = "custom"
+handler = "list_user_following"
+response = "Follower[]"
+summary = "Chi l'utente segue"
+
+[[route]]
+id = "my_follow_stats"
+method = "GET"
+path = "/users/me/follow-stats"
+auth = "user"
+kind = "custom"
+handler = "my_follow_stats"
+response = "FollowStats"
+summary = "Quante persone mi seguono in tutto: utenti e follower dei miei blog"
+
+# ---- gestione del blog ----
+
+[[route]]
+id = "blog_overview"
+method = "GET"
+path = "/blogs/{slug}/overview"
+auth = "user"
+kind = "custom"
+handler = "blog_overview"
+scope = { blog = "slug" }
+response = "BlogOverview"
+summary = "Panoramica (conteggi, letture degli ultimi 30 giorni, spazio): proprietario e membri"
+
+[[route]]
+id = "list_mentionable_users"
+method = "GET"
+path = "/blogs/{slug}/mentionable-users"
+auth = "blog_write"
+kind = "custom"
+handler = "list_mentionable_users"
+scope = { blog = "slug" }
+response = "MentionableUser[]"
+summary = "Suggerimenti per le @menzioni: proprietario, collaboratori e follower (`q`, `limit` max 25)"
+
+[[route]]
+id = "record_post_read"
+method = "POST"
+path = "/posts/{post_id}/read"
+auth = "public"
+kind = "custom"
+handler = "record_post_read"
+status = 204
+summary = "Conta una lettura (aggregata per giorno, nessun dato del lettore)"

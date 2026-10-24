@@ -1,0 +1,7 @@
+[module]
+name = "interests"
+version = "0.1.0"
+kind = "optional"
+default_enabled = true
+requires = []
+description = "Elenco pubblico degli interessi di piattaforma, scelti dagli utenti nel profilo e usati per filtrare la directory utenti"

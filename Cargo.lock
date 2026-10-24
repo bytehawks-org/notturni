@@ -2264,8 +2264,10 @@ dependencies = [
  "noct-blogs",
  "noct-comments",
  "noct-core",
+ "noct-discovery",
  "noct-events",
  "noct-fragments",
+ "noct-interests",
  "noct-link-preview",
  "noct-media",
  "noct-notes",
@@ -2380,6 +2382,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "noct-discovery"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "noct-blogs",
+ "noct-codegen",
+ "noct-core",
+ "noct-platform",
+ "noct-posts",
+ "regex",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "uuid",
+]
+
+[[package]]
 name = "noct-events"
 version = "0.1.0"
 dependencies = [
@@ -2422,6 +2442,21 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "noct-interests"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "noct-codegen",
+ "noct-core",
+ "regex",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "uuid",
 ]
 
 [[package]]

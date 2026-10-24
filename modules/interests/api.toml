@@ -1,0 +1,16 @@
+# Compatibile con GET /api/v1/interests della v1.
+
+[type.Interest]
+key = "string"
+# {locale: etichetta}; il frontend risolve la lingua corrente, con ripiego sulla `key`
+translations = "json"
+
+[[route]]
+id = "list_interests"
+method = "GET"
+path = "/interests"
+auth = "public"
+kind = "custom"
+handler = "list_interests"
+response = "Interest[]"
+summary = "Interessi di piattaforma selezionabili nel profilo"

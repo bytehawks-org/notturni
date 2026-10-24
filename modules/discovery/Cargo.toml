@@ -1,0 +1,26 @@
+[package]
+name = "noct-discovery"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+build = "build.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+noct-core.workspace = true
+noct-posts.workspace = true
+noct-blogs.workspace = true
+noct-platform.workspace = true
+axum.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+regex.workspace = true
+
+[build-dependencies]
+noct-codegen.workspace = true

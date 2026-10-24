@@ -105,3 +105,25 @@ handler = "delete_publication"
 status = 204
 scope = { blog = "slug" }
 summary = "Elimina la pubblicazione (i post restano, senza pubblicazione)"
+
+# PublicationOut + blog di appartenenza (blog_slug, blog_title)
+[type.MyPublicationOut]
+id = "uuid"
+name = "string"
+title = "string"
+description = { type = "string", nullable = true }
+chapters_total = "int"
+chapters_published = "int"
+created_at = "timestamp"
+blog_slug = "string"
+blog_title = "string"
+
+[[route]]
+id = "my_publications"
+method = "GET"
+path = "/users/me/publications"
+auth = "user"
+kind = "custom"
+handler = "my_publications"
+response = "MyPublicationOut[]"
+summary = "Pubblicazioni di tutti i miei blog (proprietario o collaboratore), con i conteggi dei capitoli"

@@ -225,3 +225,38 @@ pub async fn delete_publication(ctx: RouteCtx) -> Result<(), ApiError> {
     invalidate(&ctx, blog);
     Ok(())
 }
+
+/// Pubblicazioni di tutti i blog dell'utente (proprietario o collaboratore, esclusi quelli in
+/// cancellazione), più recenti prima.
+pub async fn my_publications(ctx: RouteCtx) -> Result<Vec<Value>, ApiError> {
+    let user =
+        ctx.actor.as_ref().map(|a| a.user_id).ok_or_else(|| ApiError::unauthorized("Autenticazione richiesta."))?;
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        #[sqlx(flatten)]
+        p: PubRow,
+        blog_slug: String,
+        blog_title: String,
+    }
+    let rows: Vec<Row> = sqlx::query_as(
+        "SELECT u.id, u.name, u.title, u.description, u.created_at, b.slug AS blog_slug, b.title AS blog_title
+         FROM publications u JOIN blogs b ON b.id = u.blog_id
+         WHERE b.deleted_at IS NULL AND (b.owner_id = $1 OR EXISTS
+               (SELECT 1 FROM blog_memberships m WHERE m.blog_id = b.id AND m.user_id = $1))
+         ORDER BY u.created_at DESC, u.id",
+    )
+    .bind(user)
+    .fetch_all(&ctx.state.db)
+    .await?;
+    let ids: Vec<Uuid> = rows.iter().map(|r| r.p.id).collect();
+    let counts = counts(&ctx.state.db, &ids).await?;
+    Ok(rows
+        .iter()
+        .map(|r| {
+            let mut v = out(&r.p, &counts);
+            v["blog_slug"] = json!(r.blog_slug);
+            v["blog_title"] = json!(r.blog_title);
+            v
+        })
+        .collect())
+}

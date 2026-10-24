@@ -6,7 +6,7 @@ license.workspace = true
 publish.workspace = true
 
 [features]
-default = ["taxonomy", "publications", "pages", "link-preview", "notes", "fragments", "comments"]
+default = ["taxonomy", "publications", "pages", "link-preview", "notes", "fragments", "comments", "discovery", "interests"]
 taxonomy = ["dep:noct-taxonomy"]
 publications = ["dep:noct-publications"]
 pages = ["dep:noct-pages"]
@@ -14,6 +14,8 @@ link-preview = ["dep:noct-link-preview"]
 notes = ["dep:noct-notes"]
 fragments = ["dep:noct-fragments"]
 comments = ["dep:noct-comments"]
+discovery = ["dep:noct-discovery"]
+interests = ["dep:noct-interests"]
 sandbox = ["dep:noct-sandbox"]
 
 [lints]
@@ -36,4 +38,6 @@ noct-link-preview = { workspace = true, optional = true }
 noct-notes = { workspace = true, optional = true }
 noct-fragments = { workspace = true, optional = true }
 noct-comments = { workspace = true, optional = true }
+noct-discovery = { workspace = true, optional = true }
+noct-interests = { workspace = true, optional = true }
 noct-sandbox = { workspace = true, optional = true }

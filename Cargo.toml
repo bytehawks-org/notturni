@@ -45,6 +45,8 @@ noct-link-preview = { path = "modules/link_preview" }
 noct-notes = { path = "modules/notes" }
 noct-fragments = { path = "modules/fragments" }
 noct-comments = { path = "modules/comments" }
+noct-discovery = { path = "modules/discovery" }
+noct-interests = { path = "modules/interests" }
 noct-sandbox = { path = "modules/sandbox" }
 noct-bundle = { path = "crates/noct-bundle" }
 noct-storage = { path = "crates/noct-storage" }

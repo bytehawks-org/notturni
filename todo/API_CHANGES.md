@@ -31,6 +31,12 @@ Nessuna è una rottura silenziosa.
 | `PATCH /blogs/{slug}`, `PATCH /posts/{id}` | `comments_mode` non valido o `comments_auto_close_days` non intero → `400` | un solo formato d'errore |
 | Note | un `kind`/`url` non valido nelle note del post → `400` con il messaggio del campo, come in v1; `notes: null` equivale ad assente | coerenza con gli altri tri-stati |
 | `GET /blogs/{slug}/notes` | `403` a chi non è proprietario né collaboratore; la ricerca `q` ignora le maiuscole sul testo intero | invariato rispetto a v1, ma esplicito |
+| `GET /feed/posts?following=true` | i post di un utente seguito compaiono solo se firmati con il suo username | in v1 comparivano anche quelli con alias, rivelando a chi segue la persona di chi fossero |
+| `POST /blogs/{slug}/follow`, `GET /blogs/{slug}/followers` | `404` se il blog non è visibile al chiamante; `DELETE /blogs/{slug}/follow` funziona comunque | in v1 si poteva seguire (e vedere i follower di) un blog privato conoscendone lo slug |
+| `GET /search/posts` | `q` mancante → `422`; `%` e `_` nel testo cercato sono letterali | in v1 erano jolly di `ILIKE` |
+| `GET /blogs/{slug}/overview` | `storage_bytes` è la somma di `media_files.size_bytes` (la stessa della quota); i conteggi dei commenti sono 0 se il modulo `comments` è spento | in v1 si contavano gli oggetti su storage, backup compresi |
+| Ordinamenti | feed, ricerca e directory hanno un ordine di spareggio per `id` | risultati stabili tra una pagina e l'altra |
+| `/users/me/{posts,media,links,publications}` | escludono i blog in cancellazione, come in v1; ora vivono nei moduli proprietari e spariscono con essi | modularità |
 
 ## Suggerite (non applicate)
 

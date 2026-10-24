@@ -1,7 +1,10 @@
 use crate::{Config, Extensions, RateLimiter, Services};
 use noct_manifest::ConfigValue;
 use sqlx::PgPool;
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 /// Stato condiviso da tutti gli handler.
 #[derive(Clone)]
@@ -14,6 +17,9 @@ pub struct AppState {
     pub module_config: Arc<BTreeMap<String, BTreeMap<String, ConfigValue>>>,
     /// Estensioni di blog e post dei moduli attivi.
     pub extensions: Extensions,
+    /// Nomi dei moduli attivi: un modulo che legge dati di un altro opzionale (conteggi dei
+    /// commenti, filtro per categoria) controlla qui che sia attivo.
+    pub modules: Arc<BTreeSet<String>>,
 }
 
 impl AppState {
@@ -31,7 +37,17 @@ impl AppState {
             limiter,
             module_config: Arc::new(module_config),
             extensions: Extensions::default(),
+            modules: Arc::new(BTreeSet::new()),
         }
+    }
+
+    pub fn with_modules(mut self, names: impl IntoIterator<Item = String>) -> Self {
+        self.modules = Arc::new(names.into_iter().collect());
+        self
+    }
+
+    pub fn module_enabled(&self, name: &str) -> bool {
+        self.modules.contains(name)
     }
 
     /// Registra le estensioni dei moduli attivi (vedi [`Registry::extensions`](crate::Registry::extensions)).

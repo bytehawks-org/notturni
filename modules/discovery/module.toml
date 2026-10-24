@@ -1,0 +1,7 @@
+[module]
+name = "discovery"
+version = "0.1.0"
+kind = "optional"
+default_enabled = true
+requires = ["users", "blogs", "posts"]
+description = "Scoperta: feed del portale, tendenze, ricerca globale, directory dei blog, follow di blog e utenti, panoramica del blog, letture, menzioni"

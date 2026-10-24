@@ -165,3 +165,29 @@ handler = "delete_favicon"
 scope = { blog = "slug" }
 response = "BlogImages"
 summary = "Rimuove la favicon e cancella l'oggetto su storage"
+
+# MediaFileOut senza `used_as_blog_cover`, più il blog di appartenenza (blog_slug, blog_title)
+[type.MyMediaFileOut]
+id = "uuid"
+url = "string"
+content_type = "string"
+size_bytes = "int"
+alt_text = "string"
+caption = { type = "string", nullable = true }
+categories = "string[]"
+is_sensitive = "bool"
+uploader_username = { type = "string", nullable = true }
+created_at = "timestamp"
+used_in = "json"
+blog_slug = "string"
+blog_title = "string"
+
+[[route]]
+id = "my_media"
+method = "GET"
+path = "/users/me/media"
+auth = "user"
+kind = "custom"
+handler = "my_media"
+response = "MyMediaFileOut[]"
+summary = "Librerie media di tutti i miei blog (proprietario o collaboratore), con il blog di appartenenza"
