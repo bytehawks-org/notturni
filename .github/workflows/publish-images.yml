@@ -29,6 +29,7 @@ on:
     branches:
       - main
       - develop
+      - migration/rust
     tags:
       - "v*.*.*"
   workflow_dispatch: {}
@@ -99,6 +100,8 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
+            # prova su K3s della riscrittura in Rust: il branch di migrazione pubblica anche questo tag fisso
+            type=raw,value=0.2.0-rust,enable=${{ github.ref == 'refs/heads/migration/rust' }}
 
       - name: Build e push
         uses: docker/build-push-action@v6

@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: ghcr.io/bytehawks-org/notturni-frontend:sha-fd6ce11
+          image: ghcr.io/bytehawks-org/notturni-frontend:0.2.0-rust
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000

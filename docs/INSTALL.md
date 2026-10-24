@@ -204,15 +204,18 @@ kubectl -n cert-manager rollout status deploy/cert-manager-webhook
 
 ### 3.4 Immagini
 
-I manifest puntano a `ghcr.io/bytehawks-org/notturni-{backend,frontend,moderation}` con tag in
-`k8s/kustomization.yaml` (`images:`). **Il tag presente nel repository è quello dell'ultima immagine Python
-pubblicata: non contiene il backend Rust.** Va sostituito con un tag costruito dopo la migrazione, in uno di
-questi modi:
+I manifest puntano a `ghcr.io/bytehawks-org/notturni-{backend,frontend,moderation}` con il tag `0.2.0-rust`
+(`images:` in `k8s/kustomization.yaml`), pubblicato dal workflow `publish-images` a ogni push sul branch
+`migration/rust`. Le immagini precedenti (tag `sha-…`) sono quelle Python e non vanno usate.
 
-**A. CI su GitHub** (consigliato): il workflow `publish-images` pubblica le tre immagini su GHCR a ogni push
-su `main`, `develop` e sui tag `vX.Y.Z` (o a mano con *Run workflow*). Impostare le variabili di repository `NEXT_PUBLIC_API_URL` e `NEXT_PUBLIC_SITE_URL`
-(`https://example.com`), attendere la pubblicazione e scrivere il nuovo tag nei tre `newTag` di
-`k8s/kustomization.yaml`.
+**A. CI su GitHub** (consigliato): prima impostare le variabili di repository `NEXT_PUBLIC_API_URL` e
+`NEXT_PUBLIC_SITE_URL` (Settings → Secrets and variables → Actions → Variables) con l'URL pubblico del test
+(`https://example.com`, oppure `http://192.168.x.x` senza dominio): sono inglobate nell'immagine **frontend** in
+fase di build e il default è `https://notturni.eu`. Poi lanciare il workflow (push sul branch o *Run workflow*
+su `migration/rust`) e attendere le tre build (backend e moderazione arm64 sotto QEMU sono lente). Il pacchetto
+GHCR deve essere leggibile dal cluster: pubblico, oppure `imagePullSecrets` con un token `read:packages`.
+Per release successive il workflow pubblica anche `sha-<commit>` e, sui tag `vX.Y.Z`, la versione semver:
+aggiornare i tre `newTag`.
 
 **B. Build locale sul nodo** (senza registro):
 
@@ -662,6 +665,6 @@ essere `ok`. Verificare che un'email di prova (reset password) arrivi: se no, `j
 | Il browser non resta autenticato | cookie `Secure` su http, o origine non in `NOCT_CORS_ORIGINS` | https + `NOCT_SESSION_COOKIE_SECURE=true`, oppure `false` in prova su http |
 | Immagini/avatar non si vedono | `NOCT_S3_PUBLIC_URL` / `NOCT_LOCAL_STORAGE_PUBLIC_URL` errati, o `/storage` non inoltrato | correggere l'URL pubblico e il reverse proxy |
 | Il frontend chiama `localhost:8000` | `NEXT_PUBLIC_API_URL` non impostato in fase di **build** | rifare il build con l'URL pubblico |
-| `ImagePullBackOff` su K3s | il tag in `kustomization.yaml` non esiste (tag Python) | vedi 3.4 |
+| `ImagePullBackOff` su K3s | il tag non è stato pubblicato (workflow non concluso), pacchetto GHCR privato o immagine non importata | vedi 3.4 |
 | Pod non partono su K3s con NetworkPolicy | CNI senza supporto alle policy | usare il CNI di K3s (default) o rimuovere `networkpolicy.yaml` |
 | Utenti con MFA non entrano più dopo un cambio di segreto | `NOCT_SECRETS_KEY` perso/ruotato | ripristinare la chiave originale |
