@@ -27,6 +27,7 @@ resources:
   - middleware-security-headers.yaml
   - ingressroute.yaml
   - ingressroute-s3.yaml
+  - networkpolicy.yaml
 
 # Config di Garage e del proxy di lettura pubblica come ConfigMap generate dai
 # file di questa directory (il suffisso hash nel nome fa ripartire i pod al

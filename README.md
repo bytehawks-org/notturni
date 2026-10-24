@@ -4,7 +4,7 @@ Piattaforma di microblogging opensource, multilingua, EU centrica & GDPR complia
 
 Questo file documenta la struttura del repository e come avviare l'ambiente di
 sviluppo — per una guida passo passo al primo avvio locale e un primo giro di
-test, vedi [GETTING_STARTED.md](GETTING_STARTED.md); per l'elenco completo
+test, vedi [GETTING_STARTED.md](GETTING_STARTED.md) (installazioni complete: Podman/Docker, K3s, VM Debian/Ubuntu e Rocky/Alma in [docs/INSTALL.md](docs/INSTALL.md)); per l'elenco completo
 delle specifiche di prodotto e il loro stato di avanzamento, vedi
 [ROADMAP.md](ROADMAP.md).
 

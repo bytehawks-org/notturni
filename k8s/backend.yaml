@@ -15,6 +15,9 @@ spec:
       labels:
         app: backend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
       # Porta Garage allo stato atteso (layout, chiave, bucket con alias
       # globale): idempotente e tollerante a esecuzioni parallele tra le
       # repliche, attende da sé che Garage sia raggiungibile.
@@ -22,6 +25,9 @@ spec:
         - name: garage-bootstrap
           image: ghcr.io/bytehawks-org/notturni-backend:sha-fd6ce11
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
           command: ["noct-ctl", "garage-bootstrap"]
           envFrom:
             - configMapRef: {name: notturni-config}
@@ -30,6 +36,9 @@ spec:
         - name: backend
           image: ghcr.io/bytehawks-org/notturni-backend:sha-fd6ce11
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
           ports:
             - containerPort: 8000
           envFrom:

@@ -130,6 +130,12 @@ impl Config {
         if cfg.jwt_secret.len() < 32 {
             return Err("NOCT_JWT_SECRET troppo corto: servono almeno 32 byte".into());
         }
+        if is_placeholder_secret(&cfg.jwt_secret) {
+            return Err(
+                "NOCT_JWT_SECRET è il valore d'esempio di .env.example: generane uno con `openssl rand -base64 48`"
+                    .into(),
+            );
+        }
         if let Some(v) = get("NOCT_JWT_ACCESS_TOKEN_TTL_MINUTES") {
             cfg.jwt_access_ttl_minutes =
                 v.parse().ok().filter(|n| *n > 0).ok_or("NOCT_JWT_ACCESS_TOKEN_TTL_MINUTES non valido")?;
@@ -218,6 +224,13 @@ impl Config {
         }
         Ok(cfg)
     }
+}
+
+/// Segnaposto dei file d'esempio (`.env.example`, `k8s/secret.example.yaml`): firmare i token con un valore
+/// pubblico equivale a non firmarli, quindi l'avvio si rifiuta.
+pub fn is_placeholder_secret(value: &str) -> bool {
+    let v = value.to_ascii_lowercase();
+    v.contains("cambia-questo") || v.contains("changeme")
 }
 
 #[cfg(test)]

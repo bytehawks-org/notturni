@@ -79,6 +79,15 @@ reale** — il lato Garage è stato provato; provare prima su una copia.
 Nota: i backup infrastrutturali già scritti sotto il prefisso `minio/` del
 bucket di backup restano dove sono; i nuovi usano `s3/`.
 
+## Sicurezza dei pod
+
+`backend.yaml` e `worker.yaml` girano con `runAsNonRoot` (UID numerico 10001 nell'immagine), profilo seccomp
+`RuntimeDefault`, senza escalation di privilegi e senza capability. `networkpolicy.yaml` chiude l'ingresso del
+namespace: i pod si parlano tra loro, mentre dall'esterno (Traefik, namespace `kube-system`) si raggiungono solo
+frontend, backend e `s3-public`. Postgres, Redis, NATS, Garage e moderation non sono esposti. Serve un CNI che
+applichi le NetworkPolicy (K3s: controller integrato). Guida completa all'installazione:
+[docs/INSTALL.md](../docs/INSTALL.md#3-k3s).
+
 ## Setup
 
 ```bash

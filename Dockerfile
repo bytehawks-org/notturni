@@ -37,13 +37,14 @@ FROM docker.io/library/debian:trixie-slim AS runtime
 RUN apt-get update \
     && apt-get install --no-install-recommends -y ca-certificates postgresql-client tini \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --create-home --shell /usr/sbin/nologin appuser
+    && useradd --system --uid 10001 --create-home --shell /usr/sbin/nologin appuser
 COPY --from=builder /src/target/release/noct-api /src/target/release/noct-worker /src/target/release/noct-ctl /usr/local/bin/
 # storage locale (installazioni `solo`): volume scrivibile dall'utente applicativo
 RUN mkdir -p /data/storage && chown -R appuser:appuser /data
 ENV NOCT_BIND_ADDR=0.0.0.0:8000 \
     NOCT_LOCAL_STORAGE_BASE_PATH=/data/storage
-USER appuser
+# UID numerico: Kubernetes verifica `runAsNonRoot` solo con un utente numerico
+USER 10001
 WORKDIR /home/appuser
 EXPOSE 8000
 ENTRYPOINT ["/usr/bin/tini", "--"]

@@ -67,7 +67,7 @@ pubblica e all'esportazione del blog con `[lifecycle] admin_sections`; ai dati p
 
 ## Primo avvio
 
-1. `cp .env.example .env` e adattare i valori (almeno `NOCT_JWT_SECRET`, le credenziali di Postgres e S3).
+1. `scripts/gen-env.sh` (crea `.env` con segreti casuali; il backend rifiuta i segnaposto di `.env.example`) e adattare i valori. Installazione completa: [INSTALL.md](INSTALL.md).
 2. `podman compose up -d --build` avvia l'intero stack (vedi [GETTING_STARTED.md](../GETTING_STARTED.md));
    oppure, fuori da compose, i servizi a mano e `cargo run -p noct-api`.
 3. Le migrazioni dei moduli attivi si applicano all'avvio (advisory lock: sicuro con più repliche;

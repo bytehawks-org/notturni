@@ -52,6 +52,9 @@ async fn bootstrap_super_admin(st: &AppState, username: &str, email: &str, passw
     validate_username(username)?;
     validate_email(&email)?;
     validate_password_policy(password)?;
+    if noct_core::is_placeholder_secret(password) {
+        return Err("NOCT_SUPER_ADMIN_PASSWORD è il valore d'esempio di .env.example: scegline una propria".into());
+    }
 
     let exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM users WHERE username = $1 OR email = $2)")
         .bind(username)

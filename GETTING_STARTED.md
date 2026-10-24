@@ -26,12 +26,15 @@ worker e frontend girano tutti in container.
 ## 1. Configurazione
 
 ```bash
-cp .env.example .env
+scripts/gen-env.sh      # crea .env da .env.example con segreti casuali e stampa la password del Super Admin
 ```
 
-I valori di default in `.env.example` funzionano così come sono per un primo
-test in locale — non serve modificare nulla. Due variabili valgono la pena di
-essere notate:
+Il backend **non parte** con i segnaposto di `.env.example` (`NOCT_JWT_SECRET`) e
+non crea il Super Admin con la password d'esempio: per questo si usa lo script,
+che sostituisce tutti i segreti (JWT, chiave dei segreti TOTP, password di Postgres
+e del Super Admin, credenziali di Garage). Le altre impostazioni vanno bene
+così per un primo test in locale. Per installazioni vere vedi
+[docs/INSTALL.md](docs/INSTALL.md). Variabili da conoscere:
 
 - `NOCT_DEPLOYMENT_MODE=platform` — stack multiutente (comportamento di
   default). Con `solo` invece la registrazione si
@@ -40,16 +43,13 @@ essere notate:
   multiutente. Per questa guida si assume `platform`.
 - `NOCT_S3_ACCESS_KEY_ID` / `NOCT_S3_SECRET_ACCESS_KEY` /
   `NOCT_GARAGE_RPC_SECRET` / `NOCT_GARAGE_ADMIN_TOKEN` — credenziali di
-  Garage, lo storage S3-compatible. I segnaposto di `.env.example` hanno già
-  il formato richiesto da Garage (`GK` + 24 hex / 64 hex) e vanno bene in
-  locale; per un ambiente esposto generarne di veri (comandi nei commenti
-  del file).
-- `NOCT_JWT_SECRET` — va bene il default per un test locale (il backend non
-  parte con un segreto di meno di 32 byte); **non riusarlo mai in un ambiente
-  esposto** (vedi i commenti nel file per generarne uno vero). In produzione
-  imposta anche `NOCT_SECRETS_KEY`, la chiave che cifra a riposo i segreti TOTP.
+  Garage, lo storage S3-compatible (formato `GK` + 24 hex / 64 hex): li genera
+  `scripts/gen-env.sh`.
+- `NOCT_JWT_SECRET` / `NOCT_SECRETS_KEY` — firma dei token e chiave che cifra a
+  riposo i segreti TOTP (da non perdere né ruotare). Il backend rifiuta i
+  segnaposto e i segreti di meno di 32 byte.
 - `NOCT_SUPER_ADMIN_USERNAME`/`_EMAIL`/`_PASSWORD` — se tutte e tre
-  valorizzate (i default in `.env.example` lo sono già), il backend crea
+  valorizzate (lo script imposta la password), il backend crea
   questo account come Super Admin al primo avvio: nessun passaggio manuale
   per entrare nell'area di amministrazione (punto 4).
 
@@ -90,10 +90,10 @@ podman compose exec backend noct-ctl migrate status
 
 ## 4. Primo utente
 
-Con i default di `.env.example` non serve fare nulla: il backend crea da solo
+Non serve fare nulla: il backend crea da solo
 un Super Admin al primo avvio, da `NOCT_SUPER_ADMIN_USERNAME`/`_EMAIL`/
 `_PASSWORD` (idempotente — un riavvio successivo non lo tocca). Accedi
-direttamente su <http://localhost:3000> con quelle credenziali: le voci di
+direttamente su <http://localhost:3000> con l'**email** del Super Admin e la password stampata da `gen-env.sh`: le voci di
 amministrazione compaiono nel menu del dashboard.
 
 Se preferisci un tuo account invece del preset (o hai svuotato quelle

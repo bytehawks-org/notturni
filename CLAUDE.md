@@ -18,6 +18,7 @@ Per tutto il resto, la fonte giusta dipende da cosa serve:
 | Se una specifica è già implementata, parziale o da fare | [ROADMAP.md](ROADMAP.md) — **controllalo sempre prima di iniziare un blocco di lavoro** |
 | Panoramica, stack, struttura del repository | [README.md](README.md) |
 | Primo avvio locale passo-passo, primo giro di test | [GETTING_STARTED.md](GETTING_STARTED.md) |
+| Installazione (Podman/Docker, K3s, VM Debian/Ubuntu e Rocky/Alma) | [docs/INSTALL.md](docs/INSTALL.md) |
 | Riferimento endpoint (richieste/risposte, autorizzazione) | [docs/API.md](docs/API.md) |
 | Setup/test/migrazioni/operazioni backend (Rust) | [docs/BACKEND.md](docs/BACKEND.md) |
 | Setup frontend | [frontend/README.md](frontend/README.md) |

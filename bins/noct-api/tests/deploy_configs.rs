@@ -92,7 +92,7 @@ fn the_dockerfile_builds_the_three_binaries_for_any_architecture() {
         !dockerfile.contains("arm64v8") && !dockerfile.contains("amd64/"),
         "niente immagini di base legate a un'architettura"
     );
-    assert!(dockerfile.contains("USER appuser"), "non gira come root");
+    assert!(dockerfile.contains("USER 10001"), "non gira come root, con UID numerico (runAsNonRoot)");
 }
 
 // ---- .env.example ----------------------------------------------------------------------------------------------------
@@ -110,7 +110,10 @@ fn env_example() -> std::collections::BTreeMap<String, String> {
 /// Il file d'esempio, così com'è, deve produrre una configurazione valida per il core e per ogni modulo.
 #[test]
 fn env_example_is_a_valid_configuration() {
-    let vars = env_example();
+    let mut vars = env_example();
+    // il segreto d'esempio viene rifiutato di proposito (vedi sotto): qui lo si sostituisce come farebbe l'operatore
+    let placeholder = vars.insert("NOCT_JWT_SECRET".into(), "x".repeat(48)).unwrap();
+    assert!(noct_core::is_placeholder_secret(&placeholder), "il segreto d'esempio deve essere un segnaposto");
     let lookup = |k: &str| vars.get(k).cloned().filter(|v| !v.is_empty());
     noct_core::Config::from_env(&lookup).unwrap_or_else(|e| panic!(".env.example: {e}"));
     let registry = noct_core::Registry::new(noct_bundle::all()).unwrap();
