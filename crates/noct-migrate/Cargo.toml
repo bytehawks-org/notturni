@@ -10,6 +10,9 @@ default = ["apply"]
 # Esecuzione su Postgres. Disattivabile per usare solo diff/render (es. in build.rs).
 apply = ["dep:sqlx"]
 
+[lints]
+workspace = true
+
 [dependencies]
 noct-manifest.workspace = true
 sha2.workspace = true

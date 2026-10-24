@@ -34,6 +34,18 @@ enum Cmd {
     Outbox,
     /// Messaggi finiti in dead letter sul bus.
     DeadLetters,
+    /// API token del motore core (machine-to-machine).
+    #[command(subcommand)]
+    Token(TokenCmd),
+}
+
+#[derive(Subcommand)]
+enum TokenCmd {
+    /// Emette un token core e lo stampa **una sola volta** (in DB resta solo l'hash).
+    Create {
+        #[arg(long)]
+        name: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -92,6 +104,7 @@ async fn main() -> Result<()> {
             let enabled =
                 registry.resolve_enabled(requested.as_deref()).map_err(|e| anyhow!("moduli non attivabili:\n{e}"))?;
             match cli.cmd {
+                Cmd::Token(TokenCmd::Create { name }) => create_core_token(&name).await,
                 Cmd::Outbox => outbox().await,
                 Cmd::DeadLetters => dead_letters().await,
                 Cmd::Validate => validate(&registry, &enabled),
@@ -148,8 +161,8 @@ async fn main() -> Result<()> {
 }
 
 async fn connect() -> Result<PgPool> {
-    let config = Config::from_env(&env).map_err(anyhow::Error::msg)?;
-    PgPoolOptions::new().max_connections(2).connect(&config.database_url).await.context("connessione a Postgres")
+    let url = Config::database_url_from_env(&env).map_err(anyhow::Error::msg)?;
+    PgPoolOptions::new().max_connections(2).connect(&url).await.context("connessione a Postgres")
 }
 
 fn validate(registry: &Registry, enabled: &[usize]) -> Result<()> {
@@ -386,5 +399,39 @@ async fn dead_letters() -> Result<()> {
             d.payload
         );
     }
+    Ok(())
+}
+
+async fn create_core_token(name: &str) -> Result<()> {
+    if name.trim().is_empty() || name.len() > 255 {
+        bail!("il nome deve essere non vuoto (max 255 caratteri)");
+    }
+    let pool = connect().await?;
+    let (plaintext, prefix, hash) = noct_core::security::token::generate_api_token();
+    let mut tx = pool.begin().await?;
+    let id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO api_tokens (name, owner_type, token_prefix, token_hash) VALUES ($1, 'core', $2, $3) RETURNING id",
+    )
+    .bind(name)
+    .bind(&prefix)
+    .bind(&hash)
+    .fetch_one(&mut *tx)
+    .await
+    .context("scrittura di api_tokens (migrazioni applicate?)")?;
+    noct_audit::record(
+        &mut tx,
+        noct_audit::Entry {
+            action: "api_token.created",
+            actor: noct_audit::AuditActor::System,
+            target: Some(("api_token", id)),
+            blog_id: None,
+            meta: &noct_core::RequestMeta::default(),
+            payload: serde_json::json!({ "name": name, "owner_type": "core", "via": "noct-ctl" }),
+        },
+    )
+    .await?;
+    tx.commit().await?;
+    println!("{plaintext}");
+    eprintln!("Token core `{name}` creato (id {id}). Conservalo ora: non sarà più mostrato.");
     Ok(())
 }

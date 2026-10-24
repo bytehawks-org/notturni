@@ -30,8 +30,12 @@ impl Method {
 pub enum Auth {
     /// Anche anonimo; se la rotta è nel perimetro di un blog, vale la sua visibilità.
     Public,
-    /// Qualsiasi utente autenticato.
+    /// Qualsiasi utente autenticato con una sessione (JWT).
     User,
+    /// Solo un API token (core o utente), non una sessione.
+    Token,
+    /// Una sessione utente oppure un API token.
+    UserOrToken,
     /// Proprietario del blog o membro con ruolo autore/co-autore (richiede `scope`).
     BlogWrite,
     /// Uno dei ruoli di piattaforma indicati.
@@ -45,6 +49,8 @@ impl FromStr for Auth {
         match s {
             "public" => Ok(Auth::Public),
             "user" => Ok(Auth::User),
+            "token" => Ok(Auth::Token),
+            "user_or_token" => Ok(Auth::UserOrToken),
             "blog_write" => Ok(Auth::BlogWrite),
             other => match other.strip_prefix("platform_role:") {
                 Some(roles) if !roles.is_empty() => {
@@ -56,7 +62,7 @@ impl FromStr for Auth {
                     }
                 }
                 _ => Err(format!(
-                    "auth sconosciuta `{other}` (ammesse: public, user, blog_write, platform_role:<ruolo>[,<ruolo>])"
+                    "auth sconosciuta `{other}` (ammesse: public, user, token, user_or_token, blog_write, platform_role:<ruolo>[,<ruolo>])"
                 )),
             },
         }
@@ -151,6 +157,10 @@ pub struct Route {
     pub emits: Option<String>,
     #[serde(default)]
     pub handler: Option<String>,
+    /// Solo `custom`: l'handler costruisce la risposta HTTP completa (header,
+    /// cookie, status). `response` resta la documentazione del corpo.
+    #[serde(default)]
+    pub raw: bool,
     #[serde(default)]
     pub summary: Option<String>,
 }
@@ -472,14 +482,21 @@ impl ApiFile {
             if r.table.is_some() || r.key.is_some() || !r.order_by.is_empty() || !r.conflict.is_empty() {
                 issues.push(module, loc, "`table`/`key`/`order_by`/`conflict` sono ammessi solo sulle rotte CRUD");
             }
-            if r.response.is_none() && r.success_status() != 204 {
-                issues.push(module, loc, "una rotta `custom` senza `response` deve dichiarare `status = 204`");
+            if r.response.is_none() && !matches!(r.status, Some(202 | 204)) {
+                issues.push(
+                    module,
+                    loc,
+                    "una rotta `custom` senza `response` deve dichiarare `status = 202` o `status = 204`",
+                );
             }
             return;
         }
 
         if r.handler.is_some() {
             issues.push(module, loc, "`handler` è ammesso solo sulle rotte `custom`");
+        }
+        if r.raw {
+            issues.push(module, loc, "`raw` è ammesso solo sulle rotte `custom`");
         }
         if r.emits.is_some() && !matches!(r.kind, RouteKind::Create | RouteKind::Update | RouteKind::Delete) {
             issues.push(module, loc, "`emits` è ammesso solo su create, update e delete");

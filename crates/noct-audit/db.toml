@@ -1,0 +1,29 @@
+# Nessuna foreign key verso users/blogs: una riga di audit deve sopravvivere alla
+# cancellazione dell'entità che cita (per questo actor_label è uno snapshot testuale).
+[[enum]]
+name = "audit_actor_type"
+values = ["user", "core_token", "user_token", "system", "anonymous"]
+
+[[table]]
+name = "audit_log"
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "occurred_at", type = "timestamptz", default = "now()" },
+  { name = "actor_type", type = "enum:audit_actor_type" },
+  { name = "actor_id", type = "uuid", null = true },
+  { name = "actor_label", type = "varchar(255)", null = true },
+  # verbo puntato e gerarchico: "auth.login", "user.role_change", "blog.suspended"
+  { name = "action", type = "varchar(100)" },
+  { name = "target_type", type = "varchar(50)", null = true },
+  { name = "target_id", type = "uuid", null = true },
+  { name = "blog_id", type = "uuid", null = true },
+  # testo e non inet: IPv4/IPv6 in forma canonica, max 45 caratteri
+  { name = "ip", type = "varchar(45)", null = true },
+  { name = "user_agent", type = "varchar(500)", null = true },
+  { name = "payload", type = "jsonb", default = "'{}'::jsonb" },
+]
+indexes = [
+  { columns = ["occurred_at"] },
+  { columns = ["action", "occurred_at"] },
+  { columns = ["blog_id", "occurred_at"] },
+]

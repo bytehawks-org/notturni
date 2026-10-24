@@ -45,7 +45,7 @@ pub fn emit(
     let opt = |present: bool, file: &str| if present { format!("Some({})", inc(file)) } else { "None".to_string() };
     writeln!(
         out,
-        "pub fn module() -> noct_core::ModuleDef {{\n    noct_core::ModuleDef {{\n        name: MODULE_NAME,\n        module_toml: {},\n        api_toml: {},\n        db_toml: {},\n        lock_json: {},\n        migrations: __MIGRATIONS,\n        router: __router,\n        consumers: __consumers,\n        source_dir: env!(\"CARGO_MANIFEST_DIR\"),\n    }}\n}}\n",
+        "pub fn module() -> noct_core::ModuleDef {{\n    noct_core::ModuleDef {{\n        name: MODULE_NAME,\n        module_toml: {},\n        api_toml: {},\n        db_toml: {},\n        lock_json: {},\n        migrations: __MIGRATIONS,\n        router: __router,\n        consumers: __consumers,\n        startup: __startup,\n        source_dir: env!(\"CARGO_MANIFEST_DIR\"),\n    }}\n}}\n",
         inc("module.toml"),
         opt(has_api, "api.toml"),
         opt(has_db, "db.toml"),
@@ -90,6 +90,11 @@ pub fn emit(
     }
     writeln!(out, "}}\n").unwrap();
     emit_consumers(&mut out, m);
+    if m.module.lifecycle.startup {
+        writeln!(out, "fn __startup(st: noct_core::AppState) -> noct_core::StartupFuture {{\n    Box::pin(crate::startup::run(st))\n}}\n").unwrap();
+    } else {
+        writeln!(out, "fn __startup(_st: noct_core::AppState) -> noct_core::StartupFuture {{\n    Box::pin(async {{ Ok(()) }})\n}}\n").unwrap();
+    }
     // il codice generato non deve sottostare ai lint stilistici del crate che lo include
     Ok(format!(
         "#[allow(clippy::all, clippy::pedantic, dead_code)]\npub mod generated {{\n{out}\n}}\npub use generated::*;\n"
@@ -214,6 +219,8 @@ fn policy_expr(a: &Auth) -> String {
     match a {
         Auth::Public => "noct_core::Policy::Public".into(),
         Auth::User => "noct_core::Policy::User".into(),
+        Auth::Token => "noct_core::Policy::Token".into(),
+        Auth::UserOrToken => "noct_core::Policy::UserOrToken".into(),
         Auth::BlogWrite => "noct_core::Policy::BlogWrite".into(),
         Auth::PlatformRole(roles) => {
             format!(
@@ -263,7 +270,15 @@ fn emit_route(out: &mut String, m: &Manifest, r: &Route) -> Result<(), String> {
     .unwrap();
 
     let has_body = r.request.is_some();
-    writeln!(out, "async fn __h_{id}(\n    axum::extract::State(st): axum::extract::State<noct_core::AppState>,\n    raw: axum::extract::RawPathParams,\n    headers: axum::http::HeaderMap,").unwrap();
+    writeln!(out, "async fn __h_{id}(\n    axum::extract::State(st): axum::extract::State<noct_core::AppState>,\n    raw: axum::extract::RawPathParams,").unwrap();
+    if r.kind == RouteKind::Custom {
+        writeln!(
+            out,
+            "    axum::extract::Query(query): axum::extract::Query<std::collections::HashMap<String, String>>,"
+        )
+        .unwrap();
+    }
+    writeln!(out, "    headers: axum::http::HeaderMap,").unwrap();
     if has_body {
         writeln!(out, "    body: axum::body::Bytes,").unwrap();
     }
@@ -282,7 +297,7 @@ fn emit_route(out: &mut String, m: &Manifest, r: &Route) -> Result<(), String> {
         let handler = r.handler.as_deref().expect("validato");
         writeln!(
             out,
-            "    let ctx = noct_core::RouteCtx {{ state: st, actor: access.actor, blog: access.blog, path, module: MODULE_NAME }};"
+            "    let ctx = noct_core::RouteCtx {{ state: st, actor: access.actor, token: access.token, blog: access.blog, path, query, headers, meta: access.meta, module: MODULE_NAME }};"
         )
         .unwrap();
         let mut args = "ctx".to_string();
@@ -291,15 +306,23 @@ fn emit_route(out: &mut String, m: &Manifest, r: &Route) -> Result<(), String> {
             writeln!(out, "    let body: {ty} = noct_core::parse_json(&body)?;\n    body.validate()?;").unwrap();
             args.push_str(", body");
         }
-        match &r.response {
-            Some(_) => writeln!(
-                out,
-                "    let out = crate::handlers::{handler}({args}).await?;\n    Ok(noct_core::json_response({}, &out))",
-                r.success_status()
-            )
-            .unwrap(),
-            None => writeln!(out, "    crate::handlers::{handler}({args}).await?;\n    Ok(noct_core::no_content())")
+        if r.raw {
+            writeln!(out, "    crate::handlers::{handler}({args}).await").unwrap();
+        } else {
+            match &r.response {
+                Some(_) => writeln!(
+                    out,
+                    "    let out = crate::handlers::{handler}({args}).await?;\n    Ok(noct_core::json_response({}, &out))",
+                    r.success_status()
+                )
                 .unwrap(),
+                None => writeln!(
+                    out,
+                    "    crate::handlers::{handler}({args}).await?;\n    Ok(noct_core::empty_response({}))",
+                    r.success_status()
+                )
+                .unwrap(),
+            }
         }
         writeln!(out, "}}\n").unwrap();
         return Ok(());

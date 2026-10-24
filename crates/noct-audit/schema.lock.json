@@ -1,0 +1,146 @@
+{
+  "enums": [
+    {
+      "name": "audit_actor_type",
+      "values": [
+        "user",
+        "core_token",
+        "user_token",
+        "system",
+        "anonymous"
+      ]
+    }
+  ],
+  "tables": [
+    {
+      "name": "audit_log",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "null": false,
+          "default": "gen_random_uuid()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "occurred_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "actor_type",
+          "type": "enum:audit_actor_type",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "actor_id",
+          "type": "uuid",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "actor_label",
+          "type": "varchar(255)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "action",
+          "type": "varchar(100)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "target_type",
+          "type": "varchar(50)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "target_id",
+          "type": "uuid",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "blog_id",
+          "type": "uuid",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "ip",
+          "type": "varchar(45)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "user_agent",
+          "type": "varchar(500)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "payload",
+          "type": "jsonb",
+          "null": false,
+          "default": "'{}'::jsonb",
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "ix_audit_log_occurred_at",
+          "columns": [
+            "occurred_at"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_audit_log_action_occurred_at",
+          "columns": [
+            "action",
+            "occurred_at"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_audit_log_blog_id_occurred_at",
+          "columns": [
+            "blog_id",
+            "occurred_at"
+          ],
+          "unique": false
+        }
+      ],
+      "uniques": []
+    }
+  ]
+}

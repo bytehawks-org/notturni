@@ -9,11 +9,16 @@ publish.workspace = true
 # moduli di sviluppo/riferimento compilati nel binario
 sandbox = ["noct-bundle/sandbox"]
 
+[lints]
+workspace = true
+
 [dependencies]
 noct-core.workspace = true
 noct-manifest.workspace = true
 noct-migrate.workspace = true
 noct-bundle.workspace = true
+noct-audit.workspace = true
+uuid.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 tokio.workspace = true

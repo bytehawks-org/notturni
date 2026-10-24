@@ -8,6 +8,9 @@ publish.workspace = true
 [features]
 sandbox = ["noct-api/sandbox"]
 
+[lints]
+workspace = true
+
 [dependencies]
 noct-api = { path = "../noct-api" }
 anyhow.workspace = true

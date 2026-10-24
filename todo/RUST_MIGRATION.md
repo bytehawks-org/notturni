@@ -200,7 +200,7 @@ consegna federata con retry (AT Protocol/ActivityPub).
 | 0 | Decisioni | ✅ prese (§9) |
 | 1 | **Spike verticale** ✅ (§11) | `backend/` → `legacy/backend/`, workspace, parser+validator manifest, motore migrazioni (additivo), codegen rotte→axum+OpenAPI, **un modulo reale piccolo** (`pages` o `taxonomy`) end-to-end con DB vero. **Go/no-go** sull'approccio dichiarativo |
 | 2 | Core infrastruttura ✅ (§12) | storage, cache, bus (NATS + outbox), mail, markdown, config; health; `noct-ctl` |
-| 3 | Core auth | utenti, sessioni, JWT, API token, ruoli, audit, bootstrap super admin |
+| 3 | Core auth ✅ (§13) | utenti, sessioni, JWT, API token, ruoli, audit, bootstrap super admin |
 | 4 | Core contenuti | `blogs`, `posts`, media, permalink |
 | 5 | Moduli, ondata 1 | comments, taxonomy, pages, discovery, publications, notes, fragments, link-preview |
 | 6 | Moduli, ondata 2 | auth-mfa, auth-sso, newsletter, gdpr, reports, custom-domains, image-moderation |
@@ -370,3 +370,64 @@ con credenziali `test`/`test`: Garage, moto, MinIO). Il compose del progetto ha 
 * Il worker esegue consumer e relay ma non ancora job periodici; nessuna metrica/tracing OpenTelemetry (Fase 9).
 * `Mailer` e `Storage` non sono ancora usati da un modulo di prodotto (arrivano con auth/OTP e media).
 * RabbitMQ è sostituito da NATS: nessuna migrazione di messaggi (il progetto non è in produzione).
+
+## 13. Fase 3 — autenticazione (completata)
+
+### Regola: nessun codice `unsafe`
+
+* `Cargo.toml` del workspace: `[workspace.lints.rust] unsafe_code = "forbid"`, ereditato da **ogni** crate (`[lints] workspace = true`). `forbid` non si aggira con `#[allow]` e vale anche per il codice generato dai manifest (è incluso nel crate che lo ospita).
+* `crates/noct-core/tests/no_unsafe.rs` lo verifica: lint presente nel workspace, ogni crate lo eredita, nessun sorgente contiene la parola `unsafe` fuori da stringhe e commenti (con un test dello scanner stesso).
+* Limite onesto: la regola copre **il nostro codice**. Le dipendenze (tokio, rustls/ring, aws-sdk, sqlx...) contengono `unsafe` per natura. Per questo le primitive crittografiche sono scelte in Rust sicuro quando possibile (Argon2, HMAC, SHA-2 di RustCrypto; JWT scritto in ~100 righe sicure invece di una libreria con backend nativo). In CI (Fase 7) si aggiungono `cargo geiger` (report degli `unsafe` nel grafo) e `cargo deny`/`cargo vet`.
+
+### Crate e moduli
+
+| Elemento | Contenuto |
+|---|---|
+| `noct-security` (libreria, nessun I/O) | Argon2id (hash PHC compatibili con argon2-cffi), JWT HS256 rigido (solo `HS256`, firma a tempo costante, `exp`/`type` obbligatori; **firma byte-identica a PyJWT**, verificato con un token reale), token opachi (`noct_`, `noct_sess_`), OTP derivati da HMAC, cookie con validazione anti-iniezione, validazione di username/password/email |
+| `noct-audit` (modulo core) | tabella `audit_log` append-only senza FK; `record()` nella **stessa transazione** dell'azione |
+| `noct-auth` (modulo core) | tabelle `user_sessions`, `api_tokens`, `password_reset_codes`; 12 rotte; job `send_password_reset`; hook di avvio per config e Super Admin |
+| `noct-users` | +`hashed_password`, `credentials_changed_at`, `mfa_enabled`, `display_name`, `ui_locale`: la migrazione `0002` è stata **generata dal diff** (prima evoluzione additiva reale) |
+| `noct-core` | `authenticate` reale (JWT + API token), policy `token` / `user_or_token`, `Access.token`, `RequestMeta` (IP, user-agent), hook di avvio, rotte `custom` con risposta `raw` e accesso a query/header/cookie |
+
+### Rotte (contratto v1 mantenuto, esclusi MFA e SSO)
+
+`POST /auth/register` · `GET /auth/username-available` · `POST /auth/login` · `POST /auth/refresh` · `POST /auth/logout` · `GET /auth/me` · `POST /auth/password/forgot` · `POST /auth/password/reset` · `POST /users/me/password` · `POST|GET /tokens` · `DELETE /tokens/{id}`.
+
+### Decisioni di sicurezza
+
+* **Sessione**: access JWT (15 min) nel corpo; refresh opaco in cookie `httpOnly` con `Path=/api/v1/auth` (in DB solo l'hash); **rotation** con `UPDATE … WHERE revoked_at IS NULL RETURNING` atomico (5 refresh concorrenti → uno solo riesce, provato); CSRF double-submit con confronto a tempo costante su refresh e logout.
+* **Cambio e reset password**: cancellano tutte le sessioni e impostano `credentials_changed_at`, che invalida anche gli access token già emessi. *Correzione rispetto alla v1*: `iat` è in secondi interi, quindi il confronto avviene al secondo; così un login subito dopo il cambio non viene respinto (finestra residua ≤ 1 s sul token precedente, documentata nel codice).
+* **OTP di reset derivato, non memorizzato**: `HMAC(chiave del server, scopo ‖ id)` a 6 cifre. Il database tiene solo id e scadenza; il job `auth.password_reset.send` porta solo l'id e rigenera il codice per spedirlo → il codice non compare mai in tabelle, outbox, NATS o dead letter (verificato nei test). Vale solo l'ultimo codice richiesto; scade in 10 minuti; monouso (`FOR UPDATE`).
+* **Anti-enumerazione**: `forgot` risponde sempre 202; login con utente inesistente esegue una verifica Argon2 fittizia (stesso costo); stessa risposta per password errata e utente sconosciuto; stesso messaggio per ogni causa di reset fallito.
+* **Rate limit** (cache condivisa): login 20/IP e 5/email ogni 5 min, reset 20/IP e 5/email, registrazione 30/IP ogni 10 min, cambio password 10/utente ogni 5 min, disponibilità username 30/IP al minuto.
+* **IP del client**: si prende il valore di `X-Forwarded-For` scritto dall'ultimo hop fidato (`NOCT_TRUSTED_PROXIES`, default 1 = Traefik), mai il primo (falsificabile); senza proxy fidati o con meno valori del previsto si usa l'IP del peer TCP, che un middleware scrive in un header interno **scartando sempre** quello del client. *Corretto un difetto della Fase 1*, che si fidava del primo valore.
+* **Argon2 fuori dal runtime** (`spawn_blocking`); password massimo 1024 byte (anti-DoS dell'hashing).
+* **Audit**: `auth.register`, `auth.login`, `auth.login_failed` (in transazione propria, così resta anche se l'azione fallisce; mai la password), `auth.password_reset`, `user.password_change`, `api_token.created/revoked`, `auth.super_admin_bootstrap`. Attore: utente, token core/utente, sistema, anonimo.
+* **Super Admin** da `NOCT_SUPER_ADMIN_USERNAME/EMAIL/PASSWORD`: idempotente, validato (username, email, password policy) e **mai fatale** (un conflitto di provisioning non blocca l'avvio); una configurazione dei cookie o delle modalità sbagliata invece **ferma** l'avvio con un messaggio chiaro.
+* **Modalità** `NOCT_REGISTRATION_MODE` (open | invite | closed) e `NOCT_DEPLOYMENT_MODE` (platform | solo: il primo utente è Super Admin e poi la registrazione si chiude, con lock advisory contro le corse — provato con 6 registrazioni concorrenti).
+* **API token**: hash sha256, prefisso visibile, mostrati una volta; `core` (nessun utente) e `user` rigorosamente separati (un token non vede né revoca quelli dell'altro tipo); ultimo uso aggiornato al massimo una volta al minuto; scaduti, revocati o con proprietario disattivato → 401. `noct-ctl token create --name …` emette token core (serve solo `NOCT_DATABASE_URL`).
+
+### Configurazione nuova
+
+| Variabile | Default | |
+|---|---|---|
+| `NOCT_JWT_SECRET` | **obbligatoria**, ≥ 32 byte | firma i JWT e deriva gli OTP; l'avvio rifiuta valori mancanti o corti |
+| `NOCT_JWT_ACCESS_TOKEN_TTL_MINUTES` / `NOCT_JWT_REFRESH_TOKEN_TTL_DAYS` | 15 / 30 | |
+| `NOCT_TRUSTED_PROXIES` | 1 | hop fidati davanti all'API |
+| `NOCT_SESSION_COOKIE_SECURE` / `_SAMESITE` / `_DOMAIN` | true / lax / — | |
+| `NOCT_REGISTRATION_MODE`, `NOCT_DEPLOYMENT_MODE` | open, platform | |
+| `NOCT_SUPER_ADMIN_USERNAME/EMAIL/PASSWORD` | — | opzionali, insieme |
+
+Rimosso `NOCT_DEV_AUTH` (l'autenticazione di sviluppo della Fase 1).
+
+### Test e verifica
+
+140 test in tutto, verdi su 3 esecuzioni consecutive; `clippy -D warnings` e `fmt` puliti. 30 sui primitivi (`noct-security`), 23 end-to-end sull'autenticazione (registrazione, sessioni, rotation e riuso, CSRF, cambio/reset password, token, IP falsificato, solo-mode concorrente, Super Admin, configurazioni errate) più quelli già esistenti. Verifica dal vivo con `noct-api` e `curl`: registrazione, login con cookie, refresh con cookie jar e CSRF, 403 senza CSRF, reset via email SMTP reale (codice letto dal messaggio), token core via `noct-ctl`.
+
+### Limiti noti / da fare
+
+* **MFA e SSO** sono moduli opzionali (Fase 6): serve un punto d'innesto nel login (challenge dopo la password) da progettare con quel modulo; per ora `mfa_enabled` è solo un flag riservato.
+* Lettura dell'audit, ruoli e sospensione utenti, rotte admin: Fase 7 (admin). Nessun trigger che impedisca UPDATE/DELETE su `audit_log` (il manifest non esprime trigger): la retention sarà un job dedicato.
+* Il riuso di un refresh token già ruotato rifiuta la richiesta ma **non** revoca le altre sessioni (come la v1: una doppia richiesta legittima da due schede non deve disconnettere l'utente). Da rivalutare con il frontend.
+* La coerenza `owner_type`/`user_id` dei token è garantita dal codice, non da un CHECK del database.
+* Le email di sistema sono testo semplice in italiano; i template e la localizzazione arrivano con il modulo newsletter/mail.

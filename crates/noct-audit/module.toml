@@ -1,0 +1,6 @@
+[module]
+name = "audit"
+version = "0.1.0"
+kind = "core"
+requires = ["events"]
+description = "Registro di audit append-only delle azioni sensibili, scritto nella stessa transazione dell'azione"

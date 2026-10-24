@@ -10,10 +10,15 @@ default = ["taxonomy"]
 taxonomy = ["dep:noct-taxonomy"]
 sandbox = ["dep:noct-sandbox"]
 
+[lints]
+workspace = true
+
 [dependencies]
 noct-core.workspace = true
 noct-users.workspace = true
 noct-blogs.workspace = true
 noct-events.workspace = true
+noct-audit.workspace = true
+noct-auth.workspace = true
 noct-taxonomy = { workspace = true, optional = true }
 noct-sandbox = { workspace = true, optional = true }

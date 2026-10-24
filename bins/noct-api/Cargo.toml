@@ -9,6 +9,9 @@ publish.workspace = true
 # moduli di sviluppo/riferimento compilati nel binario
 sandbox = ["noct-bundle/sandbox"]
 
+[lints]
+workspace = true
+
 [dependencies]
 noct-core.workspace = true
 noct-bundle.workspace = true
@@ -26,4 +29,7 @@ noct-bundle = { workspace = true, features = ["sandbox"] }
 noct-manifest.workspace = true
 tower.workspace = true
 uuid.workspace = true
+chrono.workspace = true
+futures.workspace = true
+noct-security.workspace = true
 http-body-util = "0.1"

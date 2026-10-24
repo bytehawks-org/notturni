@@ -5,6 +5,8 @@ use serde_json::{Value, json};
 use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 use tokio::{sync::watch, task::JoinHandle};
 
+/// Esito di un hook di avvio: un errore interrompe l'avvio del processo.
+pub type StartupFuture = Pin<Box<dyn Future<Output = Result<(), String>> + Send>>;
 pub type HandlerFuture = Pin<Box<dyn Future<Output = Result<(), HandlerError>> + Send>>;
 /// Firma degli handler di eventi e job scritti dai moduli.
 pub type HandlerFn = fn(AppState, Message) -> HandlerFuture;

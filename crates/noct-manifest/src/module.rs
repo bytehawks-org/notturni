@@ -11,6 +11,16 @@ pub struct ModuleFile {
     pub events: Events,
     #[serde(default)]
     pub jobs: BTreeMap<String, JobSpec>,
+    #[serde(default)]
+    pub lifecycle: Lifecycle,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Lifecycle {
+    /// Il modulo definisce `startup::run(AppState)`, eseguito all'avvio dopo le migrazioni.
+    #[serde(default)]
+    pub startup: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -54,6 +64,9 @@ pub struct ConfigField {
     /// Mai loggato né esposto.
     #[serde(default)]
     pub secret: bool,
+    /// Senza variabile né default il valore resta semplicemente assente.
+    #[serde(default)]
+    pub optional: bool,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

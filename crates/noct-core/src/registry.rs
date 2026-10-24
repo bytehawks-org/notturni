@@ -1,4 +1,4 @@
-use crate::{AppState, Background, ConsumerDef};
+use crate::{AppState, Background, ConsumerDef, StartupFuture};
 use axum::Router;
 use noct_manifest::{
     ConfigValue, Issues, Kind, Manifest, Sources, openapi, resolve_config, topological_order, validate_registry,
@@ -20,6 +20,8 @@ pub struct ModuleDef {
     pub router: fn() -> Router<AppState>,
     /// Consumer di eventi e job dichiarati in `module.toml`, legati ai loro handler.
     pub consumers: fn(AppState) -> Vec<ConsumerDef>,
+    /// `startup::run` del modulo (se dichiarato in `[lifecycle]`), altrimenti un no-op.
+    pub startup: fn(AppState) -> StartupFuture,
     /// Directory dei sorgenti del modulo (solo per gli strumenti di sviluppo).
     pub source_dir: &'static str,
 }
@@ -159,6 +161,16 @@ impl Registry {
     /// Router dei moduli attivi (senza prefisso `/api/v1`).
     pub fn router(&self, enabled: &[usize]) -> Router<AppState> {
         enabled.iter().fold(Router::new(), |r, &i| r.merge((self.entries[i].def.router)()))
+    }
+
+    /// Esegue gli hook di avvio dei moduli attivi, in ordine di dipendenza. Va chiamato
+    /// dopo le migrazioni e una sola volta per processo API.
+    pub async fn run_startup(&self, enabled: &[usize], state: &AppState) -> Result<(), String> {
+        for &i in enabled {
+            let def = &self.entries[i].def;
+            (def.startup)(state.clone()).await.map_err(|e| format!("avvio del modulo `{}`: {e}", def.name))?;
+        }
+        Ok(())
     }
 
     /// Avvia relay dell'outbox e consumer dei moduli attivi (nel processo API o in un worker).

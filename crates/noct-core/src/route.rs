@@ -1,8 +1,8 @@
-use crate::{Actor, ApiError, AppState, BlogRef};
+use crate::{Actor, ApiError, AppState, BlogRef, RequestMeta, TokenPrincipal};
 use axum::{
     Json,
     extract::RawPathParams,
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
 use noct_manifest::ConfigValue;
@@ -14,7 +14,12 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Copy)]
 pub enum Policy {
     Public,
+    /// Sessione utente (JWT).
     User,
+    /// API token (core o utente).
+    Token,
+    /// Sessione utente oppure API token.
+    UserOrToken,
     BlogWrite,
     PlatformRole(&'static [&'static str]),
 }
@@ -45,10 +50,16 @@ pub struct RouteSpec {
 /// e rate limit già applicati.
 pub struct RouteCtx {
     pub state: AppState,
+    /// Utente con sessione valida (JWT).
     pub actor: Option<Actor>,
+    /// API token valido.
+    pub token: Option<TokenPrincipal>,
     /// Presente se la rotta dichiara `scope = { blog = ... }`.
     pub blog: Option<BlogRef>,
     pub path: HashMap<String, String>,
+    pub query: HashMap<String, String>,
+    pub headers: HeaderMap,
+    pub meta: RequestMeta,
     pub module: &'static str,
 }
 
@@ -97,4 +108,9 @@ pub fn json_response<T: Serialize>(status: u16, value: &T) -> Response {
 
 pub fn no_content() -> Response {
     StatusCode::NO_CONTENT.into_response()
+}
+
+/// Risposta senza corpo con lo status indicato (es. 202 Accepted).
+pub fn empty_response(status: u16) -> Response {
+    StatusCode::from_u16(status).unwrap_or(StatusCode::NO_CONTENT).into_response()
 }

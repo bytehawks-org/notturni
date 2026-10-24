@@ -23,7 +23,7 @@ pub use db::{ColType, Column, EnumDef, Index, OnDelete, Reference, Schema, Table
 pub use graph::topological_order;
 pub use issue::{Issue, Issues};
 pub use manifest::{Manifest, Sources};
-pub use module::{ConfigField, ConfigType, Events, JobSpec, Kind, ModuleFile, ModuleMeta};
+pub use module::{ConfigField, ConfigType, Events, JobSpec, Kind, Lifecycle, ModuleFile, ModuleMeta};
 pub use openapi::openapi;
 pub use registry::validate_registry;
 

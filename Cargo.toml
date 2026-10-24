@@ -8,6 +8,25 @@ edition = "2024"
 license = "AGPL-3.0-only"
 publish = false
 
+# Binari di test più piccoli: i test end-to-end linkano l'intero workspace.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+# Argon2 in un profilo non ottimizzato è 20-50 volte più lento: renderebbe lenti test e sviluppo.
+[profile.dev.package.argon2]
+opt-level = 3
+[profile.dev.package.blake2]
+opt-level = 3
+
+# Nessun codice `unsafe` nei crate del progetto: `forbid` non è aggirabile con `#[allow]`
+# e vale anche per il codice generato dai manifest. (Le dipendenze esterne restano fuori
+# da questa regola; vedi todo/RUST_MIGRATION.md.)
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
 [workspace.dependencies]
 noct-manifest = { path = "crates/noct-manifest" }
 noct-migrate = { path = "crates/noct-migrate", default-features = false }
@@ -16,6 +35,9 @@ noct-core = { path = "crates/noct-core" }
 noct-users = { path = "crates/noct-users" }
 noct-blogs = { path = "crates/noct-blogs" }
 noct-events = { path = "crates/noct-events" }
+noct-security = { path = "crates/noct-security" }
+noct-audit = { path = "crates/noct-audit" }
+noct-auth = { path = "crates/noct-auth" }
 noct-taxonomy = { path = "modules/taxonomy" }
 noct-sandbox = { path = "modules/sandbox" }
 noct-bundle = { path = "crates/noct-bundle" }
@@ -31,7 +53,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.9"
 regex = "1"
-sha2 = "0.10"
+sha2 = "0.11"
 hex = "0.4"
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
@@ -55,3 +77,8 @@ lettre = { version = "0.11", default-features = false, features = ["builder", "s
 pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
 ammonia = "4"
 tower-http = { version = "0.7", features = ["fs"] }
+argon2 = "0.6"
+hmac = "0.13"
+subtle = "2"
+base64 = "0.23"
+getrandom = "0.4"

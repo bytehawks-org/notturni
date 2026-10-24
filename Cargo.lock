@@ -110,6 +110,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03918c3dbd7701a85c6b9887732e2921175f26c350b4563841d0958c21d57e6d"
 
 [[package]]
+name = "argon2"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "134c52ddac6d63c576bef8168db10c83c49c26444ecbc68060fef078925a901c"
+dependencies = [
+ "base64ct",
+ "blake2",
+ "cpufeatures 0.3.1",
+ "password-hash",
+]
+
+[[package]]
 name = "async-lock"
 version = "3.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -697,6 +709,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06"
 dependencies = [
  "serde_core",
+]
+
+[[package]]
+name = "blake2"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5b5d4d889834ee8ecfc0f8426ad30faf7cdcb10f741a8e6d7224d95325479f6f"
+dependencies = [
+ "digest 0.11.3",
 ]
 
 [[package]]
@@ -2100,10 +2121,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
+ "chrono",
+ "futures",
  "http-body-util",
  "noct-bundle",
  "noct-core",
  "noct-manifest",
+ "noct-security",
  "serde_json",
  "sqlx",
  "tokio",
@@ -2111,6 +2135,42 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "noct-audit"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "noct-codegen",
+ "noct-core",
+ "regex",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror",
+ "uuid",
+]
+
+[[package]]
+name = "noct-auth"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "noct-audit",
+ "noct-codegen",
+ "noct-core",
+ "noct-manifest",
+ "noct-security",
+ "regex",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "tracing",
  "uuid",
 ]
 
@@ -2133,6 +2193,8 @@ dependencies = [
 name = "noct-bundle"
 version = "0.1.0"
 dependencies = [
+ "noct-audit",
+ "noct-auth",
  "noct-blogs",
  "noct-core",
  "noct-events",
@@ -2188,6 +2250,7 @@ dependencies = [
  "noct-manifest",
  "noct-markdown",
  "noct-migrate",
+ "noct-security",
  "noct-storage",
  "serde",
  "serde_json",
@@ -2205,6 +2268,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "noct-audit",
  "noct-bundle",
  "noct-core",
  "noct-manifest",
@@ -2212,6 +2276,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -2265,7 +2330,7 @@ version = "0.1.0"
 dependencies = [
  "hex",
  "noct-manifest",
- "sha2 0.10.9",
+ "sha2 0.11.1",
  "sqlx",
  "thiserror",
  "tokio",
@@ -2284,6 +2349,24 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
+ "uuid",
+]
+
+[[package]]
+name = "noct-security"
+version = "0.1.0"
+dependencies = [
+ "argon2",
+ "base64 0.23.1",
+ "getrandom 0.4.3",
+ "hex",
+ "hmac 0.13.0",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "subtle",
+ "thiserror",
  "uuid",
 ]
 
@@ -2473,6 +2556,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "password-hash"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aab41826031698d6ffcd9cff78ef56ef998e39dc7e5067cdfebe373842d4723b"
+dependencies = [
+ "getrandom 0.4.3",
+ "phc",
+]
+
+[[package]]
 name = "pem-rfc7468"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2486,6 +2579,17 @@ name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
+
+[[package]]
+name = "phc"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "44dc769b75f93afdddd8c7fa12d685292ddeff1e66f7f0f3a234cf1818afe892"
+dependencies = [
+ "base64ct",
+ "ctutils",
+ "getrandom 0.4.3",
+]
 
 [[package]]
 name = "phf"

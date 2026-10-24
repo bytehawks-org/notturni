@@ -18,7 +18,9 @@ async fn main() -> Result<()> {
     let app = noct_api::app(&rt.registry, &rt.enabled, rt.state.clone());
     let listener = tokio::net::TcpListener::bind(&bind).await.with_context(|| format!("bind su {bind}"))?;
     tracing::info!(%bind, inline_workers = background.is_some(), "in ascolto");
-    axum::serve(listener, app).with_graceful_shutdown(noct_api::shutdown_signal()).await?;
+    axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>())
+        .with_graceful_shutdown(noct_api::shutdown_signal())
+        .await?;
     if let Some(b) = background {
         b.stop().await;
     }

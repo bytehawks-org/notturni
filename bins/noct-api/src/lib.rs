@@ -1,5 +1,12 @@
 use anyhow::{Context, Result};
-use axum::{Json, Router, extract::State, http::StatusCode, routing::get};
+use axum::{
+    Json, Router,
+    extract::{ConnectInfo, Request, State},
+    http::{HeaderValue, StatusCode},
+    middleware::{self, Next},
+    response::Response,
+    routing::get,
+};
 use noct_core::{ApiError, AppState, Config, Registry, Services, StorageBackend};
 use serde_json::{Value, json};
 use sqlx::postgres::PgPoolOptions;
@@ -51,6 +58,8 @@ pub async fn bootstrap(env: &dyn Fn(&str) -> Option<String>) -> Result<Runtime> 
         .collect();
     tracing::info!(modules = ?names, "moduli attivi");
     let state = AppState::new(pool, config, services, module_cfg);
+    // hook di avvio dei moduli (validazione della configurazione, provisioning del Super Admin...)
+    registry.run_startup(&enabled, &state).await.map_err(anyhow::Error::msg)?;
     Ok(Runtime { registry, enabled, state })
 }
 
@@ -71,7 +80,18 @@ pub fn app(registry: &Registry, enabled: &[usize], state: AppState) -> Router {
             app = app.nest_service(&format!("/storage/{bucket}"), ServeDir::new(storage.local_base_path.join(bucket)));
         }
     }
-    app.with_state(state)
+    app.layer(middleware::from_fn(peer_ip)).with_state(state)
+}
+
+/// Scrive l'IP del peer TCP in un header interno, scartando sempre quello eventualmente
+/// inviato dal client: è la base del rate limit e dell'audit quando non c'è un proxy fidato.
+async fn peer_ip(mut req: Request, next: Next) -> Response {
+    req.headers_mut().remove(noct_core::PEER_IP_HEADER);
+    let peer = req.extensions().get::<ConnectInfo<std::net::SocketAddr>>().map(|c| c.0.ip().to_string());
+    if let Some(ip) = peer.and_then(|ip| HeaderValue::from_str(&ip).ok()) {
+        req.headers_mut().insert(noct_core::PEER_IP_HEADER, ip);
+    }
+    next.run(req).await
 }
 
 /// Liveness: il processo risponde e il database è raggiungibile.

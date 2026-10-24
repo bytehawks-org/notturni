@@ -11,6 +11,14 @@ columns = [
   { name = "email", type = "varchar(255)" },
   { name = "platform_role", type = "enum:platform_role", default = "'utente'" },
   { name = "is_active", type = "boolean", default = "true" },
+  # nullable: un utente creato solo via SSO non ha una password locale
+  { name = "hashed_password", type = "varchar(255)", null = true },
+  # i JWT emessi prima di questo istante non sono più validi (cambio/reset password)
+  { name = "credentials_changed_at", type = "timestamptz", null = true },
+  # flag riservato: lo imposta il modulo auth-mfa quando l'utente attiva l'MFA
+  { name = "mfa_enabled", type = "boolean", default = "false" },
+  { name = "display_name", type = "varchar(255)", null = true },
+  { name = "ui_locale", type = "varchar(2)", null = true },
 ]
 uniques = [
   { name = "uq_users_username", columns = ["username"] },

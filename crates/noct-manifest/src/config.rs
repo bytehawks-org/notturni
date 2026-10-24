@@ -42,6 +42,7 @@ pub fn resolve_config(
                 Some(toml::Value::String(s)) => Some(ConfigValue::String(s.clone())),
                 Some(toml::Value::Integer(n)) => Some(ConfigValue::Int(*n)),
                 Some(toml::Value::Boolean(b)) => Some(ConfigValue::Bool(*b)),
+                _ if field.optional => None,
                 _ => {
                     issues.push(name, &loc, "variabile mancante e nessun default");
                     None

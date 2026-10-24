@@ -28,9 +28,12 @@ pub struct Config {
     pub bind_addr: String,
     /// `None` = i moduli con `default_enabled = true`; `Some` = elenco esplicito.
     pub modules: Option<Vec<String>>,
-    /// Autenticazione di sviluppo (`Authorization: Bearer dev:<user-uuid>`).
-    /// Temporanea: sostituita dal JWT reale nella fase auth.
-    pub dev_auth: bool,
+    /// Segreto HMAC dei JWT (e da cui derivano gli OTP): almeno 32 byte, mai un valore di esempio.
+    pub jwt_secret: String,
+    pub jwt_access_ttl_minutes: i64,
+    /// Quanti proxy fidati stanno davanti all'API (Traefik = 1). Si legge l'IP del client
+    /// dal N-esimo valore *da destra* di `X-Forwarded-For`; 0 ignora l'header e usa l'IP del peer.
+    pub trusted_proxies: usize,
     pub storage: StorageConfig,
     /// Senza Redis i contatori e i lock vivono in memoria (un solo processo).
     pub redis_url: Option<String>,
@@ -51,7 +54,10 @@ impl Config {
             database_url: database_url.into(),
             bind_addr: "127.0.0.1:8000".into(),
             modules: None,
-            dev_auth: false,
+            // solo per test e prove locali: `from_env` richiede sempre NOCT_JWT_SECRET
+            jwt_secret: "segreto-di-test-NON-usare-in-produzione-0123456789".into(),
+            jwt_access_ttl_minutes: 15,
+            trusted_proxies: 1,
             storage: StorageConfig {
                 backend: StorageBackend::Local,
                 s3: S3Config::default(),
@@ -69,27 +75,42 @@ impl Config {
         }
     }
 
+    /// Solo l'URL del database (`NOCT_DATABASE_URL` oppure `NOCT_POSTGRES_*`): per gli
+    /// strumenti che non hanno bisogno di segreti né di altri servizi.
+    pub fn database_url_from_env(env: &dyn Fn(&str) -> Option<String>) -> Result<String, String> {
+        let get = |k: &str| env(k).filter(|v| !v.is_empty());
+        if let Some(url) = get("NOCT_DATABASE_URL") {
+            return Ok(url);
+        }
+        // stessi nomi dello stack attuale (compose.yaml / .env)
+        let user =
+            get("NOCT_POSTGRES_USER").ok_or("manca NOCT_DATABASE_URL (oppure NOCT_POSTGRES_USER/PASSWORD/DB)")?;
+        let password = get("NOCT_POSTGRES_PASSWORD").unwrap_or_default();
+        let host = get("NOCT_POSTGRES_HOST").unwrap_or_else(|| "localhost".into());
+        let port = get("NOCT_POSTGRES_PORT").unwrap_or_else(|| "5432".into());
+        let db = get("NOCT_POSTGRES_DB").ok_or("manca NOCT_POSTGRES_DB")?;
+        Ok(format!("postgres://{user}:{password}@{host}:{port}/{db}"))
+    }
+
     pub fn from_env(env: &dyn Fn(&str) -> Option<String>) -> Result<Config, String> {
         let get = |k: &str| env(k).filter(|v| !v.is_empty());
         let flag = |k: &str| get(k).map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"));
-        let database_url = match get("NOCT_DATABASE_URL") {
-            Some(url) => url,
-            None => {
-                // stessi nomi dello stack attuale (compose.yaml / .env)
-                let user = get("NOCT_POSTGRES_USER")
-                    .ok_or("manca NOCT_DATABASE_URL (oppure NOCT_POSTGRES_USER/PASSWORD/DB)")?;
-                let password = get("NOCT_POSTGRES_PASSWORD").unwrap_or_default();
-                let host = get("NOCT_POSTGRES_HOST").unwrap_or_else(|| "localhost".into());
-                let port = get("NOCT_POSTGRES_PORT").unwrap_or_else(|| "5432".into());
-                let db = get("NOCT_POSTGRES_DB").ok_or("manca NOCT_POSTGRES_DB")?;
-                format!("postgres://{user}:{password}@{host}:{port}/{db}")
-            }
-        };
+        let database_url = Self::database_url_from_env(env)?;
         let mut cfg = Config::minimal(database_url);
         cfg.bind_addr = get("NOCT_BIND_ADDR").unwrap_or_else(|| "0.0.0.0:8000".into());
         cfg.modules =
             get("NOCT_MODULES").map(|v| v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect());
-        cfg.dev_auth = flag("NOCT_DEV_AUTH").unwrap_or(false);
+        cfg.jwt_secret = get("NOCT_JWT_SECRET").ok_or("manca NOCT_JWT_SECRET (almeno 32 byte casuali)")?;
+        if cfg.jwt_secret.len() < 32 {
+            return Err("NOCT_JWT_SECRET troppo corto: servono almeno 32 byte".into());
+        }
+        if let Some(v) = get("NOCT_JWT_ACCESS_TOKEN_TTL_MINUTES") {
+            cfg.jwt_access_ttl_minutes =
+                v.parse().ok().filter(|n| *n > 0).ok_or("NOCT_JWT_ACCESS_TOKEN_TTL_MINUTES non valido")?;
+        }
+        if let Some(v) = get("NOCT_TRUSTED_PROXIES") {
+            cfg.trusted_proxies = v.parse().map_err(|_| format!("NOCT_TRUSTED_PROXIES non valido: `{v}`"))?;
+        }
 
         let st = &mut cfg.storage;
         st.backend = match get("NOCT_STORAGE_BACKEND").as_deref() {
@@ -156,13 +177,15 @@ impl Config {
 mod tests {
     use super::*;
 
+    const SECRET: &str = "0123456789abcdef0123456789abcdef";
+
     fn cfg(vars: &[(&str, &str)]) -> Result<Config, String> {
         Config::from_env(&|k| vars.iter().find(|(n, _)| *n == k).map(|(_, v)| v.to_string()))
     }
 
     #[test]
     fn defaults_are_local_and_in_memory() {
-        let c = cfg(&[("NOCT_DATABASE_URL", "postgres://x/y")]).unwrap();
+        let c = cfg(&[("NOCT_DATABASE_URL", "postgres://x/y"), ("NOCT_JWT_SECRET", SECRET)]).unwrap();
         assert_eq!(c.storage.backend, StorageBackend::Local);
         assert!(c.redis_url.is_none() && c.nats_url.is_none() && c.smtp.is_none());
         assert!(c.worker_inline, "senza NATS i worker girano nel processo API");
@@ -175,6 +198,7 @@ mod tests {
             ("NOCT_POSTGRES_PASSWORD", "p"),
             ("NOCT_POSTGRES_HOST", "postgres"),
             ("NOCT_POSTGRES_DB", "d"),
+            ("NOCT_JWT_SECRET", SECRET),
             ("NOCT_REDIS_HOST", "redis"),
             ("NOCT_REDIS_DB", "2"),
             ("NOCT_STORAGE_BACKEND", "s3"),
@@ -198,14 +222,19 @@ mod tests {
     fn invalid_values_are_reported() {
         assert!(cfg(&[]).unwrap_err().contains("NOCT_DATABASE_URL"));
         assert!(
-            cfg(&[("NOCT_DATABASE_URL", "x"), ("NOCT_STORAGE_BACKEND", "ftp")])
+            cfg(&[("NOCT_DATABASE_URL", "x"), ("NOCT_JWT_SECRET", SECRET), ("NOCT_STORAGE_BACKEND", "ftp")])
                 .unwrap_err()
                 .contains("NOCT_STORAGE_BACKEND")
         );
         assert!(
-            cfg(&[("NOCT_DATABASE_URL", "x"), ("NOCT_SMTP_HOST", "h"), ("NOCT_SMTP_PORT", "abc")])
-                .unwrap_err()
-                .contains("NOCT_SMTP_PORT")
+            cfg(&[
+                ("NOCT_DATABASE_URL", "x"),
+                ("NOCT_JWT_SECRET", SECRET),
+                ("NOCT_SMTP_HOST", "h"),
+                ("NOCT_SMTP_PORT", "abc")
+            ])
+            .unwrap_err()
+            .contains("NOCT_SMTP_PORT")
         );
     }
 }

@@ -1,0 +1,31 @@
+[module]
+name = "auth"
+version = "0.1.0"
+kind = "core"
+requires = ["users", "events", "audit"]
+description = "Registrazione, login con sessione (access JWT + refresh con rotation), password dimenticata, cambio password, API token"
+
+[config]
+# open | invite | closed (in futuro letto da platform_config)
+registration_mode = { type = "string", env = "NOCT_REGISTRATION_MODE", default = "open" }
+# platform | solo: in "solo" il primo utente diventa Super Admin e la registrazione si chiude
+deployment_mode = { type = "string", env = "NOCT_DEPLOYMENT_MODE", default = "platform" }
+refresh_ttl_days = { type = "int", env = "NOCT_JWT_REFRESH_TOKEN_TTL_DAYS", default = 30 }
+cookie_secure = { type = "bool", env = "NOCT_SESSION_COOKIE_SECURE", default = true }
+cookie_samesite = { type = "string", env = "NOCT_SESSION_COOKIE_SAMESITE", default = "lax" }
+cookie_domain = { type = "string", env = "NOCT_SESSION_COOKIE_DOMAIN", optional = true }
+# Super Admin creato all'avvio (idempotente) se tutte e tre le variabili sono presenti
+super_admin_username = { type = "string", env = "NOCT_SUPER_ADMIN_USERNAME", optional = true }
+super_admin_email = { type = "string", env = "NOCT_SUPER_ADMIN_EMAIL", optional = true }
+super_admin_password = { type = "string", env = "NOCT_SUPER_ADMIN_PASSWORD", optional = true, secret = true }
+
+[events]
+publishes = ["auth.password_reset.requested"]
+
+[jobs.send_password_reset]
+subject = "auth.password_reset.send"
+max_deliver = 5
+backoff = ["10s", "1m", "5m"]
+
+[lifecycle]
+startup = true
