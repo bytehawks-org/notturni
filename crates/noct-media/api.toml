@@ -1,0 +1,167 @@
+# Contratto compatibile con gli endpoint immagine di /api/v1/blogs della v1: upload per
+# l'editor, libreria media, copertina e favicon del blog. Gli upload sono multipart/form-data
+# con un solo campo `file`.
+
+[type.MediaUploaded]
+url = "string"
+# esito della moderazione automatica; false anche se il servizio è spento o irraggiungibile
+is_sensitive = "bool"
+media_id = { type = "uuid", nullable = true }
+
+[type.MediaFileOut]
+id = "uuid"
+url = "string"
+content_type = "string"
+size_bytes = "int"
+alt_text = "string"
+caption = { type = "string", nullable = true }
+categories = "string[]"
+is_sensitive = "bool"
+uploader_username = { type = "string", nullable = true }
+created_at = "timestamp"
+# [{post_id, post_slug, post_title, permalink}]: post che la citano nel testo o come copertina
+used_in = "json"
+used_as_blog_cover = "bool"
+
+[type.MediaLibraryOut]
+# [MediaFileOut]
+items = "json"
+total_bytes = "int"
+
+[type.MediaFileUpdate]
+alt_text = "string?"
+caption = "string?"
+categories = "string[]?"
+
+[type.CoverImageUpdate]
+categories = "string[]"
+# assente: invariato; presente (anche null o ""): azzera o sostituisce
+alt_text = "string?"
+
+# Sottoinsieme di BlogOut con i campi che queste rotte modificano; la risposta è il BlogOut completo.
+[type.BlogImages]
+id = "uuid"
+slug = "string"
+cover_image_url = { type = "string", nullable = true }
+cover_image_is_sensitive = "bool"
+cover_image_categories = "string[]"
+cover_image_alt_text = "string"
+favicon_url = { type = "string", nullable = true }
+
+[[route]]
+id = "upload_media"
+method = "POST"
+path = "/blogs/{slug}/media"
+auth = "blog_write"
+kind = "custom"
+handler = "upload_media"
+scope = { blog = "slug" }
+upload = 11534336
+response = "MediaUploaded"
+status = 201
+summary = "Immagine da incorporare nel Markdown (PNG, JPEG, WEBP, GIF; max 10 MiB)"
+
+[[route]]
+id = "list_media"
+method = "GET"
+path = "/blogs/{slug}/media"
+auth = "user"
+kind = "custom"
+handler = "list_media"
+scope = { blog = "slug" }
+response = "MediaLibraryOut"
+summary = "Libreria media del blog (proprietario e collaboratori)"
+
+[[route]]
+id = "sync_media"
+method = "POST"
+path = "/blogs/{slug}/media/sync"
+auth = "blog_write"
+kind = "custom"
+handler = "sync_media"
+scope = { blog = "slug" }
+response = "MediaLibraryOut"
+summary = "Importa nella libreria le immagini citate nei post che non hanno ancora una riga"
+
+[[route]]
+id = "update_media"
+method = "PATCH"
+path = "/blogs/{slug}/media/{media_id}"
+auth = "blog_write"
+kind = "custom"
+handler = "update_media"
+scope = { blog = "slug" }
+request = "MediaFileUpdate"
+response = "MediaFileOut"
+summary = "Testo alternativo, didascalia e avviso sui contenuti"
+
+[[route]]
+id = "delete_media"
+method = "DELETE"
+path = "/blogs/{slug}/media/{media_id}"
+auth = "blog_write"
+kind = "custom"
+handler = "delete_media"
+scope = { blog = "slug" }
+status = 204
+summary = "Cancella un'immagine non più usata (409 se è in un post o è la copertina)"
+
+[[route]]
+id = "upload_cover"
+method = "POST"
+path = "/blogs/{slug}/cover-image"
+auth = "user"
+kind = "custom"
+handler = "upload_cover"
+scope = { blog = "slug" }
+upload = 11534336
+response = "BlogImages"
+status = 201
+summary = "Copertina del blog (solo il proprietario)"
+
+[[route]]
+id = "update_cover"
+method = "PATCH"
+path = "/blogs/{slug}/cover-image"
+auth = "user"
+kind = "custom"
+handler = "update_cover"
+scope = { blog = "slug" }
+request = "CoverImageUpdate"
+response = "BlogImages"
+summary = "Avviso sui contenuti e testo alternativo della copertina già caricata"
+
+[[route]]
+id = "delete_cover"
+method = "DELETE"
+path = "/blogs/{slug}/cover-image"
+auth = "user"
+kind = "custom"
+handler = "delete_cover"
+scope = { blog = "slug" }
+response = "BlogImages"
+summary = "Rimuove la copertina (l'oggetto su storage resta)"
+
+[[route]]
+id = "upload_favicon"
+method = "POST"
+path = "/blogs/{slug}/favicon"
+auth = "user"
+kind = "custom"
+handler = "upload_favicon"
+scope = { blog = "slug" }
+upload = 786432
+response = "BlogImages"
+status = 201
+summary = "Favicon del blog (PNG, JPEG, WEBP; max 512 KiB; nessuna moderazione)"
+
+[[route]]
+id = "delete_favicon"
+method = "DELETE"
+path = "/blogs/{slug}/favicon"
+auth = "user"
+kind = "custom"
+handler = "delete_favicon"
+scope = { blog = "slug" }
+response = "BlogImages"
+summary = "Rimuove la favicon e cancella l'oggetto su storage"

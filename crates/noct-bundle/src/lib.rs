@@ -8,7 +8,10 @@ use noct_core::ModuleDef;
 pub fn all() -> Vec<ModuleDef> {
     let mut modules = vec![
         noct_users::module(),
+        noct_platform::module(),
         noct_blogs::module(),
+        noct_posts::module(),
+        noct_media::module(),
         noct_events::module(),
         noct_audit::module(),
         noct_auth::module(),

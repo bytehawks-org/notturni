@@ -1,0 +1,24 @@
+# Una sola riga (`id = 1`), creata al primo accesso con i default qui sotto da
+# `noct_platform::get`. Le impostazioni che appartengono a un modulo opzionale
+# (provider SSO, commenti anonimi, newsletter di piattaforma...) vivono nelle tabelle del modulo.
+[[table]]
+name = "platform_config"
+columns = [
+  { name = "id", type = "integer", pk = true, default = "1" },
+  { name = "default_locale", type = "varchar(2)", default = "'it'" },
+  { name = "registration_mode", type = "varchar(10)", default = "'open'" },
+  # nomi di blog riservati in aggiunta alla blacklist di codice
+  { name = "reserved_blog_names", type = "text[]", default = "'{}'" },
+  { name = "moderation_threshold", type = "double precision", default = "0.8" },
+  { name = "max_blogs_per_user", type = "integer", default = "5" },
+  # spazio massimo per blog in MB (media + backup); null = nessun limite
+  { name = "max_blog_storage_mb", type = "integer", null = true },
+  { name = "audit_retention_days", type = "integer", default = "105" },
+  # footer di piattaforma: colonne 1-2 sovrascrivibili per blog, colonna 3 e barra inferiore no
+  { name = "footer_column1_markdown", type = "text", null = true },
+  { name = "footer_column2_markdown", type = "text", null = true },
+  { name = "footer_column3_markdown", type = "text", null = true },
+  { name = "footer_bottom_bar_markdown", type = "text", null = true },
+  { name = "updated_at", type = "timestamptz", null = true },
+  { name = "updated_by_id", type = "uuid", null = true, ref = "users.id", on_delete = "set_null" },
+]

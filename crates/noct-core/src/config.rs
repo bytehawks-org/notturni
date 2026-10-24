@@ -45,6 +45,13 @@ pub struct Config {
     /// Esegue relay dell'outbox e consumer dentro il processo API (default: sì
     /// se non c'è NATS, perché altrimenti nessuno li eseguirebbe).
     pub worker_inline: bool,
+    /// Prima componente del path degli oggetti su storage (`{site_slug}/userdata/...`).
+    pub site_slug: String,
+    /// Invalidazione della cache del frontend (entrambi necessari, altrimenti disattivata).
+    pub frontend_revalidate_url: Option<String>,
+    pub revalidate_secret: Option<String>,
+    /// Servizio di moderazione immagini; assente = nessuna classificazione.
+    pub moderation_service_url: Option<String>,
 }
 
 impl Config {
@@ -72,6 +79,10 @@ impl Config {
             nats_prefix: "noct".into(),
             smtp: None,
             worker_inline: true,
+            site_slug: "notturni".into(),
+            frontend_revalidate_url: None,
+            revalidate_secret: None,
+            moderation_service_url: None,
         }
     }
 
@@ -169,6 +180,15 @@ impl Config {
             }),
         };
         cfg.worker_inline = flag("NOCT_WORKER_INLINE").unwrap_or(cfg.nats_url.is_none());
+        if let Some(v) = get("NOCT_SITE_SLUG") {
+            if !v.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') {
+                return Err(format!("NOCT_SITE_SLUG non valido: `{v}` (minuscole, cifre, `-`)"));
+            }
+            cfg.site_slug = v;
+        }
+        cfg.frontend_revalidate_url = get("NOCT_FRONTEND_REVALIDATE_URL");
+        cfg.revalidate_secret = get("NOCT_REVALIDATE_SECRET");
+        cfg.moderation_service_url = get("NOCT_MODERATION_SERVICE_URL");
         Ok(cfg)
     }
 }
@@ -216,6 +236,28 @@ mod tests {
         let smtp = c.smtp.unwrap();
         assert_eq!((smtp.port, smtp.use_tls), (1025, false));
         assert!(!c.worker_inline, "con NATS i worker sono processi a parte");
+    }
+
+    #[test]
+    fn site_slug_and_auxiliary_services() {
+        let base = [("NOCT_DATABASE_URL", "x"), ("NOCT_JWT_SECRET", SECRET)];
+        let c = cfg(&base).unwrap();
+        assert_eq!(c.site_slug, "notturni");
+        assert!(c.frontend_revalidate_url.is_none() && c.moderation_service_url.is_none());
+        let mut vars = base.to_vec();
+        vars.extend([
+            ("NOCT_SITE_SLUG", "demo-1"),
+            ("NOCT_FRONTEND_REVALIDATE_URL", "http://frontend:3000/api/revalidate"),
+            ("NOCT_REVALIDATE_SECRET", "s"),
+            ("NOCT_MODERATION_SERVICE_URL", "http://moderation:8080"),
+        ]);
+        let c = cfg(&vars).unwrap();
+        assert_eq!(c.site_slug, "demo-1");
+        assert_eq!(c.moderation_service_url.as_deref(), Some("http://moderation:8080"));
+        // lo slug diventa parte di una chiave di storage: nessun carattere strano
+        let mut bad = base.to_vec();
+        bad.push(("NOCT_SITE_SLUG", "../x"));
+        assert!(cfg(&bad).unwrap_err().contains("NOCT_SITE_SLUG"));
     }
 
     #[test]

@@ -10,6 +10,36 @@
   ],
   "tables": [
     {
+      "name": "sandbox_blog_marks",
+      "columns": [
+        {
+          "name": "blog_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "blogs",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "theme",
+          "type": "varchar(20)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "blog_id"
+      ],
+      "indexes": [],
+      "uniques": []
+    },
+    {
       "name": "sandbox_notes",
       "columns": [
         {
@@ -103,6 +133,36 @@
           ]
         }
       ]
+    },
+    {
+      "name": "sandbox_post_marks",
+      "columns": [
+        {
+          "name": "post_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "posts",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "mood",
+          "type": "varchar(20)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "post_id"
+      ],
+      "indexes": [],
+      "uniques": []
     }
   ]
 }

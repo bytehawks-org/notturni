@@ -8,6 +8,14 @@
         "moderatore",
         "utente"
       ]
+    },
+    {
+      "name": "post_author_name_style",
+      "values": [
+        "username",
+        "full_name",
+        "display_name"
+      ]
     }
   ],
   "tables": [
@@ -91,6 +99,38 @@
           "type": "varchar(2)",
           "null": true,
           "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "first_name",
+          "type": "varchar(100)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "last_name",
+          "type": "varchar(100)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "avatar_object_key",
+          "type": "varchar(255)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "post_author_name_style",
+          "type": "enum:post_author_name_style",
+          "null": false,
+          "default": "'username'",
           "references": null,
           "renamed_from": null
         },

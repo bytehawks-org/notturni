@@ -1,6 +1,7 @@
 use crate::{Config, config::StorageBackend};
 use noct_bus::{Bus, MemoryBus, NatsBus};
 use noct_cache::{Cache, MemoryCache, RedisCache};
+use noct_http::{Moderation, Revalidator};
 use noct_mail::{Mailer, MemoryMailer, NotConfiguredMailer, SmtpMailer};
 use noct_storage::{LocalStorage, S3Storage, Storage};
 use std::{path::PathBuf, sync::Arc};
@@ -13,6 +14,10 @@ pub struct Services {
     pub cache: Arc<dyn Cache>,
     pub bus: Arc<dyn Bus>,
     pub mailer: Arc<dyn Mailer>,
+    /// Invalidazione della cache del frontend (fail open).
+    pub revalidate: Revalidator,
+    /// Classificazione automatica delle immagini (fail open).
+    pub moderation: Moderation,
 }
 
 impl Services {
@@ -46,7 +51,14 @@ impl Services {
             Some(smtp) => Arc::new(SmtpMailer::new(smtp).map_err(|e| format!("SMTP: {e}"))?),
             None => Arc::new(NotConfiguredMailer),
         };
-        Ok(Services { storage, cache, bus, mailer })
+        Ok(Services {
+            storage,
+            cache,
+            bus,
+            mailer,
+            revalidate: Revalidator::new(cfg.frontend_revalidate_url.clone(), cfg.revalidate_secret.clone()),
+            moderation: Moderation::new(cfg.moderation_service_url.clone()),
+        })
     }
 
     /// Tutto in memoria o su una directory locale, con un mailer ispezionabile: per i test.
@@ -57,6 +69,8 @@ impl Services {
             cache: Arc::new(MemoryCache::default()),
             bus: Arc::new(MemoryBus::default()),
             mailer: mailer.clone(),
+            revalidate: Revalidator::disabled(),
+            moderation: Moderation::disabled(),
         };
         (services, mailer)
     }

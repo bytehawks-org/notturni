@@ -1,4 +1,4 @@
-use crate::{AppState, Background, ConsumerDef, StartupFuture};
+use crate::{AppState, Background, ConsumerDef, EntityExtension, Extensions, StartupFuture};
 use axum::Router;
 use noct_manifest::{
     ConfigValue, Issues, Kind, Manifest, Sources, openapi, resolve_config, topological_order, validate_registry,
@@ -6,7 +6,10 @@ use noct_manifest::{
 use noct_migrate::{AppliedMigration, Migration, MigrationError, ModuleMigrations};
 use serde_json::Value;
 use sqlx::PgPool;
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 /// Un modulo compilato nel binario, come lo emette `noct-codegen`.
 #[derive(Clone, Copy)]
@@ -22,6 +25,8 @@ pub struct ModuleDef {
     pub consumers: fn(AppState) -> Vec<ConsumerDef>,
     /// `startup::run` del modulo (se dichiarato in `[lifecycle]`), altrimenti un no-op.
     pub startup: fn(AppState) -> StartupFuture,
+    /// Estensioni di blog/post dichiarate in `[lifecycle] extensions` (altrimenti nessuna).
+    pub extensions: fn() -> Vec<Arc<dyn EntityExtension>>,
     /// Directory dei sorgenti del modulo (solo per gli strumenti di sviluppo).
     pub source_dir: &'static str,
 }
@@ -187,6 +192,11 @@ impl Registry {
             }
         }
         Ok(Background::start(state, consumers))
+    }
+
+    /// Estensioni di blog e post dei moduli attivi.
+    pub fn extensions(&self, enabled: &[usize]) -> Result<Extensions, String> {
+        Extensions::new(enabled.iter().flat_map(|&i| (self.entries[i].def.extensions)()).collect())
     }
 
     pub fn openapi(&self, enabled: &[usize]) -> Value {

@@ -1,6 +1,7 @@
 use crate::{Actor, ApiError, AppState, BlogRef, RequestMeta, TokenPrincipal};
 use axum::{
     Json,
+    body::Bytes,
     extract::RawPathParams,
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
@@ -59,6 +60,10 @@ pub struct RouteCtx {
     pub path: HashMap<String, String>,
     pub query: HashMap<String, String>,
     pub headers: HeaderMap,
+    /// Corpo grezzo della richiesta: presente per le rotte con `request` (già
+    /// interpretato in `body`, qui serve a leggere i campi delle estensioni) e per
+    /// quelle con `upload`; vuoto altrimenti.
+    pub body: Bytes,
     pub meta: RequestMeta,
     pub module: &'static str,
 }
@@ -90,11 +95,22 @@ impl RouteCtx {
     }
 }
 
+/// Il corpo JSON come oggetto (vuoto se il corpo manca o non è un oggetto): serve a leggere i
+/// campi delle estensioni, che il DTO tipizzato della rotta non conosce.
+pub fn body_map(body: &Bytes) -> crate::JsonMap {
+    match serde_json::from_slice(body) {
+        Ok(serde_json::Value::Object(m)) => m,
+        _ => crate::JsonMap::new(),
+    }
+}
+
 pub fn path_map(raw: &RawPathParams) -> HashMap<String, String> {
     raw.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
 }
 
 pub fn parse_json<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, ApiError> {
+    // un corpo assente equivale a `{}`: i campi obbligatori mancanti falliscono comunque la validazione
+    let bytes: &[u8] = if bytes.iter().all(u8::is_ascii_whitespace) { b"{}" } else { bytes };
     serde_json::from_slice(bytes).map_err(|e| ApiError::unprocessable(format!("Corpo della richiesta non valido: {e}")))
 }
 

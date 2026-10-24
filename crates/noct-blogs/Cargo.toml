@@ -18,6 +18,11 @@ sqlx.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 regex.workspace = true
+noct-audit.workspace = true
+noct-platform.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+bytes.workspace = true
 
 [build-dependencies]
 noct-codegen.workspace = true

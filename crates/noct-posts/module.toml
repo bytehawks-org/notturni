@@ -1,0 +1,11 @@
+[module]
+name = "posts"
+version = "0.1.0"
+kind = "core"
+requires = ["users", "blogs", "events"]
+description = "Post: bozze, revisione, pubblicazione e pianificazione, traduzioni, tag, media e link citati, permalink"
+
+# Pubblicati nella stessa transazione del salvataggio (outbox). I consumer sono di altri
+# moduli: backup su storage (operazioni) e notifica agli iscritti (newsletter).
+[events]
+publishes = ["posts.post.saved", "posts.post.published"]

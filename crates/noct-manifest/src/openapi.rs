@@ -73,6 +73,8 @@ fn field_schema(m: &Manifest, f: &Field) -> Value {
         FieldType::Bool => json!({ "type": "boolean" }),
         FieldType::Timestamp => json!({ "type": "string", "format": "date-time" }),
         FieldType::Json => json!({}),
+        FieldType::Float => json!({ "type": "number" }),
+        FieldType::StringList => json!({ "type": "array", "items": { "type": "string" } }),
         FieldType::Enum(name) => {
             let values = m.schema.enum_def(name).map(|e| e.values.clone()).unwrap_or_default();
             json!({ "type": "string", "enum": values })
@@ -110,6 +112,20 @@ fn operation(m: &Manifest, r: &Route) -> Value {
         op.insert(
             "requestBody".into(),
             json!({ "required": true, "content": { "application/json": { "schema": schema_ref(m, type_ref(req).0) } } }),
+        );
+    }
+    if let Some(max) = r.upload {
+        op.insert(
+            "requestBody".into(),
+            json!({
+                "required": true,
+                "description": format!("Upload multipart/form-data, campo `file` (al più {max} byte)."),
+                "content": { "multipart/form-data": { "schema": {
+                    "type": "object",
+                    "required": ["file"],
+                    "properties": { "file": { "type": "string", "format": "binary" } }
+                } } }
+            }),
         );
     }
     let mut responses = Map::new();

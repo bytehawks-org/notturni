@@ -1,0 +1,239 @@
+# Contratto compatibile con /api/v1/posts della v1. I campi che appartengono a moduli
+# opzionali (categoria, pubblicazione, note a piè di pagina, modalità commenti) non sono
+# qui: li leggono e li aggiungono alle risposte le estensioni dei moduli attivi
+# (`noct_core::EntityExtension`). Letture di elenco aggregate (feed, ricerca globale,
+# conteggio letture) sono del modulo `discovery`.
+
+[type.PostCreate]
+slug = { type = "string", max = 255 }
+title = { type = "string", max = 255, non_blank = true, message = "Il titolo del post non può essere vuoto (max 255 caratteri)." }
+content = { type = "string", max = 500000, message = "Il contenuto supera la lunghezza massima consentita." }
+# default: la lingua principale del blog
+locale = "string?"
+cover_image_url = { type = "string", max = 2048, optional = true }
+# esito della moderazione automatica ricevuto da POST /blogs/{slug}/media (non ricalcolato qui)
+cover_image_is_sensitive = "bool?"
+cover_image_categories = "string[]?"
+cover_image_alt_text = { type = "string", max = 300, optional = true }
+# si sommano agli #hashtag del testo, massimo 5 in tutto
+tags = "string[]?"
+
+[type.PostTranslation]
+slug = { type = "string", max = 255 }
+locale = "string"
+title = { type = "string", max = 255, non_blank = true, message = "Il titolo del post non può essere vuoto (max 255 caratteri)." }
+content = { type = "string", max = 500000, message = "Il contenuto supera la lunghezza massima consentita." }
+cover_image_url = { type = "string", max = 2048, optional = true }
+cover_image_is_sensitive = "bool?"
+cover_image_categories = "string[]?"
+cover_image_alt_text = { type = "string", max = 300, optional = true }
+tags = "string[]?"
+
+# Campi assenti = invariati. Tri-stato (assente / `null` / valore) per `search_indexing_enabled` e
+# `ai_crawling_enabled`: `null` torna a ereditare dal blog. `cover_image_url = ""` rimuove la copertina;
+# `cover_image_is_sensitive` ha effetto solo se inviato nella stessa richiesta di un nuovo `cover_image_url`.
+[type.PostUpdate]
+title = { type = "string", max = 255, non_blank = true, optional = true, message = "Il titolo del post non può essere vuoto (max 255 caratteri)." }
+content = { type = "string", max = 500000, optional = true, message = "Il contenuto supera la lunghezza massima consentita." }
+cover_image_url = { type = "string", max = 2048, optional = true }
+cover_image_is_sensitive = "bool?"
+cover_image_categories = "string[]?"
+cover_image_alt_text = { type = "string", max = 300, optional = true }
+tags = "string[]?"
+search_indexing_enabled = "bool?"
+ai_crawling_enabled = "bool?"
+
+[type.PublishRequest]
+# futuro = pubblicazione pianificata
+published_at = "timestamp?"
+
+[type.PostOut]
+id = "uuid"
+blog_id = "uuid"
+author_id = "uuid"
+author_display_name = "string"
+author_avatar_url = { type = "string", nullable = true }
+locale = "string"
+translation_group_id = "uuid"
+title = "string"
+slug = "string"
+content = "string"
+cover_image_url = { type = "string", nullable = true }
+cover_image_is_sensitive = "bool"
+cover_image_categories = "string[]"
+cover_image_alt_text = "string"
+status = "enum:post_status"
+published_at = { type = "timestamp", nullable = true }
+created_at = "timestamp"
+is_hidden = "bool"
+blog_slug = "string"
+permalink = "string"
+mentions_enabled = "bool"
+# solo quelli del campo dedicato (per ripresentarli in modifica) / insieme effettivo (con gli #hashtag)
+manual_tags = "string[]"
+tags = "string[]"
+search_indexing_enabled = { type = "bool", nullable = true }
+ai_crawling_enabled = { type = "bool", nullable = true }
+effective_search_indexing_enabled = "bool"
+effective_ai_crawling_enabled = "bool"
+
+[type.TranslationSummary]
+id = "uuid"
+locale = "string"
+slug = "string"
+status = "enum:post_status"
+
+[type.MediaBibliographyEntry]
+url = "string"
+alt_text = "string"
+categories = "string[]"
+is_sensitive = "bool"
+# [{post_title, post_slug, permalink, locale, used_at}]
+citations = "json"
+
+[type.LinkBibliographyEntry]
+url = "string"
+link_text = "string"
+citations = "json"
+
+[[route]]
+id = "create_post"
+method = "POST"
+path = "/blogs/{slug}/posts"
+auth = "blog_write"
+kind = "custom"
+handler = "create_post"
+scope = { blog = "slug" }
+request = "PostCreate"
+response = "PostOut"
+status = 201
+summary = "Crea un post (bozza)"
+
+[[route]]
+id = "list_posts"
+method = "GET"
+path = "/blogs/{slug}/posts"
+auth = "public"
+kind = "custom"
+handler = "list_posts"
+scope = { blog = "slug" }
+response = "PostOut[]"
+summary = "Post del blog: i pubblicati a tutti, anche bozze e pianificati a chi può scrivere (`?locale=`)"
+
+[[route]]
+id = "search_posts"
+method = "GET"
+path = "/blogs/{slug}/search"
+auth = "public"
+kind = "custom"
+handler = "search_posts"
+scope = { blog = "slug" }
+response = "PostOut[]"
+summary = "Ricerca nei post pubblicati del blog (`?q=&limit=&offset=`)"
+
+[[route]]
+id = "get_post_by_permalink"
+method = "GET"
+path = "/blogs/{slug}/posts/{post_slug}"
+auth = "public"
+kind = "custom"
+handler = "get_post_by_permalink"
+scope = { blog = "slug" }
+response = "PostOut"
+summary = "Risolve il permalink pubblico /{blog}/{post}"
+
+[[route]]
+id = "media_bibliography"
+method = "GET"
+path = "/blogs/{slug}/media-bibliography"
+auth = "public"
+kind = "custom"
+handler = "media_bibliography"
+scope = { blog = "slug" }
+response = "MediaBibliographyEntry[]"
+summary = "Immagini citate nei post pubblicati, raggruppate per URL"
+
+[[route]]
+id = "links_bibliography"
+method = "GET"
+path = "/blogs/{slug}/links-bibliography"
+auth = "public"
+kind = "custom"
+handler = "links_bibliography"
+scope = { blog = "slug" }
+response = "LinkBibliographyEntry[]"
+summary = "Link citati nei post pubblicati, raggruppati per URL"
+
+[[route]]
+id = "get_post"
+method = "GET"
+path = "/posts/{post_id}"
+auth = "public"
+kind = "custom"
+handler = "get_post"
+response = "PostOut"
+summary = "Dettaglio di un post per id (404 se non visibile)"
+
+[[route]]
+id = "update_post"
+method = "PATCH"
+path = "/posts/{post_id}"
+auth = "user"
+kind = "custom"
+handler = "update_post"
+request = "PostUpdate"
+response = "PostOut"
+summary = "Modifica un post"
+
+[[route]]
+id = "add_translation"
+method = "POST"
+path = "/posts/{post_id}/translations"
+auth = "user"
+kind = "custom"
+handler = "add_translation"
+request = "PostTranslation"
+response = "PostOut"
+status = 201
+summary = "Aggiunge la traduzione di un post"
+
+[[route]]
+id = "list_translations"
+method = "GET"
+path = "/posts/{post_id}/translations"
+auth = "public"
+kind = "custom"
+handler = "list_translations"
+response = "TranslationSummary[]"
+summary = "Traduzioni pubblicate di un post (per il selettore di lingua)"
+
+[[route]]
+id = "submit_for_review"
+method = "POST"
+path = "/posts/{post_id}/submit-for-review"
+auth = "user"
+kind = "custom"
+handler = "submit_for_review"
+response = "PostOut"
+summary = "Manda una bozza in revisione"
+
+[[route]]
+id = "return_to_draft"
+method = "POST"
+path = "/posts/{post_id}/return-to-draft"
+auth = "user"
+kind = "custom"
+handler = "return_to_draft"
+response = "PostOut"
+summary = "Il revisore o il proprietario rimanda in bozza un post in revisione"
+
+[[route]]
+id = "publish_post"
+method = "POST"
+path = "/posts/{post_id}/publish"
+auth = "user"
+kind = "custom"
+handler = "publish_post"
+request = "PublishRequest"
+response = "PostOut"
+summary = "Pubblica (subito o pianificato)"

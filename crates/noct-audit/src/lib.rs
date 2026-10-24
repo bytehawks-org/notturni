@@ -83,6 +83,13 @@ fn valid_action(action: &str) -> bool {
             .all(|t| !t.is_empty() && t.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_'))
 }
 
+/// L'attore per un utente con sessione: etichetta `username <email>` letta dal database.
+pub async fn user_actor(conn: &mut PgConnection, user_id: Uuid) -> Result<AuditActor, AuditError> {
+    let (username, email): (String, String) =
+        sqlx::query_as("SELECT username, email FROM users WHERE id = $1").bind(user_id).fetch_one(conn).await?;
+    Ok(AuditActor::user(user_id, &username, &email))
+}
+
 /// Aggiunge una riga al registro nella transazione `conn`.
 pub async fn record(conn: &mut PgConnection, entry: Entry<'_>) -> Result<(), AuditError> {
     if !valid_action(entry.action) {

@@ -74,6 +74,8 @@ pub fn base_type(f: &Field, col: Option<&noct_manifest::Column>) -> String {
         FieldType::Bool => "bool".into(),
         FieldType::Timestamp => "chrono::DateTime<chrono::Utc>".into(),
         FieldType::Json => "serde_json::Value".into(),
+        FieldType::StringList => "Vec<String>".into(),
+        FieldType::Float => "f64".into(),
     }
 }
 

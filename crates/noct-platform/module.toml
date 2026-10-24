@@ -1,0 +1,6 @@
+[module]
+name = "platform"
+version = "0.1.0"
+kind = "core"
+requires = ["users"]
+description = "Impostazioni di piattaforma (riga unica): limiti, nomi riservati, soglia di moderazione, footer. Le rotte di amministrazione arrivano con la fase operazioni"

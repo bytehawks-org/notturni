@@ -45,7 +45,7 @@ pub fn emit(
     let opt = |present: bool, file: &str| if present { format!("Some({})", inc(file)) } else { "None".to_string() };
     writeln!(
         out,
-        "pub fn module() -> noct_core::ModuleDef {{\n    noct_core::ModuleDef {{\n        name: MODULE_NAME,\n        module_toml: {},\n        api_toml: {},\n        db_toml: {},\n        lock_json: {},\n        migrations: __MIGRATIONS,\n        router: __router,\n        consumers: __consumers,\n        startup: __startup,\n        source_dir: env!(\"CARGO_MANIFEST_DIR\"),\n    }}\n}}\n",
+        "pub fn module() -> noct_core::ModuleDef {{\n    noct_core::ModuleDef {{\n        name: MODULE_NAME,\n        module_toml: {},\n        api_toml: {},\n        db_toml: {},\n        lock_json: {},\n        migrations: __MIGRATIONS,\n        router: __router,\n        consumers: __consumers,\n        startup: __startup,\n        extensions: __extensions,\n        source_dir: env!(\"CARGO_MANIFEST_DIR\"),\n    }}\n}}\n",
         inc("module.toml"),
         opt(has_api, "api.toml"),
         opt(has_db, "db.toml"),
@@ -85,6 +85,9 @@ pub fn emit(
             } else {
                 write!(chain, ".{method}(__h_{})", r.id).unwrap();
             }
+            if let Some(max) = r.upload {
+                write!(chain, ".layer(axum::extract::DefaultBodyLimit::max({max}))").unwrap();
+            }
         }
         writeln!(out, "        .route({}, {chain})", lit(path)).unwrap();
     }
@@ -94,6 +97,15 @@ pub fn emit(
         writeln!(out, "fn __startup(st: noct_core::AppState) -> noct_core::StartupFuture {{\n    Box::pin(crate::startup::run(st))\n}}\n").unwrap();
     } else {
         writeln!(out, "fn __startup(_st: noct_core::AppState) -> noct_core::StartupFuture {{\n    Box::pin(async {{ Ok(()) }})\n}}\n").unwrap();
+    }
+    if m.module.lifecycle.extensions {
+        writeln!(out, "fn __extensions() -> Vec<std::sync::Arc<dyn noct_core::EntityExtension>> {{\n    crate::extensions::all()\n}}\n").unwrap();
+    } else {
+        writeln!(
+            out,
+            "fn __extensions() -> Vec<std::sync::Arc<dyn noct_core::EntityExtension>> {{\n    Vec::new()\n}}\n"
+        )
+        .unwrap();
     }
     // il codice generato non deve sottostare ai lint stilistici del crate che lo include
     Ok(format!(
@@ -183,6 +195,21 @@ fn field_checks(schema: &Schema, fname: &str, f: &Field) -> String {
                 .unwrap();
             }
         }
+        FieldType::StringList => {
+            if f.min.is_some() || f.max.is_some() {
+                let msg = f
+                    .message
+                    .clone()
+                    .unwrap_or_else(|| format!("Il campo `{fname}` ha un numero di elementi non consentito."));
+                writeln!(s, "            let n = v.len() as i64;").unwrap();
+                if let Some(a) = f.min {
+                    writeln!(s, "            if n < {a} {{ {} }}", err(msg.clone())).unwrap();
+                }
+                if let Some(b) = f.max {
+                    writeln!(s, "            if n > {b} {{ {} }}", err(msg)).unwrap();
+                }
+            }
+        }
         FieldType::Int => {
             if f.min.is_some() || f.max.is_some() {
                 let msg = f
@@ -269,7 +296,7 @@ fn emit_route(out: &mut String, m: &Manifest, r: &Route) -> Result<(), String> {
     )
     .unwrap();
 
-    let has_body = r.request.is_some();
+    let has_body = r.request.is_some() || r.upload.is_some();
     writeln!(out, "async fn __h_{id}(\n    axum::extract::State(st): axum::extract::State<noct_core::AppState>,\n    raw: axum::extract::RawPathParams,").unwrap();
     if r.kind == RouteKind::Custom {
         writeln!(
@@ -297,7 +324,8 @@ fn emit_route(out: &mut String, m: &Manifest, r: &Route) -> Result<(), String> {
         let handler = r.handler.as_deref().expect("validato");
         writeln!(
             out,
-            "    let ctx = noct_core::RouteCtx {{ state: st, actor: access.actor, token: access.token, blog: access.blog, path, query, headers, meta: access.meta, module: MODULE_NAME }};"
+            "    let ctx = noct_core::RouteCtx {{ state: st, actor: access.actor, token: access.token, blog: access.blog, path, query, headers, body: {}, meta: access.meta, module: MODULE_NAME }};",
+            if has_body { "body.clone()" } else { "axum::body::Bytes::new()" }
         )
         .unwrap();
         let mut args = "ctx".to_string();

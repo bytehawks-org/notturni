@@ -6,5 +6,6 @@
 include!(concat!(env!("OUT_DIR"), "/module_gen.rs"));
 
 pub mod events;
+pub mod extensions;
 pub mod handlers;
 pub mod jobs;

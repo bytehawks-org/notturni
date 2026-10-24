@@ -21,6 +21,9 @@ pub struct Lifecycle {
     /// Il modulo definisce `startup::run(AppState)`, eseguito all'avvio dopo le migrazioni.
     #[serde(default)]
     pub startup: bool,
+    /// Il modulo definisce `extensions::all()` con gli [`EntityExtension`] di blog/post.
+    #[serde(default)]
+    pub extensions: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]

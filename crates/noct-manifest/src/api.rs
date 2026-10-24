@@ -161,6 +161,10 @@ pub struct Route {
     /// cookie, status). `response` resta la documentazione del corpo.
     #[serde(default)]
     pub raw: bool,
+    /// Solo `custom`: il corpo non è JSON ma un upload binario (es. multipart) di al più
+    /// questi byte; l'handler lo legge da `ctx.body`. Alternativo a `request`.
+    #[serde(default)]
+    pub upload: Option<u64>,
     #[serde(default)]
     pub summary: Option<String>,
 }
@@ -197,6 +201,10 @@ pub fn type_ref(name: &str) -> (&str, bool) {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FieldType {
     String,
+    /// Numero a virgola mobile (`double precision`).
+    Float,
+    /// Elenco di stringhe (`text[]` in db.toml); `min`/`max` contano gli elementi.
+    StringList,
     Uuid,
     Int,
     Bool,
@@ -216,11 +224,13 @@ impl FromStr for FieldType {
             "bool" => FieldType::Bool,
             "timestamp" => FieldType::Timestamp,
             "json" => FieldType::Json,
+            "string[]" => FieldType::StringList,
+            "float" => FieldType::Float,
             other => match other.strip_prefix("enum:") {
                 Some(name) if is_ident(name) => FieldType::Enum(name.to_string()),
                 _ => {
                     return Err(format!(
-                        "tipo campo sconosciuto `{other}` (ammessi: string, uuid, int, bool, timestamp, json, enum:<nome>)"
+                        "tipo campo sconosciuto `{other}` (ammessi: string, string[], uuid, int, float, bool, timestamp, json, enum:<nome>)"
                     ));
                 }
             },
@@ -253,6 +263,8 @@ impl Serialize for FieldTypeName {
             FieldType::Bool => "bool".to_string(),
             FieldType::Timestamp => "timestamp".to_string(),
             FieldType::Json => "json".to_string(),
+            FieldType::StringList => "string[]".to_string(),
+            FieldType::Float => "float".to_string(),
             FieldType::Enum(n) => format!("enum:{n}"),
         })
     }
@@ -482,6 +494,14 @@ impl ApiFile {
             if r.table.is_some() || r.key.is_some() || !r.order_by.is_empty() || !r.conflict.is_empty() {
                 issues.push(module, loc, "`table`/`key`/`order_by`/`conflict` sono ammessi solo sulle rotte CRUD");
             }
+            if r.upload.is_some() && r.request.is_some() {
+                issues.push(module, loc, "`upload` e `request` sono alternativi: un upload non ha un corpo JSON");
+            }
+            if let Some(n) = r.upload
+                && !(1..=64 * 1024 * 1024).contains(&n)
+            {
+                issues.push(module, loc, "`upload` deve essere un numero di byte tra 1 e 67108864 (64 MiB)");
+            }
             if r.response.is_none() && !matches!(r.status, Some(202 | 204)) {
                 issues.push(
                     module,
@@ -497,6 +517,9 @@ impl ApiFile {
         }
         if r.raw {
             issues.push(module, loc, "`raw` è ammesso solo sulle rotte `custom`");
+        }
+        if r.upload.is_some() {
+            issues.push(module, loc, "`upload` è ammesso solo sulle rotte `custom`");
         }
         if r.emits.is_some() && !matches!(r.kind, RouteKind::Create | RouteKind::Update | RouteKind::Delete) {
             issues.push(module, loc, "`emits` è ammesso solo su create, update e delete");
@@ -683,6 +706,8 @@ fn check_compat(module: &str, loc: &str, what: &str, f: &Field, col: &ColType, i
             | (FieldType::Bool, ColType::Boolean)
             | (FieldType::Timestamp, ColType::Timestamptz)
             | (FieldType::Json, ColType::Jsonb)
+            | (FieldType::StringList, ColType::TextArray)
+            | (FieldType::Float, ColType::Float)
     ) || matches!((f.field_type(), col), (FieldType::Enum(a), ColType::Enum(b)) if a == b);
     if !ok {
         issues.push(module, loc, format!("`{what}`: tipo incompatibile con la colonna ({col})"));

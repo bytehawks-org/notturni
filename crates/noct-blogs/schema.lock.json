@@ -1,6 +1,15 @@
 {
   "enums": [
     {
+      "name": "blog_invitation_status",
+      "values": [
+        "pending",
+        "accepted",
+        "declined",
+        "revoked"
+      ]
+    },
+    {
       "name": "blog_role",
       "values": [
         "autore",
@@ -19,6 +28,177 @@
     }
   ],
   "tables": [
+    {
+      "name": "blog_configs",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "null": false,
+          "default": "gen_random_uuid()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "blog_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "blogs",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "config",
+          "type": "jsonb",
+          "null": false,
+          "default": "'{}'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [],
+      "uniques": [
+        {
+          "name": "uq_blog_configs_blog",
+          "columns": [
+            "blog_id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "blog_invitations",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "null": false,
+          "default": "gen_random_uuid()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "blog_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "blogs",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "invited_user_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "users",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "invited_by_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "users",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "role",
+          "type": "enum:blog_role",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "status",
+          "type": "enum:blog_invitation_status",
+          "null": false,
+          "default": "'pending'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "responded_at",
+          "type": "timestamptz",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "ix_blog_invitations_invited_user_id",
+          "columns": [
+            "invited_user_id"
+          ],
+          "unique": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "uq_invitation_blog_user",
+          "columns": [
+            "blog_id",
+            "invited_user_id"
+          ]
+        }
+      ]
+    },
     {
       "name": "blog_memberships",
       "columns": [
@@ -63,6 +243,14 @@
           "renamed_from": null
         },
         {
+          "name": "author_display_name",
+          "type": "varchar(255)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
           "name": "created_at",
           "type": "timestamptz",
           "null": false,
@@ -82,7 +270,15 @@
       "primary_key": [
         "id"
       ],
-      "indexes": [],
+      "indexes": [
+        {
+          "name": "ix_blog_memberships_user_id",
+          "columns": [
+            "user_id"
+          ],
+          "unique": false
+        }
+      ],
       "uniques": [
         {
           "name": "uq_membership_blog_user",
@@ -121,6 +317,22 @@
           "renamed_from": null
         },
         {
+          "name": "subtitle",
+          "type": "varchar(64)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "description",
+          "type": "varchar(256)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
           "name": "owner_id",
           "type": "uuid",
           "null": false,
@@ -137,6 +349,54 @@
           "type": "enum:blog_visibility",
           "null": false,
           "default": "'public'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "default_locale",
+          "type": "varchar(2)",
+          "null": false,
+          "default": "'it'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "extra_locales",
+          "type": "text[]",
+          "null": false,
+          "default": "'{}'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "default_author_display_name",
+          "type": "varchar(255)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "mentions_enabled",
+          "type": "boolean",
+          "null": false,
+          "default": "true",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "search_indexing_enabled",
+          "type": "boolean",
+          "null": false,
+          "default": "true",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "ai_crawling_enabled",
+          "type": "boolean",
+          "null": false,
+          "default": "true",
           "references": null,
           "renamed_from": null
         },
@@ -159,6 +419,46 @@
         {
           "name": "deleted_at",
           "type": "timestamptz",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "cover_image_url",
+          "type": "varchar(2048)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "cover_image_is_sensitive",
+          "type": "boolean",
+          "null": false,
+          "default": "false",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "cover_image_categories",
+          "type": "text[]",
+          "null": false,
+          "default": "'{}'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "cover_image_alt_text",
+          "type": "varchar(300)",
+          "null": false,
+          "default": "''",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "favicon_object_key",
+          "type": "varchar(255)",
           "null": true,
           "default": null,
           "references": null,

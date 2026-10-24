@@ -1,0 +1,316 @@
+# Contratto compatibile con /api/v1/blogs della v1 (collaboratori, inviti, ciclo di vita,
+# configurazione di presentazione). Direttory pubblica, follow, panoramica, copertina,
+# favicon e libreria media sono di altri crate (discovery, media).
+#
+# I campi che appartengono a moduli opzionali (modalità commenti, pagine statiche,
+# newsletter, dominio custom...) non compaiono qui: li aggiungono alle risposte e leggono
+# dal corpo le estensioni dei moduli attivi (vedi `noct_core::EntityExtension`).
+
+[type.BlogCreate]
+slug = { type = "string", max = 63 }
+title = { type = "string", max = 255, non_blank = true, message = "Il titolo del blog non può essere vuoto (max 255 caratteri)." }
+default_locale = "string?"
+subtitle = "string?"
+description = "string?"
+visibility = { type = "enum:blog_visibility", optional = true }
+default_author_display_name = { type = "string", max = 255, optional = true }
+
+[type.BlogUpdate]
+title = { type = "string", max = 255, non_blank = true, optional = true, message = "Il titolo del blog non può essere vuoto (max 255 caratteri)." }
+# "" azzera, assente lascia invariato
+subtitle = "string?"
+description = "string?"
+visibility = { type = "enum:blog_visibility", optional = true }
+mentions_enabled = "bool?"
+search_indexing_enabled = "bool?"
+ai_crawling_enabled = "bool?"
+default_author_display_name = { type = "string", max = 255, optional = true }
+is_paused = "bool?"
+extra_locales = "string[]?"
+
+[type.BlogOut]
+id = "uuid"
+slug = "string"
+title = "string"
+subtitle = { type = "string", nullable = true }
+description = { type = "string", nullable = true }
+visibility = "enum:blog_visibility"
+default_locale = "string"
+extra_locales = "string[]"
+mentions_enabled = "bool"
+search_indexing_enabled = "bool"
+ai_crawling_enabled = "bool"
+is_paused = "bool"
+is_suspended = "bool"
+deleted_at = { type = "timestamp", nullable = true }
+default_author_display_name = { type = "string", nullable = true }
+cover_image_url = { type = "string", nullable = true }
+cover_image_is_sensitive = "bool"
+cover_image_categories = "string[]"
+cover_image_alt_text = "string"
+# URL pubblico, risolto da `favicon_object_key`
+favicon_url = { type = "string", nullable = true }
+# solo per il proprietario: per chiunque altro è null (un blog con alias non deve
+# permettere di risalire all'identità reale)
+owner_id = { type = "uuid", nullable = true }
+created_at = "timestamp"
+
+[type.MembershipBlogOut]
+blog = "json"
+role = "enum:blog_role"
+author_display_name = { type = "string", nullable = true }
+
+[type.MemberOut]
+user_id = "uuid"
+username = "string"
+avatar_url = { type = "string", nullable = true }
+role = "enum:blog_role"
+author_display_name = { type = "string", nullable = true }
+created_at = "timestamp"
+
+[type.MemberRoleUpdate]
+role = "enum:blog_role"
+
+[type.MyMembershipUpdate]
+author_display_name = { type = "string", max = 255, optional = true }
+
+[type.InvitationCreate]
+username = { type = "string", max = 64 }
+role = "enum:blog_role"
+
+[type.InvitationOut]
+id = "uuid"
+blog_slug = "string"
+blog_title = "string"
+role = "enum:blog_role"
+status = "enum:blog_invitation_status"
+invited_username = "string"
+invited_by_username = "string"
+created_at = "timestamp"
+responded_at = { type = "timestamp", nullable = true }
+
+[type.BlogTransfer]
+username = { type = "string", max = 64 }
+
+[type.BlogDelete]
+confirm_slug = { type = "string", max = 255 }
+
+# Configurazione di presentazione. Oltre alle chiavi note qualsiasi altra è ammessa e
+# conservata così com'è (il layout evolve senza toccare il backend).
+[type.BlogConfig]
+palette = "json?"
+palette_dark = "json?"
+typography = "json?"
+layout = "string?"
+footer = "json?"
+
+[[route]]
+id = "create_blog"
+method = "POST"
+path = "/blogs"
+auth = "user"
+kind = "custom"
+handler = "create_blog"
+request = "BlogCreate"
+response = "BlogOut"
+status = 201
+summary = "Crea un blog (slug di almeno 4 caratteri, non riservato; limite per utente)"
+
+[[route]]
+id = "list_my_blogs"
+method = "GET"
+path = "/blogs/mine"
+auth = "user"
+kind = "custom"
+handler = "list_my_blogs"
+response = "BlogOut[]"
+summary = "Blog di proprietà dell'utente"
+
+[[route]]
+id = "list_blogs_member_of"
+method = "GET"
+path = "/blogs/member-of"
+auth = "user"
+kind = "custom"
+handler = "list_blogs_member_of"
+response = "MembershipBlogOut[]"
+summary = "Blog altrui su cui l'utente ha una membership"
+
+[[route]]
+id = "list_received_invitations"
+method = "GET"
+path = "/blogs/received-invitations"
+auth = "user"
+kind = "custom"
+handler = "list_received_invitations"
+response = "InvitationOut[]"
+summary = "Inviti a collaborare in attesa di risposta"
+
+[[route]]
+id = "accept_invitation"
+method = "POST"
+path = "/blogs/received-invitations/{invitation_id}/accept"
+auth = "user"
+kind = "custom"
+handler = "accept_invitation"
+response = "InvitationOut"
+summary = "Accetta un invito (crea la membership)"
+
+[[route]]
+id = "decline_invitation"
+method = "POST"
+path = "/blogs/received-invitations/{invitation_id}/decline"
+auth = "user"
+kind = "custom"
+handler = "decline_invitation"
+response = "InvitationOut"
+summary = "Rifiuta un invito"
+
+[[route]]
+id = "get_blog"
+method = "GET"
+path = "/blogs/{slug}"
+auth = "public"
+kind = "custom"
+handler = "get_blog"
+response = "BlogOut"
+summary = "Dettaglio del blog (404 se la visibilità non lo consente)"
+
+[[route]]
+id = "update_blog"
+method = "PATCH"
+path = "/blogs/{slug}"
+auth = "user"
+kind = "custom"
+handler = "update_blog"
+request = "BlogUpdate"
+response = "BlogOut"
+summary = "Modifica il blog (solo il proprietario)"
+
+[[route]]
+id = "delete_blog"
+method = "DELETE"
+path = "/blogs/{slug}"
+auth = "user"
+kind = "custom"
+handler = "delete_blog"
+request = "BlogDelete"
+response = "BlogOut"
+summary = "Cancellazione con tolleranza (richiede di ridigitare lo slug)"
+
+[[route]]
+id = "restore_blog"
+method = "POST"
+path = "/blogs/{slug}/restore"
+auth = "user"
+kind = "custom"
+handler = "restore_blog"
+response = "BlogOut"
+summary = "Annulla la cancellazione entro il periodo di tolleranza"
+
+[[route]]
+id = "transfer_blog"
+method = "POST"
+path = "/blogs/{slug}/transfer"
+auth = "user"
+kind = "custom"
+handler = "transfer_blog"
+request = "BlogTransfer"
+response = "BlogOut"
+summary = "Trasferisce la proprietà a un coautore"
+
+[[route]]
+id = "list_members"
+method = "GET"
+path = "/blogs/{slug}/members"
+auth = "user"
+kind = "custom"
+handler = "list_members"
+response = "MemberOut[]"
+summary = "Collaboratori del blog (solo il proprietario)"
+
+[[route]]
+id = "update_member"
+method = "PATCH"
+path = "/blogs/{slug}/members/{user_id}"
+auth = "user"
+kind = "custom"
+handler = "update_member"
+request = "MemberRoleUpdate"
+response = "MemberOut"
+summary = "Cambia il ruolo di un collaboratore (co_autore o mediatore)"
+
+[[route]]
+id = "remove_member"
+method = "DELETE"
+path = "/blogs/{slug}/members/{user_id}"
+auth = "user"
+kind = "custom"
+handler = "remove_member"
+status = 204
+summary = "Rimuove un collaboratore (idempotente)"
+
+[[route]]
+id = "update_my_membership"
+method = "PATCH"
+path = "/blogs/{slug}/my-membership"
+auth = "user"
+kind = "custom"
+handler = "update_my_membership"
+request = "MyMembershipUpdate"
+response = "MembershipBlogOut"
+summary = "Il collaboratore sceglie l'alias con cui firma i post su questo blog"
+
+[[route]]
+id = "list_invitations"
+method = "GET"
+path = "/blogs/{slug}/invitations"
+auth = "user"
+kind = "custom"
+handler = "list_invitations"
+response = "InvitationOut[]"
+summary = "Inviti emessi dal blog (solo il proprietario)"
+
+[[route]]
+id = "create_invitation"
+method = "POST"
+path = "/blogs/{slug}/invitations"
+auth = "user"
+kind = "custom"
+handler = "create_invitation"
+request = "InvitationCreate"
+response = "InvitationOut"
+status = 201
+summary = "Invita un utente come co_autore o mediatore"
+
+[[route]]
+id = "revoke_invitation"
+method = "DELETE"
+path = "/blogs/{slug}/invitations/{invitation_id}"
+auth = "user"
+kind = "custom"
+handler = "revoke_invitation"
+status = 204
+summary = "Revoca un invito in attesa"
+
+[[route]]
+id = "get_config"
+method = "GET"
+path = "/blogs/{slug}/config"
+auth = "public"
+kind = "custom"
+handler = "get_config"
+scope = { blog = "slug" }
+response = "BlogConfig"
+summary = "Configurazione di presentazione (segue la visibilità del blog)"
+
+[[route]]
+id = "put_config"
+method = "PUT"
+path = "/blogs/{slug}/config"
+auth = "user"
+kind = "custom"
+handler = "put_config"
+request = "BlogConfig"
+response = "BlogConfig"
+summary = "Sostituisce l'intera configurazione (solo il proprietario)"

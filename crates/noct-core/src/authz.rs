@@ -236,7 +236,7 @@ pub async fn enforce(
     Ok(Access { actor, token, blog, meta })
 }
 
-async fn load_blog(st: &AppState, slug: &str) -> Result<Option<BlogRef>, ApiError> {
+pub async fn load_blog(st: &AppState, slug: &str) -> Result<Option<BlogRef>, ApiError> {
     let row = sqlx::query(
         "SELECT id, slug, owner_id, visibility::text AS visibility, is_suspended, is_paused, deleted_at
          FROM blogs WHERE slug = $1",
@@ -255,7 +255,8 @@ async fn load_blog(st: &AppState, slug: &str) -> Result<Option<BlogRef>, ApiErro
     }))
 }
 
-async fn membership_role(st: &AppState, user: Uuid, blog: Uuid) -> Result<Option<String>, ApiError> {
+/// Ruolo di `user` nel blog (`None` se non è membro; il proprietario non ha una membership).
+pub async fn membership_role(st: &AppState, user: Uuid, blog: Uuid) -> Result<Option<String>, ApiError> {
     Ok(sqlx::query_scalar("SELECT role::text FROM blog_memberships WHERE user_id = $1 AND blog_id = $2")
         .bind(user)
         .bind(blog)

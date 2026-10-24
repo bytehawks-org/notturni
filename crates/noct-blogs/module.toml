@@ -1,6 +1,6 @@
 [module]
 name = "blogs"
-version = "0.1.0"
+version = "0.2.0"
 kind = "core"
-requires = ["users"]
-description = "Blog e membership (sottoinsieme della Fase 1: le rotte e gli altri campi arrivano con la Fase 4)"
+requires = ["users", "audit", "platform"]
+description = "Blog, collaboratori e inviti, ciclo di vita (pausa, cancellazione con tolleranza, trasferimento), configurazione di presentazione"

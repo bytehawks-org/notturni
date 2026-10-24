@@ -6,6 +6,12 @@ values = ["public", "members", "private"]
 name = "blog_role"
 values = ["autore", "co_autore", "revisore", "mediatore"]
 
+[[enum]]
+name = "blog_invitation_status"
+values = ["pending", "accepted", "declined", "revoked"]
+
+# Il vincolo "slug di almeno 4 caratteri, minuscole/cifre/trattini, non riservato" è
+# applicato da `rules::validate_slug` (la lista dei nomi riservati è configurabile).
 [[table]]
 name = "blogs"
 timestamps = true
@@ -13,11 +19,33 @@ columns = [
   { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
   { name = "slug", type = "varchar(63)" },
   { name = "title", type = "varchar(255)" },
+  { name = "subtitle", type = "varchar(64)", null = true },
+  { name = "description", type = "varchar(256)", null = true },
   { name = "owner_id", type = "uuid", ref = "users.id" },
   { name = "visibility", type = "enum:blog_visibility", default = "'public'" },
+  # lingua principale e secondarie (informative: i post possono usare qualunque lingua)
+  { name = "default_locale", type = "varchar(2)", default = "'it'" },
+  { name = "extra_locales", type = "text[]", default = "'{}'" },
+  # nome pubblico imposto agli autori dei post di questo blog (vince su alias di profilo)
+  { name = "default_author_display_name", type = "varchar(255)", null = true },
+  # @menzioni dei post trasformate in link al profilo
+  { name = "mentions_enabled", type = "boolean", default = "true" },
+  # opt-out per crawler: motori di ricerca e IA/LLM, separatamente
+  { name = "search_indexing_enabled", type = "boolean", default = "true" },
+  { name = "ai_crawling_enabled", type = "boolean", default = "true" },
+  # sospeso da un admin di piattaforma: mai impostabile dal proprietario
   { name = "is_suspended", type = "boolean", default = "false" },
+  # pausa volontaria del proprietario: i lettori vedono "in pausa", nulla è cancellato
   { name = "is_paused", type = "boolean", default = "false" },
+  # cancellazione con tolleranza: ripristinabile finché la manutenzione non la completa
   { name = "deleted_at", type = "timestamptz", null = true },
+  # banner della home pubblica; categorie di avviso e alt text come per i post
+  { name = "cover_image_url", type = "varchar(2048)", null = true },
+  { name = "cover_image_is_sensitive", type = "boolean", default = "false" },
+  { name = "cover_image_categories", type = "text[]", default = "'{}'" },
+  { name = "cover_image_alt_text", type = "varchar(300)", default = "''" },
+  # chiave nel bucket pubblico degli avatar; l'URL si risolve a runtime
+  { name = "favicon_object_key", type = "varchar(255)", null = true },
 ]
 uniques = [{ name = "uq_blogs_slug", columns = ["slug"] }]
 indexes = [{ columns = ["owner_id"] }]
@@ -30,5 +58,37 @@ columns = [
   { name = "blog_id", type = "uuid", ref = "blogs.id", on_delete = "cascade" },
   { name = "user_id", type = "uuid", ref = "users.id", on_delete = "cascade" },
   { name = "role", type = "enum:blog_role", default = "'autore'" },
+  # alias con cui questo utente firma i testi su questo blog
+  { name = "author_display_name", type = "varchar(255)", null = true },
 ]
 uniques = [{ name = "uq_membership_blog_user", columns = ["blog_id", "user_id"] }]
+indexes = [{ columns = ["user_id"] }]
+
+# Una sola riga per (blog, utente invitato): un nuovo invito dopo un rifiuto o una revoca
+# riporta la stessa riga a `pending`.
+[[table]]
+name = "blog_invitations"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "blog_id", type = "uuid", ref = "blogs.id", on_delete = "cascade" },
+  { name = "invited_user_id", type = "uuid", ref = "users.id", on_delete = "cascade" },
+  { name = "invited_by_id", type = "uuid", ref = "users.id", on_delete = "cascade" },
+  { name = "role", type = "enum:blog_role" },
+  { name = "status", type = "enum:blog_invitation_status", default = "'pending'" },
+  { name = "responded_at", type = "timestamptz", null = true },
+]
+uniques = [{ name = "uq_invitation_blog_user", columns = ["blog_id", "invited_user_id"] }]
+indexes = [{ columns = ["invited_user_id"] }]
+
+# Configurazione di presentazione (palette, tipografia, layout): JSON libero validato da
+# `rules::validate_config`.
+[[table]]
+name = "blog_configs"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "blog_id", type = "uuid", ref = "blogs.id", on_delete = "cascade" },
+  { name = "config", type = "jsonb", default = "'{}'" },
+]
+uniques = [{ name = "uq_blog_configs_blog", columns = ["blog_id"] }]

@@ -163,7 +163,7 @@ fn db_validation_reports_all_problems() {
             r#"
 [[table]]
 name = "Bad-Name"
-columns = [{ name = "a", type = "float" }]
+columns = [{ name = "a", type = "money" }]
 "#,
         ),
         ..Default::default()
@@ -347,4 +347,119 @@ fn openapi_describes_routes_schemas_and_security() {
     let req = &doc["components"]["schemas"]["taxonomy.CategoryCreate"];
     assert_eq!(req["properties"]["slug"]["maxLength"], 60);
     assert_eq!(req["required"], serde_json::json!(["name", "slug"]));
+}
+
+// ---- tipi lista/float e rotte di upload -----------------------------------------------------
+
+const LISTS_DB: &str = r#"
+[[table]]
+name = "things"
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "blog_id", type = "uuid", ref = "blogs.id", on_delete = "cascade" },
+  { name = "labels", type = "text[]", default = "'{}'" },
+  { name = "score", type = "double precision", default = "0.5" },
+]
+"#;
+
+fn lists(api: &str) -> Result<Manifest, Issues> {
+    Manifest::parse(Sources { module: TAX_MODULE, db: Some(LISTS_DB), api: Some(api), lock: None })
+}
+
+#[test]
+fn list_and_float_columns_map_to_matching_api_types() {
+    let m = lists(
+        r#"
+[type.Thing]
+labels = "string[]"
+score = "float"
+[type.ThingIn]
+labels = "string[]?"
+score = "float?"
+[[route]]
+id = "list_things"
+method = "GET"
+path = "/blogs/{slug}/things"
+auth = "public"
+kind = "list"
+table = "things"
+scope = { blog = "slug" }
+response = "Thing[]"
+"#,
+    )
+    .unwrap();
+    assert_eq!(m.schema.table("things").unwrap().column("labels").unwrap().ty.to_string(), "text[]");
+    assert_eq!(m.schema.table("things").unwrap().column("score").unwrap().ty.to_string(), "double precision");
+
+    // un campo `string[]` non corrisponde a una colonna jsonb o varchar
+    let bad = lists(
+        r#"
+[type.Thing]
+score = "string[]"
+[[route]]
+id = "list_things"
+method = "GET"
+path = "/blogs/{slug}/things"
+auth = "public"
+kind = "list"
+table = "things"
+scope = { blog = "slug" }
+response = "Thing[]"
+"#,
+    )
+    .unwrap_err();
+    assert!(bad.contains("score"), "{bad}");
+}
+
+#[test]
+fn upload_routes_are_custom_only_and_have_sane_limits() {
+    let base = |extra: &str| {
+        format!(
+            r#"
+[type.Out]
+id = "uuid"
+[type.In]
+a = "string"
+[[route]]
+id = "up"
+method = "POST"
+path = "/up"
+auth = "user"
+kind = "custom"
+handler = "up"
+response = "Out"
+{extra}
+"#
+        )
+    };
+    assert!(tax_with(&base("upload = 1048576")).is_ok());
+    assert!(tax_with(&base("upload = 0")).unwrap_err().contains("tra 1 e 67108864"));
+    assert!(tax_with(&base("upload = 99999999999")).unwrap_err().contains("tra 1 e 67108864"));
+    assert!(tax_with(&base("upload = 100\nrequest = \"In\"")).unwrap_err().contains("alternativi"));
+    // su una rotta CRUD non ha senso
+    let crud = TAX_API.replace("kind = \"create\"", "kind = \"create\"\nupload = 100");
+    assert!(tax_with(&crud).unwrap_err().contains("`upload` è ammesso solo"));
+}
+
+#[test]
+fn openapi_documents_uploads_as_multipart() {
+    let api = r#"
+[type.Out]
+id = "uuid"
+[[route]]
+id = "up"
+method = "POST"
+path = "/blogs/{slug}/up"
+auth = "blog_write"
+kind = "custom"
+handler = "up"
+scope = { blog = "slug" }
+upload = 1000
+response = "Out"
+status = 201
+"#;
+    let m = tax_with(api).unwrap();
+    let doc = openapi(&[&m], "t", "0");
+    let body = &doc["paths"]["/blogs/{slug}/up"]["post"]["requestBody"];
+    assert_eq!(body["content"]["multipart/form-data"]["schema"]["properties"]["file"]["format"], "binary");
 }

@@ -46,6 +46,10 @@ noct-cache = { path = "crates/noct-cache" }
 noct-bus = { path = "crates/noct-bus" }
 noct-mail = { path = "crates/noct-mail" }
 noct-markdown = { path = "crates/noct-markdown" }
+noct-http = { path = "crates/noct-http" }
+noct-platform = { path = "crates/noct-platform" }
+noct-posts = { path = "crates/noct-posts" }
+noct-media = { path = "crates/noct-media" }
 
 anyhow = "1"
 thiserror = "2"
@@ -82,3 +86,5 @@ hmac = "0.13"
 subtle = "2"
 base64 = "0.23"
 getrandom = "0.4"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "multipart", "json"] }
+multer = "3"

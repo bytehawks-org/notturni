@@ -15,3 +15,21 @@ columns = [
 ]
 indexes = [{ columns = ["blog_id", "position"] }]
 uniques = [{ name = "uq_sandbox_note_title", columns = ["blog_id", "title"] }]
+
+# Estensione di esempio di `posts`: un campo aggiuntivo per post.
+[[table]]
+name = "sandbox_post_marks"
+primary_key = ["post_id"]
+columns = [
+  { name = "post_id", type = "uuid", ref = "posts.id", on_delete = "cascade" },
+  { name = "mood", type = "varchar(20)" },
+]
+
+# Estensione di esempio di `blogs`: un campo aggiuntivo per blog.
+[[table]]
+name = "sandbox_blog_marks"
+primary_key = ["blog_id"]
+columns = [
+  { name = "blog_id", type = "uuid", ref = "blogs.id", on_delete = "cascade" },
+  { name = "theme", type = "varchar(20)" },
+]

@@ -103,6 +103,10 @@ pub enum ColType {
     Boolean,
     Timestamptz,
     Jsonb,
+    /// `double precision`
+    Float,
+    /// `text[]`
+    TextArray,
     Enum(String),
 }
 
@@ -117,6 +121,8 @@ impl fmt::Display for ColType {
             ColType::Boolean => f.write_str("boolean"),
             ColType::Timestamptz => f.write_str("timestamptz"),
             ColType::Jsonb => f.write_str("jsonb"),
+            ColType::Float => f.write_str("double precision"),
+            ColType::TextArray => f.write_str("text[]"),
             ColType::Enum(name) => write!(f, "enum:{name}"),
         }
     }
@@ -134,6 +140,8 @@ impl FromStr for ColType {
             "boolean" => ColType::Boolean,
             "timestamptz" => ColType::Timestamptz,
             "jsonb" => ColType::Jsonb,
+            "double precision" | "float" => ColType::Float,
+            "text[]" => ColType::TextArray,
             other => {
                 if let Some(rest) = other.strip_prefix("varchar(").and_then(|r| r.strip_suffix(')')) {
                     let n: u32 = rest.parse().map_err(|_| format!("lunghezza varchar non valida: `{other}`"))?;
@@ -148,7 +156,7 @@ impl FromStr for ColType {
                     ColType::Enum(name.to_string())
                 } else {
                     return Err(format!(
-                        "tipo colonna sconosciuto `{other}` (ammessi: text, varchar(n), uuid, integer, bigint, boolean, timestamptz, jsonb, enum:<nome>)"
+                        "tipo colonna sconosciuto `{other}` (ammessi: text, varchar(n), uuid, integer, bigint, boolean, timestamptz, jsonb, double precision, text[], enum:<nome>)"
                     ));
                 }
             }

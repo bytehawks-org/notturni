@@ -6,9 +6,11 @@ mod authz;
 mod config;
 mod db;
 mod error;
+mod extension;
 mod patch;
 mod rate_limit;
 mod registry;
+pub mod revalidate;
 mod route;
 mod runtime;
 mod services;
@@ -16,17 +18,18 @@ mod state;
 
 pub use authz::{
     Access, Actor, BlogRef, Identity, PEER_IP_HEADER, RequestMeta, TokenOwner, TokenPrincipal, authenticate,
-    can_view_blog, can_write_blog, client_ip, enforce, request_meta,
+    can_view_blog, can_write_blog, client_ip, enforce, load_blog, membership_role, request_meta,
 };
 pub use config::{Config, StorageBackend, StorageConfig};
 pub use db::map_db_error;
 pub use error::ApiError;
+pub use extension::{Entity, EntityExtension, ExtCtx, Extensions, JsonMap, Op};
 pub use patch::Patch;
 pub use rate_limit::RateLimiter;
 pub use registry::{ModuleDef, Registry};
 pub use route::{
-    Policy, RateKey, RateSpec, RouteCtx, RouteSpec, empty_response, json_response, no_content, parse_json, parse_uuid,
-    path_map,
+    Policy, RateKey, RateSpec, RouteCtx, RouteSpec, body_map, empty_response, json_response, no_content, parse_json,
+    parse_uuid, path_map,
 };
 pub use runtime::{
     Background, ConsumerDef, HandlerFn, HandlerFuture, StartupFuture, consumer, emit_event, event_envelope,
@@ -40,6 +43,7 @@ pub use noct_migrate::Migration;
 /// Le librerie di infrastruttura, raggiungibili da un solo crate.
 pub use noct_bus as bus;
 pub use noct_cache as cache;
+pub use noct_http as http;
 pub use noct_mail as mail;
 pub use noct_markdown as markdown;
 pub use noct_security as security;

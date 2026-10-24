@@ -1,0 +1,131 @@
+{
+  "enums": [],
+  "tables": [
+    {
+      "name": "platform_config",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "null": false,
+          "default": "1",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "default_locale",
+          "type": "varchar(2)",
+          "null": false,
+          "default": "'it'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "registration_mode",
+          "type": "varchar(10)",
+          "null": false,
+          "default": "'open'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "reserved_blog_names",
+          "type": "text[]",
+          "null": false,
+          "default": "'{}'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "moderation_threshold",
+          "type": "double precision",
+          "null": false,
+          "default": "0.8",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "max_blogs_per_user",
+          "type": "integer",
+          "null": false,
+          "default": "5",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "max_blog_storage_mb",
+          "type": "integer",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "audit_retention_days",
+          "type": "integer",
+          "null": false,
+          "default": "105",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "footer_column1_markdown",
+          "type": "text",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "footer_column2_markdown",
+          "type": "text",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "footer_column3_markdown",
+          "type": "text",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "footer_bottom_bar_markdown",
+          "type": "text",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "updated_by_id",
+          "type": "uuid",
+          "null": true,
+          "default": null,
+          "references": {
+            "table": "users",
+            "column": "id",
+            "on_delete": "set_null"
+          },
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [],
+      "uniques": []
+    }
+  ]
+}

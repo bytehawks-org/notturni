@@ -1,0 +1,142 @@
+{
+  "enums": [],
+  "tables": [
+    {
+      "name": "media_files",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "null": false,
+          "default": "gen_random_uuid()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "blog_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "blogs",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "uploader_id",
+          "type": "uuid",
+          "null": true,
+          "default": null,
+          "references": {
+            "table": "users",
+            "column": "id",
+            "on_delete": "set_null"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "object_key",
+          "type": "varchar(512)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "url",
+          "type": "text",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "content_type",
+          "type": "varchar(100)",
+          "null": false,
+          "default": "''",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "size_bytes",
+          "type": "bigint",
+          "null": false,
+          "default": "0",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "alt_text",
+          "type": "text",
+          "null": false,
+          "default": "''",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "caption",
+          "type": "text",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "categories",
+          "type": "text[]",
+          "null": false,
+          "default": "'{}'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "is_sensitive",
+          "type": "boolean",
+          "null": false,
+          "default": "false",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "ix_media_files_blog_id",
+          "columns": [
+            "blog_id"
+          ],
+          "unique": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "uq_media_files_url",
+          "columns": [
+            "url"
+          ]
+        }
+      ]
+    }
+  ]
+}

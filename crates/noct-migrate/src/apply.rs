@@ -225,6 +225,8 @@ pub async fn verify_live(pool: &PgPool, schema: &Schema) -> Result<Vec<String>, 
                         ColType::Boolean => data_type == "boolean",
                         ColType::Timestamptz => data_type == "timestamp with time zone",
                         ColType::Jsonb => data_type == "jsonb",
+                        ColType::Float => data_type == "double precision",
+                        ColType::TextArray => data_type == "ARRAY" && udt == "_text",
                         ColType::Enum(name) => data_type == "USER-DEFINED" && udt == name,
                     };
                     if !type_ok {

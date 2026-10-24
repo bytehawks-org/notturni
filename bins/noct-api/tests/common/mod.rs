@@ -55,7 +55,8 @@ pub async fn setup_with(modules: &[&str], env: &[(&str, &str)], infra: Option<&d
         configure(&mut config);
         services = Services::connect(&config).await.unwrap_or_else(|e| panic!("{e}"));
     }
-    let state = AppState::new(pool.clone(), config, services, module_cfg);
+    let extensions = registry.extensions(&enabled).unwrap_or_else(|e| panic!("{e}"));
+    let state = AppState::new(pool.clone(), config, services, module_cfg).with_extensions(extensions);
     registry.run_startup(&enabled, &state).await.unwrap_or_else(|e| panic!("{e}"));
     let app = noct_api::app(&registry, &enabled, state.clone());
     Env { app, pool, db_name, admin, state, registry, enabled, storage_dir, mailer }
@@ -112,6 +113,14 @@ impl Env {
         let (s, j, _) = self.call(Method::PATCH, path, who, Some(body)).await;
         (s, j)
     }
+    pub async fn delete_json(&self, path: &str, who: Option<Uuid>, body: Value) -> (StatusCode, Value) {
+        let (s, j, _) = self.call(Method::DELETE, path, who, Some(body)).await;
+        (s, j)
+    }
+    pub async fn put(&self, path: &str, who: Option<Uuid>, body: Value) -> (StatusCode, Value) {
+        let (s, j, _) = self.call(Method::PUT, path, who, Some(body)).await;
+        (s, j)
+    }
     pub async fn delete(&self, path: &str, who: Option<Uuid>) -> StatusCode {
         self.call(Method::DELETE, path, who, None).await.0
     }
@@ -155,6 +164,16 @@ impl Env {
             .execute(&self.pool)
             .await
             .unwrap();
+    }
+}
+
+/// `(status, corpo)` di una risposta di `Env::call`.
+pub trait IntoPair {
+    fn into_pair(self) -> (StatusCode, Value);
+}
+impl IntoPair for (StatusCode, Value, axum::http::HeaderMap) {
+    fn into_pair(self) -> (StatusCode, Value) {
+        (self.0, self.1)
     }
 }
 

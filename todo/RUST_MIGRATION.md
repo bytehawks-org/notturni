@@ -201,7 +201,7 @@ consegna federata con retry (AT Protocol/ActivityPub).
 | 1 | **Spike verticale** ✅ (§11) | `backend/` → `legacy/backend/`, workspace, parser+validator manifest, motore migrazioni (additivo), codegen rotte→axum+OpenAPI, **un modulo reale piccolo** (`pages` o `taxonomy`) end-to-end con DB vero. **Go/no-go** sull'approccio dichiarativo |
 | 2 | Core infrastruttura ✅ (§12) | storage, cache, bus (NATS + outbox), mail, markdown, config; health; `noct-ctl` |
 | 3 | Core auth ✅ (§13) | utenti, sessioni, JWT, API token, ruoli, audit, bootstrap super admin |
-| 4 | Core contenuti | `blogs`, `posts`, media, permalink |
+| 4 | Core contenuti ✅ (§14) | `blogs`, `posts`, media, permalink, punti di estensione per i moduli |
 | 5 | Moduli, ondata 1 | comments, taxonomy, pages, discovery, publications, notes, fragments, link-preview |
 | 6 | Moduli, ondata 2 | auth-mfa, auth-sso, newsletter, gdpr, reports, custom-domains, image-moderation |
 | 7 | Operazioni | worker, ops-backup, audit-maintenance, Dockerfile (cargo-chef, multi-arch), compose, k8s, CI (fmt, clippy, test, deny, audit, CodeQL, SBOM), documentazione |
@@ -431,3 +431,47 @@ Rimosso `NOCT_DEV_AUTH` (l'autenticazione di sviluppo della Fase 1).
 * Il riuso di un refresh token già ruotato rifiuta la richiesta ma **non** revoca le altre sessioni (come la v1: una doppia richiesta legittima da due schede non deve disconnettere l'utente). Da rivalutare con il frontend.
 * La coerenza `owner_type`/`user_id` dei token è garantita dal codice, non da un CHECK del database.
 * Le email di sistema sono testo semplice in italiano; i template e la localizzazione arrivano con il modulo newsletter/mail.
+
+## 14. Fase 4 — contenuti del core (completata)
+
+### Perimetro
+
+Core: **blog** (dettaglio, modifica, collaboratori, inviti, pausa, cancellazione con tolleranza, trasferimento, configurazione di presentazione), **post** (bozza → revisione → pubblicazione/pianificazione, traduzioni, tag e hashtag, media e link citati, permalink, ricerca nel blog, bibliografie di media e link), **immagini** (upload per l'editor, libreria media, copertina, favicon, quota di spazio, moderazione fail open) e **impostazioni di piattaforma** (riga unica, solo lettura per ora). Cinque crate: `noct-platform`, `noct-blogs`, `noct-posts`, `noct-media`, `noct-http` (chiamate in uscita).
+
+**Non ancora**, rimandato alle fasi indicate perché appartiene a un modulo: directory pubblica `GET /blogs`, follow/follower, panoramica, conteggio letture, `mentionable-users` (→ `discovery`, F5); categorie del post (→ `taxonomy`), note e bibliografia delle note (→ `notes`), pubblicazioni, commenti e relativi campi (F5); newsletter e `custom_domain` (F6); export ZIP del blog, cancellazione definitiva allo scadere dei 30 giorni, backup dei post su storage (F7, consumer degli eventi già pubblicati).
+
+### Punti di estensione (`EntityExtension`)
+
+Il core possiede le colonne essenziali di `blogs` e `posts`; ciò che è di un modulo vive in tabelle del modulo. Per mantenere un solo `PATCH /posts/{id}` e un solo `PostOut` come in v1, un modulo dichiara `[lifecycle] extensions = true` e fornisce `extensions::all()`:
+
+* `apply(conn, ctx, input)`: legge dal corpo le chiavi di `fields()` e scrive **nella stessa transazione** del core (un errore annulla tutto: provato, nessun residuo di post, tag o eventi);
+* `enrich(db, ids)`: aggiunge i campi alle risposte **in blocco** (una query per modulo per elenco, mai una per riga).
+
+Un modulo spento non registra nulla: i suoi campi non compaiono e se arrivano nel corpo vengono ignorati (come v1 con i campi sconosciuti). Due moduli non possono dichiarare la stessa chiave (verificato all'avvio). Il modulo `sandbox` ne è l'esempio completo (default, ereditarietà alla traduzione, validazione).
+
+### Decisioni
+
+* **Eventi al posto delle chiamate dirette**: `posts.post.saved` (con il testo, per il backup) e `posts.post.published` (per la newsletter) sono scritti in outbox nella transazione del salvataggio. In v1 erano pubblicazioni fire-and-forget dopo il commit e un broker spento le perdeva.
+* **Rotte `upload`**: attributo `upload = <byte>` in `api.toml` (alternativo a `request`); il corpo arriva grezzo in `ctx.body`, con limite per rotta e documentazione OpenAPI multipart. Il corpo JSON assente vale `{}` (il frontend invia `publish` senza corpo).
+* **Upload di immagini**: oltre al `Content-Type` dichiarato si controlla l'intestazione reale del file (PNG/JPEG/WEBP/GIF): un HTML o SVG travestito da immagine è respinto. Chiavi di storage invariate (`{site}/userdata/{proprietario}/{blog}/media/…`, `favicons/{blog}/…`).
+* **Quota per blog**: somma di `media_files.size_bytes` (v1 contava gli oggetti su storage, backup compresi) con `platform_config.max_blog_storage_mb`; 413 oltre.
+* **Concorrenza**: creazione blog serializzata per utente (`FOR UPDATE` sull'utente: 8 richieste contemporanee → esattamente 5 blog); accettazione inviti e trasferimento con lock di riga; cancellazione idempotente anche sotto concorrenza.
+* **Nome dell'autore** ricalcolato a ogni lettura (alias di membership → nome imposto dal blog → preferenza di profilo), come in v1; nuove colonne `users.first_name/last_name/avatar_object_key/post_author_name_style` (l'upload dell'avatar e il profilo arrivano con la fase utenti).
+* **Manifest**: nuovi tipi di colonna `text[]` e `double precision`, nuovi tipi di campo `string[]` e `float`; migrazioni generate dal diff (users 0003, platform 0001, blogs 0002, posts 0001, media 0001).
+* **Parser Markdown**: le regex di media/link sono riscritte per il motore `regex` (tempo lineare, nessun ReDoS: provato con 40 000 ripetizioni patologiche); niente lookbehind né gruppi atomici.
+
+### Configurazione nuova
+
+`NOCT_SITE_SLUG` (default `notturni`), `NOCT_FRONTEND_REVALIDATE_URL` + `NOCT_REVALIDATE_SECRET` (invalidazione della cache Next.js, fail open), `NOCT_MODERATION_SERVICE_URL` (servizio `moderation/`, fail open).
+
+### Test e verifica
+
+Nuovi: 9 su blog, 8 su post, 6 su media, 3 sulle estensioni (end-to-end con Postgres vero), più unit test su regole di dominio, upload, tag/hashtag, estrazione media/link, client HTTP e manifest. Verifica dal vivo con `noct-api` e `curl`: registrazione, creazione blog, post, pubblicazione, lettura anonima, upload multipart reale (e rifiuto di un PNG dichiarato JPEG), file servito dallo storage locale, configurazione con colore troppo saturo respinta, OpenAPI multipart.
+
+### Limiti noti / da fare
+
+* Gli ordinamenti non specificati in v1 sono ora deterministici (vedi `todo/API_CHANGES.md`).
+* `platform_config` ha solo le colonne del core; le rotte di amministrazione (Fase 7) e le impostazioni dei moduli (SSO, commenti anonimi, newsletter di piattaforma, interessi, sigilli) arriveranno con i rispettivi moduli.
+* La coerenza `slug ≥ 4 caratteri` non è un CHECK del database ma una regola applicativa (la lista dei nomi riservati è configurabile).
+* La moderazione e il revalidate usano `reqwest` (rustls); `cargo geiger`/`deny` in CI (Fase 7) dovranno includerlo.
+

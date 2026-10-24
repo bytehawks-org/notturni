@@ -1,0 +1,93 @@
+[[enum]]
+name = "post_status"
+values = ["draft", "pending_review", "published"]
+
+[[table]]
+name = "posts"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "blog_id", type = "uuid", ref = "blogs.id", on_delete = "cascade" },
+  { name = "author_id", type = "uuid", ref = "users.id" },
+  # nome pubblico dell'autore: ricalcolato a ogni lettura (alias di membership → nome del blog →
+  # preferenza di profilo), qui resta l'ultimo valore scritto
+  { name = "author_display_name", type = "varchar(255)" },
+  # le traduzioni di un contenuto condividono `translation_group_id` (= id del primo post)
+  { name = "locale", type = "varchar(2)", default = "'it'" },
+  { name = "translation_group_id", type = "uuid" },
+  { name = "title", type = "varchar(255)" },
+  { name = "slug", type = "varchar(255)" },
+  # Markdown: il rendering e la sanificazione sono del frontend alla lettura
+  { name = "content", type = "text" },
+  { name = "cover_image_url", type = "varchar(2048)", null = true },
+  { name = "cover_image_is_sensitive", type = "boolean", default = "false" },
+  { name = "cover_image_categories", type = "text[]", default = "'{}'" },
+  { name = "cover_image_alt_text", type = "varchar(300)", default = "''" },
+  # solo i tag del campo dedicato (servono a ripresentarli in modifica); l'insieme effettivo
+  # (questi + gli #hashtag del testo, max 5) è materializzato in `post_tags`
+  { name = "manual_tags", type = "text[]", default = "'{}'" },
+  { name = "status", type = "enum:post_status", default = "'draft'" },
+  # un post `published` con `published_at` futuro è pianificato, non ancora visibile
+  { name = "published_at", type = "timestamptz", null = true },
+  # nascosto da un admin di piattaforma, indipendentemente dallo stato; mai impostabile dall'autore
+  { name = "is_hidden", type = "boolean", default = "false" },
+  # override per post dei crawler del blog (null = eredita; un blog escluso non si riapre)
+  { name = "search_indexing_enabled", type = "boolean", null = true },
+  { name = "ai_crawling_enabled", type = "boolean", null = true },
+]
+uniques = [
+  { name = "uq_post_blog_slug_locale", columns = ["blog_id", "slug", "locale"] },
+  { name = "uq_post_translation_group_locale", columns = ["translation_group_id", "locale"] },
+]
+indexes = [
+  { columns = ["author_id"] },
+  { columns = ["translation_group_id"] },
+  # feed e tendenze: WHERE status = 'published' AND published_at <= now() ORDER BY published_at DESC
+  { columns = ["status", "published_at"] },
+]
+
+[[table]]
+name = "tags"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  # normalizzato: minuscolo, [a-z0-9-], senza trattini ai bordi o doppi
+  { name = "name", type = "varchar(30)" },
+]
+uniques = [{ name = "uq_tags_name", columns = ["name"] }]
+
+[[table]]
+name = "post_tags"
+primary_key = ["post_id", "tag_id"]
+columns = [
+  { name = "post_id", type = "uuid", ref = "posts.id", on_delete = "cascade" },
+  { name = "tag_id", type = "uuid", ref = "tags.id", on_delete = "cascade" },
+]
+indexes = [{ columns = ["tag_id"] }]
+
+# Cache dei media (immagini) e dei link citati nel Markdown: riscritta per intero a ogni
+# salvataggio del contenuto, che resta l'unica fonte di verità.
+[[table]]
+name = "post_media"
+primary_key = ["post_id", "position"]
+columns = [
+  { name = "post_id", type = "uuid", ref = "posts.id", on_delete = "cascade" },
+  { name = "position", type = "integer" },
+  { name = "url", type = "text" },
+  { name = "alt_text", type = "text", default = "''" },
+  { name = "categories", type = "text[]", default = "'{}'" },
+  # separato da `categories`: un'immagine segnalata dalla sola automoderazione è sensibile
+  # anche con `categories` vuoto
+  { name = "is_sensitive", type = "boolean", default = "false" },
+]
+indexes = [{ columns = ["url"] }]
+
+[[table]]
+name = "post_links"
+primary_key = ["post_id", "position"]
+columns = [
+  { name = "post_id", type = "uuid", ref = "posts.id", on_delete = "cascade" },
+  { name = "position", type = "integer" },
+  { name = "url", type = "text" },
+  { name = "link_text", type = "text", default = "''" },
+]

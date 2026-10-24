@@ -1,0 +1,449 @@
+{
+  "enums": [
+    {
+      "name": "post_status",
+      "values": [
+        "draft",
+        "pending_review",
+        "published"
+      ]
+    }
+  ],
+  "tables": [
+    {
+      "name": "post_links",
+      "columns": [
+        {
+          "name": "post_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "posts",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "position",
+          "type": "integer",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "url",
+          "type": "text",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "link_text",
+          "type": "text",
+          "null": false,
+          "default": "''",
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "post_id",
+        "position"
+      ],
+      "indexes": [],
+      "uniques": []
+    },
+    {
+      "name": "post_media",
+      "columns": [
+        {
+          "name": "post_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "posts",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "position",
+          "type": "integer",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "url",
+          "type": "text",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "alt_text",
+          "type": "text",
+          "null": false,
+          "default": "''",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "categories",
+          "type": "text[]",
+          "null": false,
+          "default": "'{}'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "is_sensitive",
+          "type": "boolean",
+          "null": false,
+          "default": "false",
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "post_id",
+        "position"
+      ],
+      "indexes": [
+        {
+          "name": "ix_post_media_url",
+          "columns": [
+            "url"
+          ],
+          "unique": false
+        }
+      ],
+      "uniques": []
+    },
+    {
+      "name": "post_tags",
+      "columns": [
+        {
+          "name": "post_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "posts",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "tag_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "tags",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "post_id",
+        "tag_id"
+      ],
+      "indexes": [
+        {
+          "name": "ix_post_tags_tag_id",
+          "columns": [
+            "tag_id"
+          ],
+          "unique": false
+        }
+      ],
+      "uniques": []
+    },
+    {
+      "name": "posts",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "null": false,
+          "default": "gen_random_uuid()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "blog_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "blogs",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "author_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "users",
+            "column": "id",
+            "on_delete": "restrict"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "author_display_name",
+          "type": "varchar(255)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "locale",
+          "type": "varchar(2)",
+          "null": false,
+          "default": "'it'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "translation_group_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "title",
+          "type": "varchar(255)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "slug",
+          "type": "varchar(255)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "cover_image_url",
+          "type": "varchar(2048)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "cover_image_is_sensitive",
+          "type": "boolean",
+          "null": false,
+          "default": "false",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "cover_image_categories",
+          "type": "text[]",
+          "null": false,
+          "default": "'{}'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "cover_image_alt_text",
+          "type": "varchar(300)",
+          "null": false,
+          "default": "''",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "manual_tags",
+          "type": "text[]",
+          "null": false,
+          "default": "'{}'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "status",
+          "type": "enum:post_status",
+          "null": false,
+          "default": "'draft'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "published_at",
+          "type": "timestamptz",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "is_hidden",
+          "type": "boolean",
+          "null": false,
+          "default": "false",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "search_indexing_enabled",
+          "type": "boolean",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "ai_crawling_enabled",
+          "type": "boolean",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "ix_posts_author_id",
+          "columns": [
+            "author_id"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_posts_translation_group_id",
+          "columns": [
+            "translation_group_id"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_posts_status_published_at",
+          "columns": [
+            "status",
+            "published_at"
+          ],
+          "unique": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "uq_post_blog_slug_locale",
+          "columns": [
+            "blog_id",
+            "slug",
+            "locale"
+          ]
+        },
+        {
+          "name": "uq_post_translation_group_locale",
+          "columns": [
+            "translation_group_id",
+            "locale"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "tags",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "null": false,
+          "default": "gen_random_uuid()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "name",
+          "type": "varchar(30)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [],
+      "uniques": [
+        {
+          "name": "uq_tags_name",
+          "columns": [
+            "name"
+          ]
+        }
+      ]
+    }
+  ]
+}
