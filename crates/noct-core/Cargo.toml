@@ -8,6 +8,12 @@ publish.workspace = true
 [dependencies]
 noct-manifest.workspace = true
 noct-migrate = { workspace = true, features = ["apply"] }
+noct-storage.workspace = true
+noct-cache.workspace = true
+noct-bus.workspace = true
+noct-mail.workspace = true
+noct-markdown.workspace = true
+async-trait.workspace = true
 axum.workspace = true
 tokio.workspace = true
 sqlx.workspace = true
@@ -20,3 +26,4 @@ thiserror.workspace = true
 
 [dev-dependencies]
 tower.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "time"] }

@@ -15,9 +15,15 @@ noct-codegen = { path = "crates/noct-codegen" }
 noct-core = { path = "crates/noct-core" }
 noct-users = { path = "crates/noct-users" }
 noct-blogs = { path = "crates/noct-blogs" }
+noct-events = { path = "crates/noct-events" }
 noct-taxonomy = { path = "modules/taxonomy" }
 noct-sandbox = { path = "modules/sandbox" }
 noct-bundle = { path = "crates/noct-bundle" }
+noct-storage = { path = "crates/noct-storage" }
+noct-cache = { path = "crates/noct-cache" }
+noct-bus = { path = "crates/noct-bus" }
+noct-mail = { path = "crates/noct-mail" }
+noct-markdown = { path = "crates/noct-markdown" }
 
 anyhow = "1"
 thiserror = "2"
@@ -36,3 +42,16 @@ sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio",
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 clap = { version = "4", features = ["derive", "env"] }
+
+async-trait = "0.1"
+bytes = "1"
+futures = "0.3"
+tokio-util = "0.7"
+aws-config = { version = "1", default-features = false, features = ["rt-tokio", "rustls", "behavior-version-latest"] }
+aws-sdk-s3 = { version = "1", default-features = false, features = ["rt-tokio", "rustls", "behavior-version-latest"] }
+redis = { version = "1", default-features = false, features = ["tokio-comp", "connection-manager", "script"] }
+async-nats = "0.50"
+lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1", "tokio1-rustls-tls", "ring"] }
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
+ammonia = "4"
+tower-http = { version = "0.7", features = ["fs"] }

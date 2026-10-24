@@ -14,5 +14,6 @@ sandbox = ["dep:noct-sandbox"]
 noct-core.workspace = true
 noct-users.workspace = true
 noct-blogs.workspace = true
+noct-events.workspace = true
 noct-taxonomy = { workspace = true, optional = true }
 noct-sandbox = { workspace = true, optional = true }

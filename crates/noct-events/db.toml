@@ -1,0 +1,17 @@
+[[enum]]
+name = "outbox_kind"
+values = ["event", "job"]
+
+[[table]]
+name = "noct_outbox"
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "kind", type = "enum:outbox_kind" },
+  { name = "subject", type = "varchar(200)" },
+  { name = "payload", type = "jsonb", default = "'{}'::jsonb" },
+  { name = "created_at", type = "timestamptz", default = "now()" },
+  { name = "published_at", type = "timestamptz", null = true },
+  { name = "attempts", type = "integer", default = "0" },
+  { name = "last_error", type = "text", null = true },
+]
+indexes = [{ columns = ["published_at", "created_at"] }]

@@ -43,6 +43,17 @@ impl Manifest {
         validate_module_file(&module, &mut issues);
         validate_schema_refs(&name, &schema, &mut issues);
         api.validate(&name, &schema, &mut issues);
+        for r in &api.routes {
+            if let Some(subject) = &r.emits
+                && !module.events.publishes.contains(subject)
+            {
+                issues.push(
+                    &name,
+                    format!("api.toml route {}", r.id),
+                    format!("`emits = \"{subject}\"` non è dichiarato in `[events] publishes` di module.toml"),
+                );
+            }
+        }
         issues.into_result(Manifest { module, api, schema, lock })
     }
 

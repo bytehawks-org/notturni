@@ -199,7 +199,7 @@ consegna federata con retry (AT Protocol/ActivityPub).
 |---|---|---|
 | 0 | Decisioni | ✅ prese (§9) |
 | 1 | **Spike verticale** ✅ (§11) | `backend/` → `legacy/backend/`, workspace, parser+validator manifest, motore migrazioni (additivo), codegen rotte→axum+OpenAPI, **un modulo reale piccolo** (`pages` o `taxonomy`) end-to-end con DB vero. **Go/no-go** sull'approccio dichiarativo |
-| 2 | Core infrastruttura | storage, cache, bus (NATS + outbox), mail, markdown, config; health; `noct-ctl` |
+| 2 | Core infrastruttura ✅ (§12) | storage, cache, bus (NATS + outbox), mail, markdown, config; health; `noct-ctl` |
 | 3 | Core auth | utenti, sessioni, JWT, API token, ruoli, audit, bootstrap super admin |
 | 4 | Core contenuti | `blogs`, `posts`, media, permalink |
 | 5 | Moduli, ondata 1 | comments, taxonomy, pages, discovery, publications, notes, fragments, link-preview |
@@ -318,3 +318,55 @@ curl localhost:8000/api/v1/openapi.json
 
 Nuovo modulo: copiare `modules/sandbox` (o `taxonomy` se non servono handler), rinominare,
 aggiungerlo a `Cargo.toml` (workspace + `noct-bundle`) e a `noct-bundle::all()`.
+
+## 12. Fase 2 — infrastruttura del core (completata)
+
+Ogni servizio sta dietro un trait, ha un'implementazione di produzione e una in memoria/locale,
+e un test di *contratto* eseguito identico su entrambe (cambiare backend non cambia il comportamento).
+
+| Crate | Trait | Backend | Note |
+|---|---|---|---|
+| `noct-storage` | `Storage` | S3-compatibile (`aws-sdk-s3`: endpoint sempre configurabile, path-style, checksum `when_required`, credenziali esplicite o catena di default, `LocationConstraint` fuori da us-east-1) · filesystem locale | chiavi validate allo stesso modo (no `..`, `//`, assolute); URL pubblici e presigned; il backend locale è servito dall'API su `/storage/<bucket>` **solo per avatars e content** (audit resta privato) |
+| `noct-cache` | `Cache` | Redis (script Lua atomici, `ConnectionManager`) · memoria | contatori a finestra (rate limit), chiavi con TTL, lock con token (rilascio sicuro); il rate limit è **fail open** se la cache è giù |
+| `noct-bus` | `Bus` | NATS JetStream · memoria | eventi (fan-out, `deliver new`) e job (work queue); retry con backoff, dead letter, deduplicazione per id; `max_deliver + 1` così un crash all'ultimo tentativo finisce comunque in DLQ |
+| `noct-events` (modulo core) | — | tabella `noct_outbox` | outbox **transazionale**: `outbox::enqueue(&mut tx, …)`; `Relay` con `LISTEN/NOTIFY` + polling, `SKIP LOCKED`, purge oraria |
+| `noct-mail` | `Mailer` | SMTP (`lettre`, STARTTLS o chiaro) · memoria · "non configurato" (errore esplicito) | verificato con un server SMTP finto su socket reale |
+| `noct-markdown` | — | `pulldown-cmark` + `ammonia` | stessa whitelist della v1 (tag, attributi, schemi `http/https/mailto`, `rel="noopener noreferrer"`) |
+
+### Eventi e job dichiarativi
+
+* `module.toml`: `[events] publishes/subscribes` e `[jobs.<nome>]` (subject, `max_deliver`, `backoff`) ora **vengono eseguiti**. Il codegen collega ogni voce a una funzione del modulo: job → `jobs::<nome>`, evento → `events::on_<subject con _>` (firma `async fn(AppState, Message) -> Result<(), HandlerError>`; `Retry` riprova, `Permanent` va in dead letter).
+* `api.toml`: `emits = "<subject>"` su `create`/`update`/`delete` pubblica l'evento nella **stessa transazione** della scrittura (busta `{module, blog_id, actor_id, data}`); se la scrittura fallisce o va in rollback (es. 409) non resta nessun evento. Il validatore richiede `emits` ⊆ `publishes` e `requires = ["events"]`.
+* Esecuzione: `noct-api` fa girare relay e consumer nel proprio processo se non c'è NATS (`NOCT_WORKER_INLINE`, default); con NATS si avviano uno o più `noct-worker`. Verificato dal vivo: API senza worker inline + processo `noct-worker` separato → evento via NATS → handler → Redis.
+
+### Configurazione (nomi compatibili con lo stack attuale)
+
+| Variabile | Default | Effetto |
+|---|---|---|
+| `NOCT_DATABASE_URL` (o `NOCT_POSTGRES_*`) | — | database |
+| `NOCT_STORAGE_BACKEND` | `localstorage` | `s3` \| `localstorage` |
+| `NOCT_S3_ENDPOINT_URL`, `_REGION`, `_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY`, `_PUBLIC_URL` | — | S3-compatible; senza chiavi esplicite si usa la catena di default AWS |
+| `NOCT_S3_BUCKET_AVATARS` / `_CONTENT` / `_AUDIT` | `avatars` / `notturni-content` / `notturni-audit` | creati all'avvio se mancano |
+| `NOCT_LOCAL_STORAGE_BASE_PATH`, `NOCT_LOCAL_STORAGE_PUBLIC_URL` | `./data/storage`, `http://localhost:8000/storage` | backend locale |
+| `NOCT_REDIS_URL` (o `NOCT_REDIS_HOST/PORT/DB`) | assente = cache in memoria | Redis |
+| `NOCT_NATS_URL`, `NOCT_NATS_PREFIX` | assente = bus in memoria; `noct` | NATS JetStream |
+| `NOCT_SMTP_HOST/PORT/USER/PASSWORD/USE_TLS/FROM_EMAIL` | assente = invii in errore | SMTP |
+| `NOCT_WORKER_INLINE` | `true` senza NATS, `false` con NATS | relay + consumer nel processo API |
+| `NOCT_AUTO_MIGRATE` | `true` | migrazioni dei moduli attivi all'avvio |
+
+Endpoint: `GET /api/v1/health` (liveness + DB), `GET /api/v1/health/ready` (database, storage, cache, bus; 503 se uno è giù, dettagli solo nei log).
+`noct-ctl`: `outbox` (code in attesa/pubblicate, riga bloccata), `dead-letters`.
+
+### Test (76 in totale, verdi su 3 esecuzioni consecutive)
+
+Richiedono i servizi reali, indicati da variabili d'ambiente: `NOCT_TEST_DATABASE_URL` (Postgres),
+`NOCT_TEST_REDIS_URL`, `NOCT_TEST_NATS_URL` (server con `-js`), `NOCT_TEST_S3_ENDPOINT` (qualsiasi S3-compatible
+con credenziali `test`/`test`: Garage, moto, MinIO). Il compose del progetto ha già tutti i servizi.
+
+### Limiti noti / prossime fasi
+
+* Bootstrap di Garage (layout, chiave, bucket con alias globale, website access: oggi `legacy/backend/scripts/garage_bootstrap.py`) non portato: va in `noct-ctl` con il packaging (Fase 7). I bucket vengono creati via API S3, ma Garage richiede l'alias globale per le letture pubbliche.
+* Backup su S3 esterno e manutenzione dell'audit (job periodici) restano alla Fase 7 (scheduler del worker).
+* Il worker esegue consumer e relay ma non ancora job periodici; nessuna metrica/tracing OpenTelemetry (Fase 9).
+* `Mailer` e `Storage` non sono ancora usati da un modulo di prodotto (arrivano con auth/OTP e media).
+* RabbitMQ è sostituito da NATS: nessuna migrazione di messaggi (il progetto non è in produzione).

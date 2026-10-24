@@ -45,7 +45,7 @@ pub fn emit(
     let opt = |present: bool, file: &str| if present { format!("Some({})", inc(file)) } else { "None".to_string() };
     writeln!(
         out,
-        "pub fn module() -> noct_core::ModuleDef {{\n    noct_core::ModuleDef {{\n        name: MODULE_NAME,\n        module_toml: {},\n        api_toml: {},\n        db_toml: {},\n        lock_json: {},\n        migrations: __MIGRATIONS,\n        router: __router,\n        source_dir: env!(\"CARGO_MANIFEST_DIR\"),\n    }}\n}}\n",
+        "pub fn module() -> noct_core::ModuleDef {{\n    noct_core::ModuleDef {{\n        name: MODULE_NAME,\n        module_toml: {},\n        api_toml: {},\n        db_toml: {},\n        lock_json: {},\n        migrations: __MIGRATIONS,\n        router: __router,\n        consumers: __consumers,\n        source_dir: env!(\"CARGO_MANIFEST_DIR\"),\n    }}\n}}\n",
         inc("module.toml"),
         opt(has_api, "api.toml"),
         opt(has_db, "db.toml"),
@@ -88,7 +88,8 @@ pub fn emit(
         }
         writeln!(out, "        .route({}, {chain})", lit(path)).unwrap();
     }
-    writeln!(out, "}}").unwrap();
+    writeln!(out, "}}\n").unwrap();
+    emit_consumers(&mut out, m);
     // il codice generato non deve sottostare ai lint stilistici del crate che lo include
     Ok(format!(
         "#[allow(clippy::all, clippy::pedantic, dead_code)]\npub mod generated {{\n{out}\n}}\npub use generated::*;\n"
@@ -379,12 +380,21 @@ fn emit_route(out: &mut String, m: &Manifest, r: &Route) -> Result<(), String> {
                 sql.push_str(" AND \"blog_id\" = $2");
             }
             let bind = if scoped { ".bind(blog.id)" } else { "" };
-            writeln!(
-                out,
-                "    let done = sqlx::query({}).bind(key){bind}.execute(&st.db).await?;\n    if done.rows_affected() == 0 {{\n        return Err(noct_core::ApiError::not_found({not_found}));\n    }}\n    Ok(noct_core::no_content())",
-                lit(&sql)
-            )
-            .unwrap();
+            match &r.emits {
+                None => writeln!(
+                    out,
+                    "    let done = sqlx::query({}).bind(key){bind}.execute(&st.db).await?;\n    if done.rows_affected() == 0 {{\n        return Err(noct_core::ApiError::not_found({not_found}));\n    }}\n    Ok(noct_core::no_content())",
+                    lit(&sql)
+                )
+                .unwrap(),
+                Some(subject) => writeln!(
+                    out,
+                    "    let mut tx = st.db.begin().await?;\n    let done = sqlx::query({}).bind(key){bind}.execute(&mut *tx).await?;\n    if done.rows_affected() == 0 {{\n        return Err(noct_core::ApiError::not_found({not_found}));\n    }}\n    noct_core::emit_event(&mut tx, MODULE_NAME, {}, &access, serde_json::json!({{ \"id\": key }})).await?;\n    tx.commit().await?;\n    Ok(noct_core::no_content())",
+                    lit(&sql),
+                    lit(subject)
+                )
+                .unwrap(),
+            }
         }
         RouteKind::Create => {
             let req_ty = type_ref(r.request.as_deref().unwrap()).0;
@@ -427,13 +437,23 @@ fn emit_route(out: &mut String, m: &Manifest, r: &Route) -> Result<(), String> {
                 }
             }
             writeln!(out, "    }}").unwrap();
-            writeln!(
-                out,
-                "    qb.push({});\n    let row: {ty} = qb.build_query_as::<{ty}>().fetch_one(&st.db).await.map_err(|e| noct_core::map_db_error(e, &[{conflicts}]))?;\n    Ok(noct_core::json_response({}, &row))",
-                lit(&format!(") RETURNING {cols}")),
-                r.success_status()
-            )
-            .unwrap();
+            match &r.emits {
+                None => writeln!(
+                    out,
+                    "    qb.push({});\n    let row: {ty} = qb.build_query_as::<{ty}>().fetch_one(&st.db).await.map_err(|e| noct_core::map_db_error(e, &[{conflicts}]))?;\n    Ok(noct_core::json_response({}, &row))",
+                    lit(&format!(") RETURNING {cols}")),
+                    r.success_status()
+                )
+                .unwrap(),
+                Some(subject) => writeln!(
+                    out,
+                    "    qb.push({});\n    let mut tx = st.db.begin().await?;\n    let row: {ty} = qb.build_query_as::<{ty}>().fetch_one(&mut *tx).await.map_err(|e| noct_core::map_db_error(e, &[{conflicts}]))?;\n    noct_core::emit_event(&mut tx, MODULE_NAME, {}, &access, serde_json::to_value(&row).map_err(noct_core::ApiError::internal)?).await?;\n    tx.commit().await?;\n    Ok(noct_core::json_response({}, &row))",
+                    lit(&format!(") RETURNING {cols}")),
+                    lit(subject),
+                    r.success_status()
+                )
+                .unwrap(),
+            }
         }
         RouteKind::Update => {
             key_expr(out);
@@ -493,16 +513,71 @@ fn emit_route(out: &mut String, m: &Manifest, r: &Route) -> Result<(), String> {
             if scoped {
                 writeln!(out, "    qb.push({});\n    qb.push_bind(blog.id);", lit(" AND \"blog_id\" = ")).unwrap();
             }
-            writeln!(
-                out,
-                "    qb.push({});\n    let row: Option<{ty}> = qb.build_query_as::<{ty}>().fetch_optional(&st.db).await.map_err(|e| noct_core::map_db_error(e, &[{conflicts}]))?;\n    match row {{\n        Some(r) => Ok(noct_core::json_response({}, &r)),\n        None => Err(noct_core::ApiError::not_found({not_found})),\n    }}",
-                lit(&format!(" RETURNING {cols}")),
-                r.success_status()
-            )
-            .unwrap();
+            match &r.emits {
+                None => writeln!(
+                    out,
+                    "    qb.push({});\n    let row: Option<{ty}> = qb.build_query_as::<{ty}>().fetch_optional(&st.db).await.map_err(|e| noct_core::map_db_error(e, &[{conflicts}]))?;\n    match row {{\n        Some(r) => Ok(noct_core::json_response({}, &r)),\n        None => Err(noct_core::ApiError::not_found({not_found})),\n    }}",
+                    lit(&format!(" RETURNING {cols}")),
+                    r.success_status()
+                )
+                .unwrap(),
+                Some(subject) => writeln!(
+                    out,
+                    "    qb.push({});\n    let mut tx = st.db.begin().await?;\n    let row: Option<{ty}> = qb.build_query_as::<{ty}>().fetch_optional(&mut *tx).await.map_err(|e| noct_core::map_db_error(e, &[{conflicts}]))?;\n    match row {{\n        Some(r) => {{\n            noct_core::emit_event(&mut tx, MODULE_NAME, {}, &access, serde_json::to_value(&r).map_err(noct_core::ApiError::internal)?).await?;\n            tx.commit().await?;\n            Ok(noct_core::json_response({}, &r))\n        }}\n        None => Err(noct_core::ApiError::not_found({not_found})),\n    }}",
+                    lit(&format!(" RETURNING {cols}")),
+                    lit(subject),
+                    r.success_status()
+                )
+                .unwrap(),
+            }
         }
         RouteKind::Custom => unreachable!(),
     }
     writeln!(out, "}}\n").unwrap();
     Ok(())
+}
+
+// ---- consumer di eventi e job -------------------------------------------------------
+
+/// Nome di funzione per un subject: `sandbox.note.created` → `sandbox_note_created`.
+pub fn subject_ident(subject: &str) -> String {
+    subject
+        .split('.')
+        .map(|t| match t {
+            "*" => "any".to_string(),
+            ">" => "all".to_string(),
+            other => other.replace('-', "_"),
+        })
+        .collect::<Vec<_>>()
+        .join("_")
+}
+
+fn emit_consumers(out: &mut String, m: &Manifest) {
+    let backoff = |v: &[String]| {
+        v.iter().map(|b| parse_duration(b).expect("validato").to_string()).collect::<Vec<_>>().join(", ")
+    };
+    let mut entries = Vec::new();
+    for (job, spec) in &m.module.jobs {
+        entries.push(format!(
+            "        noct_core::consumer(MODULE_NAME, {}, noct_core::bus::Kind::Job, {}, {}, &[{}], st.clone(), |st, msg| Box::pin(crate::jobs::{job}(st, msg)))",
+            lit(job),
+            lit(&spec.subject),
+            spec.max_deliver,
+            backoff(&spec.backoff)
+        ));
+    }
+    for subject in &m.module.events.subscribes {
+        let ident = subject_ident(subject);
+        entries.push(format!(
+            "        noct_core::consumer(MODULE_NAME, {}, noct_core::bus::Kind::Event, {}, 5, &[5, 30, 300], st.clone(), |st, msg| Box::pin(crate::events::on_{ident}(st, msg)))",
+            lit(&format!("on_{ident}")),
+            lit(subject)
+        ));
+    }
+    let arg = if entries.is_empty() { "_st" } else { "st" };
+    writeln!(out, "fn __consumers({arg}: noct_core::AppState) -> Vec<noct_core::ConsumerDef> {{\n    vec![").unwrap();
+    for e in entries {
+        writeln!(out, "{e},").unwrap();
+    }
+    writeln!(out, "    ]\n}}\n").unwrap();
 }

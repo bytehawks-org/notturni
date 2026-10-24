@@ -1,4 +1,4 @@
-use crate::AppState;
+use crate::{AppState, Background, ConsumerDef};
 use axum::Router;
 use noct_manifest::{
     ConfigValue, Issues, Kind, Manifest, Sources, openapi, resolve_config, topological_order, validate_registry,
@@ -18,6 +18,8 @@ pub struct ModuleDef {
     pub lock_json: Option<&'static str>,
     pub migrations: &'static [Migration<'static>],
     pub router: fn() -> Router<AppState>,
+    /// Consumer di eventi e job dichiarati in `module.toml`, legati ai loro handler.
+    pub consumers: fn(AppState) -> Vec<ConsumerDef>,
     /// Directory dei sorgenti del modulo (solo per gli strumenti di sviluppo).
     pub source_dir: &'static str,
 }
@@ -157,6 +159,22 @@ impl Registry {
     /// Router dei moduli attivi (senza prefisso `/api/v1`).
     pub fn router(&self, enabled: &[usize]) -> Router<AppState> {
         enabled.iter().fold(Router::new(), |r, &i| r.merge((self.entries[i].def.router)()))
+    }
+
+    /// Avvia relay dell'outbox e consumer dei moduli attivi (nel processo API o in un worker).
+    pub async fn start_background(
+        &self,
+        enabled: &[usize],
+        state: &AppState,
+    ) -> Result<Background, noct_bus::BusError> {
+        let mut consumers = Vec::new();
+        for &i in enabled {
+            for def in (self.entries[i].def.consumers)(state.clone()) {
+                tracing::info!(module = def.module, consumer = %def.spec.name, subject = %def.spec.subject, "consumer avviato");
+                consumers.push(state.services.bus.consume(def.spec, def.handler).await?);
+            }
+        }
+        Ok(Background::start(state, consumers))
     }
 
     pub fn openapi(&self, enabled: &[usize]) -> Value {

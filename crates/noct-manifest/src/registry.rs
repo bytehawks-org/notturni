@@ -31,6 +31,18 @@ pub fn validate_registry(manifests: &[&Manifest]) -> Result<(), Issues> {
         issues.push("?", "module.toml", format!("ciclo di dipendenze tra moduli: {}", cycle.join(", ")));
     }
 
+    // chi pubblica eventi dalle rotte passa dall'outbox, dichiarata dal modulo core `events`
+    for m in manifests {
+        let emits = m.api.routes.iter().any(|r| r.emits.is_some());
+        if emits && m.name() != "events" && !m.module.module.requires.iter().any(|r| r == "events") {
+            issues.push(
+                m.name(),
+                "module.toml",
+                "le rotte con `emits` richiedono `requires = [\"events\"]` (outbox transazionale)",
+            );
+        }
+    }
+
     // proprietà globali: tabelle, enum, rotte, subject dei job, variabili d'ambiente
     let mut tables: BTreeMap<&str, &str> = BTreeMap::new();
     let mut enums: BTreeMap<&str, &str> = BTreeMap::new();

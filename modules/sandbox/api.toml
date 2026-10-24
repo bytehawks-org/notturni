@@ -55,6 +55,7 @@ scope = { blog = "slug" }
 request = "NoteCreate"
 response = "Note"
 conflict = [{ constraint = "uq_sandbox_note_title", status = 409, message = "Titolo già usato." }]
+emits = "sandbox.note.created"
 
 [[route]]
 id = "update_note"
@@ -80,6 +81,7 @@ table = "sandbox_notes"
 scope = { blog = "slug" }
 key = { param = "note_id", column = "id" }
 not_found = "Nota non trovata."
+emits = "sandbox.note.deleted"
 
 # handler scritto a mano, con rate limit e configurazione del modulo
 [[route]]

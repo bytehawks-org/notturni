@@ -30,6 +30,10 @@ enum Cmd {
     /// Gestione delle migrazioni di schema.
     #[command(subcommand)]
     Migrate(Migrate),
+    /// Stato dell'outbox transazionale (eventi e job in attesa di pubblicazione).
+    Outbox,
+    /// Messaggi finiti in dead letter sul bus.
+    DeadLetters,
 }
 
 #[derive(Subcommand)]
@@ -88,6 +92,8 @@ async fn main() -> Result<()> {
             let enabled =
                 registry.resolve_enabled(requested.as_deref()).map_err(|e| anyhow!("moduli non attivabili:\n{e}"))?;
             match cli.cmd {
+                Cmd::Outbox => outbox().await,
+                Cmd::DeadLetters => dead_letters().await,
                 Cmd::Validate => validate(&registry, &enabled),
                 Cmd::Modules => modules(&registry, &enabled),
                 Cmd::Openapi => {
@@ -333,6 +339,52 @@ async fn apply_from_disk() -> Result<()> {
     }
     for m in done {
         println!("applicata: {} {:04}_{}", m.module, m.version, m.name);
+    }
+    Ok(())
+}
+
+async fn outbox() -> Result<()> {
+    let pool = connect().await?;
+    let rows = sqlx::query_as::<_, (String, String, i64, i64)>(
+        "SELECT kind::text, subject, count(*) FILTER (WHERE published_at IS NULL), count(*) FILTER (WHERE published_at IS NOT NULL)
+         FROM noct_outbox GROUP BY 1, 2 ORDER BY 1, 2",
+    )
+    .fetch_all(&pool)
+    .await
+    .context("lettura di noct_outbox (migrazioni applicate?)")?;
+    println!("{:<6} {:<40} {:>10} {:>10}", "tipo", "subject", "in attesa", "pubblicati");
+    for (kind, subject, pending, published) in rows {
+        println!("{kind:<6} {subject:<40} {pending:>10} {published:>10}");
+    }
+    let stuck: Option<(String, String)> = sqlx::query_as(
+        "SELECT subject, last_error FROM noct_outbox WHERE published_at IS NULL AND last_error IS NOT NULL ORDER BY created_at LIMIT 1",
+    )
+    .fetch_optional(&pool)
+    .await?;
+    if let Some((subject, error)) = stuck {
+        println!("\nbloccato su `{subject}`: {error}");
+    }
+    Ok(())
+}
+
+async fn dead_letters() -> Result<()> {
+    let config = Config::from_env(&env).map_err(anyhow::Error::msg)?;
+    let services = noct_core::Services::connect(&config).await.map_err(anyhow::Error::msg)?;
+    let dead = services.bus.dead_letters().await?;
+    if dead.is_empty() {
+        println!("nessuna dead letter");
+    }
+    for d in dead {
+        println!(
+            "{} {} id={} consumer={} consegne={}\n  motivo: {}\n  payload: {}",
+            d.kind.as_str(),
+            d.subject,
+            d.id,
+            d.consumer,
+            d.delivered,
+            d.reason,
+            d.payload
+        );
     }
     Ok(())
 }

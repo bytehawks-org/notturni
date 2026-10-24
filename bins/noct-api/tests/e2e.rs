@@ -8,7 +8,7 @@ use axum::{
     http::{Method, Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use noct_core::{AppState, Config, Registry};
+use noct_core::{AppState, Config, Registry, Services};
 use serde_json::{Value, json};
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use tower::ServiceExt;
@@ -19,9 +19,19 @@ struct Env {
     pool: PgPool,
     db_name: String,
     admin: PgPool,
+    state: AppState,
+    registry: Registry,
+    enabled: Vec<usize>,
+    storage_dir: std::path::PathBuf,
+    mailer: std::sync::Arc<noct_core::mail::MemoryMailer>,
 }
 
 async fn setup(modules: &[&str], env: &[(&str, &str)]) -> Env {
+    setup_with(modules, env, None).await
+}
+
+/// `config`: configurazione dei servizi (Redis, NATS, S3...) al posto dei servizi in memoria.
+async fn setup_with(modules: &[&str], env: &[(&str, &str)], infra: Option<&dyn Fn(&mut Config)>) -> Env {
     let admin_url = std::env::var("NOCT_TEST_DATABASE_URL").expect("NOCT_TEST_DATABASE_URL non impostata");
     let admin = PgPoolOptions::new().max_connections(2).connect(&admin_url).await.unwrap();
     let db_name = format!("noct_e2e_{}", Uuid::new_v4().simple());
@@ -36,14 +46,24 @@ async fn setup(modules: &[&str], env: &[(&str, &str)]) -> Env {
     let module_cfg = registry.module_configs(&enabled, &lookup).unwrap_or_else(|e| panic!("{e}"));
     registry.migrate(&pool, &enabled).await.unwrap();
 
-    let config =
-        Config { database_url: url, bind_addr: "127.0.0.1:0".into(), modules: Some(requested), dev_auth: true };
-    let app = noct_api::app(&registry, &enabled, AppState::new(pool.clone(), config, module_cfg));
-    Env { app, pool, db_name, admin }
+    let mut config = Config::minimal(url);
+    config.modules = Some(requested);
+    config.dev_auth = true;
+    let storage_dir = std::env::temp_dir().join(format!("noct-e2e-{}", Uuid::new_v4().simple()));
+    config.storage.local_base_path = storage_dir.clone();
+    let (mut services, mailer) = Services::in_memory(&storage_dir);
+    if let Some(configure) = infra {
+        configure(&mut config);
+        services = Services::connect(&config).await.unwrap_or_else(|e| panic!("{e}"));
+    }
+    let state = AppState::new(pool.clone(), config, services, module_cfg);
+    let app = noct_api::app(&registry, &enabled, state.clone());
+    Env { app, pool, db_name, admin, state, registry, enabled, storage_dir, mailer }
 }
 
 impl Env {
     async fn teardown(self) {
+        let _ = std::fs::remove_dir_all(&self.storage_dir);
         self.pool.close().await;
         sqlx::query(&format!("DROP DATABASE {} WITH (FORCE)", self.db_name)).execute(&self.admin).await.unwrap();
     }
@@ -407,4 +427,218 @@ async fn invalid_module_config_is_reported_at_startup() {
     let bad = |k: &str| (k == "NOCT_SANDBOX_MAX_TITLE").then(|| "molti".to_string());
     let err = registry.module_configs(&enabled, &bad).unwrap_err();
     assert!(err.to_string().contains("non intero"), "{err}");
+}
+
+// ---- infrastruttura: health, storage, outbox, eventi, job ---------------------------------
+
+use noct_core::bus::Kind;
+use std::time::Duration;
+
+async fn eventually<F: std::future::Future<Output = bool>>(what: &str, mut cond: impl FnMut() -> F) {
+    for _ in 0..100 {
+        if cond().await {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    panic!("condizione non raggiunta entro 10 s: {what}");
+}
+
+#[tokio::test]
+async fn readiness_reports_every_service() {
+    let env = setup(&["taxonomy"], &[]).await;
+    let (status, body) = env.get("/health/ready", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["status"], "ok");
+    for svc in ["database", "storage", "cache", "bus"] {
+        assert_eq!(body["services"][svc]["status"], "ok", "{svc}: {body}");
+    }
+    assert_eq!(body["services"]["storage"]["backend"], "localstorage");
+    env.teardown().await;
+}
+
+#[tokio::test]
+async fn local_storage_serves_public_buckets_only() {
+    let env = setup(&["taxonomy"], &[]).await;
+    let s = &env.state.services.storage;
+    let cfg = &env.state.config.storage;
+    for b in [&cfg.bucket_avatars, &cfg.bucket_audit] {
+        s.ensure_bucket(b).await.unwrap();
+    }
+    s.put(&cfg.bucket_avatars, "u1.png", bytes_of(b"avatar-bytes"), "image/png").await.unwrap();
+    s.put(&cfg.bucket_audit, "log.txt", bytes_of(b"segreto"), "text/plain").await.unwrap();
+
+    let get = |path: String| {
+        let app = env.app.clone();
+        async move {
+            let res = app.oneshot(Request::builder().uri(path).body(Body::empty()).unwrap()).await.unwrap();
+            let status = res.status();
+            (status, res.into_body().collect().await.unwrap().to_bytes())
+        }
+    };
+    let (status, body) = get(format!("/storage/{}/u1.png", cfg.bucket_avatars)).await;
+    assert_eq!((status, &body[..]), (StatusCode::OK, &b"avatar-bytes"[..]));
+    let (status, _) = get(format!("/storage/{}/log.txt", cfg.bucket_audit)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "il bucket di audit non è pubblico");
+    let (status, _) = get(format!("/storage/{}/../{}/log.txt", cfg.bucket_avatars, cfg.bucket_audit)).await;
+    assert_ne!(status, StatusCode::OK, "path traversal");
+    env.teardown().await;
+}
+
+fn bytes_of(b: &'static [u8]) -> noct_core::storage::Bytes {
+    noct_core::storage::Bytes::from_static(b)
+}
+
+async fn outbox_counts(pool: &PgPool) -> (i64, i64) {
+    let total: i64 = sqlx::query_scalar("SELECT count(*) FROM noct_outbox").fetch_one(pool).await.unwrap();
+    let published: i64 = sqlx::query_scalar("SELECT count(*) FROM noct_outbox WHERE published_at IS NOT NULL")
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    (total, published)
+}
+
+/// Scenario completo su un `Env` già configurato (servizi in memoria o reali).
+async fn outbox_event_and_job_flow(env: Env) {
+    let owner = env.user("anna", "utente").await;
+    let blog = env.blog("lab", owner, "public").await;
+    let base = "/blogs/lab/sandbox/notes";
+
+    // senza consumer né relay: l'evento resta nell'outbox, scritto con il dato
+    let (s, note) = env.post(base, Some(owner), json!({"title": "Prima"})).await;
+    assert_eq!(s, StatusCode::CREATED);
+    assert_eq!(outbox_counts(&env.pool).await, (1, 0));
+    let subject: String = sqlx::query_scalar("SELECT subject FROM noct_outbox").fetch_one(&env.pool).await.unwrap();
+    assert_eq!(subject, "sandbox.note.created");
+
+    // una transazione annullata non lascia eventi: titolo duplicato → 409 → nessuna nuova riga
+    let (s, _) = env.post(base, Some(owner), json!({"title": "Prima"})).await;
+    assert_eq!(s, StatusCode::CONFLICT);
+    assert_eq!(outbox_counts(&env.pool).await.0, 1, "il rollback annulla anche l'evento");
+
+    // relay + consumer: l'evento arriva all'handler del modulo (che scrive nella cache)
+    // la chiave persiste in Redis fra un'esecuzione e l'altra: si parte da zero
+    env.state.services.cache.delete("sandbox:last_created").await.unwrap();
+    let background = env.registry.start_background(&env.enabled, &env.state).await.unwrap();
+    assert_eq!(background.consumer_count(), 2, "job cleanup + evento note.created");
+    let cache = env.state.services.cache.clone();
+    eventually("evento consegnato all'handler", || async {
+        cache.get("sandbox:last_created").await.unwrap().is_some()
+    })
+    .await;
+    let envelope: serde_json::Value =
+        serde_json::from_str(&cache.get("sandbox:last_created").await.unwrap().unwrap()).unwrap();
+    assert_eq!(envelope["module"], "sandbox");
+    assert_eq!(envelope["blog_id"], json!(blog));
+    assert_eq!(envelope["actor_id"], json!(owner));
+    assert_eq!(envelope["data"]["title"], "Prima");
+    assert_eq!(envelope["data"]["id"], note["id"]);
+    eventually("outbox segnato come pubblicato", || async { outbox_counts(&env.pool).await == (1, 1) }).await;
+
+    // delete → evento (nessun consumer iscritto: pubblicato comunque)
+    let id = note["id"].as_str().unwrap();
+    assert_eq!(env.delete(&format!("{base}/{id}"), Some(owner)).await, StatusCode::NO_CONTENT);
+    eventually("evento di cancellazione pubblicato", || async { outbox_counts(&env.pool).await == (2, 2) }).await;
+
+    // job: accodato nella stessa transazione di una scrittura, eseguito dal consumer
+    env.post(base, Some(owner), json!({"title": "Seconda"})).await;
+    env.post(base, Some(owner), json!({"title": "Terza"})).await;
+    let n = |pool: PgPool| async move {
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM sandbox_notes").fetch_one(&pool).await.unwrap()
+    };
+    assert_eq!(n(env.pool.clone()).await, 2);
+    let mut tx = env.pool.begin().await.unwrap();
+    noct_core::bus::outbox::enqueue(&mut tx, Kind::Job, "sandbox.cleanup", &json!({ "blog_id": blog })).await.unwrap();
+    tx.commit().await.unwrap();
+    eventually("job eseguito", || async { n(env.pool.clone()).await == 0 }).await;
+
+    // job con payload invalido: errore permanente → dead letter, nessun retry infinito
+    let mut tx = env.pool.begin().await.unwrap();
+    noct_core::bus::outbox::enqueue(&mut tx, Kind::Job, "sandbox.cleanup", &json!({ "sbagliato": 1 })).await.unwrap();
+    tx.commit().await.unwrap();
+    let bus = env.state.services.bus.clone();
+    eventually("dead letter", || async {
+        bus.dead_letters().await.unwrap().iter().any(|d| d.reason.contains("blog_id"))
+    })
+    .await;
+
+    // purge: i messaggi pubblicati si possono ripulire
+    sqlx::query("UPDATE noct_outbox SET published_at = now() - interval '2 days' WHERE published_at IS NOT NULL")
+        .execute(&env.pool)
+        .await
+        .unwrap();
+    assert!(noct_core::bus::outbox::purge(&env.pool, Duration::from_secs(86_400)).await.unwrap() >= 3);
+
+    background.stop().await;
+    env.teardown().await;
+}
+
+#[tokio::test]
+async fn outbox_events_and_jobs_in_memory() {
+    outbox_event_and_job_flow(setup(&["sandbox"], &[]).await).await;
+}
+
+#[tokio::test]
+async fn outbox_events_and_jobs_over_real_nats_redis_and_s3() {
+    let nats = std::env::var("NOCT_TEST_NATS_URL").expect("NOCT_TEST_NATS_URL non impostata");
+    let redis = std::env::var("NOCT_TEST_REDIS_URL").expect("NOCT_TEST_REDIS_URL non impostata");
+    let s3 = std::env::var("NOCT_TEST_S3_ENDPOINT").expect("NOCT_TEST_S3_ENDPOINT non impostata");
+    let suffix = &Uuid::new_v4().simple().to_string()[..10];
+    let configure = move |c: &mut Config| {
+        c.nats_url = Some(nats.clone());
+        c.nats_prefix = format!("e2e{suffix}");
+        c.redis_url = Some(redis.to_string());
+        c.storage.backend = noct_core::StorageBackend::S3;
+        c.storage.s3.endpoint_url = Some(s3.clone());
+        c.storage.s3.region = Some("garage".into());
+        c.storage.s3.access_key_id = Some("test".into());
+        c.storage.s3.secret_access_key = Some("test".into());
+        c.storage.bucket_avatars = format!("e2e-avatars-{suffix}");
+        c.storage.bucket_content = format!("e2e-content-{suffix}");
+        c.storage.bucket_audit = format!("e2e-audit-{suffix}");
+    };
+    let env = setup_with(&["sandbox"], &[], Some(&configure)).await;
+    let (status, body) = env.get("/health/ready", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        (
+            body["services"]["storage"]["backend"].as_str(),
+            body["services"]["cache"]["backend"].as_str(),
+            body["services"]["bus"]["backend"].as_str()
+        ),
+        (Some("s3"), Some("redis"), Some("nats"))
+    );
+    outbox_event_and_job_flow(env).await;
+}
+
+#[tokio::test]
+async fn rate_limit_is_shared_through_redis() {
+    let redis = std::env::var("NOCT_TEST_REDIS_URL").expect("NOCT_TEST_REDIS_URL non impostata");
+    let configure = move |c: &mut Config| c.redis_url = Some(redis.clone());
+    let env = setup_with(&["sandbox"], &[], Some(&configure)).await;
+    let user = env.user("anna", "utente").await;
+    // 3 per minuto per utente; il contatore sta in Redis, non nel processo
+    for w in ["a", "b", "c"] {
+        assert_eq!(env.get(&format!("/sandbox/echo/{w}"), Some(user)).await.0, StatusCode::OK);
+    }
+    assert_eq!(env.get("/sandbox/echo/d", Some(user)).await.0, StatusCode::TOO_MANY_REQUESTS);
+    // il contatore sta nella cache condivisa: lo vede chiunque usi lo stesso Redis
+    let hit = env
+        .state
+        .services
+        .cache
+        .incr_window(&format!("sandbox:echo:user:{user}"), Duration::from_secs(60))
+        .await
+        .unwrap();
+    assert!(hit.count > 3, "il contatore è visibile dalla cache condivisa: {hit:?}");
+    env.teardown().await;
+}
+
+#[tokio::test]
+async fn mailer_is_reachable_from_modules_through_the_state() {
+    let env = setup(&["taxonomy"], &[]).await;
+    env.state.services.mailer.send(&noct_core::mail::Email::text("a@example.com", "Codice", "123456")).await.unwrap();
+    assert_eq!(env.mailer.sent().len(), 1);
+    assert!(noct_core::markdown::render_safe_html("**ok** <script>x</script>").contains("<strong>ok</strong>"));
+    env.teardown().await;
 }

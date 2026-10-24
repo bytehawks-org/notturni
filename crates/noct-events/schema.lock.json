@@ -1,0 +1,96 @@
+{
+  "enums": [
+    {
+      "name": "outbox_kind",
+      "values": [
+        "event",
+        "job"
+      ]
+    }
+  ],
+  "tables": [
+    {
+      "name": "noct_outbox",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "null": false,
+          "default": "gen_random_uuid()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "kind",
+          "type": "enum:outbox_kind",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "subject",
+          "type": "varchar(200)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "payload",
+          "type": "jsonb",
+          "null": false,
+          "default": "'{}'::jsonb",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "published_at",
+          "type": "timestamptz",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "attempts",
+          "type": "integer",
+          "null": false,
+          "default": "0",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "last_error",
+          "type": "text",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "ix_noct_outbox_published_at_created_at",
+          "columns": [
+            "published_at",
+            "created_at"
+          ],
+          "unique": false
+        }
+      ],
+      "uniques": []
+    }
+  ]
+}

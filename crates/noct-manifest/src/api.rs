@@ -145,6 +145,10 @@ pub struct Route {
     pub conflict: Vec<Conflict>,
     #[serde(default)]
     pub rate_limit: Option<RateLimit>,
+    /// Subject dell'evento pubblicato (via outbox, nella stessa transazione) quando
+    /// la rotta ha successo; deve comparire in `[events] publishes` del modulo.
+    #[serde(default)]
+    pub emits: Option<String>,
     #[serde(default)]
     pub handler: Option<String>,
     #[serde(default)]
@@ -458,6 +462,9 @@ impl ApiFile {
 
     fn validate_kind(&self, module: &str, loc: &str, r: &Route, schema: &Schema, params: &[&str], issues: &mut Issues) {
         if r.kind == RouteKind::Custom {
+            if r.emits.is_some() {
+                issues.push(module, loc, "`emits` non è ammesso su `custom`: l'handler pubblica con `outbox::enqueue`");
+            }
             match &r.handler {
                 Some(h) if is_ident(h) => {}
                 _ => issues.push(module, loc, "una rotta `custom` richiede `handler` (nome di funzione Rust)"),
@@ -473,6 +480,9 @@ impl ApiFile {
 
         if r.handler.is_some() {
             issues.push(module, loc, "`handler` è ammesso solo sulle rotte `custom`");
+        }
+        if r.emits.is_some() && !matches!(r.kind, RouteKind::Create | RouteKind::Update | RouteKind::Delete) {
+            issues.push(module, loc, "`emits` è ammesso solo su create, update e delete");
         }
         let expected = match r.kind {
             RouteKind::List | RouteKind::Get => &[Method::Get][..],

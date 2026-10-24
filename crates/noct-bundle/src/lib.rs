@@ -6,7 +6,7 @@
 use noct_core::ModuleDef;
 
 pub fn all() -> Vec<ModuleDef> {
-    let mut modules = vec![noct_users::module(), noct_blogs::module()];
+    let mut modules = vec![noct_users::module(), noct_blogs::module(), noct_events::module()];
     #[cfg(feature = "taxonomy")]
     modules.push(noct_taxonomy::module());
     #[cfg(feature = "sandbox")]

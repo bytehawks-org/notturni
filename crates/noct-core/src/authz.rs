@@ -96,7 +96,10 @@ pub async fn enforce(
             _ => format!("ip:{}", client_ip(headers)),
         };
         let key = format!("{}:{}:{who}", route.module, route.id);
-        st.limiter.check(&key, rate.max, Duration::from_secs(rate.window_secs)).map_err(ApiError::too_many_requests)?;
+        st.limiter
+            .check(&key, rate.max, Duration::from_secs(rate.window_secs))
+            .await
+            .map_err(ApiError::too_many_requests)?;
     }
 
     let needs_login = !matches!(route.policy, Policy::Public);

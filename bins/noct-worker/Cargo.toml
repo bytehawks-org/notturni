@@ -1,0 +1,16 @@
+[package]
+name = "noct-worker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+sandbox = ["noct-api/sandbox"]
+
+[dependencies]
+noct-api = { path = "../noct-api" }
+anyhow.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
