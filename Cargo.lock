@@ -2262,10 +2262,13 @@ dependencies = [
  "noct-audit",
  "noct-auth",
  "noct-blogs",
+ "noct-comments",
  "noct-core",
  "noct-events",
+ "noct-fragments",
  "noct-link-preview",
  "noct-media",
+ "noct-notes",
  "noct-pages",
  "noct-platform",
  "noct-posts",
@@ -2307,6 +2310,29 @@ version = "0.1.0"
 dependencies = [
  "noct-manifest",
  "noct-migrate",
+]
+
+[[package]]
+name = "noct-comments"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "chrono",
+ "hex",
+ "noct-audit",
+ "noct-codegen",
+ "noct-core",
+ "noct-posts",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -2364,6 +2390,24 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "sqlx",
+ "uuid",
+]
+
+[[package]]
+name = "noct-fragments"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "hex",
+ "noct-codegen",
+ "noct-core",
+ "noct-posts",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
  "sqlx",
  "uuid",
 ]
@@ -2463,6 +2507,24 @@ dependencies = [
  "sqlx",
  "thiserror",
  "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "noct-notes"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "chrono",
+ "noct-codegen",
+ "noct-core",
+ "noct-posts",
+ "regex",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "unicode-normalization",
  "uuid",
 ]
 

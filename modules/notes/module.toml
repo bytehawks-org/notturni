@@ -1,0 +1,10 @@
+[module]
+name = "notes"
+version = "0.1.0"
+kind = "optional"
+default_enabled = true
+requires = ["users", "blogs", "posts"]
+description = "Note a piè di pagina dei post, libreria note del blog (duplicati, merge, BibTeX) e bibliografie (campo notes di post)"
+
+[lifecycle]
+extensions = true

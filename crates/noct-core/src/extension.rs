@@ -15,7 +15,7 @@
 //! accettati. I campi dichiarati da due estensioni della stessa entità non possono
 //! sovrapporsi (verificato all'avvio).
 
-use crate::{Actor, ApiError, BlogRef};
+use crate::{Actor, ApiError, AppState, BlogRef};
 use async_trait::async_trait;
 use serde_json::{Map, Value};
 use sqlx::{PgConnection, PgPool};
@@ -40,6 +40,8 @@ pub enum Op {
 
 /// Contesto di una scrittura, passato a [`EntityExtension::apply`].
 pub struct ExtCtx<'a> {
+    /// Stato dell'applicazione (configurazione dei moduli, servizi).
+    pub state: &'a AppState,
     pub op: Op,
     /// Id dell'entità appena scritta (già presente nella transazione).
     pub entity_id: Uuid,
@@ -47,6 +49,16 @@ pub struct ExtCtx<'a> {
     pub source_id: Option<Uuid>,
     pub blog: &'a BlogRef,
     pub actor: &'a Actor,
+}
+
+impl ExtCtx<'_> {
+    /// Valore stringa della configurazione di `module` (vuoto se non impostato).
+    pub fn config_str(&self, module: &str, key: &str) -> Option<&str> {
+        match self.state.module_config.get(module)?.get(key)? {
+            noct_manifest::ConfigValue::String(s) if !s.is_empty() => Some(s),
+            _ => None,
+        }
+    }
 }
 
 #[async_trait]

@@ -1,0 +1,15 @@
+[module]
+name = "comments"
+version = "0.1.0"
+kind = "optional"
+default_enabled = true
+requires = ["users", "blogs", "posts", "audit"]
+description = "Commenti ai post: registrati senza moderazione, anonimi (captcha) moderati, risposte, segnalazione, autori bloccati; modalità per blog e per post"
+
+[config]
+# Chiave segreta Cloudflare Turnstile: senza, i commenti aperti a tutti non si possono attivare.
+turnstile_secret_key = { type = "string", env = "NOCT_TURNSTILE_SECRET_KEY", default = "" }
+turnstile_verify_url = { type = "string", env = "NOCT_TURNSTILE_VERIFY_URL", default = "https://challenges.cloudflare.com/turnstile/v0/siteverify" }
+
+[lifecycle]
+extensions = true

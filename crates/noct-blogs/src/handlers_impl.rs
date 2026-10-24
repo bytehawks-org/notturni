@@ -122,7 +122,7 @@ pub async fn create_blog(ctx: RouteCtx, body: BlogCreate) -> Result<Value, ApiEr
         .apply(
             &mut tx,
             Entity::Blog,
-            &ExtCtx { op: Op::Create, entity_id: id, source_id: None, blog: &blog_ref, actor: &actor },
+            &ExtCtx { state: st, op: Op::Create, entity_id: id, source_id: None, blog: &blog_ref, actor: &actor },
             &body_map(&ctx.body),
         )
         .await?;
@@ -236,7 +236,7 @@ pub async fn update_blog(ctx: RouteCtx, body: BlogUpdate) -> Result<Value, ApiEr
         .apply(
             &mut tx,
             Entity::Blog,
-            &ExtCtx { op: Op::Update, entity_id: blog.id, source_id: None, blog: &blog, actor: &actor },
+            &ExtCtx { state: st, op: Op::Update, entity_id: blog.id, source_id: None, blog: &blog, actor: &actor },
             &body_map(&ctx.body),
         )
         .await?;

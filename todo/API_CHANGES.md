@@ -25,6 +25,12 @@ Nessuna è una rottura silenziosa.
 | `GET /blogs/{slug}/pages/{id}/translations` | segue la visibilità del blog (`404` se non visibile) | in v1 non controllava la visibilità e rivelava slug di pagine di blog privati |
 | `GET /blogs/{slug}/publications/{ref}` | capitoli ordinati con `chapter_order` poi cronologico, a parità per `id` | v1 ordinava in Python senza criterio finale |
 | `GET /link-preview` | `?url=` mancante → `422`; il blocco SSRF copre anche CGNAT, IPv4-mapped e NAT64, e nessun proxy di sistema | difesa più completa; stessa risposta di v1 per gli URL validi |
+| `/posts/{id}/comments` (lettura e scrittura), `/posts/{id}/fragments` | solo su post **pubblicati** di un blog visibile al chiamante; altrimenti `404` | in v1 si poteva commentare e leggere i commenti anche di bozze e di blog privati se si conosceva l'id |
+| `GET /posts/{id}/comments` e viste pubbliche | `reported_to_platform` e `report_note` sono `false`/`null` per chi non modera | in v1 la nota di segnalazione era visibile a tutti nell'elenco pubblico |
+| `POST /posts/{id}/comments` | limite di 30 richieste al minuto per IP; email validata (`400`) | in v1 nessun limite oltre al captcha |
+| `PATCH /blogs/{slug}`, `PATCH /posts/{id}` | `comments_mode` non valido o `comments_auto_close_days` non intero → `400` | un solo formato d'errore |
+| Note | un `kind`/`url` non valido nelle note del post → `400` con il messaggio del campo, come in v1; `notes: null` equivale ad assente | coerenza con gli altri tri-stati |
+| `GET /blogs/{slug}/notes` | `403` a chi non è proprietario né collaboratore; la ricerca `q` ignora le maiuscole sul testo intero | invariato rispetto a v1, ma esplicito |
 
 ## Suggerite (non applicate)
 

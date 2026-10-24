@@ -1,0 +1,17 @@
+# Porzione di testo evidenziata da un lettore su un post pubblicato. Il testo è duplicato qui e
+# non è un offset: la ri-evidenziazione resta valida anche se il post viene modificato.
+[[table]]
+name = "post_fragments"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "user_id", type = "uuid", ref = "users.id", on_delete = "cascade" },
+  { name = "post_id", type = "uuid", ref = "posts.id", on_delete = "cascade" },
+  { name = "text", type = "text" },
+  # hash del testo (32 hex): un frammento può superare il limite di un indice btree
+  { name = "text_hash", type = "varchar(32)" },
+  # privato di default; pubblico = visibile agli altri iscritti, mai ai visitatori anonimi
+  { name = "is_public", type = "boolean", default = "false" },
+]
+uniques = [{ name = "uq_post_fragment_user_post_text", columns = ["user_id", "post_id", "text_hash"] }]
+indexes = [{ columns = ["post_id"] }]

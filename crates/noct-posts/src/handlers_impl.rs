@@ -276,7 +276,7 @@ pub async fn create_post(ctx: RouteCtx, body: PostCreate) -> Result<Value, ApiEr
         .apply(
             &mut tx,
             Entity::Post,
-            &ExtCtx { op: Op::Create, entity_id: id, source_id: None, blog, actor: &actor },
+            &ExtCtx { state: st, op: Op::Create, entity_id: id, source_id: None, blog, actor: &actor },
             &body_map(&ctx.body),
         )
         .await?;
@@ -330,7 +330,14 @@ pub async fn add_translation(ctx: RouteCtx, body: PostTranslation) -> Result<Val
         .apply(
             &mut tx,
             Entity::Post,
-            &ExtCtx { op: Op::Translate, entity_id: id, source_id: Some(original.id), blog: &blog, actor: &actor },
+            &ExtCtx {
+                state: st,
+                op: Op::Translate,
+                entity_id: id,
+                source_id: Some(original.id),
+                blog: &blog,
+                actor: &actor,
+            },
             &body_map(&ctx.body),
         )
         .await?;
@@ -543,7 +550,7 @@ pub async fn update_post(ctx: RouteCtx, body: PostUpdate) -> Result<Value, ApiEr
         .apply(
             &mut tx,
             Entity::Post,
-            &ExtCtx { op: Op::Update, entity_id: row.id, source_id: None, blog: &blog, actor: &actor },
+            &ExtCtx { state: st, op: Op::Update, entity_id: row.id, source_id: None, blog: &blog, actor: &actor },
             &raw,
         )
         .await?;

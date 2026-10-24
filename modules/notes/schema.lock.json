@@ -1,0 +1,291 @@
+{
+  "enums": [],
+  "tables": [
+    {
+      "name": "blog_notes",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "null": false,
+          "default": "gen_random_uuid()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "blog_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "blogs",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "normalized",
+          "type": "varchar(600)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "kind",
+          "type": "varchar(10)",
+          "null": false,
+          "default": "'note'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "url",
+          "type": "text",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "created_by_id",
+          "type": "uuid",
+          "null": true,
+          "default": null,
+          "references": {
+            "table": "users",
+            "column": "id",
+            "on_delete": "set_null"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "author",
+          "type": "text",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "isbn",
+          "type": "varchar(32)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "doi",
+          "type": "varchar(255)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "page",
+          "type": "varchar(32)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "issued",
+          "type": "varchar(32)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "ix_blog_notes_blog_id_normalized",
+          "columns": [
+            "blog_id",
+            "normalized"
+          ],
+          "unique": false
+        }
+      ],
+      "uniques": []
+    },
+    {
+      "name": "post_notes",
+      "columns": [
+        {
+          "name": "post_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "posts",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "idx",
+          "type": "integer",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "note_id",
+          "type": "uuid",
+          "null": true,
+          "default": null,
+          "references": {
+            "table": "blog_notes",
+            "column": "id",
+            "on_delete": "set_null"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "author",
+          "type": "text",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "isbn",
+          "type": "varchar(32)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "doi",
+          "type": "varchar(255)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "page",
+          "type": "varchar(32)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "kind",
+          "type": "varchar(10)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "source",
+          "type": "text",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "issued",
+          "type": "varchar(32)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "url",
+          "type": "text",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "post_id",
+        "idx"
+      ],
+      "indexes": [
+        {
+          "name": "ix_post_notes_note_id",
+          "columns": [
+            "note_id"
+          ],
+          "unique": false
+        }
+      ],
+      "uniques": []
+    }
+  ]
+}

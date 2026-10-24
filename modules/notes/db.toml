@@ -1,0 +1,47 @@
+# Libreria note di un blog: entità di prima classe. Le note dei post si agganciano con `note_id`
+# alla sincronizzazione (stesso testo normalizzato = stessa nota), così "citata in" e i duplicati
+# si calcolano dal collegamento e non da confronti di testo a ogni lettura.
+[[table]]
+name = "blog_notes"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "blog_id", type = "uuid", ref = "blogs.id", on_delete = "cascade" },
+  { name = "content", type = "text" },
+  # chiave di deduplica: testo minuscolo, solo alfanumerici, spazi collassati
+  { name = "normalized", type = "varchar(600)" },
+  { name = "kind", type = "varchar(10)", default = "'note'" },
+  { name = "url", type = "text", null = true },
+  { name = "created_by_id", type = "uuid", null = true, ref = "users.id", on_delete = "set_null" },
+  { name = "title", type = "text", null = true },
+  { name = "author", type = "text", null = true },
+  { name = "isbn", type = "varchar(32)", null = true },
+  { name = "doi", type = "varchar(255)", null = true },
+  { name = "page", type = "varchar(32)", null = true },
+  # editore / rivista / sito, e anno / data (compatibilità BibTeX)
+  { name = "source", type = "text", null = true },
+  { name = "issued", type = "varchar(32)", null = true },
+]
+indexes = [{ columns = ["blog_id", "normalized"] }]
+
+# Note a piè di pagina di un post, riscritte per intero a ogni salvataggio che le include.
+# `idx` è il numero scelto dall'editor; `content` è Markdown inline.
+[[table]]
+name = "post_notes"
+primary_key = ["post_id", "idx"]
+columns = [
+  { name = "post_id", type = "uuid", ref = "posts.id", on_delete = "cascade" },
+  { name = "idx", type = "integer" },
+  { name = "content", type = "text" },
+  { name = "note_id", type = "uuid", null = true, ref = "blog_notes.id", on_delete = "set_null" },
+  { name = "title", type = "text", null = true },
+  { name = "author", type = "text", null = true },
+  { name = "isbn", type = "varchar(32)", null = true },
+  { name = "doi", type = "varchar(255)", null = true },
+  { name = "page", type = "varchar(32)", null = true },
+  { name = "kind", type = "varchar(10)", null = true },
+  { name = "source", type = "text", null = true },
+  { name = "issued", type = "varchar(32)", null = true },
+  { name = "url", type = "text", null = true },
+]
+indexes = [{ columns = ["note_id"] }]

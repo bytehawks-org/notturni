@@ -1,0 +1,75 @@
+[[enum]]
+name = "comment_status"
+values = ["pending", "approved", "rejected"]
+
+# Chi può commentare. `members` è il default di piattaforma; `everyone` richiede il captcha.
+[[enum]]
+name = "comments_mode"
+values = ["everyone", "members", "closed"]
+
+[[table]]
+name = "comments"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "post_id", type = "uuid", ref = "posts.id", on_delete = "cascade" },
+  # risposta a un altro commento dello stesso post; nessun limite di profondità
+  { name = "parent_id", type = "uuid", null = true, ref = "comments.id", on_delete = "cascade" },
+  # nullo per i commenti anonimi, e se l'autore cancella l'account (il nome resta)
+  { name = "author_id", type = "uuid", null = true, ref = "users.id", on_delete = "set_null" },
+  { name = "author_display_name", type = "varchar(255)" },
+  { name = "author_email", type = "varchar(255)", null = true },
+  { name = "content", type = "text" },
+  { name = "status", type = "enum:comment_status", default = "'pending'" },
+  # segnalazione del proprietario/mediatore ai moderatori di piattaforma, con nota
+  { name = "reported_to_platform", type = "boolean", default = "false" },
+  { name = "report_note", type = "text", null = true },
+  { name = "reported_at", type = "timestamptz", null = true },
+]
+indexes = [{ columns = ["post_id", "status"] }, { columns = ["parent_id"] }]
+
+# Lista dei bloccati di un blog: un utente registrato oppure l'hash sha256 dell'email di un
+# anonimo (mai l'email in chiaro né l'IP).
+[[table]]
+name = "blog_blocked_authors"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "blog_id", type = "uuid", ref = "blogs.id", on_delete = "cascade" },
+  { name = "user_id", type = "uuid", null = true, ref = "users.id", on_delete = "cascade" },
+  { name = "email_hash", type = "varchar(64)", null = true },
+  { name = "label", type = "varchar(255)" },
+  { name = "note", type = "varchar(255)", null = true },
+  { name = "created_by_id", type = "uuid", null = true, ref = "users.id", on_delete = "set_null" },
+]
+indexes = [{ columns = ["blog_id"] }]
+
+# Impostazioni per blog (campi `comments_mode` e `comments_auto_close_days` del blog).
+[[table]]
+name = "comment_blog_settings"
+primary_key = ["blog_id"]
+columns = [
+  { name = "blog_id", type = "uuid", ref = "blogs.id", on_delete = "cascade" },
+  { name = "comments_mode", type = "enum:comments_mode", default = "'members'" },
+  # chiusura automatica dei commenti dopo N giorni dalla pubblicazione
+  { name = "comments_auto_close_days", type = "integer", null = true },
+]
+
+# Override per singolo post (campo `comments_mode` del post): una riga solo se c'è l'override.
+[[table]]
+name = "comment_post_settings"
+primary_key = ["post_id"]
+columns = [
+  { name = "post_id", type = "uuid", ref = "posts.id", on_delete = "cascade" },
+  { name = "comments_mode", type = "enum:comments_mode" },
+]
+
+# Impostazione di piattaforma (riga unica, creata al bisogno): i blog possono aprire i commenti
+# agli anonimi? Si modifica dalle rotte di amministrazione (fase operazioni).
+[[table]]
+name = "comments_platform_settings"
+primary_key = ["id"]
+columns = [
+  { name = "id", type = "integer", default = "1" },
+  { name = "anonymous_comments_allowed", type = "boolean", default = "true" },
+]

@@ -101,6 +101,18 @@ impl Env {
         (status, json, headers)
     }
 
+    /// GET con corpo non JSON (es. BibTeX).
+    pub async fn get_text(&self, path: &str, who: Option<Uuid>) -> (StatusCode, axum::http::HeaderMap, String) {
+        let mut req = Request::builder().method(Method::GET).uri(format!("/api/v1{path}"));
+        if let Some(u) = who {
+            req = req.header(header::AUTHORIZATION, format!("Bearer {}", self.access_token(u)));
+        }
+        let res = self.app.clone().oneshot(req.body(Body::empty()).unwrap()).await.unwrap();
+        let (status, headers) = (res.status(), res.headers().clone());
+        let bytes = res.into_body().collect().await.unwrap().to_bytes();
+        (status, headers, String::from_utf8_lossy(&bytes).to_string())
+    }
+
     pub async fn get(&self, path: &str, who: Option<Uuid>) -> (StatusCode, Value) {
         let (s, j, _) = self.call(Method::GET, path, who, None).await;
         (s, j)

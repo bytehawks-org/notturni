@@ -1,0 +1,104 @@
+{
+  "enums": [],
+  "tables": [
+    {
+      "name": "post_fragments",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "null": false,
+          "default": "gen_random_uuid()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "users",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "post_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "posts",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "text",
+          "type": "text",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "text_hash",
+          "type": "varchar(32)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "is_public",
+          "type": "boolean",
+          "null": false,
+          "default": "false",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "ix_post_fragments_post_id",
+          "columns": [
+            "post_id"
+          ],
+          "unique": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "uq_post_fragment_user_post_text",
+          "columns": [
+            "user_id",
+            "post_id",
+            "text_hash"
+          ]
+        }
+      ]
+    }
+  ]
+}

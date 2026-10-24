@@ -1,0 +1,163 @@
+# Compatibile con /api/v1/posts/{id}/comments, /comments/{id}/* e /blogs/{slug}/{comments,blocked} della v1.
+# I campi `comments_mode` di blog e post (e `effective_comments_mode`, `comments_auto_close_days`) sono
+# delle estensioni di `blogs` e `posts`.
+
+[type.CommentCreate]
+content = { type = "string", max = 10000, non_blank = true, message = "Il commento non può essere vuoto (max 10000 caratteri)." }
+parent_id = "string?"
+# richiesti solo senza account
+author_display_name = { type = "string", max = 255, optional = true }
+author_email = { type = "string", max = 255, optional = true }
+# token del widget Turnstile, richiesto per i commenti non registrati
+captcha_token = { type = "string", max = 4096, optional = true }
+
+[type.ReportRequest]
+note = { type = "string", max = 5000 }
+
+[type.BlockRequest]
+note = "string?"
+
+[type.CommentOut]
+id = "uuid"
+post_id = "uuid"
+parent_id = { type = "uuid", nullable = true }
+author_id = { type = "uuid", nullable = true }
+author_display_name = "string"
+author_avatar_url = { type = "string", nullable = true }
+status = "string"
+content = "string"
+created_at = "timestamp"
+# solo per chi modera
+reported_to_platform = "bool"
+report_note = { type = "string", nullable = true }
+
+# CommentOut + post_title, post_slug
+[type.BlogCommentOut]
+id = "uuid"
+post_id = "uuid"
+parent_id = { type = "uuid", nullable = true }
+author_id = { type = "uuid", nullable = true }
+author_display_name = "string"
+author_avatar_url = { type = "string", nullable = true }
+status = "string"
+content = "string"
+created_at = "timestamp"
+reported_to_platform = "bool"
+report_note = { type = "string", nullable = true }
+post_title = "string"
+post_slug = "string"
+
+[type.BlockedAuthorOut]
+id = "uuid"
+label = "string"
+is_anonymous = "bool"
+note = { type = "string", nullable = true }
+created_at = "timestamp"
+
+[[route]]
+id = "create_comment"
+method = "POST"
+path = "/posts/{post_id}/comments"
+auth = "public"
+kind = "custom"
+handler = "create_comment"
+request = "CommentCreate"
+response = "CommentOut"
+status = 201
+rate_limit = { key = "ip", max = 30, window = "1m" }
+summary = "Commenta un post (registrati: subito pubblicato; anonimi: captcha e moderazione)"
+
+[[route]]
+id = "list_approved_comments"
+method = "GET"
+path = "/posts/{post_id}/comments"
+auth = "public"
+kind = "custom"
+handler = "list_approved_comments"
+response = "CommentOut[]"
+summary = "Commenti approvati di un post"
+
+[[route]]
+id = "list_pending_comments"
+method = "GET"
+path = "/posts/{post_id}/comments/pending"
+auth = "user"
+kind = "custom"
+handler = "list_pending_comments"
+response = "CommentOut[]"
+summary = "Commenti in attesa di moderazione di un post (proprietario, mediatore, moderatori di piattaforma)"
+
+[[route]]
+id = "list_blog_comments"
+method = "GET"
+path = "/blogs/{slug}/comments"
+auth = "user"
+kind = "custom"
+handler = "list_blog_comments"
+scope = { blog = "slug" }
+response = "BlogCommentOut[]"
+summary = "Commenti di tutti i post del blog (`?status=` default pending, `?reported=true`)"
+
+[[route]]
+id = "approve_comment"
+method = "POST"
+path = "/comments/{comment_id}/approve"
+auth = "user"
+kind = "custom"
+handler = "approve_comment"
+response = "CommentOut"
+summary = "Approva un commento"
+
+[[route]]
+id = "reject_comment"
+method = "POST"
+path = "/comments/{comment_id}/reject"
+auth = "user"
+kind = "custom"
+handler = "reject_comment"
+response = "CommentOut"
+summary = "Rifiuta un commento"
+
+[[route]]
+id = "report_comment"
+method = "POST"
+path = "/comments/{comment_id}/report"
+auth = "user"
+kind = "custom"
+handler = "report_comment"
+request = "ReportRequest"
+response = "CommentOut"
+summary = "Segnala il commento ai moderatori di piattaforma, con una nota"
+
+[[route]]
+id = "block_comment_author"
+method = "POST"
+path = "/comments/{comment_id}/block-author"
+auth = "user"
+kind = "custom"
+handler = "block_comment_author"
+request = "BlockRequest"
+response = "BlockedAuthorOut"
+summary = "Blocca l'autore del commento nel blog e rifiuta il commento"
+
+[[route]]
+id = "list_blocked_authors"
+method = "GET"
+path = "/blogs/{slug}/blocked"
+auth = "user"
+kind = "custom"
+handler = "list_blocked_authors"
+scope = { blog = "slug" }
+response = "BlockedAuthorOut[]"
+summary = "Autori bloccati del blog"
+
+[[route]]
+id = "unblock_author"
+method = "DELETE"
+path = "/blogs/{slug}/blocked/{block_id}"
+auth = "user"
+kind = "custom"
+handler = "unblock_author"
+scope = { blog = "slug" }
+status = 204
+summary = "Sblocca un autore"

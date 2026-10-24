@@ -24,6 +24,12 @@ pub fn all() -> Vec<ModuleDef> {
     modules.push(noct_pages::module());
     #[cfg(feature = "link-preview")]
     modules.push(noct_link_preview::module());
+    #[cfg(feature = "notes")]
+    modules.push(noct_notes::module());
+    #[cfg(feature = "fragments")]
+    modules.push(noct_fragments::module());
+    #[cfg(feature = "comments")]
+    modules.push(noct_comments::module());
     #[cfg(feature = "sandbox")]
     modules.push(noct_sandbox::module());
     modules
