@@ -35,7 +35,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: SBOM backend (Rust, da Cargo.lock)
         uses: anchore/sbom-action@v0
@@ -62,7 +62,7 @@ jobs:
           upload-artifact: false
 
       - name: Carica i report SBOM sorgenti
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: sbom-sorgenti
           path: |
@@ -95,7 +95,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Build immagine backend
         run: docker build -t notturni-backend:ci .
@@ -120,7 +120,7 @@ jobs:
           upload-artifact: false
 
       - name: Carica i report SBOM immagini
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: sbom-immagini
           path: |

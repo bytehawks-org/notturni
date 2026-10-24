@@ -32,7 +32,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Prepara .env per l'ambiente CI
         # Stessi default di sviluppo di GETTING_STARTED.md #1 (segreti fittizi,
@@ -101,7 +101,7 @@ jobs:
         # un'istanza reale: non puntare mai questo scan a notturni.eu.
         # Più lento del baseline, per questo resta nello stesso job invece
         # che duplicare l'avvio dello stack in un job a parte.
-        uses: zaproxy/action-full-scan@v0.10.0
+        uses: zaproxy/action-full-scan@v0.13.0
         with:
           target: "http://localhost:3000"
           fail_action: false

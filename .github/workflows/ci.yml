@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -56,7 +56,7 @@ jobs:
     env:
       NOCT_DATABASE_URL: postgres://postgres:ci@localhost:5432/postgres
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Valida i manifest (drift di db.toml incluso)
@@ -100,7 +100,7 @@ jobs:
       NOCT_TEST_NATS_URL: nats://localhost:4222
       NOCT_TEST_S3_ENDPOINT: http://localhost:5000
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       # i service container non accettano argomenti per il comando: JetStream si avvia a mano
@@ -117,7 +117,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: cargo-deny (licenze, fonti, ban)
         uses: EmbarkStudios/cargo-deny-action@v2
         with:
