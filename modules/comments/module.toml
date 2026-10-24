@@ -12,4 +12,5 @@ turnstile_secret_key = { type = "string", env = "NOCT_TURNSTILE_SECRET_KEY", def
 turnstile_verify_url = { type = "string", env = "NOCT_TURNSTILE_VERIFY_URL", default = "https://challenges.cloudflare.com/turnstile/v0/siteverify" }
 
 [lifecycle]
+personal_data = true
 extensions = true

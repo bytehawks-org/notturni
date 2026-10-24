@@ -1,0 +1,7 @@
+[module]
+name = "image_moderation"
+version = "0.1.0"
+kind = "optional"
+default_enabled = true
+requires = ["media", "platform"]
+description = "Classificazione automatica delle immagini caricate (nudità e contenuti sensibili) con il servizio self-hosted moderation/; fail open"

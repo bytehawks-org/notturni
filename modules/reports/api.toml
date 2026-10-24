@@ -1,0 +1,43 @@
+# Compatibile con POST /api/v1/blogs/{slug}/report e /posts/{id}/report della v1. Le rotte di
+# lettura e chiusura delle segnalazioni (`/admin/reports*`) arrivano con la Fase 7.
+
+[type.ReportRequest]
+reason = "enum:report_reason"
+# tagliata a 500 caratteri
+note = { type = "string", max = 5000, optional = true }
+
+[type.ReportOut]
+id = "uuid"
+target_type = "enum:report_target_type"
+target_id = "uuid"
+reason = "enum:report_reason"
+note = { type = "string", nullable = true }
+status = "enum:report_status"
+created_at = "timestamp"
+
+[[route]]
+id = "report_blog"
+method = "POST"
+path = "/blogs/{slug}/report"
+auth = "user"
+kind = "custom"
+handler = "report_blog"
+scope = { blog = "slug" }
+request = "ReportRequest"
+response = "ReportOut"
+status = 201
+rate_limit = { key = "user", max = 10, window = "1h" }
+summary = "Segnala un blog (una sola volta; non il proprio)"
+
+[[route]]
+id = "report_post"
+method = "POST"
+path = "/posts/{post_id}/report"
+auth = "user"
+kind = "custom"
+handler = "report_post"
+request = "ReportRequest"
+response = "ReportOut"
+status = 201
+rate_limit = { key = "user", max = 10, window = "1h" }
+summary = "Segnala un post pubblicato (una sola volta; non un contenuto proprio)"

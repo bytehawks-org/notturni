@@ -14,7 +14,8 @@
       "values": [
         "username",
         "full_name",
-        "display_name"
+        "display_name",
+        "verified_domain"
       ]
     }
   ],
@@ -131,6 +132,70 @@
           "type": "enum:post_author_name_style",
           "null": false,
           "default": "'username'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "bio",
+          "type": "text",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "country",
+          "type": "varchar(2)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "native_language",
+          "type": "varchar(2)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "fallback_languages",
+          "type": "text[]",
+          "null": false,
+          "default": "'{}'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "interests",
+          "type": "text[]",
+          "null": false,
+          "default": "'{}'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "directory_listed",
+          "type": "boolean",
+          "null": false,
+          "default": "true",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "username_changed_at",
+          "type": "timestamptz",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "verified_domain",
+          "type": "varchar(255)",
+          "null": true,
+          "default": null,
           "references": null,
           "renamed_from": null
         },

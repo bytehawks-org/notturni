@@ -52,6 +52,9 @@ pub struct Config {
     pub revalidate_secret: Option<String>,
     /// Servizio di moderazione immagini; assente = nessuna classificazione.
     pub moderation_service_url: Option<String>,
+    /// Dominio pubblico dell'istanza (`NOCT_INSTANCE_FQDN`): base dei link nelle email, degli
+    /// identificatori di federazione e dominio email «blu» del sigillo di verifica.
+    pub instance_fqdn: String,
 }
 
 impl Config {
@@ -83,6 +86,7 @@ impl Config {
             frontend_revalidate_url: None,
             revalidate_secret: None,
             moderation_service_url: None,
+            instance_fqdn: "notturni.eu".into(),
         }
     }
 
@@ -189,6 +193,9 @@ impl Config {
         cfg.frontend_revalidate_url = get("NOCT_FRONTEND_REVALIDATE_URL");
         cfg.revalidate_secret = get("NOCT_REVALIDATE_SECRET");
         cfg.moderation_service_url = get("NOCT_MODERATION_SERVICE_URL");
+        if let Some(v) = get("NOCT_INSTANCE_FQDN") {
+            cfg.instance_fqdn = v.trim().trim_end_matches('.').to_lowercase();
+        }
         Ok(cfg)
     }
 }

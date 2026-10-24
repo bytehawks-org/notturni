@@ -1,0 +1,21 @@
+[[enum]]
+name = "custom_domain_status"
+values = ["pending", "verified", "failed"]
+
+# Un dominio per utente. Il dominio verificato è copiato su `users.verified_domain`, che il profilo
+# legge per mostrarlo, per il sigillo di verifica e per risolvere il profilo dal dominio.
+[[table]]
+name = "custom_domains"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "user_id", type = "uuid", ref = "users.id", on_delete = "cascade" },
+  { name = "domain", type = "varchar(255)" },
+  { name = "verification_token", type = "varchar(64)" },
+  { name = "status", type = "enum:custom_domain_status", default = "'pending'" },
+  { name = "verified_at", type = "timestamptz", null = true },
+]
+uniques = [
+  { name = "uq_custom_domains_user", columns = ["user_id"] },
+  { name = "uq_custom_domains_domain", columns = ["domain"] },
+]

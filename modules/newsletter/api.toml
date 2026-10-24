@@ -1,0 +1,285 @@
+# Compatibile con /api/v1/newsletter/*, /blogs/{slug}/newsletter/* e /admin/newsletter/* della v1.
+# Differenze: vedi todo/API_CHANGES.md (link di conferma derivato e non salvato, conferma solo di
+# iscrizioni in attesa, errori di validazione come `400`).
+
+[type.SubscribeRequest]
+email = { type = "string", max = 255 }
+# assente = digest di piattaforma
+blog_slug = "string?"
+locale = "string?"
+
+[type.StatusOut]
+# ok | confirmed | already_confirmed | invalid
+status = "string"
+
+[type.UnsubscribeRequest]
+token = { type = "string", max = 256 }
+reason = { type = "string", max = 500, optional = true }
+
+[type.TokenRequest]
+token = { type = "string", max = 256 }
+
+[type.NewsletterStats]
+pending = "int"
+confirmed = "int"
+unsubscribed = "int"
+
+[type.CampaignOut]
+id = "uuid"
+blog_id = { type = "uuid", nullable = true }
+kind = "enum:newsletter_campaign_kind"
+post_id = { type = "uuid", nullable = true }
+subject = "string"
+body_markdown = { type = "string", nullable = true }
+status = "enum:newsletter_campaign_status"
+scheduled_at = { type = "timestamp", nullable = true }
+sent_at = { type = "timestamp", nullable = true }
+recipient_count = "int"
+failed_count = "int"
+created_at = "timestamp"
+
+[type.CampaignCreate]
+subject = { type = "string", max = 255, non_blank = true, message = "L'oggetto non può essere vuoto (max 255 caratteri)." }
+body_markdown = { type = "string", max = 200000, non_blank = true, message = "Il testo della campagna non può essere vuoto." }
+# assente o nel passato = invio immediato; deve avere il fuso orario
+scheduled_at = { type = "timestamp", optional = true }
+
+[type.CampaignUpdate]
+subject = { type = "string", max = 255, non_blank = true, optional = true, message = "L'oggetto non può essere vuoto (max 255 caratteri)." }
+body_markdown = { type = "string", max = 200000, non_blank = true, optional = true, message = "Il testo della campagna non può essere vuoto." }
+# assente = invariato; `null` o nel passato = invio immediato
+scheduled_at = { type = "timestamp", nullable = true, optional = true }
+
+[type.NewsletterSettingsUpdate]
+newsletter_auto_notify_enabled = "bool?"
+# `null` azzera
+newsletter_sender_name = { type = "string", max = 120, nullable = true, optional = true }
+newsletter_banner_url = { type = "string", max = 2048, nullable = true, optional = true }
+newsletter_banner_alt_text = { type = "string", max = 300, nullable = true, optional = true }
+
+[type.NewsletterSettingsOut]
+newsletter_auto_notify_enabled = "bool"
+newsletter_sender_name = { type = "string", nullable = true }
+newsletter_banner_url = { type = "string", nullable = true }
+newsletter_banner_alt_text = "string"
+
+# Come sopra, per il digest di piattaforma: nessun invio automatico
+[type.AdminNewsletterSettingsUpdate]
+newsletter_sender_name = { type = "string", max = 120, nullable = true, optional = true }
+newsletter_banner_url = { type = "string", max = 2048, nullable = true, optional = true }
+newsletter_banner_alt_text = { type = "string", max = 300, nullable = true, optional = true }
+
+[type.AdminNewsletterSettingsOut]
+newsletter_sender_name = { type = "string", nullable = true }
+newsletter_banner_url = { type = "string", nullable = true }
+newsletter_banner_alt_text = "string"
+
+# ---- pubbliche ----
+
+[[route]]
+id = "subscribe"
+method = "POST"
+path = "/newsletter/subscribe"
+auth = "public"
+kind = "custom"
+handler = "subscribe"
+request = "SubscribeRequest"
+response = "StatusOut"
+status = 202
+rate_limit = { key = "ip", max = 5, window = "1h" }
+summary = "Iscrizione con doppio consenso; risposta sempre uguale (nessuna enumerazione delle email)"
+
+[[route]]
+id = "confirm_subscription"
+method = "GET"
+path = "/newsletter/confirm"
+auth = "public"
+kind = "custom"
+handler = "confirm_subscription"
+response = "StatusOut"
+rate_limit = { key = "ip", max = 30, window = "5m" }
+summary = "Conferma l'iscrizione (`?token=`); idempotente"
+
+[[route]]
+id = "unsubscribe"
+method = "POST"
+path = "/newsletter/unsubscribe"
+auth = "public"
+kind = "custom"
+handler = "unsubscribe"
+request = "UnsubscribeRequest"
+response = "StatusOut"
+rate_limit = { key = "ip", max = 30, window = "5m" }
+summary = "Disiscrizione con il link firmato ricevuto per email, senza login"
+
+[[route]]
+id = "unsubscribe_and_delete"
+method = "POST"
+path = "/newsletter/unsubscribe/delete"
+auth = "public"
+kind = "custom"
+handler = "unsubscribe_and_delete"
+request = "TokenRequest"
+response = "StatusOut"
+rate_limit = { key = "ip", max = 30, window = "5m" }
+summary = "Cancellazione dei propri dati dalla lista (GDPR art. 17), senza login"
+
+# ---- per blog ----
+
+[[route]]
+id = "blog_stats"
+method = "GET"
+path = "/blogs/{slug}/newsletter/stats"
+auth = "blog_write"
+kind = "custom"
+handler = "blog_stats"
+scope = { blog = "slug" }
+response = "NewsletterStats"
+summary = "Iscritti per stato"
+
+[[route]]
+id = "blog_campaigns"
+method = "GET"
+path = "/blogs/{slug}/newsletter/campaigns"
+auth = "blog_write"
+kind = "custom"
+handler = "blog_campaigns"
+scope = { blog = "slug" }
+response = "CampaignOut[]"
+summary = "Campagne del blog, dalla più recente"
+
+[[route]]
+id = "create_blog_campaign"
+method = "POST"
+path = "/blogs/{slug}/newsletter/campaigns"
+auth = "blog_write"
+kind = "custom"
+handler = "create_blog_campaign"
+scope = { blog = "slug" }
+request = "CampaignCreate"
+response = "CampaignOut"
+status = 201
+rate_limit = { key = "user", max = 20, window = "1h" }
+summary = "Crea una campagna manuale (immediata o pianificata)"
+
+[[route]]
+id = "update_blog_campaign"
+method = "PATCH"
+path = "/blogs/{slug}/newsletter/campaigns/{campaign_id}"
+auth = "blog_write"
+kind = "custom"
+handler = "update_blog_campaign"
+scope = { blog = "slug" }
+request = "CampaignUpdate"
+response = "CampaignOut"
+summary = "Modifica una campagna ancora pianificata"
+
+[[route]]
+id = "cancel_blog_campaign"
+method = "DELETE"
+path = "/blogs/{slug}/newsletter/campaigns/{campaign_id}"
+auth = "blog_write"
+kind = "custom"
+handler = "cancel_blog_campaign"
+scope = { blog = "slug" }
+response = "CampaignOut"
+summary = "Annulla una campagna ancora pianificata"
+
+[[route]]
+id = "get_blog_settings"
+method = "GET"
+path = "/blogs/{slug}/newsletter/settings"
+auth = "blog_write"
+kind = "custom"
+handler = "get_blog_settings"
+scope = { blog = "slug" }
+response = "NewsletterSettingsOut"
+summary = "Invio automatico, nome del mittente e banner delle email"
+
+[[route]]
+id = "update_blog_settings"
+method = "PATCH"
+path = "/blogs/{slug}/newsletter/settings"
+auth = "blog_write"
+kind = "custom"
+handler = "update_blog_settings"
+scope = { blog = "slug" }
+request = "NewsletterSettingsUpdate"
+response = "NewsletterSettingsOut"
+summary = "Aggiorna le impostazioni (campo assente = invariato, `null` = azzera)"
+
+# ---- digest di piattaforma ----
+
+[[route]]
+id = "admin_stats"
+method = "GET"
+path = "/admin/newsletter/stats"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "admin_stats"
+response = "NewsletterStats"
+summary = "Iscritti al digest per stato"
+
+[[route]]
+id = "get_admin_settings"
+method = "GET"
+path = "/admin/newsletter/settings"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "get_admin_settings"
+response = "AdminNewsletterSettingsOut"
+summary = "Nome del mittente e banner del digest"
+
+[[route]]
+id = "update_admin_settings"
+method = "PATCH"
+path = "/admin/newsletter/settings"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "update_admin_settings"
+request = "AdminNewsletterSettingsUpdate"
+response = "AdminNewsletterSettingsOut"
+summary = "Aggiorna le impostazioni del digest"
+
+[[route]]
+id = "admin_campaigns"
+method = "GET"
+path = "/admin/newsletter/campaigns"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "admin_campaigns"
+response = "CampaignOut[]"
+summary = "Campagne del digest"
+
+[[route]]
+id = "create_admin_campaign"
+method = "POST"
+path = "/admin/newsletter/campaigns"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "create_admin_campaign"
+request = "CampaignCreate"
+response = "CampaignOut"
+status = 201
+summary = "Crea una campagna del digest"
+
+[[route]]
+id = "update_admin_campaign"
+method = "PATCH"
+path = "/admin/newsletter/campaigns/{campaign_id}"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "update_admin_campaign"
+request = "CampaignUpdate"
+response = "CampaignOut"
+summary = "Modifica una campagna del digest ancora pianificata"
+
+[[route]]
+id = "cancel_admin_campaign"
+method = "DELETE"
+path = "/admin/newsletter/campaigns/{campaign_id}"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "cancel_admin_campaign"
+response = "CampaignOut"
+summary = "Annulla una campagna del digest ancora pianificata"

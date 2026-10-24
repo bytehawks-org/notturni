@@ -70,6 +70,7 @@ struct AuthorRow {
     first_name: Option<String>,
     last_name: Option<String>,
     style: String,
+    verified_domain: Option<String>,
     avatar_object_key: Option<String>,
 }
 
@@ -84,7 +85,7 @@ pub async fn render(st: &AppState, rows: Vec<PostRow>) -> Result<Vec<Value>, Api
     let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
     let author_ids: Vec<Uuid> = rows.iter().map(|r| r.author_id).collect();
     let authors: HashMap<Uuid, AuthorRow> = sqlx::query_as::<_, AuthorRow>(
-        "SELECT id, username, display_name, first_name, last_name, post_author_name_style::text AS style, avatar_object_key
+        "SELECT id, username, display_name, first_name, last_name, post_author_name_style::text AS style, verified_domain, avatar_object_key
          FROM users WHERE id = ANY($1)",
     )
     .bind(&author_ids)
@@ -120,6 +121,7 @@ pub async fn render(st: &AppState, rows: Vec<PostRow>) -> Result<Vec<Value>, Api
                     first_name: a.first_name.clone(),
                     last_name: a.last_name.clone(),
                     style: a.style.clone(),
+                    verified_domain: a.verified_domain.clone(),
                 },
             ),
             None => r.author_display_name.clone(),

@@ -28,6 +28,10 @@ pub struct Lifecycle {
     /// Il modulo definisce `gates::all()` con i [`LoginGate`] che possono fermare un login
     /// riuscito (es. sfida MFA).
     pub login_gates: bool,
+    #[serde(default)]
+    /// Il modulo definisce `personal_data::all()` con i [`PersonalData`] che espongono e cancellano
+    /// i dati personali dell'utente (modulo `gdpr`).
+    pub personal_data: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]

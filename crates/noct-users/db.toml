@@ -3,10 +3,10 @@ name = "platform_role"
 values = ["super_admin", "amministratore", "moderatore", "utente"]
 
 # Come l'utente firma i propri testi, in mancanza di un alias di membership o di blog
-# (il valore `verified_domain` arriva con il modulo dei domini verificati).
+# (`verified_domain` vale solo con un dominio personale verificato dal modulo `custom_domains`).
 [[enum]]
 name = "post_author_name_style"
-values = ["username", "full_name", "display_name"]
+values = ["username", "full_name", "display_name", "verified_domain"]
 
 [[table]]
 name = "users"
@@ -30,6 +30,19 @@ columns = [
   # chiave nel bucket pubblico degli avatar; l'URL si risolve a runtime
   { name = "avatar_object_key", type = "varchar(255)", null = true },
   { name = "post_author_name_style", type = "enum:post_author_name_style", default = "'username'" },
+  # profilo pubblico (rotte e regole nel crate `profiles`)
+  { name = "bio", type = "text", null = true },
+  # ISO 3166-1 alpha-2 maiuscolo / ISO 639-1 minuscolo
+  { name = "country", type = "varchar(2)", null = true },
+  { name = "native_language", type = "varchar(2)", null = true },
+  { name = "fallback_languages", type = "text[]", default = "'{}'" },
+  # chiavi canoniche dell'elenco del modulo `interests`
+  { name = "interests", type = "text[]", default = "'{}'" },
+  # opt-out dalla directory pubblica degli utenti
+  { name = "directory_listed", type = "boolean", default = "true" },
+  { name = "username_changed_at", type = "timestamptz", null = true },
+  # dominio personale verificato (lo scrive il modulo `custom_domains`)
+  { name = "verified_domain", type = "varchar(255)", null = true },
 ]
 uniques = [
   { name = "uq_users_username", columns = ["username"] },

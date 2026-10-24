@@ -1,0 +1,15 @@
+[module]
+name = "profiles"
+version = "0.1.0"
+kind = "core"
+requires = ["users", "blogs", "posts", "media", "audit", "events"]
+description = "Profilo utente: anagrafica pubblica e privata, avatar, link social, cambio email in tre passi, directory degli utenti, blog e post pubblici di un utente"
+
+# Spedisce il codice del cambio email: il valore si rigenera dal job, non passa da outbox né bus.
+[jobs.send_email_change_code]
+subject = "profiles.email_change.send"
+max_deliver = 5
+backoff = ["10s", "1m", "5m"]
+
+[lifecycle]
+personal_data = true

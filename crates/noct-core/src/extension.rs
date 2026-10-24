@@ -28,6 +28,8 @@ pub type JsonMap = Map<String, Value>;
 pub enum Entity {
     Blog,
     Post,
+    /// Profilo utente: solo campi in uscita ([`EntityExtension::enrich`]); `apply` non viene chiamato.
+    User,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

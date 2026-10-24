@@ -25,7 +25,7 @@ pub use config::{Config, StorageBackend, StorageConfig};
 pub use db::map_db_error;
 pub use error::ApiError;
 pub use extension::{Entity, EntityExtension, ExtCtx, Extensions, JsonMap, Op};
-pub use hooks::{LoginGate, LoginGates};
+pub use hooks::{LoginGate, LoginGates, PersonalData, PersonalDataProviders, StoredObject};
 pub use patch::Patch;
 pub use rate_limit::RateLimiter;
 pub use registry::{ModuleDef, Registry};

@@ -1,0 +1,179 @@
+{
+  "enums": [
+    {
+      "name": "report_reason",
+      "values": [
+        "spam",
+        "abuse",
+        "illegal",
+        "other"
+      ]
+    },
+    {
+      "name": "report_status",
+      "values": [
+        "open",
+        "dismissed",
+        "actioned"
+      ]
+    },
+    {
+      "name": "report_target_type",
+      "values": [
+        "blog",
+        "post"
+      ]
+    }
+  ],
+  "tables": [
+    {
+      "name": "content_reports",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "null": false,
+          "default": "gen_random_uuid()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "reporter_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "users",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "target_type",
+          "type": "enum:report_target_type",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "target_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "blog_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "blogs",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "reason",
+          "type": "enum:report_reason",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "note",
+          "type": "varchar(500)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "status",
+          "type": "enum:report_status",
+          "null": false,
+          "default": "'open'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "resolved_at",
+          "type": "timestamptz",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "resolved_by_id",
+          "type": "uuid",
+          "null": true,
+          "default": null,
+          "references": {
+            "table": "users",
+            "column": "id",
+            "on_delete": "set_null"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "ix_content_reports_target_id",
+          "columns": [
+            "target_id"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_content_reports_blog_id",
+          "columns": [
+            "blog_id"
+          ],
+          "unique": false
+        },
+        {
+          "name": "ix_content_reports_status",
+          "columns": [
+            "status"
+          ],
+          "unique": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "uq_content_report_per_reporter",
+          "columns": [
+            "reporter_id",
+            "target_type",
+            "target_id"
+          ]
+        }
+      ]
+    }
+  ]
+}

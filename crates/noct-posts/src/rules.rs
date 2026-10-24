@@ -213,8 +213,10 @@ pub struct UserNames {
     pub display_name: Option<String>,
     pub first_name: Option<String>,
     pub last_name: Option<String>,
-    /// `username` | `full_name` | `display_name`
+    /// `username` | `full_name` | `display_name` | `verified_domain`
     pub style: String,
+    /// Dominio personale verificato (modulo `custom_domains`)
+    pub verified_domain: Option<String>,
 }
 
 fn non_empty(s: &Option<String>) -> Option<&str> {
@@ -233,6 +235,8 @@ pub fn personal_display_name(user: &UserNames) -> String {
             if full.is_empty() { user.username.clone() } else { full }
         }
         "display_name" => non_empty(&user.display_name).unwrap_or(&user.username).to_string(),
+        // senza un dominio verificato (rimosso o mai verificato) ci si firma con lo username
+        "verified_domain" => non_empty(&user.verified_domain).unwrap_or(&user.username).to_string(),
         _ => user.username.clone(),
     }
 }
@@ -368,10 +372,15 @@ poi ![auto](https://x.org/c.webp "sensitive") e ![](https://x.org/d.gif)
             first_name: Some("Anna".into()),
             last_name: Some("Bianchi".into()),
             style: "full_name".into(),
+            verified_domain: Some("anna.example.org".into()),
         };
         assert_eq!(pick_display_name(Some("Firma"), Some("Blog"), &user), "Firma");
         assert_eq!(pick_display_name(None, Some("Blog"), &user), "Blog");
         assert_eq!(pick_display_name(Some(""), Some(""), &user), "Anna Bianchi");
+        let signed_with_domain = UserNames { style: "verified_domain".into(), ..user.clone() };
+        assert_eq!(personal_display_name(&signed_with_domain), "anna.example.org");
+        let lost_domain = UserNames { verified_domain: None, ..signed_with_domain };
+        assert_eq!(personal_display_name(&lost_domain), "anna", "senza dominio verificato si torna allo username");
         let mut u = user.clone();
         u.style = "display_name".into();
         assert_eq!(personal_display_name(&u), "Anna B.");

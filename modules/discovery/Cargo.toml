@@ -11,6 +11,7 @@ workspace = true
 
 [dependencies]
 noct-core.workspace = true
+async-trait.workspace = true
 noct-posts.workspace = true
 noct-blogs.workspace = true
 noct-platform.workspace = true

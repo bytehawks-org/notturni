@@ -15,6 +15,7 @@ pub fn all() -> Vec<ModuleDef> {
         noct_events::module(),
         noct_audit::module(),
         noct_auth::module(),
+        noct_profiles::module(),
     ];
     #[cfg(feature = "taxonomy")]
     modules.push(noct_taxonomy::module());
@@ -38,6 +39,16 @@ pub fn all() -> Vec<ModuleDef> {
     modules.push(noct_auth_mfa::module());
     #[cfg(feature = "auth-sso")]
     modules.push(noct_auth_sso::module());
+    #[cfg(feature = "reports")]
+    modules.push(noct_reports::module());
+    #[cfg(feature = "newsletter")]
+    modules.push(noct_newsletter::module());
+    #[cfg(feature = "custom-domains")]
+    modules.push(noct_custom_domains::module());
+    #[cfg(feature = "gdpr")]
+    modules.push(noct_gdpr::module());
+    #[cfg(feature = "image-moderation")]
+    modules.push(noct_image_moderation::module());
     #[cfg(feature = "sandbox")]
     modules.push(noct_sandbox::module());
     modules

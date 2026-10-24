@@ -1,0 +1,10 @@
+[module]
+name = "reports"
+version = "0.1.0"
+kind = "optional"
+default_enabled = true
+requires = ["users", "blogs", "posts"]
+description = "Segnalazioni di blog e post da parte dei lettori registrati, una per bersaglio, da chiudere dalle rotte di amministrazione"
+
+[lifecycle]
+personal_data = true

@@ -27,11 +27,28 @@ pub struct Email {
     pub subject: String,
     pub text: String,
     pub html: Option<String>,
+    /// Nome mostrato del mittente; l'indirizzo resta sempre quello configurato.
+    pub from_name: Option<String>,
 }
 
 impl Email {
     pub fn text(to: impl Into<String>, subject: impl Into<String>, body: impl Into<String>) -> Self {
-        Self { to: vec![to.into()], subject: subject.into(), text: body.into(), html: None }
+        Self { to: vec![to.into()], subject: subject.into(), text: body.into(), html: None, from_name: None }
+    }
+
+    /// Messaggio `multipart/alternative`: testo semplice di ripiego e versione HTML.
+    pub fn alternative(
+        to: impl Into<String>,
+        subject: impl Into<String>,
+        text: impl Into<String>,
+        html: impl Into<String>,
+    ) -> Self {
+        Self { html: Some(html.into()), ..Self::text(to, subject, text) }
+    }
+
+    pub fn with_from_name(mut self, name: impl Into<String>) -> Self {
+        self.from_name = Some(name.into()).filter(|n| !n.trim().is_empty());
+        self
     }
 }
 
@@ -82,7 +99,16 @@ fn build_message(from: &Mailbox, email: &Email) -> Result<Message, MailError> {
     if email.to.is_empty() {
         return Err(MailError::Build("nessun destinatario".into()));
     }
-    let mut b = Message::builder().from(from.clone()).subject(email.subject.clone());
+    // il nome del mittente è testo libero dell'utente: lo si ripulisce da ritorni a capo e virgolette
+    let from = match email.from_name.as_deref() {
+        Some(name) => {
+            let clean: String =
+                name.chars().filter(|c| !c.is_control() && *c != '"' && *c != '<' && *c != '>').collect();
+            Mailbox::new(Some(clean.trim().to_string()).filter(|n| !n.is_empty()), from.email.clone())
+        }
+        None => from.clone(),
+    };
+    let mut b = Message::builder().from(from).subject(email.subject.clone());
     for to in &email.to {
         b = b.to(to.parse().map_err(|_| MailError::InvalidAddress(to.clone()))?);
     }
@@ -220,13 +246,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn sender_name_is_sanitized_and_the_address_never_changes() {
+        let (port, server) = fake_smtp().await;
+        let mailer = SmtpMailer::new(&SmtpConfig {
+            host: "127.0.0.1".into(),
+            port,
+            user: None,
+            password: None,
+            use_tls: false,
+            from: "Notturni <no-reply@example.com>".into(),
+        })
+        .unwrap();
+        // un nome con ritorni a capo e un indirizzo finto non può iniettare intestazioni né cambiare il mittente
+        let email = Email::alternative("lettore@example.com", "Ciao", "testo", "<p>testo</p>")
+            .with_from_name("Redazione\r\nBcc: x@example.com <evil@example.net>");
+        mailer.send(&email).await.unwrap();
+        drop(mailer);
+        let transcript = server.await.unwrap();
+        assert!(transcript.contains("MAIL FROM:<no-reply@example.com>"), "{transcript}");
+        assert!(!transcript.lines().any(|l| l.starts_with("Bcc:")), "{transcript}");
+        assert!(
+            transcript.contains("RCPT TO:<lettore@example.com>") && !transcript.contains("RCPT TO:<x@"),
+            "{transcript}"
+        );
+        // il nome è codificato (RFC 2047) e l'indirizzo dopo di esso è sempre quello configurato
+        assert!(transcript.contains("=?utf-8?b?") && transcript.contains("<no-reply@example.com>"), "{transcript}");
+        assert_eq!(Email::text("a@example.com", "s", "b").with_from_name("  ").from_name, None);
+    }
+
+    #[tokio::test]
     async fn invalid_addresses_and_empty_recipients_are_rejected() {
         let mem = MemoryMailer::default();
         assert!(matches!(
             mem.send(&Email::text("non-un-indirizzo", "s", "b")).await,
             Err(MailError::InvalidAddress(_))
         ));
-        let none = Email { to: vec![], subject: "s".into(), text: "b".into(), html: None };
+        let none = Email { to: vec![], ..Email::text("a@example.com", "s", "b") };
         assert!(matches!(mem.send(&none).await, Err(MailError::Build(_))));
         assert!(mem.sent().is_empty());
         mem.send(&Email::text("a@example.com", "s", "b")).await.unwrap();

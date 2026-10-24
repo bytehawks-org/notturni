@@ -24,4 +24,5 @@ linkedin_client_secret = { type = "string", env = "NOCT_OAUTH_LINKEDIN_CLIENT_SE
 endpoint_base = { type = "string", env = "NOCT_OAUTH_ENDPOINT_BASE", default = "" }
 
 [lifecycle]
+personal_data = true
 login_gates = true

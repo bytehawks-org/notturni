@@ -5,3 +5,6 @@ kind = "optional"
 default_enabled = true
 requires = ["users", "blogs", "posts"]
 description = "Frammenti: porzioni di testo evidenziate e salvate dai lettori su un post pubblicato, raccolta personale"
+
+[lifecycle]
+personal_data = true

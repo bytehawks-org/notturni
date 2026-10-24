@@ -61,6 +61,7 @@ pub async fn bootstrap(env: &dyn Fn(&str) -> Option<String>) -> Result<Runtime> 
     let state = AppState::new(pool, config, services, module_cfg)
         .with_extensions(extensions)
         .with_login_gates(registry.login_gates(&enabled))
+        .with_personal_data(registry.personal_data(&enabled))
         .with_modules(names.clone());
     // hook di avvio dei moduli (validazione della configurazione, provisioning del Super Admin...)
     registry.run_startup(&enabled, &state).await.map_err(anyhow::Error::msg)?;

@@ -375,7 +375,8 @@ async fn fake_moderation() -> String {
 #[tokio::test]
 async fn moderation_flags_uploads_and_never_blocks_them() {
     let url = fake_moderation().await;
-    let env = setup_with(&[], &[], Some(&move |cfg| cfg.moderation_service_url = Some(url.clone()))).await;
+    let configure = move |cfg: &mut noct_core::Config| cfg.moderation_service_url = Some(url.clone());
+    let env = setup_with(&["image_moderation"], &[], Some(&configure)).await;
     let anna = env.user("anna", "utente").await;
     env.blog("diario", anna, "public").await;
     let (s, m) = upload(&env, "/blogs/diario/media", Some(anna), "image/png", &png(50)).await;
@@ -384,8 +385,22 @@ async fn moderation_flags_uploads_and_never_blocks_them() {
     assert_eq!(blog["cover_image_is_sensitive"], true);
     env.teardown().await;
 
+    // il modulo spento è l'interruttore: anche con il servizio configurato non si classifica nulla
+    let url = fake_moderation().await;
+    let env = setup_with(&[], &[], Some(&move |cfg| cfg.moderation_service_url = Some(url.clone()))).await;
+    let anna = env.user("anna", "utente").await;
+    env.blog("diario", anna, "public").await;
+    let (s, m) = upload(&env, "/blogs/diario/media", Some(anna), "image/png", &png(50)).await;
+    assert_eq!((s, m["is_sensitive"].as_bool()), (StatusCode::CREATED, Some(false)), "{m}");
+    env.teardown().await;
+
     // servizio irraggiungibile: l'upload riesce comunque, non sensibile
-    let env = setup_with(&[], &[], Some(&|cfg| cfg.moderation_service_url = Some("http://127.0.0.1:1".into()))).await;
+    let env = setup_with(
+        &["image_moderation"],
+        &[],
+        Some(&|cfg| cfg.moderation_service_url = Some("http://127.0.0.1:1".into())),
+    )
+    .await;
     let anna = env.user("anna", "utente").await;
     env.blog("diario", anna, "public").await;
     let (s, m) = upload(&env, "/blogs/diario/media", Some(anna), "image/png", &png(50)).await;

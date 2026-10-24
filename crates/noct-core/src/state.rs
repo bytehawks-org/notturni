@@ -1,4 +1,4 @@
-use crate::{Config, Extensions, LoginGates, RateLimiter, Services};
+use crate::{Config, Extensions, LoginGates, PersonalDataProviders, RateLimiter, Services};
 use noct_manifest::ConfigValue;
 use sqlx::PgPool;
 use std::{
@@ -19,6 +19,8 @@ pub struct AppState {
     pub extensions: Extensions,
     /// Gate del login dei moduli attivi (sfida MFA...).
     pub login_gates: LoginGates,
+    /// Fornitori di dati personali dei moduli attivi (esportazione e cancellazione dell'account).
+    pub personal_data: PersonalDataProviders,
     /// Nomi dei moduli attivi: un modulo che legge dati di un altro opzionale (conteggi dei
     /// commenti, filtro per categoria) controlla qui che sia attivo.
     pub modules: Arc<BTreeSet<String>>,
@@ -40,12 +42,18 @@ impl AppState {
             module_config: Arc::new(module_config),
             extensions: Extensions::default(),
             login_gates: LoginGates::default(),
+            personal_data: PersonalDataProviders::default(),
             modules: Arc::new(BTreeSet::new()),
         }
     }
 
     pub fn with_login_gates(mut self, gates: LoginGates) -> Self {
         self.login_gates = gates;
+        self
+    }
+
+    pub fn with_personal_data(mut self, providers: PersonalDataProviders) -> Self {
+        self.personal_data = providers;
         self
     }
 

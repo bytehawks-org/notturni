@@ -1,0 +1,112 @@
+# Compatibile con GET /api/v1/users/me/export-data, DELETE /users/me e /admin/gdpr* della v1.
+
+[type.DataExport]
+# id, username, email, nome, ruolo, MFA, date… più i campi dei moduli attivi (profilo, dominio…)
+account = "json"
+# le altre sezioni dipendono dai moduli attivi: social_links, blogs_owned, posts_authored,
+# comments_authored, fragments, follows, api_tokens, newsletter_subscriptions, audit_log…
+
+[type.AccountDelete]
+# si deve ridigitare il proprio username: un gesto deliberato, non un booleano
+confirm_username = { type = "string", max = 64 }
+
+[type.GdprRequestCreate]
+username = { type = "string", max = 64, non_blank = true, message = "Indica lo username." }
+type = "enum:gdpr_request_type"
+# chi ha chiesto e come (email, PEC…): obbligatoria, va nel registro
+note = { type = "string", max = 2000, non_blank = true, message = "La nota è obbligatoria." }
+
+[type.GdprReject]
+note = { type = "string", max = 2000, non_blank = true, message = "La nota è obbligatoria." }
+
+[type.GdprRequestOut]
+id = "uuid"
+username = "string"
+type = "enum:gdpr_request_type"
+status = "enum:gdpr_request_status"
+deadline_at = "timestamp"
+note = { type = "string", nullable = true }
+created_by_username = { type = "string", nullable = true }
+approved_by_username = { type = "string", nullable = true }
+approved_at = { type = "timestamp", nullable = true }
+completed_at = { type = "timestamp", nullable = true }
+created_at = "timestamp"
+
+[type.GdprDone]
+status = "string"
+
+[[route]]
+id = "export_my_data"
+method = "GET"
+path = "/users/me/export-data"
+auth = "user"
+kind = "custom"
+handler = "export_my_data"
+response = "DataExport"
+rate_limit = { key = "user", max = 5, window = "1h" }
+summary = "Copia dei propri dati in un unico JSON (GDPR art. 20)"
+
+[[route]]
+id = "delete_my_account"
+method = "DELETE"
+path = "/users/me"
+auth = "user"
+kind = "custom"
+handler = "delete_my_account"
+request = "AccountDelete"
+status = 204
+rate_limit = { key = "user", max = 5, window = "10m" }
+summary = "Cancella l'account (GDPR art. 17): dati personali eliminati, contenuti condivisi anonimizzati"
+
+[[route]]
+id = "list_requests"
+method = "GET"
+path = "/admin/gdpr"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "list_requests"
+response = "GdprRequestOut[]"
+summary = "Registro delle richieste (`status`): aperte e approvate prima, per scadenza"
+
+[[route]]
+id = "create_request"
+method = "POST"
+path = "/admin/gdpr"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "create_request"
+request = "GdprRequestCreate"
+response = "GdprRequestOut"
+status = 201
+summary = "Inserisce una richiesta arrivata fuori banda a nome di un utente"
+
+[[route]]
+id = "approve_request"
+method = "POST"
+path = "/admin/gdpr/{request_id}/approve"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "approve_request"
+response = "GdprRequestOut"
+summary = "Approva; una cancellazione la approva un amministratore diverso da chi l'ha inserita"
+
+[[route]]
+id = "reject_request"
+method = "POST"
+path = "/admin/gdpr/{request_id}/reject"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "reject_request"
+request = "GdprReject"
+response = "GdprRequestOut"
+summary = "Rifiuto motivato"
+
+[[route]]
+id = "execute_request"
+method = "POST"
+path = "/admin/gdpr/{request_id}/execute"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "execute_request"
+response = "DataExport"
+summary = "Esegue: un export restituisce il JSON dei dati; una cancellazione approvata anonimizza l'account"

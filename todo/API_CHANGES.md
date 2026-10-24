@@ -37,6 +37,26 @@ Nessuna è una rottura silenziosa.
 | `GET /blogs/{slug}/overview` | `storage_bytes` è la somma di `media_files.size_bytes` (la stessa della quota); i conteggi dei commenti sono 0 se il modulo `comments` è spento | in v1 si contavano gli oggetti su storage, backup compresi |
 | Ordinamenti | feed, ricerca e directory hanno un ordine di spareggio per `id` | risultati stabili tra una pagina e l'altra |
 | `/users/me/{posts,media,links,publications}` | escludono i blog in cancellazione, come in v1; ora vivono nei moduli proprietari e spariscono con essi | modularità |
+| `GET /users/{username}`, `/users/{username}/{blogs,posts,comments}` | `404` per un account disattivato (sospeso o cancellato) | in v1 il profilo di un account anonimizzato restava raggiungibile |
+| `GET /users` | `q` ignora `%` e `_` come jolly (sono letterali); ordinamento di spareggio per `id`; senza il modulo `discovery` `follower_count` è 0 | coerenza con le altre ricerche |
+| `PATCH /users/me` | `bio`, nome, cognome e nome pubblico vuoti o di soli spazi diventano `null` (v1 salvava `""` per `bio`); `post_author_name_style` non valido → `422`; limiti: `bio` ≤ 5000, nome/cognome ≤ 100, nome pubblico ≤ 255 | v1 non limitava la bio e restituiva `500` oltre la lunghezza delle colonne |
+| `PATCH /users/me` | `fallback_languages` senza duplicati (ordine preservato); `interests` senza duplicati e vuoti; senza il modulo `interests` si possono solo svuotare | coerenza con il resto delle liste |
+| `POST /users/me/social-links` | l'URL deve essere `http://` o `https://` (`400`); etichetta e URL ≤ 100 / 2048 caratteri; il tetto di 5 è serializzato sulla riga utente | in v1 `javascript:` e `data:` finivano in un `href` del profilo pubblico; due richieste concorrenti superavano il tetto |
+| `POST /users/me/email/*` | i codici sono derivati e non salvati (come l'OTP di reset); limite di 5 richieste e 10 verifiche ogni 10 minuti per utente | v1 salvava l'hash del codice e non limitava i tentativi |
+| `POST /users/me/avatar` | tipo reale dell'immagine verificato (PNG/JPEG/WEBP, max 2 MiB) | in v1 si fidava del `Content-Type` dichiarato |
+| `POST /newsletter/subscribe` | `blog_slug` non visibile al chiamante → `404`; `email` e `locale` non validi → `400` (in v1 `422`); l'email è salvata in minuscolo | coerenza con il resto dell'API |
+| `GET /newsletter/confirm` | conferma solo iscrizioni **in attesa**: un vecchio link di un iscritto già disiscritto non lo riporta in lista (`invalid`); `?token=` mancante → `422`; il token non è più un valore casuale salvato ma firmato, e una nuova richiesta di iscrizione invalida il link precedente | in v1 un vecchio link riattivava un'iscrizione disdetta |
+| `POST /newsletter/unsubscribe*` | i link già spediti dalla v1 restano validi (stessa firma HMAC); `reason` ≤ 500 caratteri (`400`) | continuità dei link nelle email |
+| Campagne pianificate | partono davvero alla scadenza (`newsletter.campaigns.dispatch`, accodato dal pianificatore della F7) | in v1 restavano `scheduled` per sempre |
+| Campagne | blog sospeso, in pausa o cancellato, o post non più pubblicato → `canceled` invece di spedire; SMTP assente → `failed`; un post pianificato nel futuro dà una campagna pianificata alla stessa ora | in v1 si spediva comunque e senza SMTP la campagna risultava inviata a 0 destinatari |
+| `PATCH /blogs/{slug}/newsletter/settings` | `newsletter_banner_url` solo http(s) (`400`) | il valore finisce in un `<img src>` |
+| `POST /blogs/{slug}/report`, `/posts/{id}/report` | `reason` non valido → `400`; `note` più lunga di 500 caratteri è tagliata (come in v1) | un solo formato d'errore |
+| `POST /users/me/domain` | dominio con etichette oltre 63 caratteri o con schema/percorso → `400`; la verifica DNS ha timeout configurabile | v1 accettava solo il formato dell'espressione regolare |
+| `PATCH /users/me` | `post_author_name_style = verified_domain` (valore già previsto in v1): se il dominio non c'è più si firma con lo username | coerenza |
+| `DELETE /users/me`, `/admin/gdpr/{id}/execute` | un Super Admin non si cancella, né da solo né con una richiesta | senza, la piattaforma non si amministra più (in v1 solo il percorso admin lo impediva) |
+| `GET /users/me/export-data` | le sezioni dei moduli spenti non compaiono; in più `memberships`, `sso_identities`, `reports_made` e `user.data_exported` nell'audit; mai token, hash o segreti | portabilità completa e verificabile |
+| `DELETE /users/me` | anche le etichette nelle liste dei bloccati dei blog altrui e gli inviti pendenti ricevuti sono ripuliti; limite di 5 richieste ogni 10 minuti | in v1 restavano il nome nell'etichetta e gli inviti |
+| `GET /admin/gdpr` | `status` non valido → `422`; ordine: aperte, poi approvate, poi per scadenza | stabile |
 | `POST /auth/mfa/totp/setup` | il nuovo segreto è «in attesa» fino a `confirm`; non sostituisce quello attivo | in v1 rigenerarlo con l'MFA già attiva la rompeva finché non si confermava |
 | `POST /auth/mfa/verify`, `confirm` | lo stesso codice TOTP non si può usare due volte; il metodo della sfida deve essere quello attuale | replay di un codice intercettato |
 | `POST /auth/mfa/{email/setup,disable}` | `auth.mfa_enabled` e `auth.mfa_disabled` finiscono nell'audit; limite di richieste per utente | assenti in v1 |

@@ -116,9 +116,10 @@ const COMMENT_COLS: &str =
 /// preferenza si riflette sui commenti passati); un solo SELECT per l'intero elenco.
 async fn comments_out(st: &AppState, rows: &[CommentRow], moderator_view: bool) -> Result<Vec<Value>, ApiError> {
     let ids: Vec<Uuid> = rows.iter().filter_map(|c| c.author_id).collect();
-    type AuthorRow = (Uuid, String, Option<String>, Option<String>, Option<String>, String, Option<String>);
+    type AuthorRow =
+        (Uuid, String, Option<String>, Option<String>, Option<String>, String, Option<String>, Option<String>);
     let authors: Vec<AuthorRow> = sqlx::query_as(
-        "SELECT id, username, display_name, first_name, last_name, post_author_name_style::text, avatar_object_key
+        "SELECT id, username, display_name, first_name, last_name, post_author_name_style::text, verified_domain, avatar_object_key
          FROM users WHERE id = ANY($1)",
     )
     .bind(&ids)
@@ -126,13 +127,14 @@ async fn comments_out(st: &AppState, rows: &[CommentRow], moderator_view: bool) 
     .await?;
     let by_id: HashMap<Uuid, (String, Option<String>)> = authors
         .into_iter()
-        .map(|(id, username, display_name, first_name, last_name, style, avatar)| {
+        .map(|(id, username, display_name, first_name, last_name, style, verified_domain, avatar)| {
             let name = noct_posts::rules::personal_display_name(&UserNames {
                 username,
                 display_name,
                 first_name,
                 last_name,
                 style,
+                verified_domain,
             });
             let avatar_url = avatar.map(|k| st.services.storage.public_url(&st.config.storage.bucket_avatars, &k));
             (id, (name, avatar_url))
@@ -533,4 +535,57 @@ pub async fn unblock_author(ctx: RouteCtx) -> Result<(), ApiError> {
         return Err(ApiError::not_found("Blocco non trovato."));
     }
     Ok(())
+}
+
+/// Commenti approvati di un utente su post pubblici di blog pubblici (tab «Commenti» del profilo).
+/// Come per blog e post, solo quelli firmati con lo username: un commento con un altro nome non
+/// deve collegare quel nome all'identità reale.
+pub async fn list_user_comments(ctx: RouteCtx) -> Result<Vec<Value>, ApiError> {
+    let st = &ctx.state;
+    let identifier = ctx.path.get("username").map(String::as_str).unwrap_or_default();
+    let limit = ctx
+        .query
+        .get("limit")
+        .map(|v| v.trim().parse::<i64>())
+        .transpose()
+        .map_err(|_| ApiError::unprocessable("`limit` deve essere un intero."))?
+        .unwrap_or(20)
+        .clamp(1, 50);
+    let offset = ctx
+        .query
+        .get("offset")
+        .map(|v| v.trim().parse::<i64>())
+        .transpose()
+        .map_err(|_| ApiError::unprocessable("`offset` deve essere un intero."))?
+        .unwrap_or(0)
+        .max(0);
+    let user: Option<(Uuid, String, Option<String>)> = sqlx::query_as(
+        "SELECT id, username, verified_domain FROM users
+         WHERE is_active AND (lower(username) = lower($1) OR verified_domain = lower($1))
+         ORDER BY (lower(username) = lower($1)) DESC LIMIT 1",
+    )
+    .bind(identifier)
+    .fetch_optional(&st.db)
+    .await?;
+    let (user, username, domain) = user.ok_or_else(|| ApiError::not_found("Utente non trovato."))?;
+    let rows: Vec<(Uuid, String, DateTime<Utc>, String, String, String)> = sqlx::query_as(&format!(
+        "SELECT c.id, c.content, c.created_at, p.title, p.slug, b.slug
+         FROM comments c JOIN posts p ON p.id = c.post_id JOIN blogs b ON b.id = p.blog_id
+         WHERE c.author_id = $1 AND lower(c.author_display_name) IN (lower($2), lower($5)) AND c.status = 'approved' AND {VISIBLE_SQL}
+           AND b.visibility = 'public' AND NOT b.is_suspended AND NOT b.is_paused AND b.deleted_at IS NULL
+         ORDER BY c.created_at DESC, c.id LIMIT $3 OFFSET $4"
+    ))
+    .bind(user)
+    .bind(&username)
+    .bind(limit)
+    .bind(offset)
+    .bind(domain)
+    .fetch_all(&st.db)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(id, content, created_at, post_title, post_slug, blog_slug)| {
+            json!({"id": id, "content": content, "created_at": created_at, "post_title": post_title, "permalink": format!("/{blog_slug}/{post_slug}")})
+        })
+        .collect())
 }

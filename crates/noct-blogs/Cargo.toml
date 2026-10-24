@@ -11,6 +11,7 @@ workspace = true
 
 [dependencies]
 noct-core.workspace = true
+async-trait.workspace = true
 axum.workspace = true
 serde.workspace = true
 serde_json.workspace = true

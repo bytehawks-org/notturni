@@ -7,6 +7,7 @@ include!(concat!(env!("OUT_DIR"), "/module_gen.rs"));
 
 mod handlers_impl;
 mod out;
+pub mod personal_data;
 pub mod rules;
 
 pub mod handlers {

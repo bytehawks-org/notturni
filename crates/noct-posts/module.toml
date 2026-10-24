@@ -9,3 +9,6 @@ description = "Post: bozze, revisione, pubblicazione e pianificazione, traduzion
 # moduli: backup su storage (operazioni) e notifica agli iscritti (newsletter).
 [events]
 publishes = ["posts.post.saved", "posts.post.published"]
+
+[lifecycle]
+personal_data = true

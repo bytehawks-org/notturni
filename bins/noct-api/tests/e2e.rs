@@ -393,7 +393,11 @@ async fn outbox_event_and_job_flow(env: Env) {
     // la chiave persiste in Redis fra un'esecuzione e l'altra: si parte da zero
     env.state.services.cache.delete("sandbox:last_created").await.unwrap();
     let background = env.registry.start_background(&env.enabled, &env.state).await.unwrap();
-    assert_eq!(background.consumer_count(), 3, "job cleanup + evento note.created + job di reset password");
+    assert_eq!(
+        background.consumer_count(),
+        4,
+        "job cleanup + evento note.created + job di reset password + job del cambio email"
+    );
     let cache = env.state.services.cache.clone();
     eventually("evento consegnato all'handler", || async {
         cache.get("sandbox:last_created").await.unwrap().is_some()

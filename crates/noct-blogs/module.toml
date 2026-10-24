@@ -4,3 +4,6 @@ version = "0.2.0"
 kind = "core"
 requires = ["users", "audit", "platform"]
 description = "Blog, collaboratori e inviti, ciclo di vita (pausa, cancellazione con tolleranza, trasferimento), configurazione di presentazione"
+
+[lifecycle]
+personal_data = true

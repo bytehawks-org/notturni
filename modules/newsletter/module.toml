@@ -1,0 +1,31 @@
+[module]
+name = "newsletter"
+version = "0.1.0"
+kind = "optional"
+default_enabled = true
+requires = ["users", "blogs", "posts", "events"]
+description = "Newsletter per blog e digest di piattaforma: iscrizione con doppio consenso, disiscrizione e cancellazione senza login, notifica automatica dei nuovi post e campagne manuali"
+
+[events]
+# alla pubblicazione di un post nasce (una sola volta) la campagna di notifica agli iscritti
+subscribes = ["posts.post.published"]
+
+[jobs.send_confirmation]
+subject = "newsletter.confirmation.send"
+max_deliver = 5
+backoff = ["10s", "1m", "5m"]
+
+[jobs.send_campaign]
+subject = "newsletter.campaign.send"
+max_deliver = 5
+backoff = ["30s", "5m", "30m"]
+
+# Fa partire le campagne pianificate arrivate a scadenza. Va accodato a intervalli regolari dal
+# pianificatore dei job periodici (Fase 7); vedi `jobs::dispatch_due`.
+[jobs.dispatch_due]
+subject = "newsletter.campaigns.dispatch"
+max_deliver = 3
+backoff = ["30s", "5m"]
+
+[lifecycle]
+personal_data = true

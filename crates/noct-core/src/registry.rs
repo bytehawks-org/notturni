@@ -29,6 +29,8 @@ pub struct ModuleDef {
     pub extensions: fn() -> Vec<Arc<dyn EntityExtension>>,
     /// Gate del login dichiarati in `[lifecycle] login_gates` (altrimenti nessuno).
     pub login_gates: fn() -> Vec<Arc<dyn crate::LoginGate>>,
+    /// Fornitori di dati personali dichiarati in `[lifecycle] personal_data` (altrimenti nessuno).
+    pub personal_data: fn() -> Vec<Arc<dyn crate::PersonalData>>,
     /// Directory dei sorgenti del modulo (solo per gli strumenti di sviluppo).
     pub source_dir: &'static str,
 }
@@ -199,6 +201,11 @@ impl Registry {
     /// Gate del login dei moduli attivi.
     pub fn login_gates(&self, enabled: &[usize]) -> crate::LoginGates {
         crate::LoginGates::new(enabled.iter().flat_map(|&i| (self.entries[i].def.login_gates)()).collect())
+    }
+
+    /// Fornitori di dati personali dei moduli attivi.
+    pub fn personal_data(&self, enabled: &[usize]) -> crate::PersonalDataProviders {
+        crate::PersonalDataProviders::new(enabled.iter().flat_map(|&i| (self.entries[i].def.personal_data)()).collect())
     }
 
     /// Nomi dei moduli attivi.

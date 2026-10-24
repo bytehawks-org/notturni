@@ -67,9 +67,13 @@ async fn store_content_image(ctx: &RouteCtx, up: &Upload) -> Result<Stored, ApiE
     let key = upload::media_key(&st.config.site_slug, b.owner_id, b.id, ext);
     let bucket = &st.config.storage.bucket_content;
     st.services.storage.put(bucket, &key, up.data.clone(), &up.content_type).await.map_err(ApiError::internal)?;
-    let threshold = noct_platform::get(&st.db).await?.moderation_threshold;
-    let is_sensitive =
-        st.services.moderation.classify(up.data.clone(), &up.filename, &up.content_type, Some(threshold)).await;
+    // la classificazione è del modulo opzionale `image_moderation`: spento, nessun controllo
+    let is_sensitive = if st.module_enabled("image_moderation") {
+        let threshold = noct_platform::get(&st.db).await?.moderation_threshold;
+        st.services.moderation.classify(up.data.clone(), &up.filename, &up.content_type, Some(threshold)).await
+    } else {
+        false
+    };
     Ok(Stored {
         url: st.services.storage.public_url(bucket, &key),
         key,

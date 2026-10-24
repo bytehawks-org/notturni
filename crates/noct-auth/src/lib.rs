@@ -11,6 +11,7 @@
 include!(concat!(env!("OUT_DIR"), "/module_gen.rs"));
 
 mod handlers_impl;
+pub mod personal_data;
 mod settings;
 mod util;
 

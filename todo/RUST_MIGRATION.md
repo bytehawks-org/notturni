@@ -202,8 +202,8 @@ consegna federata con retry (AT Protocol/ActivityPub).
 | 2 | Core infrastruttura ✅ (§12) | storage, cache, bus (NATS + outbox), mail, markdown, config; health; `noct-ctl` |
 | 3 | Core auth ✅ (§13) | utenti, sessioni, JWT, API token, ruoli, audit, bootstrap super admin |
 | 4 | Core contenuti ✅ (§14) | `blogs`, `posts`, media, permalink, punti di estensione per i moduli |
-| 5 | Moduli, ondata 1 | divisa in tre blocchi, uno per sessione (§15): **5a** ✅ taxonomy, publications, pages, link_preview · **5b** ✅ notes, fragments, comments · **5c** ✅ discovery (feed, ricerca, directory, follow, panoramica, letture, menzioni), interests, viste «tutti i miei blog» · **5d** profilo utente (vedi §15) |
-| 6 | Moduli, ondata 2 | divisa in tre blocchi (§16): **6a** ✅ auth_mfa, auth_sso · **6b** newsletter, reports, custom_domains · **6c** gdpr, image_moderation |
+| 5 | Moduli, ondata 1 | divisa in tre blocchi, uno per sessione (§15): **5a** ✅ taxonomy, publications, pages, link_preview · **5b** ✅ notes, fragments, comments · **5c** ✅ discovery (feed, ricerca, directory, follow, panoramica, letture, menzioni), interests, viste «tutti i miei blog» · **5d** ✅ profilo utente (§15) |
+| 6 | Moduli, ondata 2 | divisa in tre blocchi (§16): **6a** ✅ auth_mfa, auth_sso · **6b** ✅ newsletter, reports, custom_domains · **6c** ✅ gdpr, image_moderation |
 | 7 | Operazioni | worker, ops-backup, audit-maintenance, Dockerfile (cargo-chef, multi-arch), compose, k8s, CI (fmt, clippy, test, deny, audit, CodeQL, SBOM), documentazione |
 | 8 | Chiusura | rimozione `legacy/`, benchmark, valutazione `moderation` in Rust (ONNX/`ort`) |
 
@@ -484,6 +484,7 @@ Nuovi: 9 su blog, 8 su post, 6 su media, 3 sulle estensioni (end-to-end con Post
 | **5a** ✅ | `taxonomy`, `publications`, `pages`, `link_preview` | si agganciano a blog/post solo con `EntityExtension` o sono autonomi: nessuna modifica al core |
 | **5b** ✅ | `notes`, `fragments`, `comments` | toccano il contenuto del post (marcatori nel testo, note a piè di pagina, commenti con moderazione e modalità per post) e condividono regole di sanificazione |
 | **5c** ✅ | `discovery`, `interests` | letture aggregate trasversali (feed, ricerca globale, directory dei blog, follow, panoramica, letture): dipendono da tutti i campi dei moduli precedenti e sono quelle dove contano le prestazioni |
+| **5d** ✅ | `profiles` (core) | il profilo utente: anagrafica, avatar, link social, cambio email, directory degli utenti e viste pubbliche di blog, post e commenti |
 
 ### 5a — completato
 
@@ -527,6 +528,21 @@ Test e verifica: 10 test end-to-end (`bins/noct-api/tests/discovery_modules.rs`:
 
 Limiti noti / da fare: l'**endpoint del profilo utente** non è ancora stato portato e diventa il blocco **5d**: `GET /users` (directory utenti con filtro per interesse), `GET/PATCH /users/me` e `/users/{username}`, avatar, link social, cambio email in tre passi, dominio verificato, `/users/{username}/blogs|posts|comments`, esportazione dati e cancellazione dell'account (queste ultime due toccano il modulo `gdpr`, F6). La scelta degli interessi sul profilo e il filtro della directory utenti arrivano lì. Il conteggio dello spazio nella panoramica è la somma di `media_files.size_bytes` (come la quota), non il conteggio degli oggetti su storage.
 
+### 5d — completato
+
+* **`profiles`** è un crate **core** (`crates/noct-profiles`): in v1 il profilo fa parte dell'utente, non è opzionale. Rotte: `GET /users` (directory: `q` su username, nome pubblico e bio con `%`/`_` letterali, `locale`, `interest`, `sort=new|followers`, paginazione), `GET|PATCH /users/me`, `GET /users/{username}` (anche per dominio personale verificato), avatar (`POST|DELETE /users/me/avatar`), link social (max 5), cambio email in tre passi, `GET /users/{username}/blogs` e `/posts`. `GET /users/{username}/comments` è del modulo `comments` (stesso criterio delle viste «tutti i miei blog»: la rotta vive nel modulo che possiede i dati, e sparisce con esso).
+* **Colonne del profilo su `users`** (bio, paese, lingua madre, lingue di ripiego, interessi, opt-out dalla directory, data dell'ultimo cambio username, dominio verificato): sono dati dell'utente, non di un modulo. Tabelle del modulo: `social_links`, `email_change_requests`, `verification_settings`.
+* **Sigillo di verifica calcolato in lettura**, non colonna da tenere allineata: oro > argento > blu > bronzo > nessuno, da email/username/dominio dell'utente, dalle liste in `verification_settings` e da `verified_domain`. Modificare le liste (rotte admin, F7) non richiede alcun ricalcolo di massa e il sigillo non può restare su un livello non più valido.
+* **Cambio email**: i due codici (vecchia e nuova casella) sono derivati da id della richiesta e chiave del server con scopo diverso per passo, mai salvati né messi in outbox (come l'OTP di reset e quello MFA); un job li rigenera per spedirli. Una nuova richiesta sostituisce la precedente, ogni passo è monouso, a ogni passo si ricontrolla che l'indirizzo non sia stato preso da un altro account; `user.email_changed` finisce nell'audit.
+* **Username**: un cambio ogni 5 giorni (`409` con la data), validato come alla registrazione, `user.username_changed` nell'audit; la riga utente è bloccata durante il cambio, quindi due richieste concorrenti non aggirano il cooldown né l'unicità.
+* **Interessi**: validati contro `interests_settings` se il modulo `interests` è attivo; senza il modulo si può solo svuotare l'elenco.
+* **Estensione `Entity::User`** in `noct-core`: solo campi in uscita sul profilo privato (`/users/me`). Serve a `custom_domains` (6b) per aggiungere lo stato del dominio personale in attesa senza che `profiles` ne conosca la tabella.
+* **Privacy**: blog e post di un utente compaiono nel profilo solo se firmati con lo username (un alias non deve collegarsi alla persona), come in v1; ora vale anche per i commenti con lo stesso criterio, e un account disattivato non ha profilo pubblico.
+
+Test e verifica: 12 test end-to-end (`bins/noct-api/tests/profiles.rs`: profilo privato e pubblico, PATCH e validazioni, interessi con e senza modulo, username con cooldown e audit, sigillo di verifica, avatar, link social, cambio email completo e annullamento/scadenza, directory con filtri e follower, viste di blog/post con alias, commenti pubblici).
+
+Limiti noti / da fare: il dominio personale (`/users/me/domain*`) arriva con `custom_domains` (6b); esportazione dati e cancellazione dell'account con `gdpr` (6c); le liste del sigillo di verifica si modificano con le rotte admin (F7); la rotta `GET /users/{username}` non espone ancora `post_author_name_style = verified_domain` (arriva con `custom_domains`).
+
 ## 16. Fase 6 — moduli, ondata 2
 
 ### Divisione in blocchi
@@ -534,8 +550,8 @@ Limiti noti / da fare: l'**endpoint del profilo utente** non è ancora stato por
 | Blocco | Moduli | Perché insieme |
 |---|---|---|
 | **6a** ✅ | `auth_mfa`, `auth_sso` | entrambi toccano il login: un secondo fattore e un provider esterno che deve rispettarlo |
-| **6b** | `newsletter`, `reports`, `custom_domains` | consumano gli eventi e i campi già pubblicati dal core (`posts.post.published`, blog) e hanno rotte di amministrazione proprie |
-| **6c** | `gdpr`, `image_moderation` | trattano dati personali e media di tutti gli altri moduli: vanno scritti per ultimi, quando c'è tutto da esportare e cancellare |
+| **6b** ✅ | `newsletter`, `reports`, `custom_domains` | consumano gli eventi e i campi già pubblicati dal core (`posts.post.published`, blog) e hanno rotte di amministrazione proprie |
+| **6c** ✅ | `gdpr`, `image_moderation` | trattano dati personali e media di tutti gli altri moduli: vanno scritti per ultimi, quando c'è tutto da esportare e cancellare |
 
 ### 6a — completato
 
@@ -548,3 +564,29 @@ Limiti noti / da fare: l'**endpoint del profilo utente** non è ancora stato por
 Test e verifica: 14 test end-to-end (`bins/noct-api/tests/auth_modules.rs`: configurazione/conferma/login TOTP con replay respinto, sfide tipizzate/scadute/legate al metodo/utente disattivato, rigenerazione del segreto, limite di tentativi, MFA via email con codice derivato e monouso, disattivazione e audit, redirect SSO con state e PKCE, creazione e riconoscimento dell'utente con username adattato, callback forgiati o rotti, collegamento solo con email verificata, collegamento con MFA completato dopo il secondo fattore, GitHub con email primaria, registrazioni chiuse, moduli spenti — con un provider OAuth finto in un server TCP) e 10 unit test (RFC 6238, base32, finestra TOTP, `otpauth://`, endpoint e profili dei provider, PKCE dell'RFC 7636, username). Suite completa verde, `clippy -D warnings` e `fmt` puliti.
 
 Limiti noti / da fare: l'impostazione `sso_providers` della piattaforma e le rotte di amministrazione arrivano con le operazioni (F7: oggi si scrive su `sso_settings`); il segreto TOTP è in chiaro nel database come in v1 (cifratura a riposo: hardening, F9); `POST /auth/mfa/disable` non chiede ancora un codice (cambierebbe il contratto, vedi `todo/API_CHANGES.md`). L'SSO non è verificabile end-to-end contro i provider reali senza credenziali: i test usano un provider finto.
+
+### 6b — completato
+
+* **`reports`**: `POST /blogs/{slug}/report` e `POST /posts/{id}/report` (solo utenti registrati, una per lettore e bersaglio, idempotente: chi ripete riottiene la prima; non si segnala un proprio contenuto; blog o post non visibili → `404`; nota tagliata a 500 caratteri; 10 all'ora per utente). Lettura e chiusura (`/admin/reports*`) con le operazioni, F7.
+* **`custom_domains`**: `POST /users/me/domain` (in attesa, con le istruzioni del record TXT `_notturni-challenge.<dominio>`), `POST /users/me/domain/verify` (5 ogni 10 minuti), `DELETE /users/me/domain`. DNS con `hickory-resolver` (server configurabile, `NOCT_DNS_SERVER`, e timeout, `NOCT_DNS_TIMEOUT_MS`; qualunque errore vale «non verificato»). Verificato: il dominio è copiato su `users.verified_domain` (sigillo bronzo e profilo raggiungibile dal dominio), solo il primo che verifica lo tiene, una richiesta non verificata di un altro non blocca nessuno. Aggiunge al profilo privato lo stato del dominio in attesa con l'estensione `Entity::User`. Nuovo valore `verified_domain` di `post_author_name_style`: ci si firma con il dominio verificato, e se lo si perde si torna allo username.
+* **`newsletter`**: iscrizione pubblica con doppio consenso (`POST /newsletter/subscribe`, risposta sempre uguale; limiti per IP e per indirizzo), conferma (`GET /newsletter/confirm`, idempotente), disiscrizione e cancellazione senza login con link firmato; per blog (`/blogs/{slug}/newsletter/*`: statistiche, campagne, impostazioni di mittente e banner) e per il digest di piattaforma (`/admin/newsletter/*`). Notifica automatica a ogni post pubblicato: il modulo ascolta `posts.post.published` e crea **una sola** campagna per post (vincolo di unicità); un post pianificato nel futuro dà una campagna pianificata alla stessa ora.
+* **Nessun segreto in outbox, bus o database**: il link di conferma si deriva da id dell'iscritto e un nonce (una nuova richiesta invalida il link precedente), quello di disiscrizione è lo stesso formato HMAC della v1, quindi i link già spediti restano validi. Il job che spedisce l'email rigenera il token.
+* **Invio**: il job `newsletter.campaign.send` è idempotente (`newsletter_deliveries`: chi ha già ricevuto la campagna non la riceve di nuovo se l'invio riprende; un lock advisory impedisce a due worker di lavorare sulla stessa); chi si disiscrive durante l'invio non riceve il resto; blog sospeso, in pausa o cancellato, o post non più pubblicato → campagna annullata; SMTP non configurato → campagna `failed`, mai persa in silenzio. Email `multipart/alternative` con banner e nome del mittente (`Email::from_name`, ripulito da ritorni a capo: non può iniettare intestazioni né cambiare l'indirizzo).
+* **Campagne pianificate**: in v1 non partivano mai. Ora `jobs::dispatch_due_campaigns` mette in invio quelle scadute (job `newsletter.campaigns.dispatch`); a richiamarlo a intervalli regolari sarà il pianificatore dei job periodici (F7), che oggi non esiste.
+* **Core**: `NOCT_INSTANCE_FQDN` è un'impostazione di piattaforma (`Config.instance_fqdn`): base dei link nelle email, degli identificatori di federazione e dominio email «blu». Il registro rifiuta due moduli con la stessa variabile d'ambiente, per questo non è di un modulo.
+
+Test e verifica: 15 test end-to-end (`bins/noct-api/tests/wave2_modules.rs`: segnalazioni e limite, doppio consenso e nessuna fuga, link invalidato da una nuova richiesta e scaduto, limiti per indirizzo e per IP, campagna manuale con filtri/piè di pagina/mittente/banner, disiscrizione e cancellazione dal link, campagne pianificate (modifica, annullo, scadenza), notifica automatica una sola volta e disattivabile, ripresa di un invio interrotto, campagne annullate; domini con un server DNS finto su UDP, richieste non verificate, sostituzione e rimozione, DNS irraggiungibile e limite) più 6 unitari dei moduli (token, testo delle email, regole dei domini) e 1 di `noct-mail`.
+
+Limiti noti / da fare: le rotte di amministrazione delle segnalazioni, le impostazioni di piattaforma delle liste di verifica e il pianificatore dei job periodici arrivano con F7; il dominio personale legato a un **blog** (non all'utente) resta nel backlog; i dati già in v1 (iscritti, domini) si portano con lo strumento di migrazione dei dati (F8).
+
+### 6c — completato
+
+* **Punto di aggancio `PersonalData`** in `noct-core` (come `LoginGate` e `EntityExtension`): ogni modulo che tiene dati personali di un utente li espone per l'esportazione (sezioni JSON, unite per chiave) e li cancella nella transazione dell'eliminazione, restituendo gli oggetti su storage da rimuovere dopo il commit. `[lifecycle] personal_data = true` + `personal_data::all()`. Un modulo spento non contribuisce: l'esportazione e la cancellazione non conoscono nessun modulo per nome.
+* **Fornitori**: `auth` (sessioni, token API, codici di reset), `profiles` (campi del profilo, link social, richieste di cambio email, avatar su storage), `blogs` (blog di proprietà e membership; le membership su blog altrui spariscono), `posts`, `comments` (le etichette nelle liste dei bloccati), `fragments`, `discovery` (follow in entrambe le direzioni), `newsletter`, `custom_domains` (anche la richiesta non verificata, mai il token), `auth_mfa`, `auth_sso`, `reports`, `audit` (solo esportazione: il registro si conserva).
+* **`gdpr`**: `GET /users/me/export-data`; `DELETE /users/me` (ridigitare lo username); coda delle richieste con scadenza a 30 giorni (art. 12): `GET|POST /admin/gdpr`, `approve`, `reject` (nota obbligatoria), `execute`. Le azioni dell'utente si registrano già completate; una cancellazione chiesta fuori banda richiede l'approvazione di **un secondo amministratore**; un export non ha bisogno di approvazione.
+* **Cancellazione = anonimizzazione** (art. 17.3): blog, post e commenti restano con l'autore «Utente eliminato»; username, email, password, ruolo, nome, MFA e tutti i dati personali dei moduli spariscono; l'account è disattivato e i token già emessi non valgono più. Un Super Admin non si cancella (né da solo né con una richiesta): senza, la piattaforma non si amministra.
+* **`image_moderation`**: interruttore della classificazione automatica che `media` già faceva dalla Fase 4: con il modulo attivo (e `NOCT_MODERATION_SERVICE_URL`) le immagini si classificano, spento no. Il servizio `moderation/` resta Python (§8).
+
+Test e verifica: 6 test end-to-end (`bins/noct-api/tests/gdpr.rs`: esportazione con ogni modulo e senza segreti, sezioni dei moduli spenti assenti, cancellazione con controllo di ogni tabella e dello storage, contenuti condivisi anonimizzati, Super Admin, coda con seconda approvazione, rifiuto motivato) e il test di moderazione di `media` esteso all'interruttore. Suite completa e `clippy -D warnings` verdi.
+
+Limiti noti / da fare: l'audit conserva lo username/email dell'attore in chiaro nelle righe passate (obbligo di tracciabilità; una politica di conservazione è già un'impostazione di piattaforma, F7); i dati di moduli futuri entrano nell'esportazione e nella cancellazione implementando `PersonalData`, senza toccare `gdpr`.

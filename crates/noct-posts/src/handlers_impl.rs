@@ -80,14 +80,16 @@ async fn author_name(conn: &mut PgConnection, user: Uuid, blog: Uuid) -> Result<
     .bind(blog)
     .fetch_one(&mut *conn)
     .await?;
-    let (username, display_name, first_name, last_name, style): (
+    let (username, display_name, first_name, last_name, style, verified_domain): (
         String,
         Option<String>,
         Option<String>,
         Option<String>,
         String,
+        Option<String>,
     ) = sqlx::query_as(
-        "SELECT username, display_name, first_name, last_name, post_author_name_style::text FROM users WHERE id = $1",
+        "SELECT username, display_name, first_name, last_name, post_author_name_style::text, verified_domain
+         FROM users WHERE id = $1",
     )
     .bind(user)
     .fetch_one(&mut *conn)
@@ -95,7 +97,7 @@ async fn author_name(conn: &mut PgConnection, user: Uuid, blog: Uuid) -> Result<
     Ok(rules::pick_display_name(
         alias.as_deref(),
         default.as_deref(),
-        &UserNames { username, display_name, first_name, last_name, style },
+        &UserNames { username, display_name, first_name, last_name, style, verified_domain },
     ))
 }
 

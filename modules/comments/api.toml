@@ -67,6 +67,23 @@ status = 201
 rate_limit = { key = "ip", max = 30, window = "1m" }
 summary = "Commenta un post (registrati: subito pubblicato; anonimi: captcha e moderazione)"
 
+[type.UserComment]
+id = "uuid"
+content = "string"
+created_at = "timestamp"
+post_title = "string"
+permalink = "string"
+
+[[route]]
+id = "list_user_comments"
+method = "GET"
+path = "/users/{username}/comments"
+auth = "public"
+kind = "custom"
+handler = "list_user_comments"
+response = "UserComment[]"
+summary = "Commenti approvati dell'utente su post pubblici, solo quelli firmati con lo username (`limit` max 50, `offset`)"
+
 [[route]]
 id = "list_approved_comments"
 method = "GET"
