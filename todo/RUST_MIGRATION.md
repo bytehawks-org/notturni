@@ -1,147 +1,224 @@
-# Migrazione backend/worker Python → Rust: analisi e piano
+# Rewrite in Rust — analisi e piano (v2, greenfield)
 
-Branch: `migration/rust`. Il frontend (Next.js) resta invariato. Il servizio
-`moderation/` (PyTorch/transformers) è trattato a parte (vedi §6).
+Branch: `migration/rust`. Il progetto non è in produzione: il codice Python è una
+POC e diventa **specifica di riferimento**, non codice da portare riga per riga.
+Nessuno strangler/proxy, nessuna migrazione di dati, nessun vincolo di
+compatibilità dell'API (il frontend si adegua). Il frontend Next.js resta;
+`moderation/` (PyTorch) resta Python per ora (vedi §8).
 
-## 1. Stato attuale (misurato)
+## 1. Cosa cambia rispetto a v1
 
-| Area | Dimensione | Note |
+| Tema | v1 | v2 |
 |---|---|---|
-| `backend/app` | ~17.7k LOC Python | 198 route in 28 moduli, `/api/v1` |
-| Route più dense | `users.py` (26), `admin.py` (19), `newsletter.py` (18), `auth.py` (16), `posts.py` (12) | |
-| `domain/` | ~3.4k LOC, ~45 moduli | logica di business già separata dagli handler: base ideale per i crate |
-| `models/` | 35 tabelle, 18 `Enum`, `JSONB`, `ARRAY`, `INET`, `UUID` | |
-| Migrazioni Alembic | 56 file (head unico dopo merge) + `schema.sql` (1143 righe) | |
-| Worker | `email_otp_consumer`, `post_backup_consumer`, `newsletter_consumer` (AMQP); `audit_maintenance`, `backup` (periodici, `--loop`) | |
-| Script | `garage_bootstrap`, `create_api_token` | |
-| Test | ~8.6k LOC pytest, 53 file, DB + Redis reali | **oracolo di compatibilità** |
-| Contratto | `backend/API.md` (2.5k righe) | il frontend dipende da questo, non da OpenAPI generato |
+| Strategia | strangler con reverse proxy | rewrite pulito, Python in `legacy/` solo come riferimento |
+| DB | baseline sqlx + adozione DB esistenti | schema **dichiarativo per modulo**, nessun legacy |
+| API | handler scritti a mano | **rotte dichiarate** in `api.toml`, handler Rust solo per la logica |
+| Struttura | crate per area | **core** sempre attivo + **moduli** attivabili |
+| Broker | RabbitMQ (`lapin`) | **NATS JetStream** dietro trait (§6) |
 
-Dipendenze Python → equivalente Rust:
+## 2. Approccio dichiarativo: cosa è realistico
 
-| Python | Rust |
+Rust è tipizzato staticamente: un file di config **non può** sostituire gli handler
+di logica (feed con filtri dinamici, newsletter, MFA...). Tre livelli possibili:
+
+| Livello | Descrizione | Giudizio |
+|---|---|---|
+| A. Interprete a runtime | rotte e tabelle lette all'avvio, handler generici | perde type-safety e compile-time check; ok solo per CRUD puro |
+| **B. Codegen a build-time** (`build.rs`) | `api.toml`/`db.toml` validati e trasformati in router axum, DTO serde, validazione, OpenAPI, schema desiderato | **consigliato**: errori in compilazione/CI, zero costo runtime |
+| C. Plugin dinamici (dylib/WASM) | moduli caricati a runtime da terzi | fuori scope; rivalutabile (WASM) dopo la 1.0 |
+
+Scelta: **B + toggle a runtime**. Ogni modulo è compilato nel binario (feature Cargo per
+chi vuole un binario più piccolo), ma `NOCT_MODULES=...` (o `platform_config`)
+decide quali montare ed eseguire all'avvio.
+
+Formato: **TOML** (`module.toml`, `api.toml`, `db.toml`) invece di `.conf`: serde-nativo,
+supporto editor/JSON Schema (taplo), nessun parser custom da mantenere.
+
+### Cosa è dichiarativo e cosa no
+
+| Dichiarativo | Resta codice Rust |
 |---|---|
-| FastAPI/Uvicorn | `axum` + `tokio` + `tower-http` (CORS, trace, limit) |
-| SQLAlchemy async + asyncpg | `sqlx` (Postgres, query verificate a compile-time, `migrate!`) |
-| Alembic | `sqlx migrate` (SQL puro) |
-| Pydantic / pydantic-settings | `serde` + `validator`; config con `figment` o `envy` (prefisso `NOCT_`) |
-| argon2-cffi | `argon2` (RustCrypto) — hash PHC compatibili, nessun reset password |
-| PyJWT (HS) | `jsonwebtoken` |
-| pyotp / qrcode (SVG) | `totp-rs` (feature `qr`) o `totp-lite` + `qrcode` (SVG) |
-| Authlib (OAuth2/OIDC) | `oauth2` + `openidconnect` |
-| boto3 | `aws-sdk-s3` (path-style, endpoint custom, checksum `when_required`) |
-| pika | `lapin` |
-| redis-py | `redis` (tokio, `ConnectionManager`) |
-| httpx | `reqwest` (rustls) |
-| markdown + nh3 | `pulldown-cmark` + `ammonia` (stessa base di nh3) |
-| dnspython | `hickory-resolver` |
-| smtplib | `lettre` |
-| itsdangerous / SessionMiddleware | `tower-sessions` oppure cookie firmato (`axum-extra` `SignedCookieJar`) |
-| pg_dump nei worker | invariato: binario `pg_dump` nell'immagine, invocato via `tokio::process` |
+| Path, metodo, policy auth/ruolo, rate limit, schema request/response, paginazione, CRUD semplice | Logica di dominio, query complesse (feed, ricerca), invio mail, rendering |
+| Tabelle, colonne, indici, FK, enum, default | Backfill dati, trasformazioni, migrazioni distruttive |
+| Eventi pubblicati/sottoscritti, job e policy di retry | Corpo dell'handler del job/evento |
+| Schema di configurazione del modulo (env, default, tipi) | — |
 
-## 2. Rischi e punti delicati
+Regola anti-DSL-creep: se serve un'espressione condizionale nel `.toml`, è logica → va in Rust.
 
-1. **Compatibilità di contratto**: 198 endpoint con payload, status code, messaggi di errore e tri-stato PATCH (`model_fields_set`) da replicare byte-per-byte. Mitigazione: suite di contract test (§5).
-2. **PATCH tri-stato** → `Option<Option<T>>` con `serde_with::double_option`; da centralizzare in un tipo `Patch<T>` condiviso.
-3. **Hash password/token esistenti**: argon2 PHC e sha256 (`noct_`) sono portabili; JWT HS256 con lo stesso `NOCT_JWT_SECRET` → sessioni attive sopravvivono al cutover. Verificare claim e `credentials_changed_at`.
-4. **Schema DB**: Alembic è la sorgente storica. Strategia: `0001_baseline.sql` = `schema.sql` allineato all'head Alembic; le installazioni esistenti vengono "adottate" (tabella `_sqlx_migrations` pre-popolata con la baseline). Nuove migrazioni solo sqlx. Enum PG, `ARRAY`, `JSONB`, `INET` mappati a mano con `sqlx::Type`.
-5. **SSO non testabile end-to-end** (nessuna credenziale OAuth reale): rischio di regressione invisibile; coprire con mock del provider (wiremock).
-6. **Moderazione immagini**: PyTorch non ha un equivalente Rust maturo a parità di modello. Vedi §6.
-7. **Markdown/sanitizzazione**: output HTML di `markdown` (Python) ≠ `pulldown-cmark` in dettagli (tabelle, sane_lists). Snapshot test sui contenuti reali.
-8. **Compile time/CI**: workspace grande → usare `cargo-chef` nel Dockerfile, `sccache`, `SQLX_OFFLINE` (`cargo sqlx prepare`).
-9. **Vincolo di sessione** (CLAUDE.md §2): un blocco per sessione. Il piano sotto è dimensionato di conseguenza.
+### Esempio (modulo `newsletter`, abbreviato)
 
-## 3. Architettura target (workspace Cargo)
+```toml
+# module.toml
+[module]
+name = "newsletter"
+kind = "optional"            # core | optional
+default_enabled = false
+requires = ["core.auth", "core.blogs", "core.mail"]
 
-```
-rust/                      # (o radice repo: da decidere, vedi §8)
-├── Cargo.toml             # [workspace], dipendenze condivise
-├── migrations/            # SQL sqlx, 0001_baseline.sql + incrementali
-├── crates/
-│   ├── noct-config/       # Settings da env NOCT_*, validazione all'avvio
-│   ├── noct-db/           # pool sqlx, tipi enum, helper transazione, test util
-│   ├── noct-core/         # errori (AppError → HTTP), tipi comuni, Patch<T>, paginazione
-│   ├── noct-storage/      # trait Storage { put, get, delete, presign, public_url }
-│   │                      #   impl S3 (aws-sdk-s3) + impl LocalFs; scelta da NOCT_STORAGE_BACKEND
-│   ├── noct-cache/        # Redis: rate_limit, lock
-│   ├── noct-broker/       # lapin: publish/consume, code e DLQ, retry
-│   ├── noct-mail/         # lettre + template
-│   ├── noct-markdown/     # pulldown-cmark + ammonia
-│   ├── noct-auth/         # password, JWT, API token, sessioni, MFA (TOTP/email), SSO, extractor axum
-│   ├── noct-authz/        # ruoli piattaforma + ruoli per-blog (ex domain/authorization.py)
-│   ├── noct-audit/        # record() transazionale
-│   ├── noct-domain/       # (opzionale) regole pure: blog_rules, usernames, permalinks, tags, i18n, seo
-│   ├── api-auth/          # route /auth, /tokens
-│   ├── api-users/         # /users, /interests, profilo, GDPR
-│   ├── api-blogs/         # /blogs/* (crud, config, branding, members, invitations, categories, media, pages, notes, bibliography, publications, lifecycle, overview)
-│   ├── api-posts/         # /posts, fragments, link_preview
-│   ├── api-comments/      # commenti + reports
-│   ├── api-feed/          # feed, search, pages pubbliche
-│   ├── api-newsletter/
-│   ├── api-admin/
-│   └── api-health/
-├── bins/
-│   ├── noct-api/          # compone i router dei crate api-*; unico binario HTTP
-│   ├── noct-worker/       # subcommand: email-otp | post-backup | newsletter | audit-maintenance | backup  (--loop/--interval)
-│   └── noct-ctl/          # migrate | bootstrap-garage | create-api-token | bootstrap-super-admin
-└── tests/                 # contract/integration test
+[config]
+batch_size = { type = "int", default = 100, env = "NOCT_NEWSLETTER_BATCH" }
+
+[events]
+subscribes = ["post.published"]
+publishes  = ["newsletter.campaign.sent"]
+
+[jobs.send_campaign]
+subject = "newsletter.send"
+max_deliver = 5
+backoff = ["10s", "1m", "10m"]
 ```
 
-Principi:
-* Ogni `api-*` espone `pub fn router() -> Router<AppState>`; `noct-api` li monta sotto `/api/v1` → aggiungere un endpoint non tocca gli altri crate.
-* `AppState` (pool, redis, broker, storage `Arc<dyn Storage>`, config) definito in `noct-core`.
-* **Un solo binario worker** con subcommand → una sola immagine, N Deployment K8s (come oggi). Stesso schema per `noct-ctl` (Job/initContainer di migrazione).
-* Storage: trait con due implementazioni; il `localstorage` mantiene il serving `/storage` via `tower-http::ServeDir` montato da `noct-api`. Vincoli CLAUDE.md §3 preservati (endpoint S3 da env, credenziali opzionali con default chain, `NOCT_S3_REGION`).
-* Immagine: multi-stage `rust:slim` → `debian:bookworm-slim` (o `distroless/cc`) con `postgresql-client`; build multi-arch x86_64/ARM64 (`--platform`, niente tag arch-specifici), TLS con `rustls` per evitare dipendenze OpenSSL.
+```toml
+# api.toml
+[[route]]
+id = "subscribe"
+method = "POST"
+path = "/blogs/{slug}/newsletter/subscribers"
+auth = "public"              # public | user | api_token | platform_role:admin | blog_role:owner
+rate_limit = { key = "ip", max = 5, window = "1m" }
+request  = { email = "email!", locale = "locale?" }
+response = "Subscriber"
+handler  = "subscribe"       # funzione nel crate; omesso con kind = "crud"
+```
 
-## 4. Strategia di migrazione: strangler, non big-bang
+```toml
+# db.toml
+[[table]]
+name = "newsletter_subscribers"
+columns = [
+  { name = "id",      type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "blog_id", type = "uuid", ref = "blogs.id", on_delete = "cascade" },
+  { name = "email",   type = "text", null = false },
+  { name = "locale",  type = "text", null = true },
+]
+indexes = [{ columns = ["blog_id", "email"], unique = true }]
+```
 
-Rust e Python convivono dietro lo stesso ingress/proxy finché il porting non è completo:
+### Migrazioni "trasparenti": cosa è sicuro automatizzare
 
-1. `noct-api` (Rust) in ascolto su `:8000`; per le route non ancora portate fa **reverse proxy** verso il backend Python (`NOCT_LEGACY_BACKEND_URL`). Il frontend non cambia mai URL.
-2. Ogni fase sposta un gruppo di endpoint in Rust e rimuove la regola di proxy corrispondente.
-3. Fine: rimozione del backend Python, `requirements.txt`, Alembic, Dockerfile Python.
+Applicare in automatico un diff di schema su dati reali è il punto più rischioso.
+Proposta: il motore genera **file SQL versionati e con checksum** (committati e
+rivedibili), li applica all'avvio sotto advisory lock, registra tutto in
+`noct_migrations(module, version, checksum)`.
 
-DB condiviso durante la transizione → **nessuna migrazione di schema incompatibile** finché il Python è vivo; Alembic resta autoritativo fino alla Fase 8, poi baseline sqlx.
+| Cambiamento | Comportamento |
+|---|---|
+| Nuova tabella, nuova colonna nullable/con default, nuovo indice, nuovo enum value | **automatico** |
+| `renamed_from = "vecchio"` dichiarato | automatico (rename) |
+| Drop colonna/tabella, cambio tipo, `NOT NULL` senza default, restringimento | **bloccato**: richiede migrazione SQL esplicita in `migrations/` del modulo + flag `NOCT_ALLOW_DESTRUCTIVE` |
+| Checksum diverso da quello registrato | avvio rifiutato (drift) |
+| Modulo disattivato | nessun drop: tabelle e dati restano; rotte non montate |
 
-## 5. Strategia di test (oracolo)
+Vincoli di dipendenza: i moduli possono referenziare tabelle del core o di moduli in
+`requires`; **il core non referenzia mai tabelle di moduli**. Ordine di migrazione =
+ordinamento topologico del grafo `requires`.
 
-* **Contract test**: riusare i pytest esistenti come client HTTP puro contro `NOCT_API_URL` (httpx), così la stessa suite gira contro Python e Rust. I test che toccano direttamente i modelli SQLAlchemy vanno riscritti come client-only o come test Rust.
-* Test Rust: `sqlx::test` (DB per-test), `testcontainers` per Postgres/Redis/RabbitMQ/Garage.
-* Golden/snapshot (`insta`): markdown→HTML, feed, risposte JSON tipiche.
-* CI: `cargo fmt --check`, `clippy -D warnings`, `cargo test`, `cargo deny`, `cargo audit`; CodeQL supporta Rust → aggiornare `.github/workflows`.
+Query layer: con schema modulare le macro `sqlx::query!` (verifica a compile-time)
+sono scomode (schema dipende dai moduli attivi). Si usa `sqlx::query_as` runtime +
+test d'integrazione con tutti i moduli attivi (testcontainers). Strumenti a
+disposizione: `noct-ctl validate` (CI: manifest, grafo dipendenze, conflitti di
+path/tabella), `noct-ctl migrate plan|apply`, `noct-ctl openapi`.
 
-## 6. Moderazione immagini (decisione richiesta)
+## 3. Core vs moduli
 
-Opzioni:
-* **A (consigliata ora)**: lasciare `moderation/` in Python. È già un microservizio isolato con client HTTP e *fail open*; migrarlo non porta benefici proporzionati.
-* B: portare il modello in ONNX e servirlo con `ort` (ONNX Runtime) in Rust — fattibile, ma richiede conversione/validazione del modello e immagine più pesante.
-* C: `candle` (HF, pure Rust) — più rischioso per parità di risultati.
+Criterio: è core ciò senza cui nessun altro componente funziona o ciò che definisce
+l'entità centrale del prodotto (utente, blog, post). Il resto è modulo.
 
-Piano: A durante tutta la migrazione, rivalutare B a fine Fase 8.
+| Core (sempre attivo) | Modulo (attivabile) |
+|---|---|
+| `config`, `module-registry`, motore migrazioni, `core` (errori, tipi, `Patch<T>`) | `comments` (+ moderazione commenti) |
+| `db`, `storage` (S3/locale), `cache`/rate limit, `bus` (NATS), `mail` (trasporto), `markdown` | `reports` (segnalazioni contenuti) |
+| `auth`: utenti, password, JWT/sessioni, API token, ruoli piattaforma | `auth-mfa` (TOTP, email OTP), `auth-sso` (per provider) |
+| `authz`: ruoli per blog (Autore/Co-Autore/Revisore/Mediatore) | `newsletter` (+ digest) |
+| `audit` (scrittura transazionale) | `discovery` (feed portale, trending, ricerca, interessi) |
+| `platform_config`, `health`, admin di base | `taxonomy` (tag, categorie) |
+| `blogs` (CRUD, membri, inviti, branding, quote) | `publications` (serie), `bibliography`, `notes`, `fragments` |
+| `posts` (CRUD, stati, permalink, media) | `pages` (pagine statiche), `link-preview` |
+| | `gdpr` (export/cancellazione), `custom-domains` |
+| | `image-moderation` (client verso `moderation/`) |
+| | `ops-backup`, `audit-maintenance` (job periodici) |
+| | futuri: `federation-atproto`, `federation-activitypub`, `likes` |
 
-## 7. Fasi (ogni fase = un blocco/sessione, con DoD)
+Installazione `solo`: core + pochi moduli, senza discovery/newsletter/sso. Portale
+`notturni.eu`: tutti i moduli. Da validare con te: `blogs`/`posts` come core
+(proposta) e `taxonomy` come modulo.
 
-| # | Fase | Contenuto | Definition of Done |
-|---|---|---|---|
-| 0 | Fondamenta | Workspace, `noct-config`, `noct-core`, `noct-db`, CI Rust, Dockerfile cargo-chef multi-arch, `/api/v1/health`, reverse proxy verso Python | `compose up` con Rust davanti a Python, health ok, tutto il resto proxato |
-| 1 | Test harness | Rendere la suite pytest client-only parametrizzabile su `NOCT_API_URL`; baseline verde su Python | stessa suite verde via proxy Rust |
-| 2 | Infra crate | `noct-storage` (S3 + local), `noct-cache` (rate limit), `noct-broker`, `noct-mail`, `noct-markdown` con test unit/integration | test crate verdi, parità funzionale con `core/*.py` |
-| 3 | Auth | `noct-auth`, `noct-authz`, `noct-audit`, `api-auth`, `api-tokens`; cookie refresh httpOnly, rotation, MFA TOTP+email, password reset, SSO | `test_auth*`, `test_tokens*` verdi; login incrociato (token emesso da Python valido su Rust e viceversa) |
-| 4 | Utenti e profilo | `api-users`, interessi, GDPR, cambio email, verifica domini | `test_users*`, `test_profile*` verdi |
-| 5 | Blog | `api-blogs` (tutti i sotto-moduli), media/branding su `noct-storage` | `test_blogs*`, `test_notes*`, `test_blog_invitations` verdi |
-| 6 | Contenuti | `api-posts`, fragments, link_preview, comments, reports, feed, search, pages | `test_posts*`, `test_comments*` verdi; feed identico (diff JSON) |
-| 7 | Newsletter, admin, worker | `api-newsletter`, `api-admin`, `noct-worker` (5 subcommand), `noct-ctl` (garage-bootstrap, create-api-token, super admin) | tutti i worker in compose/K8s su Rust; backup/restore verificato |
-| 8 | Cutover DB e pulizia | Baseline sqlx + adozione DB esistenti, rimozione proxy, Alembic, Python, aggiornamento `k8s/`, `compose.yaml`, doc (`ROADMAP.md`, `backend/API.md`, README, GETTING_STARTED) | stack completo senza Python (tranne moderation); verifica live con `curl` |
-| 9 | Hardening | Benchmark vs Python (latenza, RSS), tuning pool, OpenTelemetry/tracing, `cargo audit` in CI | report prestazioni |
+## 4. Layout repository
 
-Ordine pensato per dipendenze: infra → auth (tutto ne dipende) → blog → contenuti → resto.
+```
+legacy/backend/            # Python, riferimento, rimosso a fine rewrite
+crates/                    # core: noct-config, noct-core, noct-db, noct-migrate,
+                           #   noct-registry, noct-codegen (build.rs helper),
+                           #   noct-storage, noct-cache, noct-bus, noct-mail,
+                           #   noct-markdown, noct-auth, noct-authz, noct-audit,
+                           #   noct-blogs, noct-posts
+modules/<nome>/            # module.toml, api.toml, db.toml, migrations/, src/, tests/
+bins/noct-api, bins/noct-worker (subcommand: jobs dei moduli attivi), bins/noct-ctl
+```
 
-## 8. Decisioni aperte (servono prima della Fase 0)
+Un solo binario API e un solo binario worker (stessa immagine, ruoli diversi):
+Deployment K8s separati, nessun requisito su arch (x86_64/ARM64, `rustls`).
 
-1. **Posizione del workspace**: `backend/` sostituito in-place (storico git più pulito a fine corsa) oppure nuova cartella `rust/` accanto al Python durante la transizione (consigliato per lo strangler; rinomina a fine Fase 8).
-2. **Framework**: `axum` (consigliato: ecosistema tower, manutenzione attiva) vs `actix-web`.
-3. **Documentazione API**: generare OpenAPI con `utoipa` (nuovo, migliora il lavoro sul frontend) oppure mantenere solo `API.md`.
-4. **Livello `sqlx`**: query SQL dirette (consigliato, schema già maturo) vs ORM (`sea-orm`).
-5. **Moderazione**: opzione A/B/C del §6.
-6. **Ruolo CI**: build immagini ARM64 su runner nativo o cross-compile.
+## 5. Storage
+
+Trait `Storage` (`put/get/delete/presign/public_url`), implementazioni `S3`
+(`aws-sdk-s3`, endpoint custom da env, path-style, credenziali esplicite o default
+chain, `NOCT_S3_REGION` opzionale) e `LocalFs` (servito dall'API via `ServeDir`);
+selezione con `NOCT_STORAGE_BACKEND`. Come prima, Garage dietro il proxy dei
+prefissi pubblici.
+
+## 6. RabbitMQ vs NATS
+
+Uso attuale: 3 code di lavoro a basso volume (OTP email, backup post, newsletter) +
+job periodici in loop. Nuove esigenze con l'architettura a moduli: **eventi tra
+moduli** (`post.published` → newsletter/discovery/cache frontend) e, in futuro,
+consegna federata con retry (AT Protocol/ActivityPub).
+
+| Criterio | RabbitMQ | NATS JetStream |
+|---|---|---|
+| Footprint | Erlang, centinaia di MB; nel compose c'è già un workaround per il cookie Erlang su Podman rootless | binario singolo, decine di MB |
+| Client Rust | `lapin` (community) | `async-nats` (ufficiale) |
+| Work queue, ack, retry con backoff | sì | sì (pull consumer, `max_deliver`, `nak` con delay) |
+| DLQ | nativa | via advisory `max_deliver` + republish (da implementare) |
+| Pub/sub tra moduli | exchange/binding | subject gerarchici (`post.published`) — naturale per i moduli |
+| Cluster / K8s | operator, più pesante | cluster semplice, adatto da single node a HA |
+| Extra | — | KV e Object store (candidati a sostituire Redis in seguito) |
+| Licenza | MPL-2.0 (Broadcom) | Apache-2.0 (CNCF) |
+
+**Raccomandazione: sì, NATS JetStream**, dietro i trait `EventBus` e `JobQueue`
+(il codice dei moduli non vede mai il client). Punti da tenere presenti:
+* **Outbox transazionale** in Postgres (tabella `noct_outbox` scritta nella stessa transazione della scrittura di dominio, relay verso NATS): evita eventi persi/duplicati.
+* I job periodici (`backup`, `audit-maintenance`) restano scheduler interno del worker, non messaggi.
+* Verificare sulla versione scelta: scheduled/delayed delivery e TTL per-key del KV.
+* Alternativa per `solo`: implementazione del trait basata su Postgres (`SKIP LOCKED` + `LISTEN/NOTIFY`), senza broker. Non nel primo giro; il trait la rende possibile.
+* Redis: si tiene dietro il trait `Cache` (rate limit, lock); valutare in Fase 7 NATS KV o implementazione in-memory per `solo`.
+
+## 7. Fasi
+
+| # | Fase | Output / DoD |
+|---|---|---|
+| 0 | Decisioni | formato manifest (ADR), confine core/moduli, politica API (§9) |
+| 1 | **Spike verticale** | workspace, parser+validator manifest, motore migrazioni (additivo), codegen rotte→axum+OpenAPI, **un modulo reale piccolo** (`pages` o `taxonomy`) end-to-end con DB vero. **Go/no-go** sull'approccio dichiarativo |
+| 2 | Core infrastruttura | storage, cache, bus (NATS + outbox), mail, markdown, config; health; `noct-ctl` |
+| 3 | Core auth | utenti, sessioni, JWT, API token, ruoli, audit, bootstrap super admin |
+| 4 | Core contenuti | `blogs`, `posts`, media, permalink |
+| 5 | Moduli, ondata 1 | comments, taxonomy, pages, discovery, publications, notes, fragments, link-preview |
+| 6 | Moduli, ondata 2 | auth-mfa, auth-sso, newsletter, gdpr, reports, custom-domains, image-moderation |
+| 7 | Operazioni | worker, ops-backup, audit-maintenance, Dockerfile (cargo-chef, multi-arch), compose, k8s, CI (fmt, clippy, test, deny, audit, CodeQL, SBOM), documentazione |
+| 8 | Chiusura | rimozione `legacy/`, benchmark, valutazione `moderation` in Rust (ONNX/`ort`) |
+
+Ogni fase = un blocco/sessione. La Fase 1 è deliberatamente piccola e decide se
+l'investimento nel DSL è giustificato prima di scrivere il resto.
+
+## 8. Moderazione immagini
+
+Resta il servizio Python (microservizio già isolato, fail open). Rivalutare in Fase 8
+la conversione del modello in ONNX con `ort`; `candle` è più rischioso per parità.
+
+## 9. Decisioni aperte
+
+1. **API**: ripartire da `API.md` v1 come baseline (meno lavoro sul frontend) o ridisegnare API e frontend insieme? Consiglio: baseline v1 con correzioni mirate, versione `/api/v1` mantenuta.
+2. **Core**: confermi `blogs`/`posts` core e `taxonomy` modulo?
+3. **Toggle moduli**: solo env/config all'avvio (consigliato) o anche da dashboard admin a caldo (richiede mount/unmount dinamico del router: più complesso)?
+4. **NATS**: confermi come broker unico?
+5. **Legacy**: spostare subito `backend/` in `legacy/` (consigliato)?
