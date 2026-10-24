@@ -307,12 +307,29 @@ async fn email_mfa_codes_are_derived_single_use_and_the_latest_wins() {
 }
 
 #[tokio::test]
-async fn disabling_mfa_restores_plain_login_and_is_audited() {
+async fn disabling_mfa_needs_a_valid_current_code_and_restores_plain_login() {
     let env = setup(&["auth_mfa"], &[]).await;
     let anna = register(&env, "anna").await;
-    enable_totp(&env, anna).await;
+    let secret = enable_totp(&env, anna).await;
     assert_eq!(env.post("/auth/mfa/disable", None, json!({})).await.0, StatusCode::UNAUTHORIZED);
-    assert_eq!(env.post("/auth/mfa/disable", Some(anna), json!({})).await.0, StatusCode::NO_CONTENT);
+
+    // primo passo: nessun codice → 202, e il secondo fattore resta
+    let (s, j) = env.post("/auth/mfa/disable", Some(anna), json!({})).await;
+    assert_eq!(
+        (s, j["code_required"].as_bool(), j["method"].as_str()),
+        (StatusCode::ACCEPTED, Some(true), Some("totp"))
+    );
+    assert_eq!(env.get("/auth/me", Some(anna)).await.1["mfa_enabled"], true);
+    // codice sbagliato
+    assert_eq!(env.post("/auth/mfa/disable", Some(anna), json!({"code": "000000"})).await.0, StatusCode::BAD_REQUEST);
+    // il codice usato per attivare l'MFA (stesso intervallo) non si riusa
+    let used = next_code(&secret, 0);
+    assert_eq!(env.post("/auth/mfa/disable", Some(anna), json!({"code": used})).await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(env.get("/auth/me", Some(anna)).await.1["mfa_enabled"], true);
+
+    // con il codice dell'intervallo successivo si disattiva
+    let next = next_code(&secret, 1);
+    assert_eq!(env.post("/auth/mfa/disable", Some(anna), json!({"code": next})).await.0, StatusCode::NO_CONTENT);
     assert_eq!(env.get("/auth/me", Some(anna)).await.1["mfa_enabled"], false);
     let (_, _, j) = login(&env, "anna").await;
     assert!(j["access_token"].is_string());
@@ -324,6 +341,73 @@ async fn disabling_mfa_restores_plain_login_and_is_audited() {
             .await
             .unwrap();
     assert_eq!(actions, ["auth.mfa_enabled", "auth.mfa_disabled"]);
+    // già disattivata: idempotente
+    assert_eq!(env.post("/auth/mfa/disable", Some(anna), json!({})).await.0, StatusCode::NO_CONTENT);
+    env.teardown().await;
+}
+
+#[tokio::test]
+async fn disabling_email_mfa_sends_a_code_first() {
+    let env = setup(&["auth_mfa"], &[]).await;
+    let anna = register(&env, "anna").await;
+    let background = env.registry.start_background(&env.enabled, &env.state).await.unwrap();
+    env.post("/auth/mfa/email/setup", Some(anna), json!({})).await;
+    let code = code_in(&wait_for_mail(&env, 1).await[0]);
+    assert_eq!(env.post("/auth/mfa/email/confirm", Some(anna), json!({"code": code})).await.0, StatusCode::NO_CONTENT);
+
+    let (s, j) = env.post("/auth/mfa/disable", Some(anna), json!({})).await;
+    assert_eq!((s, j["method"].as_str()), (StatusCode::ACCEPTED, Some("email")));
+    let disable_code = code_in(&wait_for_mail(&env, 2).await[1]);
+    assert_eq!(env.post("/auth/mfa/disable", Some(anna), json!({"code": "123456"})).await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(env.get("/auth/me", Some(anna)).await.1["mfa_enabled"], true);
+    assert_eq!(
+        env.post("/auth/mfa/disable", Some(anna), json!({"code": disable_code})).await.0,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(env.get("/auth/me", Some(anna)).await.1["mfa_enabled"], false);
+    background.stop().await;
+    env.teardown().await;
+}
+
+#[tokio::test]
+async fn the_code_requirement_can_be_switched_off_for_v1_behaviour() {
+    let env = setup(&["auth_mfa"], &[("NOCT_MFA_DISABLE_REQUIRES_CODE", "false")]).await;
+    let anna = register(&env, "anna").await;
+    enable_totp(&env, anna).await;
+    assert_eq!(env.post("/auth/mfa/disable", Some(anna), json!({})).await.0, StatusCode::NO_CONTENT);
+    assert_eq!(env.get("/auth/me", Some(anna)).await.1["mfa_enabled"], false);
+    env.teardown().await;
+}
+
+#[tokio::test]
+async fn totp_secrets_are_encrypted_at_rest_and_plaintext_rows_still_work() {
+    let env = setup(&["auth_mfa"], &[]).await;
+    let anna = register(&env, "anna").await;
+    let secret = enable_totp(&env, anna).await;
+    let stored: String = sqlx::query_scalar("SELECT totp_secret FROM mfa_settings").fetch_one(&env.pool).await.unwrap();
+    assert!(stored.starts_with("enc:v1:") && !stored.contains(&secret), "{stored}");
+    // il login con il codice funziona sul valore cifrato
+    let (_, _, j) = login(&env, "anna").await;
+    let challenge = j["challenge"].as_str().unwrap().to_string();
+    assert_eq!(verify(&env, &challenge, &next_code(&secret, 1)).await.0, StatusCode::OK);
+    // un valore in chiaro scritto prima della cifratura si legge ancora
+    sqlx::query("UPDATE mfa_settings SET totp_secret = $1, totp_last_step = NULL")
+        .bind(&secret)
+        .execute(&env.pool)
+        .await
+        .unwrap();
+    let (_, _, j) = login(&env, "anna").await;
+    let challenge = j["challenge"].as_str().unwrap().to_string();
+    assert_eq!(verify(&env, &challenge, &next_code(&secret, 0)).await.0, StatusCode::OK);
+    // una chiave diversa non decifra: errore del server, mai un accesso
+    let other = setup(&["auth_mfa"], &[("NOCT_SECRETS_KEY", "un'altra-chiave-lunga-e-casuale-0123456789")]).await;
+    let bruno = register(&other, "bruno").await;
+    let secret2 = enable_totp(&other, bruno).await;
+    sqlx::query("UPDATE mfa_settings SET totp_secret = $1").bind(stored).execute(&other.pool).await.unwrap();
+    let (_, _, j) = login(&other, "bruno").await;
+    let (s, _, _) = verify(&other, j["challenge"].as_str().unwrap(), &next_code(&secret2, 1)).await;
+    assert_eq!(s, StatusCode::INTERNAL_SERVER_ERROR);
+    other.teardown().await;
     env.teardown().await;
 }
 

@@ -2,8 +2,20 @@
 name = "audit"
 version = "0.1.0"
 kind = "core"
-requires = ["events"]
+requires = ["events", "platform"]
 description = "Registro di audit append-only delle azioni sensibili, scritto nella stessa transazione dell'azione"
 
 [lifecycle]
 personal_data = true
+
+[config]
+# Archivia le settimane ISO concluse su storage (bucket privato) prima di cancellarle dal database
+archive_enabled = { type = "bool", env = "NOCT_AUDIT_ARCHIVE_ENABLED", default = true }
+
+# Un giro al giorno: archivia le settimane concluse e cancella quanto oltre la conservazione
+# (`platform_config.audit_retention_days`), mai più recente dell'ultima settimana archiviata.
+[jobs.maintenance]
+subject = "audit.maintenance.run"
+schedule = "1d"
+max_deliver = 3
+backoff = ["5m", "30m"]

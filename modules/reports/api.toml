@@ -41,3 +41,62 @@ response = "ReportOut"
 status = 201
 rate_limit = { key = "user", max = 10, window = "1h" }
 summary = "Segnala un post pubblicato (una sola volta; non un contenuto proprio)"
+
+# ---- amministrazione (Amministratore e Super Admin) ----
+
+[type.ReportDetail]
+id = "uuid"
+target_type = "enum:report_target_type"
+target_id = "uuid"
+post_slug = { type = "string", nullable = true }
+post_title = { type = "string", nullable = true }
+reason = "string"
+note = { type = "string", nullable = true }
+reporter_username = "string"
+created_at = "timestamp"
+
+[type.AdminReportedBlog]
+id = "uuid"
+slug = "string"
+title = "string"
+owner_username = "string"
+visibility = "string"
+is_suspended = "bool"
+is_paused = "bool"
+deleted_at = { type = "timestamp", nullable = true }
+created_at = "timestamp"
+posts_count = "int"
+reports_open = "int"
+
+[type.BlogReports]
+blog = "json"
+owner_mfa_enabled = "bool"
+owner_email_domain = "string"
+# [ReportDetail]
+reports = "json"
+
+[type.BlogAction]
+# suspend | restore | hide_reported_posts | deactivate_owner | dismiss
+action = "string"
+note = { type = "string", max = 5000, non_blank = true, message = "Serve una nota per il registro." }
+
+[[route]]
+id = "blog_reports"
+method = "GET"
+path = "/admin/blogs/{blog_id}/reports"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "blog_reports"
+response = "BlogReports"
+summary = "Segnalazioni aperte su un blog e sui suoi post, con motivo, nota e chi ha segnalato"
+
+[[route]]
+id = "blog_action"
+method = "POST"
+path = "/admin/blogs/{blog_id}/action"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "blog_action"
+request = "BlogAction"
+response = "AdminReportedBlog"
+summary = "Azione dal pannello segnalazioni (nota obbligatoria): chiude le segnalazioni aperte del blog"

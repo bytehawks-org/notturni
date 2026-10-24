@@ -13,6 +13,111 @@
   ],
   "tables": [
     {
+      "name": "audit_archive_runs",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "null": false,
+          "default": "gen_random_uuid()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "period_start",
+          "type": "timestamptz",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "period_end",
+          "type": "timestamptz",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "week_label",
+          "type": "varchar(10)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "object_key",
+          "type": "varchar(255)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "storage_backend",
+          "type": "varchar(20)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "row_count",
+          "type": "integer",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "byte_size",
+          "type": "bigint",
+          "null": false,
+          "default": "0",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "sha256",
+          "type": "varchar(64)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "ix_audit_archive_runs_period_end",
+          "columns": [
+            "period_end"
+          ],
+          "unique": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "uq_audit_archive_week",
+          "columns": [
+            "week_label"
+          ]
+        }
+      ]
+    },
+    {
       "name": "audit_log",
       "columns": [
         {

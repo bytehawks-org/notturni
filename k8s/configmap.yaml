@@ -16,9 +16,9 @@ data:
   NOCT_POSTGRES_USER: "admin"
   NOCT_POSTGRES_DB: "notturni"
 
-  NOCT_RABBITMQ_USER: "admin"
-  NOCT_RABBITMQ_HOST: "rabbitmq"
-  NOCT_RABBITMQ_PORT: "5672"
+  # bus di messaggi (NATS JetStream, nats.yaml); con NATS i consumer girano nel Deployment `worker`
+  # e non nell'API (NOCT_WORKER_INLINE si ricava dalla presenza di questo URL)
+  NOCT_NATS_URL: "nats://nats:4222"
 
   NOCT_REDIS_HOST: "redis"
   NOCT_REDIS_PORT: "6379"
@@ -38,9 +38,8 @@ data:
   # Garage valida la regione della firma SigV4: deve coincidere con s3_region
   # di garage.toml
   NOCT_S3_REGION: "garage"
-  # Garage non ha le bucket policy: bucket pubblici via website access
-  # (storage.py::_make_public_readable), serviti dal proxy s3-public.yaml
-  NOCT_S3_PUBLIC_ACCESS: "website"
+  # Garage non ha le bucket policy: i bucket pubblici si servono via website access
+  # (`noct-ctl garage-bootstrap`), dal proxy s3-public.yaml
   # admin API di Garage, usata solo dall'initContainer garage-bootstrap
   NOCT_GARAGE_ADMIN_URL: "http://garage:3903"
   # URL pubblico degli oggetti: host esposto da ingressroute-s3.yaml (proxy
@@ -53,12 +52,12 @@ data:
   NOCT_S3_BUCKET_AUDIT: "notturni-audit"
 
   # Servizio di moderazione automatica delle immagini (moderation.yaml),
-  # chiamato da app/domain/moderation.py ad ogni upload (fail open: un
+  # chiamato da `noct-media` ad ogni upload (fail open: un
   # problema di questo servizio non blocca mai l'upload).
   NOCT_MODERATION_SERVICE_URL: "http://moderation:8100"
 
-  # Backup infrastrutturale di Postgres e dello storage S3 (app/workers/backup.py,
-  # backup-cronjob.yaml) verso uno storage S3 **esterno** — placeholder,
+  # Backup infrastrutturale di Postgres e dello storage S3 (modulo `backup`, un giro al
+  # giorno dal pianificatore di worker.yaml) verso uno storage S3 **esterno** — placeholder,
   # da sostituire con un provider realmente esterno e separato da quello dei
   # contenuti prima della produzione (credenziali in secret.yaml:
   # NOCT_BACKUP_S3_ACCESS_KEY_ID/_SECRET_ACCESS_KEY). Vuoto: il job resta
@@ -67,7 +66,7 @@ data:
   NOCT_BACKUP_S3_ENDPOINT_URL: ""
   NOCT_BACKUP_S3_REGION: ""
 
-  # SMTP per l'invio del codice MFA via email (app/core/mail.py) — placeholder,
+  # SMTP per le email del backend (codici MFA e di reset, conferme newsletter) — placeholder,
   # da sostituire con un provider SMTP/transazionale reale prima della
   # produzione (credenziali in secret.yaml: NOCT_SMTP_USER/_PASSWORD).
   NOCT_SMTP_HOST: "smtp.notturni.eu"
@@ -92,7 +91,7 @@ data:
   # questo valore resta comunque inerte (nessun provider chiamato).
   NOCT_OAUTH_REDIRECT_BASE_URL: "https://notturni.eu"
 
-  # Cloudflare Turnstile (app/core/captcha.py): captcha per i commenti aperti
+  # Cloudflare Turnstile: captcha per i commenti aperti
   # a tutti. Site key pubblica (safe da esporre, letta anche dal frontend via
   # GET /api/v1/config) — la secret key sta in secret.yaml. Vuota: quella
   # modalità di commenti non è selezionabile su questa istanza.
@@ -110,7 +109,7 @@ data:
   # dominio (solo IP nodo) non c'è alcun sottodominio da coprire, resta vuoto.
   NOCT_CORS_ORIGIN_REGEX: "https://([a-z0-9-]+\\.)?notturni\\.eu"
 
-  # Cookie di sessione (refresh token httpOnly, legacy/backend/API.md).
+  # Cookie di sessione (refresh token httpOnly, docs/API.md).
   # NOCT_SESSION_COOKIE_SECURE="true" perché ingress.yaml/ingressroute.yaml
   # servono ora https (TLS via cert-manager, certificate.yaml) — un cookie
   # Secure non verrebbe accettato dal browser su una connessione non
@@ -126,7 +125,7 @@ data:
   # frontend per l'SSR (il browser usa invece l'host pubblico).
   NOCT_BACKEND_INTERNAL_URL: "http://backend:8000"
   # invalidazione on-demand della cache del frontend dopo publish/update di
-  # contenuti pubblici (vedi legacy/backend/app/core/revalidation.py). Il secret
+  # contenuti pubblici (`NOCT_FRONTEND_REVALIDATE_URL`). Il secret
   # corrispondente è in secret.yaml (NOCT_REVALIDATE_SECRET), condiviso tra
   # backend e frontend; se assente la funzione è disattivata (solo cache a tempo).
   NOCT_FRONTEND_REVALIDATE_URL: "http://frontend:3000/api/revalidate"

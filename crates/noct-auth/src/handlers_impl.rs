@@ -96,7 +96,10 @@ pub fn session_response(access: String, refresh: &str, s: &AuthSettings) -> Resu
 
 pub async fn register(ctx: RouteCtx, body: RegisterRequest) -> Result<UserOut, ApiError> {
     let s = settings(&ctx)?;
-    match s.registration_mode.as_str() {
+    let mode: Option<String> = sqlx::query_scalar("SELECT registration_mode FROM platform_config WHERE id = 1")
+        .fetch_optional(&ctx.state.db)
+        .await?;
+    match mode.as_deref().unwrap_or(&s.registration_mode) {
         "open" => {}
         "closed" => return Err(ApiError::forbidden("Le registrazioni sono chiuse su questa piattaforma.")),
         _ => {
@@ -310,6 +313,26 @@ pub async fn me(ctx: RouteCtx) -> Result<UserOut, ApiError> {
 
 // ---- password dimenticata / cambio password ---------------------------------------------
 
+/// Emette un codice di reset per `user_id` e accoda l'email, nella transazione `conn`. Vale solo
+/// l'ultimo codice richiesto. Condiviso con il reset avviato da un amministratore.
+pub async fn enqueue_password_reset(conn: &mut PgConnection, user_id: Uuid) -> Result<(), ApiError> {
+    sqlx::query("UPDATE password_reset_codes SET consumed_at = now() WHERE user_id = $1 AND consumed_at IS NULL")
+        .bind(user_id)
+        .execute(&mut *conn)
+        .await?;
+    let code_id: Uuid = sqlx::query_scalar("INSERT INTO password_reset_codes (user_id, expires_at) VALUES ($1, now() + make_interval(mins => $2)) RETURNING id")
+        .bind(user_id)
+        .bind(RESET_CODE_TTL_MINUTES as i32)
+        .fetch_one(&mut *conn)
+        .await?;
+    // l'email parte da un job nella stessa transazione: se il bus è giù il messaggio resta
+    // nell'outbox, e un'email esistente non risponde diversamente da una inesistente
+    outbox::enqueue(conn, Kind::Job, "auth.password_reset.send", &json!({ "code_id": code_id }))
+        .await
+        .map_err(ApiError::internal)?;
+    Ok(())
+}
+
 pub async fn forgot_password(ctx: RouteCtx, body: ForgotPasswordRequest) -> Result<(), ApiError> {
     let email = normalize_email(&body.email);
     if let Some(ip) = &ctx.meta.ip {
@@ -325,21 +348,7 @@ pub async fn forgot_password(ctx: RouteCtx, body: ForgotPasswordRequest) -> Resu
     let Some((user_id, true)) = user else { return Ok(()) };
 
     let mut tx = ctx.state.db.begin().await?;
-    // vale solo l'ultimo codice richiesto
-    sqlx::query("UPDATE password_reset_codes SET consumed_at = now() WHERE user_id = $1 AND consumed_at IS NULL")
-        .bind(user_id)
-        .execute(&mut *tx)
-        .await?;
-    let code_id: Uuid = sqlx::query_scalar("INSERT INTO password_reset_codes (user_id, expires_at) VALUES ($1, now() + make_interval(mins => $2)) RETURNING id")
-        .bind(user_id)
-        .bind(RESET_CODE_TTL_MINUTES as i32)
-        .fetch_one(&mut *tx)
-        .await?;
-    // l'email parte da un job nella stessa transazione: se il bus è giù il messaggio resta
-    // nell'outbox, e un'email esistente non risponde diversamente da una inesistente
-    outbox::enqueue(&mut tx, Kind::Job, "auth.password_reset.send", &json!({ "code_id": code_id }))
-        .await
-        .map_err(ApiError::internal)?;
+    enqueue_password_reset(&mut tx, user_id).await?;
     tx.commit().await?;
     Ok(())
 }

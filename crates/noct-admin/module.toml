@@ -1,0 +1,6 @@
+[module]
+name = "admin"
+version = "0.1.0"
+kind = "core"
+requires = ["users", "audit", "platform", "blogs", "posts", "auth"]
+description = "Amministrazione di piattaforma: panoramica, utenti, blog, post, registro di audit e impostazioni. I moduli opzionali vi aggiungono contatori e impostazioni con `AdminSection`"

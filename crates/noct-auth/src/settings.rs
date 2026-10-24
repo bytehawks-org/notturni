@@ -7,6 +7,8 @@ use noct_security::cookie::SameSite;
 #[derive(Debug, Clone)]
 pub struct AuthSettings {
     pub registration_mode: String,
+    /// Seme di `platform_config.default_locale`.
+    pub default_locale: String,
     pub solo: bool,
     pub refresh_ttl_days: i64,
     pub cookie_secure: bool,
@@ -25,6 +27,10 @@ impl AuthSettings {
         if !["open", "invite", "closed"].contains(&registration_mode.as_str()) {
             return Err(format!("NOCT_REGISTRATION_MODE non valido: `{registration_mode}` (open | invite | closed)"));
         }
+        let default_locale = text("default_locale").unwrap_or_else(|| "it".into());
+        if !["it", "en"].contains(&default_locale.as_str()) {
+            return Err(format!("NOCT_DEFAULT_LOCALE non valido: `{default_locale}` (it | en)"));
+        }
         let deployment = text("deployment_mode").unwrap_or_else(|| "platform".into());
         if !["platform", "solo"].contains(&deployment.as_str()) {
             return Err(format!("NOCT_DEPLOYMENT_MODE non valido: `{deployment}` (platform | solo)"));
@@ -38,6 +44,7 @@ impl AuthSettings {
             .ok_or("NOCT_SESSION_COOKIE_SAMESITE non valido (lax | strict | none)")?;
         Ok(Self {
             registration_mode,
+            default_locale,
             solo: deployment == "solo",
             refresh_ttl_days,
             cookie_secure: matches!(cfg.get("cookie_secure"), Some(ConfigValue::Bool(true))),

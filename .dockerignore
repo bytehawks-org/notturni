@@ -1,0 +1,14 @@
+target
+.git
+.github
+legacy
+frontend
+frontend-prototype
+moderation
+k8s
+garage
+s3-public
+todo
+*.md
+.env
+.env.*

@@ -93,6 +93,14 @@ impl Moderation {
         Self::new(None)
     }
 
+    /// Stato del servizio per la panoramica di amministrazione: `None` se non è configurato, altrimenti
+    /// se `GET /health` risponde 200 entro 2 secondi.
+    pub async fn health(&self) -> Option<bool> {
+        let url = self.url.as_ref()?;
+        let probe = self.client.get(format!("{url}/health")).timeout(std::time::Duration::from_secs(2));
+        Some(probe.send().await.is_ok_and(|r| r.status().is_success()))
+    }
+
     /// `true` se l'immagine è segnalata come possibile contenuto sensibile. Servizio non
     /// configurato, irraggiungibile o in errore → `false` (mai un blocco).
     pub async fn classify(&self, data: Bytes, filename: &str, content_type: &str, threshold: Option<f64>) -> bool {

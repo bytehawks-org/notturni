@@ -2,8 +2,15 @@
 name = "blogs"
 version = "0.2.0"
 kind = "core"
-requires = ["users", "audit", "platform"]
+requires = ["users", "audit", "platform", "events"]
 description = "Blog, collaboratori e inviti, ciclo di vita (pausa, cancellazione con tolleranza, trasferimento), configurazione di presentazione"
+
+# Cancellazione definitiva dei blog oltre il periodo di tolleranza (un giro al giorno, idempotente)
+[jobs.purge_deleted]
+subject = "blogs.purge_deleted"
+schedule = "1d"
+max_deliver = 3
+backoff = ["5m", "30m"]
 
 [lifecycle]
 personal_data = true

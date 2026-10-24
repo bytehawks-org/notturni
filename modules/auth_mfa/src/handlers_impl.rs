@@ -1,7 +1,7 @@
 //! Handler `custom` del modulo.
 
 use crate::{
-    CHALLENGE_TYPE, MfaCode, MfaVerify, PURPOSE_MFA_EMAIL, TotpSetup,
+    CHALLENGE_TYPE, MfaCode, MfaDisable, MfaVerify, PURPOSE_MFA_EMAIL, TotpSetup,
     gates::issue_email_code,
     totp::{self, provisioning_uri},
 };
@@ -12,7 +12,7 @@ use noct_audit::{AuditActor, Entry, user_actor};
 use noct_auth::{AuthSettings, session};
 use noct_core::{
     ApiError, AppState, RouteCtx,
-    security::{constant_time_eq, jwt, otp::derive_otp},
+    security::{constant_time_eq, jwt, otp::derive_otp, secrets},
 };
 use serde_json::{Value, json};
 use sqlx::PgConnection;
@@ -24,6 +24,17 @@ const MSG_BAD_CODE: &str = "Codice MFA non valido o scaduto.";
 const SUBJECT_LIMIT: u32 = 8;
 const WINDOW: Duration = Duration::from_secs(300);
 const ISSUER: &str = "Notturni";
+
+/// Chiave con cui si cifrano a riposo i segreti TOTP: `NOCT_SECRETS_KEY` o, in sua assenza, derivata dal
+/// segreto JWT (vedi `noct_security::secrets`).
+pub(crate) fn secrets_key(st: &AppState) -> [u8; 32] {
+    secrets::derive_key(st.module_config_str("auth_mfa", "secrets_key"), &st.config.jwt_secret)
+}
+
+/// Il segreto TOTP in chiaro dal valore salvato (cifrato, o in chiaro se scritto prima della cifratura).
+fn open_secret(st: &AppState, stored: &str) -> Result<String, ApiError> {
+    secrets::open(&secrets_key(st), stored).map_err(|e| ApiError::internal(format!("segreto TOTP illeggibile: {e}")))
+}
 
 fn user_id(ctx: &RouteCtx) -> Result<Uuid, ApiError> {
     ctx.actor.as_ref().map(|a| a.user_id).ok_or_else(|| ApiError::unauthorized("Not authenticated"))
@@ -86,7 +97,7 @@ pub async fn setup_totp(ctx: RouteCtx) -> Result<TotpSetup, ApiError> {
          ON CONFLICT (user_id) DO UPDATE SET pending_totp_secret = EXCLUDED.pending_totp_secret, updated_at = now()",
     )
     .bind(user)
-    .bind(&secret)
+    .bind(secrets::seal(&secrets_key(&ctx.state), &secret))
     .execute(&ctx.state.db)
     .await?;
     let email: String =
@@ -104,6 +115,7 @@ pub async fn confirm_totp(ctx: RouteCtx, body: MfaCode) -> Result<(), ApiError> 
         .fetch_optional(&st.db)
         .await?
         .flatten();
+    let pending = pending.map(|s| open_secret(st, &s)).transpose()?;
     let step = pending
         .as_deref()
         .and_then(|s| totp::verify(s, &body.code, Utc::now().timestamp()))
@@ -153,9 +165,61 @@ pub async fn confirm_email(ctx: RouteCtx, body: MfaCode) -> Result<(), ApiError>
     Ok(())
 }
 
-pub async fn disable_mfa(ctx: RouteCtx) -> Result<(), ApiError> {
+/// Disattiva l'MFA. Con un access token rubato basterebbe una richiesta per togliere il secondo fattore:
+/// per questo serve un codice valido, in due tempi con un solo endpoint.
+///
+/// * senza `code`: risponde `202 {"code_required": true, "method": ...}`; con il metodo email spedisce
+///   anche il codice;
+/// * con `code`: lo verifica (TOTP con protezione dal riuso, o codice email) e risponde `204`.
+///
+/// `NOCT_MFA_DISABLE_REQUIRES_CODE=false` ripristina il comportamento della v1 (nessun codice).
+pub async fn disable_mfa(ctx: RouteCtx, body: MfaDisable) -> Result<Response, ApiError> {
+    let st = &ctx.state;
     let user = user_id(&ctx)?;
-    let mut tx = ctx.state.db.begin().await?;
+    let requires_code = ctx.config_bool("disable_requires_code").unwrap_or(true);
+    let row: Option<(Option<String>, Option<String>)> =
+        sqlx::query_as("SELECT method::text, totp_secret FROM mfa_settings WHERE user_id = $1")
+            .bind(user)
+            .fetch_optional(&st.db)
+            .await?;
+    let (method, secret) = row.unwrap_or((None, None));
+    let mut tx = st.db.begin().await?;
+    if requires_code && method.is_some() {
+        subject_limit(st, user).await?;
+        let code = body.code.as_deref().map(str::trim).filter(|c| !c.is_empty());
+        let Some(code) = code else {
+            if method.as_deref() == Some("email") {
+                issue_email_code(&mut tx, user).await?;
+            }
+            tx.commit().await?;
+            return Ok(noct_core::json_response(202, &json!({"code_required": true, "method": method})));
+        };
+        let ok = match (method.as_deref(), secret) {
+            (Some("totp"), Some(stored)) => {
+                let plain = open_secret(st, &stored)?;
+                match totp::verify(&plain, code, Utc::now().timestamp()) {
+                    // atomico: lo stesso codice non vale due volte
+                    Some(step) => {
+                        sqlx::query(
+                            "UPDATE mfa_settings SET totp_last_step = $2 WHERE user_id = $1 AND (totp_last_step IS NULL OR totp_last_step < $2)",
+                        )
+                        .bind(user)
+                        .bind(step as i64)
+                        .execute(&mut *tx)
+                        .await?
+                        .rows_affected()
+                            == 1
+                    }
+                    None => false,
+                }
+            }
+            (Some("email"), _) => consume_email_code(&mut tx, st, user, code).await?,
+            _ => false,
+        };
+        if !ok {
+            return Err(ApiError::bad_request("Codice non valido o scaduto."));
+        }
+    }
     sqlx::query("DELETE FROM mfa_settings WHERE user_id = $1").bind(user).execute(&mut *tx).await?;
     sqlx::query("UPDATE mfa_email_codes SET consumed_at = now() WHERE user_id = $1 AND consumed_at IS NULL")
         .bind(user)
@@ -164,7 +228,7 @@ pub async fn disable_mfa(ctx: RouteCtx) -> Result<(), ApiError> {
     sqlx::query("UPDATE users SET mfa_enabled = false WHERE id = $1").bind(user).execute(&mut *tx).await?;
     audit(&mut tx, &ctx, "auth.mfa_disabled", user, json!({})).await?;
     tx.commit().await?;
-    Ok(())
+    Ok(noct_core::no_content())
 }
 
 // ---- completamento del login --------------------------------------------------------------------------------------
@@ -195,6 +259,7 @@ pub async fn verify_mfa(ctx: RouteCtx, body: MfaVerify) -> Result<Response, ApiE
         return Err(ApiError::unauthorized(MSG_BAD_CHALLENGE));
     }
 
+    let secret = secret.map(|s| open_secret(st, &s)).transpose()?;
     let mut tx = st.db.begin().await?;
     let ok = match (method.as_deref(), secret.as_deref()) {
         (Some("totp"), Some(secret)) => match totp::verify(secret, &body.code, Utc::now().timestamp()) {

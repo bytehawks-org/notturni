@@ -14,8 +14,8 @@ di rete a runtime.
 
 Non è mai esposto pubblicamente: il backend lo chiama internamente via HTTP
 (`NOCT_MODERATION_SERVICE_URL`, impostato automaticamente da
-`compose.yaml`) — vedi `legacy/backend/app/domain/moderation.py` e
-[legacy/backend/API.md](../legacy/backend/API.md#moderazione-automatica-delle-immagini).
+`compose.yaml`) — vedi `crates/noct-http` (client) e `crates/noct-media` (chiamata ad ogni upload) e
+[docs/API.md](../docs/API.md#moderazione-automatica-delle-immagini).
 Se il servizio non è raggiungibile o non risponde in tempo, il backend
 assume "non sensibile" e non blocca mai l'upload (fail open).
 

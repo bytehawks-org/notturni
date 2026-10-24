@@ -52,6 +52,7 @@ noct-reports = { path = "modules/reports" }
 noct-newsletter = { path = "modules/newsletter" }
 noct-custom-domains = { path = "modules/custom_domains" }
 noct-gdpr = { path = "modules/gdpr" }
+noct-backup = { path = "modules/backup" }
 noct-image-moderation = { path = "modules/image_moderation" }
 noct-auth-mfa = { path = "modules/auth_mfa" }
 noct-auth-sso = { path = "modules/auth_sso" }
@@ -64,6 +65,7 @@ noct-mail = { path = "crates/noct-mail" }
 noct-markdown = { path = "crates/noct-markdown" }
 noct-http = { path = "crates/noct-http" }
 noct-platform = { path = "crates/noct-platform" }
+noct-admin = { path = "crates/noct-admin" }
 noct-posts = { path = "crates/noct-posts" }
 noct-media = { path = "crates/noct-media" }
 
@@ -75,9 +77,14 @@ toml = "0.9"
 regex = "1"
 sha2 = "0.11"
 hex = "0.4"
+chacha20poly1305 = "0.10"
+flate2 = "1"
+url = "2"
+zip = { version = "9", default-features = false, features = ["deflate"] }
+percent-encoding = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time", "process"] }
 axum = "0.8"
 tower = { version = "0.5", features = ["util"] }
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "chrono", "json", "macros"] }
@@ -89,14 +96,14 @@ async-trait = "0.1"
 bytes = "1"
 futures = "0.3"
 tokio-util = "0.7"
-aws-config = { version = "1", default-features = false, features = ["rt-tokio", "rustls", "behavior-version-latest"] }
-aws-sdk-s3 = { version = "1", default-features = false, features = ["rt-tokio", "rustls", "behavior-version-latest"] }
+aws-config = { version = "1", default-features = false, features = ["rt-tokio", "default-https-client", "behavior-version-latest"] }
+aws-sdk-s3 = { version = "1", default-features = false, features = ["rt-tokio", "default-https-client", "behavior-version-latest"] }
 redis = { version = "1", default-features = false, features = ["tokio-comp", "connection-manager", "script"] }
 async-nats = "0.50"
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1", "tokio1-rustls-tls", "ring"] }
 pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
 ammonia = "4"
-tower-http = { version = "0.7", features = ["fs"] }
+tower-http = { version = "0.7", features = ["fs", "cors"] }
 argon2 = "0.6"
 hmac = "0.13"
 subtle = "2"

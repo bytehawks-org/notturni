@@ -25,7 +25,12 @@ pub use config::{Config, StorageBackend, StorageConfig};
 pub use db::map_db_error;
 pub use error::ApiError;
 pub use extension::{Entity, EntityExtension, ExtCtx, Extensions, JsonMap, Op};
-pub use hooks::{LoginGate, LoginGates, PersonalData, PersonalDataProviders, StoredObject};
+pub mod catalog;
+pub use catalog::ModuleInfo;
+pub mod schedule;
+pub use hooks::{
+    AdminSection, AdminSections, LoginGate, LoginGates, PersonalData, PersonalDataProviders, StoredObject,
+};
 pub use patch::Patch;
 pub use rate_limit::RateLimiter;
 pub use registry::{ModuleDef, Registry};
@@ -36,6 +41,7 @@ pub use route::{
 pub use runtime::{
     Background, ConsumerDef, HandlerFn, HandlerFuture, StartupFuture, consumer, emit_event, event_envelope,
 };
+pub use schedule::Schedule;
 pub use services::Services;
 pub use state::AppState;
 

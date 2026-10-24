@@ -211,6 +211,23 @@ pub async fn enforce(
     {
         return Err(ApiError::forbidden("Permessi insufficienti."));
     }
+    // con `mfa_required_for_admins` gli amministratori senza MFA non usano l'area di amministrazione
+    if let (Policy::PlatformRole(_), Some(a)) = (&route.policy, &actor)
+        && matches!(a.platform_role.as_str(), "super_admin" | "amministratore")
+    {
+        let blocked: Option<bool> = sqlx::query_scalar(
+            "SELECT NOT u.mfa_enabled AND coalesce((SELECT mfa_required_for_admins FROM platform_config WHERE id = 1), FALSE)
+             FROM users u WHERE u.id = $1",
+        )
+        .bind(a.user_id)
+        .fetch_optional(&st.db)
+        .await?;
+        if blocked == Some(true) {
+            return Err(ApiError::forbidden(
+                "Questa piattaforma richiede l'autenticazione a due fattori agli amministratori: attivala nel profilo.",
+            ));
+        }
+    }
 
     let mut blog = None;
     if let Some(slug) = blog_slug {

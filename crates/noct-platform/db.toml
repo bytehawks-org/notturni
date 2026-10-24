@@ -14,6 +14,8 @@ columns = [
   # spazio massimo per blog in MB (media + backup); null = nessun limite
   { name = "max_blog_storage_mb", type = "integer", null = true },
   { name = "audit_retention_days", type = "integer", default = "105" },
+  # gli amministratori senza MFA non usano l'area di amministrazione finché non la attivano
+  { name = "mfa_required_for_admins", type = "boolean", default = "false" },
   # footer di piattaforma: colonne 1-2 sovrascrivibili per blog, colonna 3 e barra inferiore no
   { name = "footer_column1_markdown", type = "text", null = true },
   { name = "footer_column2_markdown", type = "text", null = true },
@@ -21,4 +23,28 @@ columns = [
   { name = "footer_bottom_bar_markdown", type = "text", null = true },
   { name = "updated_at", type = "timestamptz", null = true },
   { name = "updated_by_id", type = "uuid", null = true, ref = "users.id", on_delete = "set_null" },
+]
+
+# Stato desiderato dei moduli opzionali (§10 del piano): `NOCT_MODULES` o i default dei manifest
+# servono da seme alla prima installazione, poi vale questa tabella. Si modifica da `/admin/modules`.
+[[table]]
+name = "noct_modules"
+primary_key = ["name"]
+columns = [
+  { name = "name", type = "varchar(100)" },
+  { name = "enabled", type = "boolean" },
+  { name = "updated_at", type = "timestamptz", default = "now()" },
+  { name = "updated_by_id", type = "uuid", null = true, ref = "users.id", on_delete = "set_null" },
+]
+
+# Riga unica: `version` sale a ogni cambio dello stato desiderato. Ogni replica (API e worker) la
+# controlla a intervalli e ricostruisce router e consumer quando cambia; `last_error` dice perché
+# un cambio non è stato applicato (es. migrazione fallita).
+[[table]]
+name = "noct_module_state"
+primary_key = ["id"]
+columns = [
+  { name = "id", type = "integer", default = "1" },
+  { name = "version", type = "bigint", default = "0" },
+  { name = "last_error", type = "text", null = true },
 ]

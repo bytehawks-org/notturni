@@ -11,6 +11,16 @@ pub async fn run(st: AppState) -> Result<(), String> {
     // una configurazione sbagliata deve fermare l'avvio, non manifestarsi alla prima richiesta
     let settings = AuthSettings::from_state(&st)?;
     probe_cookies(&settings)?;
+    // la variabile d'ambiente è il seme della modalità di registrazione: dalla prima installazione
+    // vale `platform_config` (modificabile dall'amministrazione)
+    sqlx::query(
+        "INSERT INTO platform_config (id, registration_mode, default_locale) VALUES (1, $1, $2) ON CONFLICT (id) DO NOTHING",
+    )
+        .bind(&settings.registration_mode)
+        .bind(&settings.default_locale)
+        .execute(&st.db)
+        .await
+        .map_err(|e| format!("impostazioni di piattaforma: {e}"))?;
 
     let cfg = st.module_config.get("auth").cloned().unwrap_or_default();
     let get = |k: &str| match cfg.get(k) {

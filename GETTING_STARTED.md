@@ -3,8 +3,8 @@
 Percorso più rapido per portare su tutto lo stack in locale e fare un primo
 giro di prova, dalla registrazione alla pubblicazione di un post. Per il
 dettaglio di ogni pezzo vedi [README.md](README.md) (panoramica e struttura),
-[legacy/backend/API.md](legacy/backend/API.md) (riferimento endpoint) e i README di
-[backend](legacy/backend/README.md)/[frontend](frontend/README.md).
+[docs/API.md](docs/API.md) (riferimento endpoint) e i README di
+[backend](docs/BACKEND.md)/[frontend](frontend/README.md).
 
 ## Prerequisiti
 
@@ -20,8 +20,8 @@ dettaglio di ogni pezzo vedi [README.md](README.md) (panoramica e struttura),
   # poi usa /tmp/podman-compose-venv/bin/podman-compose al posto di "podman compose"
   ```
 
-Non serve altro installato a mano: Postgres, Redis, RabbitMQ, Garage (storage S3), backend
-e frontend girano tutti in container.
+Non serve altro installato a mano: Postgres, Redis, NATS, Garage (storage S3), backend,
+worker e frontend girano tutti in container.
 
 ## 1. Configurazione
 
@@ -44,9 +44,10 @@ essere notate:
   il formato richiesto da Garage (`GK` + 24 hex / 64 hex) e vanno bene in
   locale; per un ambiente esposto generarne di veri (comandi nei commenti
   del file).
-- `NOCT_JWT_SECRET` / `NOCT_SESSION_SECRET` — vanno bene i default (`foo`) per
-  un test locale; **non riusarli mai in un ambiente esposto** (vedi i commenti
-  nel file per generarne di veri).
+- `NOCT_JWT_SECRET` — va bene il default per un test locale (il backend non
+  parte con un segreto di meno di 32 byte); **non riusarlo mai in un ambiente
+  esposto** (vedi i commenti nel file per generarne uno vero). In produzione
+  imposta anche `NOCT_SECRETS_KEY`, la chiave che cifra a riposo i segreti TOTP.
 - `NOCT_SUPER_ADMIN_USERNAME`/`_EMAIL`/`_PASSWORD` — se tutte e tre
   valorizzate (i default in `.env.example` lo sono già), il backend crea
   questo account come Super Admin al primo avvio: nessun passaggio manuale
@@ -61,14 +62,14 @@ podman-compose up -d --build
 ```
 
 La prima volta impiega qualche minuto (build delle immagini + download di
-Postgres/Redis/RabbitMQ/Garage). `garage-bootstrap` è un job one-shot
-(layout, chiave e bucket di Garage): termina da solo con exit 0, è normale che
+Postgres/Redis/NATS/Garage e compilazione del backend Rust). `garage-bootstrap`
+è un job one-shot (`noct-ctl garage-bootstrap`: layout, chiave e bucket di Garage): termina da solo con exit 0, è normale che
 non risulti `Up`. Al termine i servizi raggiungibili sono:
 
 - Frontend (dashboard e amministrazione incluse): <http://localhost:3000>
-- Backend — Swagger UI: <http://localhost:8000/docs>
-- Backend — health check: <http://localhost:8000/api/v1/health>
-- RabbitMQ — console: <http://localhost:15672> (admin/foo)
+- Backend — schema OpenAPI: <http://localhost:8000/api/v1/openapi.json>
+- Backend — health check: <http://localhost:8000/api/v1/health> (readiness: `/api/v1/health/ready`)
+- Email di sviluppo (MailHog): <http://localhost:8025>
 - Storage S3 (Garage) — API: <http://localhost:3900>; letture pubbliche (avatar/media): <http://localhost:9000>
 
 Verifica rapida che il backend risponda e veda il database:
@@ -80,15 +81,12 @@ curl http://localhost:8000/api/v1/health
 
 ## 3. Migrazioni del database
 
-Non partono da sole all'avvio del container — vanno applicate una volta:
+Partono da sole all'avvio del backend: i moduli attivi applicano le proprie migrazioni sotto advisory lock
+(sicuro anche con più repliche). Per vederne lo stato:
 
 ```bash
-podman exec -it $(podman ps -qf "name=backend") alembic upgrade head
+podman compose exec backend noct-ctl migrate status
 ```
-
-(Se hai usato `podman-compose`, il nome del container potrebbe avere un
-suffisso diverso: `podman ps` per controllare, o cerca quello con l'immagine
-`notturni_backend`/`notturni-backend`.)
 
 ## 4. Primo utente
 
@@ -114,7 +112,8 @@ nel `.env`, questo passaggio non serve: il primo utente registrato è già
 Super Admin.
 
 Per l'accesso diretto all'API senza passare da editor/admin (motore core,
-script), vedi lo script di bootstrap in [legacy/backend/API.md](legacy/backend/API.md#come-ottenere-il-primo-token).
+script): `podman compose exec backend noct-ctl token create --name core-engine`
+(il valore si mostra una sola volta; vedi [docs/API.md](docs/API.md#api-token-motore-core--accesso-diretto-utente)).
 
 ## 5. Primo giro di test — interfaccia web
 
@@ -146,7 +145,7 @@ script), vedi lo script di bootstrap in [legacy/backend/API.md](legacy/backend/A
 ## 6. Primo giro di test — API diretta
 
 Alternativa (o complemento) al punto 5, utile per capire cosa sta succedendo
-sotto al frontend. Riferimento completo in [legacy/backend/API.md](legacy/backend/API.md).
+sotto al frontend. Riferimento completo in [docs/API.md](docs/API.md).
 
 ```bash
 # registrazione + login
@@ -189,13 +188,11 @@ podman compose down -v       # ferma e cancella anche i dati (riparti da zero)
 - **`podman compose` non trovato / "looking up compose provider failed"** —
   installa `podman-compose` (vedi Prerequisiti) e usa `podman-compose` al
   posto di `podman compose` in tutti i comandi sopra.
-- **Il container `rabbitmq` si riavvia una volta all'avvio** — capita su
-  Podman rootless, un noto problema di permessi al primissimo boot di questa
-  immagine (`.erlang.cookie`); si auto-risolve al riavvio (`restart:
-  on-failure` in `compose.yaml`). Se dopo un paio di riavvii resta giù,
-  guardane i log con `podman logs $(podman ps -aqf "name=rabbitmq")`.
-- **Il backend risponde ma ogni chiamata autenticata dà errore** — hai
-  applicato le migrazioni (punto 3)? Senza schema, molte tabelle non esistono.
+- **Il backend non parte e il log parla di manifest o di configurazione** — il backend valida
+  tutto all'avvio e si ferma con un messaggio che nomina la variabile o il modulo (per esempio un
+  `NOCT_JWT_SECRET` troppo corto). `podman compose logs backend`.
+- **Una chiamata autenticata risponde 401 subito dopo il login** — controlla che `NOCT_CORS_ORIGINS`
+  includa l'origine da cui apri il frontend e, in http locale, che `NOCT_SESSION_COOKIE_SECURE=false`.
 - **Il frontend non riesce a chiamare il backend (errori di rete/CORS in
   console)** — succede se il frontend gira su un URL diverso da
   `http://localhost:3000`: `NOCT_CORS_ORIGINS` nel `.env` deve includerlo.
@@ -209,19 +206,20 @@ podman compose down -v       # ferma e cancella anche i dati (riparti da zero)
   locale servito dal backend stesso, senza bisogno di Garage/S3 — vedi
   `.env.example`), non usato di default in questo stack.
 - **Il codice MFA via email non arriva mai per email vera** — atteso in
-  locale: il consumer (`worker-email-otp` nel `compose.yaml`) invia davvero
-  via SMTP, ma punta al catcher locale `mailhog` (nessuna email reale in
-  uscita) — guardalo su `http://localhost:8025` invece della tua casella di
-  posta, o nei log con `podman logs -f $(podman ps -qf "name=worker-email-otp")`.
-- **Voglio essere sicuro che il backup dei post su S3 funzioni** — controlla i
-  log del worker dedicato: `podman logs -f $(podman ps -qf "name=worker-post-backup")`.
+  locale: il servizio `worker` invia davvero via SMTP, ma punta al catcher
+  locale `mailhog` (nessuna email reale in uscita) — guardalo su
+  `http://localhost:8025` invece della tua casella di posta. I messaggi che non
+  riescono a partire finiscono in `podman compose exec backend noct-ctl dead-letters`.
+- **Voglio essere sicuro che i job in background girino** — `podman compose logs -f worker`:
+  campagne newsletter, copia dei post, manutenzione dell'audit e backup passano da lì.
 
 ## Prossimi passi
 
 Una volta verificato che tutto gira, per approfondire:
 
 - [README.md](README.md) — panoramica, stack, struttura del repository.
-- [legacy/backend/API.md](legacy/backend/API.md) — ogni endpoint, con esempi di
+- [docs/BACKEND.md](docs/BACKEND.md) — sviluppo, test e operazioni del backend Rust.
+- [docs/API.md](docs/API.md) — ogni endpoint, con esempi di
   richiesta/risposta e le regole di autorizzazione.
 - [ROADMAP.md](ROADMAP.md) — tabella completa delle specifiche di prodotto,
   il loro stato di avanzamento e il backlog dei prossimi sviluppi.

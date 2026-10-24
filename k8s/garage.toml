@@ -2,10 +2,10 @@
 # configurazione single-node. Segreti NON in questo file: arrivano da
 # variabili d'ambiente GARAGE_RPC_SECRET e GARAGE_ADMIN_TOKEN (compose.yaml /
 # k8s/garage.yaml). Layout, chiave applicativa e bucket vengono creati da
-# legacy/backend/scripts/garage_bootstrap.py.
+# `noct-ctl garage-bootstrap`.
 #
 # Copia identica in k8s/garage.toml (kustomize non può leggere file fuori
-# dalla propria directory): tenere allineate — tests/test_deploy_configs.py
+# dalla propria directory): tenere allineate — `cargo test -p noct-api --test deploy_configs`
 # lo verifica.
 
 metadata_dir = "/var/lib/garage/meta"

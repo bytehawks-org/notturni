@@ -6,7 +6,7 @@ license.workspace = true
 publish.workspace = true
 
 [features]
-default = ["taxonomy", "publications", "pages", "link-preview", "notes", "fragments", "comments", "discovery", "interests", "auth-mfa", "auth-sso", "reports", "newsletter", "custom-domains", "gdpr", "image-moderation"]
+default = ["taxonomy", "publications", "pages", "link-preview", "notes", "fragments", "comments", "discovery", "interests", "auth-mfa", "auth-sso", "reports", "newsletter", "custom-domains", "gdpr", "image-moderation", "backup"]
 taxonomy = ["dep:noct-taxonomy"]
 publications = ["dep:noct-publications"]
 pages = ["dep:noct-pages"]
@@ -23,6 +23,7 @@ newsletter = ["dep:noct-newsletter"]
 custom-domains = ["dep:noct-custom-domains"]
 gdpr = ["dep:noct-gdpr"]
 image-moderation = ["dep:noct-image-moderation"]
+backup = ["dep:noct-backup"]
 sandbox = ["dep:noct-sandbox"]
 
 [lints]
@@ -33,6 +34,7 @@ noct-core.workspace = true
 noct-users.workspace = true
 noct-profiles.workspace = true
 noct-platform.workspace = true
+noct-admin.workspace = true
 noct-blogs.workspace = true
 noct-posts.workspace = true
 noct-media.workspace = true
@@ -53,6 +55,7 @@ noct-newsletter = { workspace = true, optional = true }
 noct-custom-domains = { workspace = true, optional = true }
 noct-gdpr = { workspace = true, optional = true }
 noct-image-moderation = { workspace = true, optional = true }
+noct-backup = { workspace = true, optional = true }
 noct-auth-mfa = { workspace = true, optional = true }
 noct-auth-sso = { workspace = true, optional = true }
 noct-sandbox = { workspace = true, optional = true }

@@ -204,15 +204,16 @@ consegna federata con retry (AT Protocol/ActivityPub).
 | 4 | Core contenuti ✅ (§14) | `blogs`, `posts`, media, permalink, punti di estensione per i moduli |
 | 5 | Moduli, ondata 1 | divisa in tre blocchi, uno per sessione (§15): **5a** ✅ taxonomy, publications, pages, link_preview · **5b** ✅ notes, fragments, comments · **5c** ✅ discovery (feed, ricerca, directory, follow, panoramica, letture, menzioni), interests, viste «tutti i miei blog» · **5d** ✅ profilo utente (§15) |
 | 6 | Moduli, ondata 2 | divisa in tre blocchi (§16): **6a** ✅ auth_mfa, auth_sso · **6b** ✅ newsletter, reports, custom_domains · **6c** ✅ gdpr, image_moderation |
-| 7 | Operazioni | worker, ops-backup, audit-maintenance, Dockerfile (cargo-chef, multi-arch), compose, k8s, CI (fmt, clippy, test, deny, audit, CodeQL, SBOM), documentazione |
-| 8 | Chiusura | rimozione `legacy/`, benchmark, valutazione `moderation` in Rust (ONNX/`ort`) |
+| 7 | Operazioni ✅ (§17) | amministrazione, pianificatore, backup, attivazione a caldo, Dockerfile (cargo-chef, multi-arch), compose, k8s, CI, buchi di contratto |
+| 8 | Hardening ✅ (§18) | CORS, segreti a riposo, MFA disable con codice, regole sugli amministratori, supply chain |
+| 9 | Chiusura ✅ (§19) | rimozione `legacy/`, benchmark, valutazione `moderation` in Rust (ONNX/`ort`), documentazione |
 
 Ogni fase = un blocco/sessione. La Fase 1 è deliberatamente piccola e decide se
 l'investimento nel DSL è giustificato prima di scrivere il resto.
 
 ## 8. Moderazione immagini
 
-Resta il servizio Python (microservizio già isolato, fail open). Rivalutare in Fase 8
+Resta il servizio Python (microservizio già isolato, fail open). Rivalutare dopo la 1.0 (valutazione in §19)
 la conversione del modello in ONNX con `ort`; `candle` è più rischioso per parità.
 
 ## 9. Decisioni prese
@@ -590,3 +591,24 @@ Limiti noti / da fare: le rotte di amministrazione delle segnalazioni, le impost
 Test e verifica: 6 test end-to-end (`bins/noct-api/tests/gdpr.rs`: esportazione con ogni modulo e senza segreti, sezioni dei moduli spenti assenti, cancellazione con controllo di ogni tabella e dello storage, contenuti condivisi anonimizzati, Super Admin, coda con seconda approvazione, rifiuto motivato) e il test di moderazione di `media` esteso all'interruttore. Suite completa e `clippy -D warnings` verdi.
 
 Limiti noti / da fare: l'audit conserva lo username/email dell'attore in chiaro nelle righe passate (obbligo di tracciabilità; una politica di conservazione è già un'impostazione di piattaforma, F7); i dati di moduli futuri entrano nell'esportazione e nella cancellazione implementando `PersonalData`, senza toccare `gdpr`.
+
+## 17. Fase 7 — operazioni (completata)
+
+* **7a — amministrazione**: crate `noct-admin` (utenti, blog, post, audit, config, moduli, overview) più rotte dei moduli (`comments`, `reports`, `gdpr`, `newsletter`). Hook `AdminSection` (`[lifecycle] admin_sections`) per contatori, impostazioni di piattaforma, configurazione pubblica ed esportazione del blog: nessun nome di modulo cablato.
+* **7b — pianificatore**: `schedule = "1m"` in `[jobs.x]`; tabella `noct_schedules`, elezione atomica per intervallo (`INSERT … ON CONFLICT … WHERE last_run_at <= now() - interval`), accodamento via outbox; tick ogni 15 s nel worker. Sostituisce i cinque worker Python. Job: campagne newsletter, manutenzione audit (archivio NDJSON gzip per settimana ISO, prune con watermark, restore), purge dei blog (30 giorni), backup.
+* **7c — moduli a caldo**: `noct_modules` e `noct_module_state` nel database; `NOCT_MODULES` è solo il seme. `LiveRouter` (RwLock) e `supervise()` (poll 5 s o `Notify`, retry 30 s) in API e worker.
+* **7d — consegna**: `Dockerfile` unico con tre binari, `compose.yaml` (NATS, worker, `garage-bootstrap` con `noct-ctl`), `k8s/` (nats, worker; via RabbitMQ e worker Python), CI (fmt, clippy, test, deny), CodeQL, SBOM, publish, DAST.
+* **Buchi di contratto chiusi** (confronto statico delle rotte Python con l'OpenAPI Rust): `/config`, `/footer`, `/seo/*`, `/blogs/{slug}/export`.
+
+Test: `admin.rs`, `operations.rs`, `public_contract.rs`, `deploy_configs.rs` (coerenza di Dockerfile, compose, k8s e `.env.example`).
+
+## 18. Fase 8 — hardening (completata)
+
+CORS con origini esatte e regex; segreti MFA/SSO cifrati a riposo (ChaCha20-Poly1305, `NOCT_SECRETS_KEY`); `POST /auth/mfa/disable` in due passi; ultimo Super Admin protetto e amministratori non reciprocamente sovvertibili; `mfa_required_for_admins`; `registration_mode`/`default_locale` dal database; dipendenze senza rustls 0.21, `zip` 9, `deny.toml` (licenze, fonti, RustSec). Differenze di contratto in [API_CHANGES.md](API_CHANGES.md).
+
+## 19. Fase 9 — chiusura (completata)
+
+* **`legacy/` rimosso** (consultabile nella cronologia git). La tabella «Dalla v1» di [docs/BACKEND.md](../docs/BACKEND.md) mappa ogni file Python sul crate o modulo che lo ha sostituito; `docs/API.md` sostituisce `legacy/backend/API.md`.
+* **Benchmark**: non eseguito contro la baseline Python (il venv non ha più le dipendenze legacy e `legacy/` è stato rimosso): nessun confronto numerico dichiarato. Da misurare con uno strumento di carico (es. `oha`/`k6`) su `noct-api --release` con il compose; i colli di bottiglia attesi sono Postgres e il bus, non il framework.
+* **Valutazione ONNX per `moderation/`**: decisione **tenere il servizio Python**. Il modello (ViT di classificazione NSFW) è esportabile in ONNX e usabile con il crate `ort`, ma serve prima un harness di parità (stessi punteggi su un set di immagini, soglie incluse), la gestione della libreria nativa ONNX Runtime nell'immagine multi-arch e un ricalcolo del pre-processing (resize/normalizzazione). Il servizio è già isolato e fail open: il guadagno è solo la rimozione di PyTorch dalla supply chain. Rivalutare dopo la 1.0.
+* **Non verificato in questa sessione**: avvio live dello stack con `curl`, `podman compose build` (nessun daemon disponibile), `cargo audit`.

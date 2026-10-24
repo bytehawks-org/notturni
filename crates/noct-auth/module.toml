@@ -2,12 +2,15 @@
 name = "auth"
 version = "0.1.0"
 kind = "core"
-requires = ["users", "events", "audit"]
+requires = ["users", "events", "audit", "platform"]
 description = "Registrazione, login con sessione (access JWT + refresh con rotation), password dimenticata, cambio password, API token"
 
 [config]
-# open | invite | closed (in futuro letto da platform_config)
+# open | invite | closed: solo il valore iniziale; poi vale `platform_config.registration_mode`
+# (modificabile da /admin/config)
 registration_mode = { type = "string", env = "NOCT_REGISTRATION_MODE", default = "open" }
+# it | en: lingua predefinita dell'interfaccia; come la modalità di registrazione è solo il valore iniziale
+default_locale = { type = "string", env = "NOCT_DEFAULT_LOCALE", default = "it" }
 # platform | solo: in "solo" il primo utente diventa Super Admin e la registrazione si chiude
 deployment_mode = { type = "string", env = "NOCT_DEPLOYMENT_MODE", default = "platform" }
 refresh_ttl_days = { type = "int", env = "NOCT_JWT_REFRESH_TOKEN_TTL_DAYS", default = 30 }

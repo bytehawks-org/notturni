@@ -6,7 +6,7 @@ Il pannello di amministrazione è parte di questa stessa app, non un
 progetto a sé: `dashboard/pagine`, `dashboard/utenti`, `dashboard/blog`
 (voci di menu visibili solo ad Amministratore/Super Admin — riusano
 `RichTextEditor` e gli altri componenti già usati per i post, nessuna
-duplicazione). Vedi [legacy/backend/API.md](../legacy/backend/API.md#amministrazione-di-piattaforma)
+duplicazione). Vedi [docs/API.md](../docs/API.md#amministrazione-di-piattaforma)
 per gli endpoint usati.
 
 ## Setup
@@ -16,7 +16,7 @@ npm install
 cp .env.local.example .env.local  # opzionale: il default punta già a localhost:8000
 ```
 
-Serve il backend in esecuzione (vedi `../legacy/backend/README.md`) — questo frontend
+Serve il backend in esecuzione (vedi `../docs/BACKEND.md`) — questo frontend
 non funziona a sé stante, ogni pagina autenticata chiama l'API direttamente
 dal browser.
 
@@ -59,7 +59,7 @@ src/
 memoria** (mai in `localStorage`): un reload completo lo perde, per cui
 all'avvio l'app tenta sempre un refresh silenzioso. Il refresh token vero e
 proprio non è mai visibile a JS — vive in un cookie `httpOnly` impostato dal
-backend (`legacy/backend/API.md`), inviato automaticamente dal browser con
+backend (`docs/API.md`), inviato automaticamente dal browser con
 `credentials: "include"` sulle sole chiamate a `/auth/refresh`/`/auth/logout`
 (`src/lib/api.ts`). Refresh automatico su `401` come prima, via `authFetch`.
 

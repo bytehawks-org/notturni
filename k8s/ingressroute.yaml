@@ -18,7 +18,7 @@
 # non supporta i lookahead negativi necessari per farlo in una singola
 # espressione. L'esclusione è comunque applicata — lato Next.js
 # (frontend/src/proxy.ts::RESERVED_SUBDOMAINS, stessa lista di
-# legacy/backend/app/domain/blog_rules.py::RESERVED_BLOG_SLUGS): un sottodominio
+# crates/noct-blogs/src/rules.rs::RESERVED_BLOG_SLUGS): un sottodominio
 # riservato arriva comunque al frontend ma non viene riscritto su un blog,
 # resta sulla home di piattaforma. Quando un sottodominio riservato avrà una
 # sua destinazione reale (es. blog.notturni.eu verso un servizio dedicato,

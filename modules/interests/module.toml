@@ -5,3 +5,11 @@ kind = "optional"
 default_enabled = true
 requires = []
 description = "Elenco pubblico degli interessi di piattaforma, scelti dagli utenti nel profilo e usati per filtrare la directory utenti"
+
+[config]
+# JSON con l'elenco iniziale (`[{"key": "music", "translations": {"it": "Musica"}}]`); vuoto = elenco predefinito
+default_interests = { type = "string", env = "NOCT_DEFAULT_INTERESTS", optional = true }
+
+[lifecycle]
+startup = true
+admin_sections = true

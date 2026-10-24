@@ -7,4 +7,5 @@ requires = ["blogs", "posts"]
 description = "Categorie per-blog dei post (campi category_id/category in create/update/risposta di post)"
 
 [lifecycle]
+admin_sections = true
 extensions = true

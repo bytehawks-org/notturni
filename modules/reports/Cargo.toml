@@ -13,6 +13,7 @@ workspace = true
 noct-core.workspace = true
 async-trait.workspace = true
 noct-posts.workspace = true
+noct-audit.workspace = true
 axum.workspace = true
 serde.workspace = true
 serde_json.workspace = true

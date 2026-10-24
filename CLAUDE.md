@@ -18,8 +18,8 @@ Per tutto il resto, la fonte giusta dipende da cosa serve:
 | Se una specifica è già implementata, parziale o da fare | [ROADMAP.md](ROADMAP.md) — **controllalo sempre prima di iniziare un blocco di lavoro** |
 | Panoramica, stack, struttura del repository | [README.md](README.md) |
 | Primo avvio locale passo-passo, primo giro di test | [GETTING_STARTED.md](GETTING_STARTED.md) |
-| Riferimento endpoint (richieste/risposte, autorizzazione) | [legacy/backend/API.md](legacy/backend/API.md) |
-| Setup/test/migrazioni backend | [legacy/backend/README.md](legacy/backend/README.md) |
+| Riferimento endpoint (richieste/risposte, autorizzazione) | [docs/API.md](docs/API.md) |
+| Setup/test/migrazioni/operazioni backend (Rust) | [docs/BACKEND.md](docs/BACKEND.md) |
 | Setup frontend | [frontend/README.md](frontend/README.md) |
 | Manifest Kubernetes | [k8s/README.md](k8s/README.md) |
 | Servizio di moderazione immagini | [moderation/README.md](moderation/README.md) |
@@ -44,7 +44,7 @@ sessione/richiesta — non a "big bang" su più funzionalità insieme.
    sessione successiva.
 3. **Verifica prima di dichiarare fatto un blocco**, nell'ordine che si
    applica alla modifica:
-   * Backend: `python -m pytest` in `backend/` (vedi [legacy/backend/README.md](legacy/backend/README.md#test)).
+   * Backend: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` (vedi [docs/BACKEND.md](docs/BACKEND.md#sviluppo)).
    * Frontend: `tsc`, `eslint`, `npm run build`.
    * Se la modifica cambia comportamento a runtime (non solo tipi/test):
      rebuild del/i servizio/i coinvolto/i (`podman compose build --no-cache
@@ -55,7 +55,7 @@ sessione/richiesta — non a "big bang" su più funzionalità insieme.
 4. **Documentazione**, nella stessa modifica che tocca il codice, non in un
    passaggio successivo:
    * Aggiorna la riga corrispondente in ROADMAP.md (stato + nota).
-   * Aggiorna [legacy/backend/API.md](legacy/backend/API.md) se cambiano endpoint, payload
+   * Aggiorna [docs/API.md](docs/API.md) se cambiano endpoint, payload
      o risposta.
    * Aggiorna README.md solo se cambia la lista "Funzionalità implementate" a
      livello di onboarding — non per ogni dettaglio interno.
@@ -76,7 +76,7 @@ Da rispettare sempre, indipendentemente dal blocco in corso:
 * **Nessun file `.md` tracciato nel repository deve citare `CLAUDE.md`** — è
   documentazione interna, non linkata pubblicamente (lo stesso ROADMAP.md lo
   richiama in apertura). Alcune citazioni residue da prima di questa regola
-  esistono ancora in `legacy/backend/API.md`, `ROADMAP.md` e `moderation/README.md`:
+  possono esistere ancora in `docs/API.md`, `ROADMAP.md` e `moderation/README.md`:
   vanno ripulite in un blocco dedicato quando richiesto esplicitamente, non
   corrette di riflesso durante un blocco non correlato.
 * **Dockerfile e manifest agnostici rispetto all'architettura** (x86_64 in
@@ -84,15 +84,15 @@ Da rispettare sempre, indipendentemente dal blocco in corso:
   arch-specifico (es. `arm64v8/...`) fuori da un contesto che lo richieda
   esplicitamente.
 * **Compatibilità S3**: ogni interazione con lo storage S3-compatible
-  (`boto3`) deve iniettare un endpoint custom configurabile via env — mai
+  (SDK AWS per Rust, crate `noct-storage`) deve iniettare un endpoint custom configurabile via env — mai
   `localhost`/l'endpoint AWS hard-coded — per restare intercambiabile tra
   Garage locale e S3/R2 in produzione. Autenticazione via
   `NOCT_S3_ACCESS_KEY_ID`/`NOCT_S3_SECRET_ACCESS_KEY` se entrambe valorizzate,
-  altrimenti ruolo AWS (default credential chain di boto3); `NOCT_S3_REGION`
+  altrimenti ruolo AWS (default credential chain dell'SDK); `NOCT_S3_REGION`
   opzionale. In alternativa a S3, `NOCT_STORAGE_BACKEND=localstorage` scrive
   su filesystem locale, servito dal backend stesso — pensato per
   installazioni `solo` senza hardware/competenze per gestire uno storage
-  S3-compatible. Vedi `legacy/backend/app/core/storage.py`.
+  S3-compatible. Vedi `crates/noct-storage`.
 * **Prefisso env**: variabili Podman/Kubernetes con prefisso `NOCT_`/`noct_`
   (maiuscolo o minuscolo a seconda del contesto d'uso).
 * **Formato delle risposte in chat**: evitare intro o conclusioni
@@ -105,15 +105,15 @@ Da rispettare sempre, indipendentemente dal blocco in corso:
 
 ## 4. Insidie note (da non re-scoprire ogni volta)
 
-* **SQLAlchemy async e relazioni**: un accesso lazy a una relazione fuori dal
-  contesto della sessione async (es. dopo il `commit`, in un punto in cui
-  l'oggetto non è stato ricaricato con `refresh`/eager load) fa fallire con
-  `MissingGreenlet`. Nei path di scrittura con FK/many-to-many, ricaricare o
-  fare eager load esplicito prima di serializzare la risposta.
-* **PATCH con campi tri-stato** (assente / esplicitamente `null` / valore):
-  usare `model_fields_set` di Pydantic v2 per distinguere "campo omesso dal
-  payload" da "campo inviato come `null`" — non basta un default `None` sul
-  modello.
+* **Campi tri-stato nei PATCH degli handler `custom`** (assente / esplicitamente
+  `null` / valore): un `Option<T>` non distingue "omesso" da `null`. Si legge il corpo
+  grezzo con `noct_core::body_map(&ctx.body)` e si costruisce un `Patch`
+  (`Absent`/`Null`/`Value`); le rotte `kind = "update"` dichiarative usano già `Patch`.
+* **Un'env var appartiene a un solo modulo**: il registry rifiuta due `[config]` con lo
+  stesso nome. Le impostazioni valide per tutta la piattaforma vanno nel `Config` del core.
+* **Aggiungere un modulo non si completa con il solo crate**: dipendenza opzionale e riga
+  in `crates/noct-bundle`, `noct-ctl migrate generate` dopo ogni modifica a `db.toml`
+  (la CI fallisce sul drift), voce in `.env.example` per ogni nuova variabile (c'è un test).
 * **Immagini "sensibili" e blur via CSS**: la regola
   `.sensitive-image-wrapper img { filter: blur(...) }` in `globals.css`
   sfoca **qualunque** immagine dentro quel wrapper, incondizionatamente, e il
@@ -125,12 +125,11 @@ Da rispettare sempre, indipendentemente dal blocco in corso:
 * **`cover_image_is_sensitive` nel PATCH dei post**: ha effetto solo se
   inviato **nella stessa richiesta** che include anche un nuovo
   `cover_image_url` — comportamento intenzionale, documentato nel codice e in
-  `legacy/backend/API.md`, non un bug da correggere se sembra "ignorato" inviandolo
+  `docs/API.md`, non un bug da correggere se sembra "ignorato" inviandolo
   da solo.
-* **Filtri del feed** (tag, categoria, locale, ...): seguono tutti lo stesso
-  pattern di join in `legacy/backend/app/api/v1/feed.py` — un nuovo filtro va
-  aggiunto lì con lo stesso stile (`stmt.join(...).where(...)` condizionale),
-  non con un endpoint/query separata.
+* **Filtri del feed** (tag, categoria, locale, ...): seguono tutti lo stesso pattern in
+  `modules/discovery` — un nuovo filtro va aggiunto lì con lo stesso stile (condizione
+  SQL opzionale con parametro `NULL`-able), non con un endpoint/query separata.
 
 ## 5. Abstract del prodotto
 
@@ -178,7 +177,7 @@ Backlog dettagliato: [ROADMAP.md § 5](ROADMAP.md#5-sviluppi-futuri-non-ancora-i
 ## 6. System Architecture & Stack
 
 Anche se inizialmente sarà un sistema locale e successivamente su un singolo nodo Kubernetes prevedere la clusterizzazione dei componenti necessari.
-In questa fase iniziale si predilige Python per la parte di backend. La roadmap dei prossimi 3 anni prevede già la sostituzione dei microservizi con applicativi scritti in Rust.
+Il backend è scritto in Rust (workspace Cargo); resta in Python solo il servizio di moderazione delle immagini (modello ML).
 Come ingress verrà utilizzato Traefik.
 Per la parte storage, anche su nodo singolo, si prevede di utilizzare comunque Longhorn.
 Prevedere un backup su storage S3 esterno delle risorse fondamentali quali database e dello storage a oggetti (Garage).
@@ -193,10 +192,10 @@ Non usare immagini di base con tag arch-specifico (es. `arm64v8/...`) negli
 esempi/script pensati per girare in locale.
 **Container Engine (Local):** Podman su Fedora Linux (Rootless networking, no K8s).
 **Frontend:** Next.js (App Router, SSR), Tailwind CSS.
-**Backend:** Python 3.12+, FastAPI, Uvicorn (ASGI).
+**Backend:** Rust (axum, sqlx), moduli dichiarativi; vedi [docs/BACKEND.md](docs/BACKEND.md).
 **Database:** PostgreSQL 16+ (Estensione `pgcrypto` o `uuid-ossp`).
 **Cache & State:** Redis 7+ (Rate limiting, lock distribuiti).
-**Message Broker:** RabbitMQ (Code asincrone, AMQP).
+**Message Broker:** NATS JetStream (eventi e job asincroni, outbox transazionale nel database).
 **Object Storage:** Garage (S3-compatible, drop-in replacement per AWS S3 / Cloudflare R2). Garage non implementa le bucket policy S3: le letture pubbliche passano dal suo web endpoint, dietro un proxy che espone solo i prefissi pubblici.
 
 In produzione i certificati saranno gestiti tramite cert-manager di Let's Encrypt.
@@ -206,15 +205,15 @@ Stato di avanzamento: [ROADMAP.md § 3](ROADMAP.md#3-architettura-stack-e-infras
 
 ## 7. Authentication & SSO Flow
 
-L'identity provider è gestito centralmente da FastAPI, fungendo da Master per lo schema relazionale.
+L'identity provider è gestito centralmente dal backend Rust, fungendo da Master per lo schema relazionale.
 
 * **Multi-Factor Authentication (MFA):**
-  * Supporto TOTP (Authenticator App) generato via `pyotp`.
-  * Supporto Email OTP asincrono, inviato accodando il task su RabbitMQ.
+  * Supporto TOTP (Authenticator App), segreti cifrati a riposo.
+  * Supporto Email OTP asincrono, inviato accodando il job sul bus NATS.
 
 * **Single Sign-On (SSO):**
   * Provider attivi: Google, Microsoft, GitHub, LinkedIn.
-  * Gestione flow OAuth2/OIDC tramite `Authlib`.
+  * Gestione flow OAuth2/OIDC con PKCE (implementazione propria nel modulo `auth_sso`).
 
 * **Account Linking (Join):**
   * Risoluzione conflitti basata su `email`.
@@ -227,11 +226,11 @@ L'identity provider è gestito centralmente da FastAPI, fungendo da Master per l
 Stato di avanzamento (inclusa la limitazione nota: SSO non testabile
 end-to-end senza credenziali OAuth reali) ed endpoint:
 [ROADMAP.md § 4](ROADMAP.md#4-autenticazione-e-sso) e
-[legacy/backend/API.md](legacy/backend/API.md).
+[docs/API.md](docs/API.md).
 
 ## 8. Ambiente locale
 
-Lo stack locale (Postgres, Redis, RabbitMQ, Garage, servizio di moderazione,
+Lo stack locale (Postgres, Redis, NATS, Garage, servizio di moderazione,
 backend, worker, frontend) è definito per intero in [compose.yaml](compose.yaml)
 e si avvia con `podman compose up -d --build`. Non avviare i singoli
 componenti a mano con `podman run`/`podman pod create`: `compose.yaml` include

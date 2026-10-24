@@ -160,7 +160,7 @@ async fn patch_updates_only_the_given_fields_and_validates_the_rest() {
 #[tokio::test]
 async fn interests_come_from_the_platform_list_and_need_the_module() {
     let (env, anna) = world(&["interests"]).await;
-    sqlx::query("INSERT INTO interests_settings (id, items) VALUES (1, $1)")
+    sqlx::query("INSERT INTO interests_settings (id, items) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET items = EXCLUDED.items")
         .bind(
             json!([{"key": "music", "translations": {"it": "Musica"}}, {"key": "art", "translations": {"it": "Arte"}}]),
         )

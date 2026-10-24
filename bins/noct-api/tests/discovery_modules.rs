@@ -411,15 +411,27 @@ async fn author_views_span_owned_and_joined_blogs_but_not_deleted_ones() {
 }
 
 #[tokio::test]
-async fn interests_are_public_and_empty_until_configured() {
+async fn interests_are_public_and_seeded_with_the_curated_list() {
     let (env, _) = world().await;
-    assert_eq!(env.get("/interests", None).await, (StatusCode::OK, json!([])));
-    sqlx::query("INSERT INTO interests_settings (id, items) VALUES (1, $1)")
+    let (s, list) = env.get("/interests", None).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(list.as_array().unwrap().len(), 16);
+    assert_eq!(list[0]["key"], "music");
+    sqlx::query("UPDATE interests_settings SET items = $1")
         .bind(json!([{"key": "poesia", "translations": {"it": "Poesia", "en": "Poetry"}}]))
         .execute(&env.pool)
         .await
         .unwrap();
     let (_, list) = env.get("/interests", None).await;
     assert_eq!(list[0]["translations"]["en"], "Poetry");
+    env.teardown().await;
+
+    // seme dall'ambiente; un valore malformato ricade sull'elenco predefinito
+    let seed = r#"[{"key": "Poesia", "translations": {"it": "Poesia"}}]"#;
+    let env = setup(&["interests"], &[("NOCT_DEFAULT_INTERESTS", seed)]).await;
+    assert_eq!(env.get("/interests", None).await.1, json!([{"key": "poesia", "translations": {"it": "Poesia"}}]));
+    env.teardown().await;
+    let env = setup(&["interests"], &[("NOCT_DEFAULT_INTERESTS", "{non json")]).await;
+    assert_eq!(env.get("/interests", None).await.1.as_array().unwrap().len(), 16);
     env.teardown().await;
 }

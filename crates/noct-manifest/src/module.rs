@@ -32,6 +32,10 @@ pub struct Lifecycle {
     /// Il modulo definisce `personal_data::all()` con i [`PersonalData`] che espongono e cancellano
     /// i dati personali dell'utente (modulo `gdpr`).
     pub personal_data: bool,
+    #[serde(default)]
+    /// Il modulo definisce `admin_sections::all()` con le [`AdminSection`] che aggiungono contatori
+    /// alla panoramica e impostazioni di piattaforma a `/admin/config`.
+    pub admin_sections: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -97,6 +101,10 @@ pub struct JobSpec {
     pub max_deliver: u32,
     #[serde(default)]
     pub backoff: Vec<String>,
+    /// Intervallo (`1m`, `1h`, `1d`) con cui il pianificatore accoda il job. Una sola replica per
+    /// intervallo lo accoda (vedi `noct_schedules`); il consumer è quello normale del job.
+    #[serde(default)]
+    pub schedule: Option<String>,
 }
 
 fn default_max_deliver() -> u32 {

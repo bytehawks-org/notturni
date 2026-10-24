@@ -9,3 +9,5 @@ pub mod handlers {
     //! Handler delle rotte `custom` di api.toml.
     pub use crate::handlers_impl::*;
 }
+
+pub mod admin_sections;

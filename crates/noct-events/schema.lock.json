@@ -91,6 +91,32 @@
         }
       ],
       "uniques": []
+    },
+    {
+      "name": "noct_schedules",
+      "columns": [
+        {
+          "name": "name",
+          "type": "varchar(200)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "last_run_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "name"
+      ],
+      "indexes": [],
+      "uniques": []
     }
   ]
 }

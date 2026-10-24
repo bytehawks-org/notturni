@@ -187,7 +187,14 @@ export const api = {
       request<void>("/api/v1/auth/mfa/email/setup", { method: "POST", token }),
     emailConfirm: (token: string, code: string) =>
       request<void>("/api/v1/auth/mfa/email/confirm", { method: "POST", token, body: { code } }),
-    disableMfa: (token: string) => request<void>("/api/v1/auth/mfa/disable", { method: "POST", token }),
+    /** Senza `code` il backend risponde 202 (`code_required`; con il metodo email spedisce il codice),
+     * con un `code` valido 204. */
+    disableMfa: (token: string, code?: string) =>
+      request<{ code_required: boolean; method: "totp" | "email" } | undefined>("/api/v1/auth/mfa/disable", {
+        method: "POST",
+        token,
+        body: code ? { code } : {},
+      }),
     forgotPassword: (payload: { email: string }) =>
       request<void>("/api/v1/auth/password/forgot", { method: "POST", body: payload }),
     resetPassword: (payload: { email: string; code: string; new_password: string }) =>

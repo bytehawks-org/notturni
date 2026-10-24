@@ -265,3 +265,55 @@ kind = "custom"
 handler = "my_links"
 response = "MyLinkEntry[]"
 summary = "Link citati nei post (qualunque stato) di tutti i miei blog, raggruppati per URL"
+
+# ---- SEO ed esportazione (compatibili con /seo/* e /blogs/{slug}/export della v1) ----
+
+[type.CrawlDirectives]
+# percorsi (`/blog` o `/blog/post`) da vietare ai motori di ricerca in robots.txt
+search_disallow = "string[]"
+# idem per i crawler di IA/LLM (include sempre anche `search_disallow`)
+ai_disallow = "string[]"
+# user-agent noti dei crawler di IA, da abbinare a `ai_disallow`
+ai_user_agents = "string[]"
+
+[type.BlogExportFile]
+# il corpo reale è un archivio `application/zip`, non JSON
+archive = "string"
+
+[type.SitemapEntries]
+# [{slug, updated_at}]
+blogs = "json"
+# [{permalink, updated_at}]
+posts = "json"
+
+[[route]]
+id = "crawl_directives"
+method = "GET"
+path = "/seo/crawl-directives"
+auth = "public"
+kind = "custom"
+handler = "crawl_directives"
+response = "CrawlDirectives"
+summary = "Percorsi da escludere in robots.txt (opt-out per blog e per post, motori di ricerca e IA separati)"
+
+[[route]]
+id = "sitemap_entries"
+method = "GET"
+path = "/seo/sitemap-entries"
+auth = "public"
+kind = "custom"
+handler = "sitemap_entries"
+response = "SitemapEntries"
+summary = "Blog e post indicizzabili per sitemap.xml"
+
+[[route]]
+id = "export_blog"
+method = "GET"
+path = "/blogs/{slug}/export"
+auth = "user"
+kind = "custom"
+handler = "export_blog"
+scope = { blog = "slug" }
+raw = true
+response = "BlogExportFile"
+summary = "ZIP con tutto il contenuto del blog in formati aperti (solo il proprietario); i binari delle immagini restano sullo storage"

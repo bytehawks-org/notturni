@@ -15,3 +15,13 @@ columns = [
   { name = "last_error", type = "text", null = true },
 ]
 indexes = [{ columns = ["published_at", "created_at"] }]
+
+# Ultima esecuzione di ogni job periodico (`schedule` in module.toml): l'UPDATE condizionale è ciò che
+# garantisce una sola accodatura per intervallo anche con più repliche.
+[[table]]
+name = "noct_schedules"
+primary_key = ["name"]
+columns = [
+  { name = "name", type = "varchar(200)" },
+  { name = "last_run_at", type = "timestamptz", default = "now()" },
+]

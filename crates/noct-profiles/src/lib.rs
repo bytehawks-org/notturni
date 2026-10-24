@@ -21,3 +21,5 @@ pub const PURPOSE_EMAIL_OLD: &str = "email_change_old";
 pub const PURPOSE_EMAIL_NEW: &str = "email_change_new";
 /// Validità di ciascun codice.
 pub const EMAIL_CODE_TTL_MINUTES: i64 = 10;
+
+pub mod admin_sections;

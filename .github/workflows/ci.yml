@@ -1,0 +1,128 @@
+name: CI
+
+# Qualità del backend Rust a ogni push e pull request: formattazione, lint (clippy con i warning come
+# errori), test completi su servizi veri (Postgres, Redis, NATS JetStream, un S3 finto), coerenza dei
+# manifest dichiarativi con le migrazioni e il lock, licenze e vulnerabilità delle dipendenze.
+# Il workspace vieta `unsafe` (lint `forbid` in Cargo.toml): qui non serve un controllo a parte.
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - "migration/**"
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "0"
+  # la CI non ha bisogno dei simboli di debug: binari di test più piccoli, link più rapido
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+
+jobs:
+  fmt-clippy:
+    name: Formattazione e clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  manifests:
+    name: Manifest, migrazioni e OpenAPI
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NOCT_DATABASE_URL: postgres://postgres:ci@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Valida i manifest (drift di db.toml incluso)
+        run: cargo run --locked -q -p noct-ctl -- validate
+      - name: Nessuna modifica di schema non migrata
+        run: |
+          out=$(cargo run --locked -q -p noct-ctl -- migrate plan)
+          echo "$out"
+          if echo "$out" | grep -qE '^\s+[+~-] '; then
+            echo "::error::db.toml è cambiato senza una migrazione: esegui 'noct-ctl migrate generate'"
+            exit 1
+          fi
+      - name: Applica le migrazioni a un database vuoto e verificale
+        run: |
+          cargo run --locked -q -p noct-ctl -- migrate apply
+          cargo run --locked -q -p noct-ctl -- migrate verify
+      - name: OpenAPI generabile
+        run: cargo run --locked -q -p noct-ctl -- openapi > /dev/null
+
+  test:
+    name: Test (Postgres, Redis, NATS, S3)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+      moto:
+        image: motoserver/moto:latest
+        ports: ["5000:5000"]
+    env:
+      NOCT_TEST_DATABASE_URL: postgres://postgres:ci@localhost:5432/postgres
+      NOCT_TEST_REDIS_URL: redis://localhost:6379/0
+      NOCT_TEST_NATS_URL: nats://localhost:4222
+      NOCT_TEST_S3_ENDPOINT: http://localhost:5000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # i service container non accettano argomenti per il comando: JetStream si avvia a mano
+      - name: NATS JetStream
+        run: docker run -d --name nats -p 4222:4222 nats:2-alpine -js
+      # pg_dump serve ai test del backup infrastrutturale (versione >= del server)
+      - name: Client PostgreSQL
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y postgresql-client
+      - name: cargo test
+        run: cargo test --workspace --locked
+
+  supply-chain:
+    name: Licenze e vulnerabilità (cargo-deny, cargo-audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: cargo-deny (licenze, fonti, ban)
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check licenses bans sources
+      - name: cargo-audit (RustSec)
+        uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}

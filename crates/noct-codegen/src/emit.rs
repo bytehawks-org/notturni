@@ -45,7 +45,7 @@ pub fn emit(
     let opt = |present: bool, file: &str| if present { format!("Some({})", inc(file)) } else { "None".to_string() };
     writeln!(
         out,
-        "pub fn module() -> noct_core::ModuleDef {{\n    noct_core::ModuleDef {{\n        name: MODULE_NAME,\n        module_toml: {},\n        api_toml: {},\n        db_toml: {},\n        lock_json: {},\n        migrations: __MIGRATIONS,\n        router: __router,\n        consumers: __consumers,\n        startup: __startup,\n        extensions: __extensions,\n        login_gates: __login_gates,\n        personal_data: __personal_data,\n        source_dir: env!(\"CARGO_MANIFEST_DIR\"),\n    }}\n}}\n",
+        "pub fn module() -> noct_core::ModuleDef {{\n    noct_core::ModuleDef {{\n        name: MODULE_NAME,\n        module_toml: {},\n        api_toml: {},\n        db_toml: {},\n        lock_json: {},\n        migrations: __MIGRATIONS,\n        router: __router,\n        consumers: __consumers,\n        startup: __startup,\n        extensions: __extensions,\n        login_gates: __login_gates,\n        personal_data: __personal_data,\n        admin_sections: __admin_sections,\n        source_dir: env!(\"CARGO_MANIFEST_DIR\"),\n    }}\n}}\n",
         inc("module.toml"),
         opt(has_api, "api.toml"),
         opt(has_db, "db.toml"),
@@ -127,6 +127,19 @@ pub fn emit(
         writeln!(
             out,
             "fn __personal_data() -> Vec<std::sync::Arc<dyn noct_core::PersonalData>> {{\n    Vec::new()\n}}\n"
+        )
+        .unwrap();
+    }
+    if m.module.lifecycle.admin_sections {
+        writeln!(
+            out,
+            "fn __admin_sections() -> Vec<std::sync::Arc<dyn noct_core::AdminSection>> {{\n    crate::admin_sections::all()\n}}\n"
+        )
+        .unwrap();
+    } else {
+        writeln!(
+            out,
+            "fn __admin_sections() -> Vec<std::sync::Arc<dyn noct_core::AdminSection>> {{\n    Vec::new()\n}}\n"
         )
         .unwrap();
     }

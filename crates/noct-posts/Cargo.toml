@@ -10,6 +10,7 @@ build = "build.rs"
 workspace = true
 
 [dependencies]
+zip.workspace = true
 noct-core.workspace = true
 async-trait.workspace = true
 noct-blogs.workspace = true

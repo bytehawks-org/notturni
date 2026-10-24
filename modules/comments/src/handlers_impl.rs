@@ -90,7 +90,7 @@ async fn effective_mode(st: &AppState, post: &PostInfo) -> Result<String, ApiErr
 
 // ---- commenti ---------------------------------------------------------------------------------------------------------
 
-#[derive(sqlx::FromRow)]
+#[derive(sqlx::FromRow, Clone)]
 struct CommentRow {
     id: Uuid,
     post_id: Uuid,
@@ -588,4 +588,47 @@ pub async fn list_user_comments(ctx: RouteCtx) -> Result<Vec<Value>, ApiError> {
             json!({"id": id, "content": content, "created_at": created_at, "post_title": post_title, "permalink": format!("/{blog_slug}/{post_slug}")})
         })
         .collect())
+}
+
+/// Commenti di *tutti* i blog nello stato indicato (default `pending`), o quelli segnalati alla
+/// piattaforma con `reported=true`: la coda di moderazione trasversale di amministratori e moderatori.
+pub async fn list_all_comments(ctx: RouteCtx) -> Result<Vec<Value>, ApiError> {
+    let status = ctx.query.get("status").map(String::as_str).filter(|s| !s.is_empty()).unwrap_or("pending");
+    if !["pending", "approved", "rejected"].contains(&status) {
+        return Err(ApiError::unprocessable("`status` deve essere pending, approved o rejected."));
+    }
+    let reported = matches!(ctx.query.get("reported").map(String::as_str), Some("true" | "1"));
+    let q = ctx.query.get("q").map(|q| q.trim().to_string()).filter(|q| !q.is_empty());
+    let filter = if reported { "c.reported_to_platform" } else { "c.status::text = $1" };
+    let order = if reported { "c.reported_at DESC NULLS LAST" } else { "c.created_at DESC" };
+    let sql = format!(
+        "SELECT c.id, c.post_id, c.parent_id, c.author_id, c.author_display_name, c.author_email, c.content,
+                c.status::text AS status, c.created_at, c.reported_to_platform, c.report_note,
+                p.title AS post_title, p.slug AS post_slug, c.reported_at, b.id AS blog_id, b.slug AS blog_slug, b.title AS blog_title
+         FROM comments c JOIN posts p ON p.id = c.post_id JOIN blogs b ON b.id = p.blog_id
+         WHERE {filter} AND ($2::text IS NULL OR position(lower($2) IN lower(c.content)) > 0
+               OR position(lower($2) IN lower(c.author_display_name)) > 0 OR position(lower($2) IN lower(p.title)) > 0
+               OR position(lower($2) IN lower(b.slug)) > 0)
+           AND ($1::text IS NOT NULL)
+         ORDER BY {order}, c.id"
+    );
+    #[derive(sqlx::FromRow)]
+    struct Admin {
+        #[sqlx(flatten)]
+        row: CommentRow,
+        reported_at: Option<DateTime<Utc>>,
+        blog_id: Uuid,
+        blog_slug: String,
+        blog_title: String,
+    }
+    let rows: Vec<Admin> = sqlx::query_as(&sql).bind(status).bind(q).fetch_all(&ctx.state.db).await?;
+    let plain: Vec<CommentRow> = rows.iter().map(|a| a.row.clone()).collect();
+    let mut out = comments_out(&ctx.state, &plain, true).await?;
+    for (v, a) in out.iter_mut().zip(&rows) {
+        v["blog_id"] = json!(a.blog_id);
+        v["blog_slug"] = json!(a.blog_slug);
+        v["blog_title"] = json!(a.blog_title);
+        v["reported_at"] = json!(a.reported_at);
+    }
+    Ok(out)
 }

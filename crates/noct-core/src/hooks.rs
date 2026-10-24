@@ -145,3 +145,113 @@ impl PersonalDataProviders {
         Ok(objects)
     }
 }
+
+/// Contributo di un modulo all'amministrazione di piattaforma: contatori della panoramica e
+/// impostazioni di piattaforma che appartengono al modulo (provider SSO, commenti anonimi…). Il
+/// crate `admin` non conosce nessun modulo: compone ciò che i moduli attivi dichiarano.
+#[async_trait]
+pub trait AdminSection: Send + Sync {
+    fn module(&self) -> &'static str;
+
+    /// Contatori per `GET /admin/overview` (nome → numero).
+    async fn overview(&self, _st: &AppState) -> Result<JsonMap, ApiError> {
+        Ok(JsonMap::new())
+    }
+
+    /// Valori pubblici per `GET /config` (es. i provider di accesso abilitati).
+    async fn public_config(&self, _st: &AppState) -> Result<JsonMap, ApiError> {
+        Ok(JsonMap::new())
+    }
+
+    /// File che il modulo aggiunge all'esportazione di un blog (`GET /blogs/{slug}/export`):
+    /// (percorso nello zip, contenuto).
+    async fn blog_export(&self, _st: &AppState, _blog_id: Uuid) -> Result<Vec<(String, Vec<u8>)>, ApiError> {
+        Ok(Vec::new())
+    }
+
+    /// Chiavi di `GET|PATCH /admin/config` gestite da questa sezione.
+    fn settings_keys(&self) -> &'static [&'static str] {
+        &[]
+    }
+
+    /// Valori correnti delle chiavi dichiarate in [`AdminSection::settings_keys`].
+    async fn settings(&self, _st: &AppState) -> Result<JsonMap, ApiError> {
+        Ok(JsonMap::new())
+    }
+
+    /// Applica le sole chiavi della sezione presenti in `patch`, nella transazione `conn`. Ritorna
+    /// `{campo: {from, to}}` per ciò che è davvero cambiato (finisce nel registro di audit).
+    async fn apply_settings(
+        &self,
+        _conn: &mut PgConnection,
+        _st: &AppState,
+        _patch: &JsonMap,
+    ) -> Result<JsonMap, ApiError> {
+        Ok(JsonMap::new())
+    }
+}
+
+/// Le sezioni di amministrazione dei moduli attivi.
+#[derive(Clone, Default)]
+pub struct AdminSections {
+    list: Arc<Vec<Arc<dyn AdminSection>>>,
+}
+
+impl AdminSections {
+    pub fn new(list: Vec<Arc<dyn AdminSection>>) -> Self {
+        Self { list: Arc::new(list) }
+    }
+
+    pub async fn overview(&self, st: &AppState) -> Result<JsonMap, ApiError> {
+        let mut out = JsonMap::new();
+        for s in self.list.iter() {
+            out.extend(s.overview(st).await?);
+        }
+        Ok(out)
+    }
+
+    pub async fn public_config(&self, st: &AppState) -> Result<JsonMap, ApiError> {
+        let mut out = JsonMap::new();
+        for s in self.list.iter() {
+            out.extend(s.public_config(st).await?);
+        }
+        Ok(out)
+    }
+
+    pub async fn blog_export(&self, st: &AppState, blog_id: Uuid) -> Result<Vec<(String, Vec<u8>)>, ApiError> {
+        let mut out = Vec::new();
+        for s in self.list.iter() {
+            out.extend(s.blog_export(st, blog_id).await?);
+        }
+        Ok(out)
+    }
+
+    pub async fn settings(&self, st: &AppState) -> Result<JsonMap, ApiError> {
+        let mut out = JsonMap::new();
+        for s in self.list.iter() {
+            out.extend(s.settings(st).await?);
+        }
+        Ok(out)
+    }
+
+    /// Passa a ogni sezione le sole chiavi che dichiara; unisce i cambiamenti.
+    pub async fn apply_settings(
+        &self,
+        conn: &mut PgConnection,
+        st: &AppState,
+        patch: &JsonMap,
+    ) -> Result<JsonMap, ApiError> {
+        let mut changes = JsonMap::new();
+        for s in self.list.iter() {
+            let mine: JsonMap = patch
+                .iter()
+                .filter(|(k, _)| s.settings_keys().contains(&k.as_str()))
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
+            if !mine.is_empty() {
+                changes.extend(s.apply_settings(&mut *conn, st, &mine).await?);
+            }
+        }
+        Ok(changes)
+    }
+}

@@ -1,6 +1,6 @@
 # Modifiche all'API suggerite durante la riscrittura in Rust
 
-Il contratto `/api/v1` della v1 ([legacy/backend/API.md](../legacy/backend/API.md)) è mantenuto. Qui si elencano le
+Il contratto `/api/v1` della v1 ([legacy/backend/API.md](../docs/API.md)) è mantenuto. Qui si elencano le
 differenze **introdotte** (da verificare con il frontend) e quelle **suggerite** (da approvare caso per caso).
 Nessuna è una rottura silenziosa.
 
@@ -62,6 +62,15 @@ Nessuna è una rottura silenziosa.
 | `POST /auth/mfa/{email/setup,disable}` | `auth.mfa_enabled` e `auth.mfa_disabled` finiscono nell'audit; limite di richieste per utente | assenti in v1 |
 | `GET /auth/sso/{provider}/callback` | collega un account esistente solo se il provider garantisce l'email; per GitHub solo l'email primaria verificata; un nuovo account solo a registrazioni aperte; errori sempre come `/login?sso_error=1` | in v1 un provider che non verificava l'email permetteva di prendere un account altrui, e l'SSO aggirava le modalità di registrazione |
 | `GET /auth/sso/{provider}/login` | state e PKCE legati al browser da un cookie `noct_sso_state` (httpOnly, `SameSite=Lax`, path `/api/v1/auth/sso`) | in v1 era la sessione firmata di Starlette |
+| `PATCH /admin/users/{id}` | L'ultimo Super Admin attivo non si retrocede né disattiva; un Amministratore non disattiva né reimposta la password di un altro amministratore; la disattivazione revoca le sessioni | in v1 si poteva restare senza Super Admin e un amministratore poteva prendere il controllo di un pari |
+| Registrazione | `registration_mode` e `default_locale` sono impostazioni di piattaforma nel database (seminate da `NOCT_REGISTRATION_MODE`/`NOCT_DEFAULT_LOCALE` al primo avvio) | modificabili da `/admin/config` senza riavvio |
+| Amministratori | `mfa_required_for_admins` (impostazione di piattaforma) impone l'MFA sulle rotte riservate al ruolo di piattaforma | assente in v1 |
+| `POST /auth/mfa/disable` | Con MFA attivo risponde `202 {"code_required": true}`; ripetuta con `code` (TOTP o di recupero) risponde `204`. `NOCT_MFA_DISABLE_REQUIRES_CODE=false` ripristina il comportamento v1 | un access token rubato non basta più a togliere il secondo fattore |
+| Segreti MFA/SSO | cifrati a riposo (`enc:v1:`, chiave `NOCT_SECRETS_KEY`); i valori in chiaro restano leggibili | difesa in profondità sul database |
+| `GET /blogs/{slug}/export` | lo zip include `notes.json` (modulo `notes`) oltre a pagine, commenti e tassonomie | allineato ai moduli attivi |
+| `/admin/modules`, `/admin/modules/{name}/enable|disable` | Nuove (Super Admin): attivazione a caldo dei moduli, stato in `noct_modules` | `NOCT_MODULES` è solo il seme |
+| CORS | `NOCT_CORS_ORIGINS` (esatte) e `NOCT_CORS_ORIGIN_REGEX`, con credenziali | come in v1 |
+| `GET /admin/overview` | accessibile anche al moderatore; include `moderation` (stato del servizio) e `deployment_mode` | pannello unico |
 
 ## Suggerite (non applicate)
 
@@ -69,4 +78,3 @@ Nessuna è una rottura silenziosa.
 * **Paginazione** di `GET /blogs/{slug}/media` e delle bibliografie.
 * **`GET /blogs/{slug}/members`** potrebbe restituire anche il proprietario con ruolo `autore`, per semplificare il pannello collaboratori.
 * **`DELETE /blogs/{slug}`** con corpo: alcuni proxy scartano il corpo dei `DELETE`; si potrebbe accettare `?confirm_slug=`.
-* **`POST /auth/mfa/disable`** dovrebbe chiedere un codice valido (o la password) invece di spegnere l'MFA a chiunque abbia un access token: un token rubato oggi basta a togliere il secondo fattore. Richiede un campo nel corpo, quindi una modifica del frontend.

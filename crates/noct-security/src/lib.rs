@@ -7,6 +7,7 @@ pub mod cookie;
 pub mod jwt;
 pub mod otp;
 pub mod password;
+pub mod secrets;
 pub mod token;
 pub mod validate;
 

@@ -1,4 +1,4 @@
-use crate::{Config, Extensions, LoginGates, PersonalDataProviders, RateLimiter, Services};
+use crate::{AdminSections, Config, Extensions, LoginGates, ModuleInfo, PersonalDataProviders, RateLimiter, Services};
 use noct_manifest::ConfigValue;
 use sqlx::PgPool;
 use std::{
@@ -21,6 +21,13 @@ pub struct AppState {
     pub login_gates: LoginGates,
     /// Fornitori di dati personali dei moduli attivi (esportazione e cancellazione dell'account).
     pub personal_data: PersonalDataProviders,
+    /// Sezioni di amministrazione dei moduli attivi (panoramica e impostazioni di piattaforma).
+    pub admin_sections: AdminSections,
+    /// Tutti i moduli compilati nel binario (attivi o no).
+    pub catalog: Arc<Vec<ModuleInfo>>,
+    /// Svegliato quando lo stato desiderato dei moduli cambia: il supervisore del processo lo legge
+    /// subito invece di aspettare il prossimo giro.
+    pub modules_changed: Arc<tokio::sync::Notify>,
     /// Nomi dei moduli attivi: un modulo che legge dati di un altro opzionale (conteggi dei
     /// commenti, filtro per categoria) controlla qui che sia attivo.
     pub modules: Arc<BTreeSet<String>>,
@@ -43,6 +50,9 @@ impl AppState {
             extensions: Extensions::default(),
             login_gates: LoginGates::default(),
             personal_data: PersonalDataProviders::default(),
+            admin_sections: AdminSections::default(),
+            catalog: Arc::new(Vec::new()),
+            modules_changed: Arc::new(tokio::sync::Notify::new()),
             modules: Arc::new(BTreeSet::new()),
         }
     }
@@ -57,9 +67,35 @@ impl AppState {
         self
     }
 
+    pub fn with_admin_sections(mut self, sections: AdminSections) -> Self {
+        self.admin_sections = sections;
+        self
+    }
+
+    pub fn with_catalog(mut self, catalog: Vec<ModuleInfo>) -> Self {
+        self.catalog = Arc::new(catalog);
+        self
+    }
+
     pub fn with_modules(mut self, names: impl IntoIterator<Item = String>) -> Self {
         self.modules = Arc::new(names.into_iter().collect());
         self
+    }
+
+    /// Valore testuale della configurazione di un modulo attivo (vuoto = non impostato).
+    pub fn module_config_str(&self, module: &str, key: &str) -> Option<&str> {
+        match self.module_config.get(module)?.get(key)? {
+            ConfigValue::String(s) if !s.is_empty() => Some(s),
+            _ => None,
+        }
+    }
+
+    /// Valore booleano della configurazione di un modulo.
+    pub fn module_flag(&self, module: &str, key: &str) -> Option<bool> {
+        match self.module_config.get(module)?.get(key)? {
+            ConfigValue::Bool(b) => Some(*b),
+            _ => None,
+        }
     }
 
     pub fn module_enabled(&self, name: &str) -> bool {

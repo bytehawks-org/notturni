@@ -362,12 +362,19 @@ fn bytes_of(b: &'static [u8]) -> noct_core::storage::Bytes {
     noct_core::storage::Bytes::from_static(b)
 }
 
+/// Messaggi dell'outbox, esclusi quelli del pianificatore dei job periodici (`payload.scheduled`), che il
+/// processo in background accoda da sé a ogni avvio.
 async fn outbox_counts(pool: &PgPool) -> (i64, i64) {
-    let total: i64 = sqlx::query_scalar("SELECT count(*) FROM noct_outbox").fetch_one(pool).await.unwrap();
-    let published: i64 = sqlx::query_scalar("SELECT count(*) FROM noct_outbox WHERE published_at IS NOT NULL")
+    let total: i64 = sqlx::query_scalar("SELECT count(*) FROM noct_outbox WHERE payload->>'scheduled' IS NULL")
         .fetch_one(pool)
         .await
         .unwrap();
+    let published: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM noct_outbox WHERE published_at IS NOT NULL AND payload->>'scheduled' IS NULL",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap();
     (total, published)
 }
 
@@ -395,8 +402,8 @@ async fn outbox_event_and_job_flow(env: Env) {
     let background = env.registry.start_background(&env.enabled, &env.state).await.unwrap();
     assert_eq!(
         background.consumer_count(),
-        4,
-        "job cleanup + evento note.created + job di reset password + job del cambio email"
+        6,
+        "job cleanup + evento note.created + job di reset password + job del cambio email + manutenzione dell'audit + pulizia dei blog"
     );
     let cache = env.state.services.cache.clone();
     eventually("evento consegnato all'handler", || async {

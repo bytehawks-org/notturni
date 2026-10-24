@@ -4,3 +4,5 @@
 include!(concat!(env!("OUT_DIR"), "/module_gen.rs"));
 
 pub mod extensions;
+
+pub mod admin_sections;

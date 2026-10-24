@@ -10,7 +10,8 @@ name: Pubblica immagini (GHCR)
 # a mano.
 #
 # arm64 viene costruita via QEMU (i runner ubuntu-latest sono amd64 nativi):
-# più lento del solo amd64, in particolare per "moderation" (installa torch
+# più lento del solo amd64, in particolare per "backend" (compilazione Rust
+# in release, cache dei layer con cargo-chef) e per "moderation" (installa torch
 # e scarica un modello ML in fase di build, vedi moderation/Dockerfile) —
 # è il job che più probabilmente allunga la pipeline, per questo ogni
 # immagine è un job a sé (matrice, fail-fast:false) invece che passi in
@@ -46,10 +47,12 @@ jobs:
       matrix:
         include:
           - name: backend
-            context: ./legacy/backend
+            context: .
+            file: ./Dockerfile
             build-args: ""
           - name: frontend
             context: ./frontend
+            file: ./frontend/Dockerfile
             # NEXT_PUBLIC_* è inglobato nel bundle in fase di build, non
             # letto a runtime (vedi frontend/Dockerfile, k8s/README.md): i
             # valori qui sono quelli di produzione, sovrascrivibili senza
@@ -63,6 +66,7 @@ jobs:
               NEXT_PUBLIC_SITE_URL=${{ vars.NEXT_PUBLIC_SITE_URL || 'https://notturni.eu' }}
           - name: moderation
             context: ./moderation
+            file: ./moderation/Dockerfile
             build-args: ""
 
     steps:
@@ -100,6 +104,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}

@@ -90,10 +90,10 @@ kubectl apply -k .
 
 **Aggiornare il tag delle immagini** (dopo un nuovo push su GHCR): un solo
 posto, i tre `newTag` sotto `images:` in fondo a `kustomization.yaml` — non
-i singoli manifest. `notturni-backend` copre da solo `backend.yaml` **e** i
-tre worker **e** i due `CronJob` (`audit-maintenance.yaml`/`backup.yaml`),
-tutti sullo stesso tag: kustomize sostituisce ogni `image:` che referenzia
-quel nome esatto, ripetuto identico in più file. Poi `kubectl apply -k .`.
+i singoli manifest. `notturni-backend` copre da solo `backend.yaml` **e**
+`worker.yaml`, sullo stesso tag: kustomize sostituisce ogni `image:` che
+referenzia quel nome esatto, ripetuto identico in più file. Poi
+`kubectl apply -k .`.
 
 Per un primo test senza registro (immagini costruite localmente sul nodo
 invece che pubblicate su GHCR): buildarle sulla stessa macchina del nodo
@@ -118,7 +118,9 @@ build, non a runtime — vedi nota più sotto).
   volume Longhorn (ext4) arriva con un `lost+found` creato dal filesystem, e
   `initdb` si rifiuta di inizializzare una data directory non vuota —
   fallirebbe al primo avvio senza questo accorgimento.
-- `redis.yaml` e `rabbitmq.yaml` non hanno persistenza in questo primo draft.
+- `redis.yaml` non ha persistenza (cache e rate limit, ricostruibili). `nats.yaml` ha un volume
+  dedicato per JetStream; i messaggi già scritti nell'outbox transazionale del database
+  sopravvivono comunque a una perdita del volume.
 - `ingress.yaml` gestisce il routing catch-all path-based sotto l'host fisso
   `notturni.eu`; il routing per sottodominio-per-blog è invece in
   `ingressroute.yaml` (`IngressRoute` Traefik, `HostRegexp` su
@@ -145,7 +147,7 @@ build, non a runtime — vedi nota più sotto).
 - Lo storage a oggetti è **Garage** (`garage.yaml`, nodo singolo, config in
   `garage.toml`). Un Garage appena avviato non è utilizzabile (nessun layout,
   nessuna chiave): l'initContainer `garage-bootstrap` di `backend.yaml`
-  (`legacy/backend/scripts/garage_bootstrap.py`, idempotente) assegna il nodo al
+  (`noct-ctl garage-bootstrap`, idempotente) assegna il nodo al
   layout, importa la chiave applicativa e crea i bucket con alias globale.
   La chiave deve avere il formato Garage: `NOCT_S3_ACCESS_KEY_ID` (in
   `configmap.yaml`) = `GK` + 24 hex, `NOCT_S3_SECRET_ACCESS_KEY` (in
@@ -160,7 +162,7 @@ build, non a runtime — vedi nota più sotto).
   e archivi di audit restano irraggiungibili). `garage.toml` e
   `s3-public.conf.template` sono copie di `garage/garage.toml` e
   `s3-public/default.conf.template` (usati da `compose.yaml`; kustomize non
-  legge fuori da questa directory): `legacy/backend/tests/test_deploy_configs.py`
+  legge fuori da questa directory): `cargo test -p noct-api --test deploy_configs`
   verifica che non divergano.
 - `ingressroute-s3.yaml` (`IngressRoute` Traefik) espone il solo proxy
   `s3-public` sull'host configurato in `NOCT_S3_PUBLIC_URL` (`configmap.yaml`,
@@ -170,7 +172,7 @@ build, non a runtime — vedi nota più sotto).
   produzione: upload riuscito ma media irraggiungibili). Le scritture
   restano dietro le credenziali `NOCT_S3_ACCESS_KEY_ID`/`_SECRET_ACCESS_KEY`,
   solo server-side. `s3` è anche in `RESERVED_SUBDOMAINS`/`RESERVED_BLOG_SLUGS`
-  (`frontend/src/proxy.ts`, `legacy/backend/app/domain/blog_rules.py`): un utente
+  (`frontend/src/proxy.ts`, `crates/noct-blogs/src/rules.rs`): un utente
   non può registrare un blog con quello slug.
 - Il backend di storage alternativo (`NOCT_STORAGE_BACKEND=localstorage`,
   vedi [ROADMAP.md](../ROADMAP.md#3-architettura-stack-e-infrastruttura)) non
@@ -186,40 +188,38 @@ build, non a runtime — vedi nota più sotto).
   il dominio pubblico reale del sito (es. `https://notturni.eu`), non
   `localhost`, altrimenti canonical/sitemap/robots puntano tutti all'host
   sbagliato.
-- I worker consumer di coda (`worker-post-backup.yaml`,
-  `worker-email-otp.yaml`, `worker-newsletter.yaml`) sono Deployment
-  long-running senza `Service` (non ricevono richieste in ingresso, solo
-  consumo da RabbitMQ) — stesso `envFrom` di `backend.yaml`, niente
-  override locali stile `mailhog`/`localhost:9000` di `compose.yaml`.
-  `worker-newsletter` è l'unico dei tre che accede anche al database
-  (iscritti/campagne), coperto dallo stesso ConfigMap/Secret condiviso.
+- `worker.yaml` (Deployment, 2 repliche, nessun `Service`): `noct-worker`, che esegue relay
+  dell'outbox, pianificatore dei job periodici e consumer di eventi e job di **tutti** i moduli
+  attivi (email di MFA e di reset, conferme e invio della newsletter, copia dei post, ...). Sostituisce
+  i tre Deployment di consumer e i due `CronJob` della versione Python. Più repliche sono sicure: NATS
+  distribuisce i job e ogni intervallo dei job periodici è assegnato a una sola replica con un `UPDATE`
+  atomico. Con `NOCT_NATS_URL` impostato l'API non esegue consumer (`NOCT_WORKER_INLINE` si ricava da lì).
+- Job periodici (dichiarati con `schedule` nei `module.toml`, accodati dal worker): campagne newsletter
+  pianificate (ogni minuto), manutenzione dell'audit (ogni giorno: archivio su storage delle
+  settimane ISO concluse e cancellazione oltre `audit_retention_days`, sempre limitata al watermark
+  archiviato), cancellazione definitiva dei blog oltre i 30 giorni di tolleranza e backup
+  infrastrutturale (modulo `backup`: `pg_dump` più rispecchiamento dei bucket verso uno storage S3
+  **esterno**; senza `NOCT_BACKUP_S3_BUCKET` in `configmap.yaml` il giro non fa nulla — va puntato a un
+  provider realmente esterno e separato da quello dei contenuti prima della produzione). Il Markdown
+  di ogni post pubblicato è copiato nel bucket dei contenuti dallo stesso modulo, su evento. Lo stato
+  si legge da `GET /api/v1/admin/audit-log` e da `noct-ctl`.
+- **Moduli a caldo**: i moduli opzionali si attivano e disattivano da `/api/v1/admin/modules`
+  (Super Admin) senza riavviare nulla. Lo stato desiderato sta nel database (`noct_modules`); API e worker
+  lo rileggono ogni 5 secondi (subito sull'API che ha ricevuto la richiesta), applicano le migrazioni
+  mancanti, ricostruiscono il router e i consumer e li scambiano. `NOCT_MODULES` è solo il seme della
+  prima installazione. Disattivare non cancella mai dati né tabelle. Se la migrazione di un modulo
+  fallisce, `GET /admin/modules` lo mostra con l'errore (`pending: true`) e si riprova ogni 30 secondi.
 - `moderation.yaml` (Deployment+Service, porta 8100): servizio di
   moderazione automatica delle immagini (`moderation/`), `fail open` per
   design (un problema di questo servizio non blocca mai l'upload — vedi
-  `app/domain/moderation.py`) ma senza `NOCT_MODERATION_SERVICE_URL`
+  `noct-media`) ma senza `NOCT_MODERATION_SERVICE_URL`
   valorizzato in `configmap.yaml` (ora presente) nessuna immagine verrebbe
   mai moderata. `readinessProbe`/`livenessProbe` con `initialDelaySeconds`
   più alto del solito: il modello (torch) viene caricato all'avvio.
-- `audit-maintenance.yaml` è invece un `CronJob` (non un consumer): archivia
-  su storage le settimane ISO chiuse di `audit_log` e cancella gli eventi
-  oltre `NOCT_AUDIT_RETENTION_DAYS`. Gira una volta al giorno; in locale
-  l'equivalente è il servizio `worker-audit-maintenance` di `compose.yaml`
-  (stesso modulo con `--loop`).
-- `backup.yaml` è un altro `CronJob`: backup infrastrutturale di Postgres
-  (`pg_dump`) e mirror di tutti i bucket S3 applicativi verso uno
-  storage S3 **esterno** (`app/workers/backup.py`, distinto dal backup
-  applicativo dei singoli post di `worker-post-backup`, che resta nello
-  stesso bucket applicativo). Senza `NOCT_BACKUP_S3_BUCKET` configurato
-  (placeholder in `configmap.yaml`) il job termina subito senza fare nulla —
-  va puntato a un provider S3 realmente esterno e separato da quello dei
-  contenuti prima della produzione. In locale l'equivalente è il servizio
-  `worker-backup` di `compose.yaml` (stesso modulo con `--loop`, verso lo
-  stesso Garage locale su un bucket dedicato solo per avere qualcosa di
-  verificabile in sviluppo).
 - `smtp-relay.yaml` è invece un Deployment+Service, sempre attivo: un
   servizio SMTP containerizzato (`boky/postfix`) come alternativa a puntare
   `NOCT_SMTP_HOST` direttamente a un provider esterno per l'invio del
-  codice MFA via email. `NOCT_SMTP_RELAY_HOST` vuoto (default): il
+  codice MFA e le altre email del backend. `NOCT_SMTP_RELAY_HOST` vuoto (default): il
   container spedisce direttamente (richiede comunque un dominio con SPF/
   DKIM/reverse DNS a posto per una buona deliverability); valorizzato:
   inoltra verso quello smarthost esterno con le credenziali in

@@ -37,6 +37,19 @@ enum Cmd {
     /// API token del motore core (machine-to-machine).
     #[command(subcommand)]
     Token(TokenCmd),
+    /// Manutenzione del registro di audit.
+    #[command(subcommand)]
+    Audit(AuditCmd),
+    /// Porta Garage allo stato atteso (layout del nodo, chiave applicativa, bucket); idempotente.
+    GarageBootstrap,
+}
+
+#[derive(Subcommand)]
+enum AuditCmd {
+    /// Un giro di manutenzione adesso: archivia le settimane concluse e cancella oltre la conservazione.
+    Maintain,
+    /// Rimette a database gli eventi di una settimana archiviata (`2026w36`).
+    Restore { week: String },
 }
 
 #[derive(Subcommand)]
@@ -105,6 +118,8 @@ async fn main() -> Result<()> {
                 registry.resolve_enabled(requested.as_deref()).map_err(|e| anyhow!("moduli non attivabili:\n{e}"))?;
             match cli.cmd {
                 Cmd::Token(TokenCmd::Create { name }) => create_core_token(&name).await,
+                Cmd::Audit(cmd) => audit(cmd).await,
+                Cmd::GarageBootstrap => garage_bootstrap().await,
                 Cmd::Outbox => outbox().await,
                 Cmd::DeadLetters => dead_letters().await,
                 Cmd::Validate => validate(&registry, &enabled),
@@ -433,5 +448,161 @@ async fn create_core_token(name: &str) -> Result<()> {
     tx.commit().await?;
     println!("{plaintext}");
     eprintln!("Token core `{name}` creato (id {id}). Conservalo ora: non sarà più mostrato.");
+    Ok(())
+}
+
+// ---- audit ---------------------------------------------------------------------------------------------------------
+
+/// Stato minimo per i comandi che usano solo database, storage e configurazione.
+async fn light_state() -> Result<noct_core::AppState> {
+    let config = Config::from_env(&|k| env(k)).map_err(|e| anyhow!(e))?;
+    let pool = connect().await?;
+    let services = noct_core::Services::connect(&config).await.map_err(|e| anyhow!(e))?;
+    Ok(noct_core::AppState::new(pool, config, services, Default::default()))
+}
+
+async fn audit(cmd: AuditCmd) -> Result<()> {
+    let st = light_state().await?;
+    match cmd {
+        AuditCmd::Maintain => {
+            let archive = env("NOCT_AUDIT_ARCHIVE_ENABLED").is_none_or(|v| !matches!(v.as_str(), "0" | "false" | "no"));
+            let report = noct_audit::maintenance::run_once(&st, archive).await?;
+            println!("settimane archiviate: {}", report.archived_weeks.len());
+            println!("eventi cancellati: {}", report.deleted_rows);
+        }
+        AuditCmd::Restore { week } => {
+            let n = noct_audit::maintenance::restore_week(&st, &week).await?;
+            println!("{week}: {n} eventi reinseriti");
+        }
+    }
+    Ok(())
+}
+
+// ---- Garage ----------------------------------------------------------------------------------------------------------
+
+const GARAGE_ZONE: &str = "dc1";
+const GARAGE_READY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
+fn required(name: &str) -> Result<String> {
+    env(name).filter(|v| !v.is_empty()).ok_or_else(|| anyhow!("{name} obbligatoria"))
+}
+
+/// Un Garage appena avviato non è utilizzabile: nessun ruolo nel layout, nessuna chiave, e i bucket
+/// creati via S3 avrebbero solo un alias *locale* alla chiave, che il web endpoint non risolve.
+/// Questo comando porta Garage allo stato atteso ed è sicuro da rieseguire (anche in parallelo:
+/// initContainer di più repliche).
+async fn garage_bootstrap() -> Result<()> {
+    use serde_json::{Value, json};
+    let base = env("NOCT_GARAGE_ADMIN_URL").unwrap_or_else(|| "http://garage:3903".into());
+    let token = required("NOCT_GARAGE_ADMIN_TOKEN")?;
+    let key_id = required("NOCT_S3_ACCESS_KEY_ID")?;
+    let secret = required("NOCT_S3_SECRET_ACCESS_KEY")?;
+    let capacity: u64 = env("NOCT_GARAGE_NODE_CAPACITY_BYTES").and_then(|v| v.parse().ok()).unwrap_or(1_073_741_824);
+    let site = env("NOCT_SITE_SLUG").unwrap_or_else(|| "notturni".into());
+    let bucket = |var: &str, default: &str| env(var).unwrap_or_else(|| default.into());
+    let mut plan = vec![
+        (bucket("NOCT_S3_BUCKET_AVATARS", "avatars"), true),
+        (bucket("NOCT_S3_BUCKET_CONTENT", "notturni-content"), true),
+        (bucket("NOCT_S3_BUCKET_AUDIT", "notturni-audit"), false),
+    ];
+    // destinazione di backup sullo stesso Garage (sviluppo locale): in produzione è un provider esterno
+    if let (Some(b), Some(e)) = (env("NOCT_BACKUP_S3_BUCKET"), env("NOCT_BACKUP_S3_ENDPOINT_URL"))
+        && Some(e) == env("NOCT_S3_ENDPOINT_URL")
+    {
+        plan.push((b, false));
+    }
+
+    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(15)).build()?;
+    let call =
+        |method: reqwest::Method, path: &str| client.request(method, format!("{base}{path}")).bearer_auth(&token);
+
+    let deadline = std::time::Instant::now() + GARAGE_READY_TIMEOUT;
+    let status: Value = loop {
+        match call(reqwest::Method::GET, "/v2/GetClusterStatus").send().await {
+            Ok(r) if r.status().is_success() => break r.json().await?,
+            Ok(r) if matches!(r.status().as_u16(), 401 | 403) => bail!("Garage admin API: token rifiutato"),
+            _ => {}
+        }
+        if std::time::Instant::now() > deadline {
+            bail!("Garage admin API non raggiungibile su {base} dopo {}s", GARAGE_READY_TIMEOUT.as_secs());
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    };
+
+    // layout
+    let node = status["nodes"]
+        .as_array()
+        .and_then(|n| n.iter().find(|n| n["isUp"].as_bool() == Some(true)))
+        .ok_or_else(|| anyhow!("Garage: nessun nodo attivo nel cluster"))?;
+    let node_id = node["id"].as_str().unwrap_or_default();
+    if node["role"].is_null() {
+        call(reqwest::Method::POST, "/v2/UpdateClusterLayout")
+            .json(&json!({"roles": [{"id": node_id, "zone": GARAGE_ZONE, "capacity": capacity, "tags": []}]}))
+            .send()
+            .await?
+            .error_for_status()?;
+        let version = status["layoutVersion"].as_i64().unwrap_or(0) + 1;
+        call(reqwest::Method::POST, "/v2/ApplyClusterLayout")
+            .json(&json!({"version": version}))
+            .send()
+            .await?
+            .error_for_status()?;
+        println!("layout: nodo {} assegnato ({capacity} byte)", &node_id[..node_id.len().min(16)]);
+    } else {
+        println!("layout: nodo {} già assegnato", &node_id[..node_id.len().min(16)]);
+    }
+
+    // chiave applicativa
+    let has_key = || async {
+        call(reqwest::Method::GET, "/v2/GetKeyInfo")
+            .query(&[("id", &key_id)])
+            .send()
+            .await
+            .map(|r| r.status().is_success())
+    };
+    if has_key().await? {
+        println!("chiave {key_id} già presente");
+    } else {
+        let r = call(reqwest::Method::POST, "/v2/ImportKey")
+            .json(&json!({"accessKeyId": key_id, "secretAccessKey": secret, "name": site}))
+            .send()
+            .await?;
+        // più repliche possono eseguire il bootstrap insieme: se un'altra l'ha importata, va bene
+        if !r.status().is_success() && !has_key().await? {
+            bail!(
+                "import della chiave rifiutato da Garage ({}): formato richiesto NOCT_S3_ACCESS_KEY_ID = 'GK' + 24 hex, NOCT_S3_SECRET_ACCESS_KEY = 64 hex",
+                r.status()
+            );
+        }
+        println!("chiave {key_id} importata");
+    }
+
+    // bucket con alias globale
+    for (name, public) in plan {
+        let mut r = call(reqwest::Method::GET, "/v2/GetBucketInfo").query(&[("globalAlias", &name)]).send().await?;
+        if r.status().as_u16() == 404 {
+            r = call(reqwest::Method::POST, "/v2/CreateBucket").json(&json!({"globalAlias": name})).send().await?;
+            if !r.status().is_success() {
+                // creato nel frattempo da un'altra istanza
+                r = call(reqwest::Method::GET, "/v2/GetBucketInfo").query(&[("globalAlias", &name)]).send().await?;
+            }
+        }
+        let info: Value = r.error_for_status()?.json().await?;
+        let id = info["id"].as_str().ok_or_else(|| anyhow!("Garage: bucket senza id"))?.to_string();
+        call(reqwest::Method::POST, "/v2/AllowBucketKey")
+            .json(&json!({"bucketId": id, "accessKeyId": key_id, "permissions": {"read": true, "write": true, "owner": true}}))
+            .send()
+            .await?
+            .error_for_status()?;
+        let website =
+            if public { json!({"enabled": true, "indexDocument": "index.html"}) } else { json!({"enabled": false}) };
+        call(reqwest::Method::POST, "/v2/UpdateBucket")
+            .query(&[("id", &id)])
+            .json(&json!({"websiteAccess": website}))
+            .send()
+            .await?
+            .error_for_status()?;
+        println!("bucket {name} pronto ({})", if public { "pubblico" } else { "privato" });
+    }
     Ok(())
 }

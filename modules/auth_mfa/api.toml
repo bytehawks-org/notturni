@@ -76,6 +76,15 @@ status = 204
 rate_limit = { key = "ip", max = 20, window = "5m" }
 summary = "Conferma il codice ricevuto e attiva l'MFA via email"
 
+[type.MfaDisable]
+# assente al primo passo; il codice dell'app TOTP o quello ricevuto via email
+code = { type = "string", max = 16, optional = true }
+
+[type.MfaDisableOut]
+# solo nella risposta 202
+code_required = "bool"
+method = "string"
+
 [[route]]
 id = "disable_mfa"
 method = "POST"
@@ -83,5 +92,8 @@ path = "/auth/mfa/disable"
 auth = "user"
 kind = "custom"
 handler = "disable_mfa"
-status = 204
-summary = "Disattiva l'MFA"
+request = "MfaDisable"
+raw = true
+response = "MfaDisableOut"
+rate_limit = { key = "ip", max = 20, window = "5m" }
+summary = "Disattiva l'MFA: senza `code` 202 (con il metodo email spedisce il codice), con `code` valido 204"

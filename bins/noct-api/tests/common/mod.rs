@@ -55,12 +55,9 @@ pub async fn setup_with(modules: &[&str], env: &[(&str, &str)], infra: Option<&d
         configure(&mut config);
         services = Services::connect(&config).await.unwrap_or_else(|e| panic!("{e}"));
     }
-    let extensions = registry.extensions(&enabled).unwrap_or_else(|e| panic!("{e}"));
-    let state = AppState::new(pool.clone(), config, services, module_cfg)
-        .with_extensions(extensions)
-        .with_login_gates(registry.login_gates(&enabled))
-        .with_personal_data(registry.personal_data(&enabled))
-        .with_modules(registry.names(&enabled));
+    let state = registry
+        .wire(&enabled, AppState::new(pool.clone(), config, services, module_cfg))
+        .unwrap_or_else(|e| panic!("{e}"));
     registry.run_startup(&enabled, &state).await.unwrap_or_else(|e| panic!("{e}"));
     let app = noct_api::app(&registry, &enabled, state.clone());
     Env { app, pool, db_name, admin, state, registry, enabled, storage_dir, mailer }

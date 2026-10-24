@@ -66,6 +66,13 @@ pub fn event_envelope(module: &str, blog: Option<&BlogRef>, actor: Option<&Actor
     })
 }
 
+/// Ogni quanto il pianificatore controlla se un job periodico è a scadenza.
+const SCHEDULER_TICK: Duration = Duration::from_secs(15);
+
+fn tx_clone(shutdown: &watch::Sender<bool>) -> watch::Receiver<bool> {
+    shutdown.subscribe()
+}
+
 /// Relay dell'outbox e consumer dei moduli attivi, in esecuzione.
 pub struct Background {
     shutdown: watch::Sender<bool>,
@@ -74,7 +81,7 @@ pub struct Background {
 }
 
 impl Background {
-    pub(crate) fn start(state: &AppState, consumers: Vec<Consumer>) -> Background {
+    pub(crate) fn start(state: &AppState, consumers: Vec<Consumer>, schedules: Vec<crate::Schedule>) -> Background {
         let (shutdown, rx) = watch::channel(false);
         let relay = Relay::new(state.db.clone(), state.services.bus.clone());
         let mut tasks = vec![tokio::spawn(relay.run(rx.clone()))];
@@ -92,6 +99,22 @@ impl Background {
                 }
             }
         }));
+        if !schedules.is_empty() {
+            let (pool, mut rx3) = (state.db.clone(), tx_clone(&shutdown));
+            tasks.push(tokio::spawn(async move {
+                loop {
+                    match crate::schedule::run_due(&pool, &schedules).await {
+                        Ok(fired) if !fired.is_empty() => tracing::info!(jobs = ?fired, "job periodici accodati"),
+                        Ok(_) => {}
+                        Err(e) => tracing::warn!(error = %e, "pianificatore dei job periodici"),
+                    }
+                    tokio::select! {
+                        _ = rx3.changed() => return,
+                        _ = tokio::time::sleep(SCHEDULER_TICK) => {}
+                    }
+                }
+            }));
+        }
         Background { shutdown, tasks, consumers }
     }
 

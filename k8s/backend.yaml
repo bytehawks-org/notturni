@@ -22,7 +22,7 @@ spec:
         - name: garage-bootstrap
           image: ghcr.io/bytehawks-org/notturni-backend:sha-fd6ce11
           imagePullPolicy: IfNotPresent
-          command: ["python", "-m", "scripts.garage_bootstrap"]
+          command: ["noct-ctl", "garage-bootstrap"]
           envFrom:
             - configMapRef: {name: notturni-config}
             - secretRef: {name: notturni-secrets}
@@ -36,7 +36,8 @@ spec:
             - configMapRef: {name: notturni-config}
             - secretRef: {name: notturni-secrets}
           readinessProbe:
-            httpGet: {path: /api/v1/health, port: 8000}
+            # database, cache, bus e storage raggiungibili: un pod con un servizio giù esce dal Service
+            httpGet: {path: /api/v1/health/ready, port: 8000}
             initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:

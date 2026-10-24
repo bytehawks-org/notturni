@@ -11,13 +11,15 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
 ## Stack
 
 - **Frontend:** Next.js (App Router), Tailwind CSS
-- **Backend:** Python 3.12+, FastAPI, SQLAlchemy (async), Alembic
-- **Autenticazione:** password (Argon2) + sessioni JWT, MFA (TOTP/email), SSO
-  OAuth2/OIDC (Authlib), API token per accesso diretto/motore core
+- **Backend:** Rust (workspace Cargo, `unsafe` vietato), axum, sqlx. Moduli dichiarativi
+  (`module.toml`/`api.toml`/`db.toml`) da cui si generano DTO, rotte e migrazioni; core e moduli
+  opzionali attivabili a caldo — vedi [docs/BACKEND.md](docs/BACKEND.md)
+- **Autenticazione:** password (Argon2) + sessioni JWT, MFA (TOTP cifrato a riposo/email), SSO
+  OAuth2/OIDC, API token per accesso diretto/motore core
 - **Database:** PostgreSQL 16+
-- **Cache & State:** Redis 7+
-- **Message Broker:** RabbitMQ
-- **Object Storage:** backend S3-compatible via boto3 (Garage in locale e in produzione, scelta primaria del progetto — configurabile verso qualunque endpoint S3-compatible/AWS S3 in produzione, con auth via access key o ruolo AWS) oppure filesystem locale (`NOCT_STORAGE_BACKEND=localstorage`, alternativa per installazioni `solo` senza storage S3)
+- **Cache & State:** Redis 7+ (rate limit, lock)
+- **Message Broker:** NATS JetStream (eventi e job, outbox transazionale nel database)
+- **Object Storage:** backend S3-compatible (SDK AWS per Rust) (Garage in locale e in produzione, scelta primaria del progetto — configurabile verso qualunque endpoint S3-compatible/AWS S3 in produzione, con auth via access key o ruolo AWS) oppure filesystem locale (`NOCT_STORAGE_BACKEND=localstorage`, alternativa per installazioni `solo` senza storage S3)
 - **Dev locale:** Podman (rootless, senza Kubernetes)
 - **Produzione:** Kubernetes (K3s), Traefik (ingress), Longhorn (storage), cert-manager
 
@@ -84,8 +86,13 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   piattaforma mostra il feed cronologico di tutti i blog, con una sezione
   "di tendenza" basata sui tag più usati.
 - **Media e backup su S3:** immagini incorporabili nei post (pubbliche) e una
-  copia di backup del Markdown di ogni post ad ogni salvataggio (privata),
-  entrambe sotto `s3://{bucket}/{site_slug}/userdata/{user}/{blog}/...`.
+  copia di backup del Markdown di ogni post pubblicato (privata), entrambe
+  sotto `s3://{bucket}/{site_slug}/userdata/{user}/{blog}/...`; ogni giorno
+  anche `pg_dump` e una copia di tutti i bucket verso uno storage S3
+  esterno (modulo `backup`).
+- **Moduli a caldo:** i moduli opzionali (commenti, newsletter, MFA, SSO,
+  GDPR, ...) si attivano e disattivano dall'amministrazione senza riavviare
+  il backend; le tabelle di un modulo spento restano intatte.
 - **Multilingua (i18n):** post e pagine statiche traducibili (locale + slug per
   lingua, con selettore delle lingue di fallback del profilo invece di
   scrivere la sigla a mano); la struttura di path `/it/`, `/en/`, ... è una
@@ -179,7 +186,7 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   ATProto in prima battuta).
 
 Dettagli, esempi di richiesta/risposta e limitazioni note (SSO non testabile
-end-to-end senza credenziali reali) sono in [legacy/backend/API.md](legacy/backend/API.md). Per lo stato di
+end-to-end senza credenziali reali) sono in [docs/API.md](docs/API.md). Per lo stato di
 avanzamento di ogni funzionalità, incluse quelle ancora parziali o non
 iniziate, vedi [ROADMAP.md](ROADMAP.md).
 
@@ -205,18 +212,12 @@ In sintesi, ad alto livello (l'elenco completo, specifica per specifica, è in
 
 ```text
 .
-├── legacy/backend/     # API FastAPI (POC Python, in dismissione)
-│   ├── app/
-│   │   ├── core/          # configurazione (env NOCT_*), DB, sicurezza, storage S3, broker
-│   │   ├── models/         # entità SQLAlchemy (User, Blog, Post, Category, Tag, Page, Comment, Follow, ...)
-│   │   ├── domain/          # regole di business (auth, mfa, sso, i18n, autorizzazione, tag, categorie, permalink, moderazione, ...)
-│   │   ├── api/v1/            # router FastAPI (auth, blogs, posts, comments, pages, users, tokens, feed, admin)
-│   │   └── workers/            # consumer RabbitMQ (backup post su S3; invio OTP email via SMTP)
-│   ├── scripts/            # script di bootstrap (primo API token)
-│   ├── tests/               # suite pytest (vedi sotto)
-│   ├── alembic/              # migrazioni del database
-│   ├── schema.sql             # schema corrente, generato da Alembic (sola documentazione)
-│   └── Dockerfile
+├── bins/                # noct-api (API HTTP), noct-worker (job e consumer), noct-ctl (strumenti)
+├── crates/               # core del backend Rust: registry, runtime, auth, utenti, profili, blog, post, media,
+│                           audit, amministrazione, bus, cache, storage, mail, markdown, sicurezza, codegen...
+├── modules/              # moduli opzionali: commenti, newsletter, MFA, SSO, GDPR, segnalazioni, scoperta,
+│                           pagine, backup... (ciascuno con module.toml, api.toml, db.toml)
+├── docs/                 # API.md (contratto HTTP) e BACKEND.md (sviluppo e operazioni del backend)
 ├── moderation/          # microservizio FastAPI di moderazione automatica delle immagini
 │   ├── app/                # modello self-hosted (Falconsai/nsfw_image_detection via transformers)
 │   └── Dockerfile           # pesi del modello inclusi nell'immagine in fase di build
@@ -226,8 +227,12 @@ In sintesi, ad alto livello (l'elenco completo, specifica per specifica, è in
 │   │   ├── lib/             # client API, sessione (auth-context), tema (theme-context, sun.ts), Markdown/social/lingue
 │   │   └── components/       # UI condivisa (Button, Card, SearchInput, ...), editor/ (Tiptap, tag, categorie, copertina, traduzioni), ThemeToggle
 │   └── Dockerfile
-├── k8s/                  # manifest Kubernetes (primo draft)
+├── Dockerfile           # immagine del backend (cargo-chef, multi-arch): noct-api, noct-worker, noct-ctl
+├── k8s/                  # manifest Kubernetes
+├── garage/, s3-public/  # configurazione di Garage e del proxy delle letture pubbliche
+├── todo/                 # piano della riscrittura Rust e modifiche all'API (API_CHANGES.md)
 ├── compose.yaml         # stack locale via Podman/Docker compose (include il servizio moderation)
+├── deny.toml            # cargo-deny: licenze, fonti, vulnerabilità
 └── .env.example          # variabili d'ambiente (prefisso NOCT_)
 ```
 
@@ -241,83 +246,83 @@ podman compose up -d --build
 Servizi esposti:
 
 - Frontend (dashboard e amministrazione incluse): <http://localhost:3000>
-- Backend (API docs): <http://localhost:8000/docs>
-- Backend (health): <http://localhost:8000/api/v1/health>
+- Backend (OpenAPI): <http://localhost:8000/api/v1/openapi.json>
+- Backend (health): <http://localhost:8000/api/v1/health>, readiness: <http://localhost:8000/api/v1/health/ready>
 - Moderazione immagini (health): <http://localhost:8100/health>
-- RabbitMQ (console): <http://localhost:15672>
+- Email di sviluppo (MailHog): <http://localhost:8025>
 - Storage S3 (Garage): API <http://localhost:3900>, letture pubbliche <http://localhost:9000>
 
-Al primo avvio le migrazioni del database non vengono applicate automaticamente;
-vanno eseguite manualmente (vedi [legacy/backend/README.md](legacy/backend/README.md)):
-
-```bash
-podman exec -it <container-backend> alembic upgrade head
-```
+Le migrazioni dei moduli attivi si applicano da sole all'avvio (advisory lock: sicuro con più repliche;
+`NOCT_AUTO_MIGRATE=false` per applicarle altrove con `noct-ctl migrate apply`) e il Super Admin si
+crea da `NOCT_SUPER_ADMIN_*`.
 
 Se `podman compose` non è disponibile (richiede `podman-compose` o il plugin
 `docker-compose`), vedi [GETTING_STARTED.md](GETTING_STARTED.md#prerequisiti)
-per le alternative, oppure avvia backend/frontend in locale seguendo i
-rispettivi README.
+per le alternative, oppure avvia backend/frontend in locale seguendo
+[docs/BACKEND.md](docs/BACKEND.md) e [frontend/README.md](frontend/README.md).
 
 ## Schema del database
 
-Lo schema (tabelle, tipi enum, vincoli) è versionato tramite le migrazioni
-Alembic in `legacy/backend/alembic/versions/`. Una copia SQL di sola lettura, utile per
-consultazione rapida senza dover leggere Python, è in
-[legacy/backend/schema.sql](legacy/backend/schema.sql) — va rigenerata con
-`alembic upgrade head --sql` ad ogni modifica dello schema, non modificata a mano.
+Ogni modulo dichiara le proprie tabelle in `db.toml`; `noct-ctl migrate generate` ne ricava le
+migrazioni SQL (`crates/*/migrations/`, `modules/*/migrations/`) e aggiorna `schema.lock.json`. Le
+modifiche additive (tabelle, colonne con default o nullable, indici, enum) sono automatiche; quelle
+distruttive richiedono SQL scritto a mano. `noct-ctl validate` verifica in CI che manifest, lock e
+migrazioni non divergano.
 
 ## API e autenticazione
 
 Riferimento di tutti gli endpoint, i due meccanismi di autenticazione
 (sessione utente vs API token), formato del token e come ottenere il primo:
-[legacy/backend/API.md](legacy/backend/API.md).
+[docs/API.md](docs/API.md). Lo schema OpenAPI, sempre allineato ai moduli attivi, è su
+`/api/v1/openapi.json`.
 
 ## Test
 
-Suite pytest ripetibile (schema ricreato da zero e tabelle svuotate ad ogni
-run — nessuno stato residuo tra un'esecuzione e l'altra):
-
 ```bash
-cd backend
-pip install -r requirements-dev.txt
-python -m pytest
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
+cargo deny check
 ```
 
-Serve solo Postgres raggiungibile (usa un database separato, `notturni_test`
-di default); lo storage S3 e RabbitMQ sono sostituiti da fake/mock nei test, non
-servono in esecuzione. Dettagli in [legacy/backend/README.md](legacy/backend/README.md#test).
+I test end-to-end girano su Postgres veri (un database per test, creato e distrutto dal test stesso) e
+usano Redis, NATS JetStream e un S3 finto dove il caso lo richiede: variabili `NOCT_TEST_*` e servizi di
+prova in [docs/BACKEND.md](docs/BACKEND.md#sviluppo). Frontend: `npx tsc --noEmit`, `npx eslint`,
+`npm run build` in `frontend/`.
 
 ## CI e sicurezza
 
-Tre GitHub Actions in [.github/workflows/](.github/workflows/):
+Quattro GitHub Actions in [.github/workflows/](.github/workflows/):
 
-- [codeql.yml](.github/workflows/codeql.yml) — SAST (analisi statica) via
-  CodeQL su backend/moderation (Python) e frontend (TypeScript/JavaScript).
-  Report nella tab **Security → Code scanning** del repository, non come
-  artifact. Su push/PR verso `main`/`develop`, avvio manuale e schedule
-  settimanale.
+- [ci.yml](.github/workflows/ci.yml) — a ogni push e pull request: `cargo fmt`, `cargo clippy` con i
+  warning come errori, coerenza di manifest e migrazioni (`noct-ctl validate`, `migrate plan/apply/verify`),
+  l'intera suite di test su Postgres, Redis, NATS e un S3 finto, licenze e fonti delle dipendenze
+  (`cargo-deny`) e vulnerabilità note (RustSec, `cargo-audit`).
+- [codeql.yml](.github/workflows/codeql.yml) — SAST (analisi statica) via CodeQL su backend (Rust),
+  moderazione (Python) e frontend (TypeScript/JavaScript). Report nella tab **Security → Code scanning**
+  del repository, non come artifact. Su push/PR verso `main`/`develop`, avvio manuale e schedule settimanale.
 - [sbom.yml](.github/workflows/sbom.yml) — SBOM (Software Bill of Materials,
   formato CycloneDX): un inventario delle dipendenze, non un'analisi di
-  vulnerabilità. Un livello dai sorgenti (backend/frontend/moderation, sempre
+  vulnerabilità. Un livello dai sorgenti (`Cargo.lock`, frontend, moderazione, sempre
   veloce) e uno dalle immagini container effettivamente costruite
   (backend/frontend). Report come artifact del workflow. Stessi trigger di
   `codeql.yml`.
 - [dast.yml](.github/workflows/dast.yml) — DAST (analisi dinamica): avvia
   l'intero stack da `compose.yaml` (con Docker invece di Podman — nessuna
   sintassi specifica di Podman nel file) ed esegue OWASP ZAP contro le pagine
-  pubbliche del frontend e l'API del backend (da `/openapi.json`). Più
-  pesante degli altri due: solo avvio manuale e schedule settimanale, mai su
+  pubbliche del frontend e l'API del backend (da `/api/v1/openapi.json`). Più
+  pesante degli altri: solo avvio manuale e schedule settimanale, mai su
   ogni push/PR. Report come artifact del workflow.
+- [publish-images.yml](.github/workflows/publish-images.yml) — immagini multi-arch (amd64 e arm64) di
+  backend, frontend e moderazione su GHCR.
 
-Nessuno dei tre fallisce la build in presenza di segnalazioni (`fail_action:
-false`/nessun controllo di soglia): sono pensati per produrre un report da
-consultare, non un gate che blocca il merge — da rivedere se in futuro si
-vorrà imporre una soglia.
+SAST, SBOM e DAST non fanno fallire la build in presenza di segnalazioni (`fail_action:
+false`/nessun controllo di soglia): producono un report da consultare, non un gate che blocca il merge —
+da rivedere se in futuro si vorrà imporre una soglia. `ci.yml` invece blocca.
 
 ## Backend e frontend in locale (senza container)
 
-Vedi [legacy/backend/README.md](legacy/backend/README.md) e [frontend/README.md](frontend/README.md).
+Vedi [docs/BACKEND.md](docs/BACKEND.md) e [frontend/README.md](frontend/README.md).
 
 ## Kubernetes
 

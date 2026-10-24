@@ -40,7 +40,7 @@ jobs:
         # stack, non serve altro per una scansione black-box.
         run: cp .env.example .env
 
-      - name: Avvia lo stack (Postgres, Redis, RabbitMQ, Garage, backend, frontend, ...)
+      - name: Avvia lo stack (Postgres, Redis, NATS, Garage, backend, worker, frontend, ...)
         run: docker compose -f compose.yaml up -d --build
 
       - name: Attendi Postgres
@@ -49,9 +49,6 @@ jobs:
             docker compose -f compose.yaml exec -T postgres pg_isready -U admin && break
             sleep 2
           done
-
-      - name: Applica le migrazioni
-        run: docker compose -f compose.yaml exec -T backend alembic upgrade head
 
       - name: Attendi backend e frontend
         run: |

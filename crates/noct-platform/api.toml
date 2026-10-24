@@ -1,0 +1,36 @@
+# Compatibile con GET /api/v1/config e GET /api/v1/footer della v1 (pubblici, senza autenticazione).
+
+[type.PublicConfig]
+# platform | solo
+deployment_mode = "string"
+# site key pubblica di Cloudflare Turnstile, se configurata
+turnstile_site_key = { type = "string", nullable = true }
+default_locale = "string"
+registration_mode = "string"
+# provider di accesso abilitati (con il modulo `auth_sso`); altrimenti assente
+
+[type.PublicFooter]
+column1 = { type = "string", nullable = true }
+column2 = { type = "string", nullable = true }
+column3 = { type = "string", nullable = true }
+bottom_bar = { type = "string", nullable = true }
+
+[[route]]
+id = "public_config"
+method = "GET"
+path = "/config"
+auth = "public"
+kind = "custom"
+handler = "public_config"
+response = "PublicConfig"
+summary = "Configurazione pubblica dell'istanza: lingua, registrazioni, captcha, provider di accesso"
+
+[[route]]
+id = "public_footer"
+method = "GET"
+path = "/footer"
+auth = "public"
+kind = "custom"
+handler = "public_footer"
+response = "PublicFooter"
+summary = "Footer di piattaforma in Markdown grezzo (le colonne 1-2 sono sovrascrivibili per blog)"

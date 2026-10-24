@@ -3,7 +3,7 @@ name: SBOM
 # Software Bill of Materials, formato CycloneDX: un inventario delle
 # dipendenze, non un'analisi di vulnerabilità (per quello vedi SAST/DAST negli
 # altri due workflow). Due livelli distinti:
-#   - "sorgenti": da requirements.txt/package-lock.json, un file per
+#   - "sorgenti": da Cargo.lock/package-lock.json/requirements.txt, un file per
 #     sotto-progetto (backend, frontend, moderation) — veloce, sempre eseguito.
 #   - "immagini": dal contenuto reale delle immagini container backend/
 #     frontend effettivamente costruite — più preciso (include anche
@@ -37,10 +37,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: SBOM backend (Python)
+      - name: SBOM backend (Rust, da Cargo.lock)
         uses: anchore/sbom-action@v0
         with:
-          path: ./legacy/backend
+          file: ./Cargo.lock
           format: cyclonedx-json
           output-file: sbom-backend.cyclonedx.json
           upload-artifact: false
@@ -98,7 +98,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build immagine backend
-        run: docker build -t notturni-backend:ci ./legacy/backend
+        run: docker build -t notturni-backend:ci .
 
       - name: Build immagine frontend
         run: docker build -t notturni-frontend:ci ./frontend

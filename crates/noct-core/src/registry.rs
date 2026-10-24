@@ -31,6 +31,8 @@ pub struct ModuleDef {
     pub login_gates: fn() -> Vec<Arc<dyn crate::LoginGate>>,
     /// Fornitori di dati personali dichiarati in `[lifecycle] personal_data` (altrimenti nessuno).
     pub personal_data: fn() -> Vec<Arc<dyn crate::PersonalData>>,
+    /// Sezioni di amministrazione dichiarate in `[lifecycle] admin_sections` (altrimenti nessuna).
+    pub admin_sections: fn() -> Vec<Arc<dyn crate::AdminSection>>,
     /// Directory dei sorgenti del modulo (solo per gli strumenti di sviluppo).
     pub source_dir: &'static str,
 }
@@ -195,7 +197,25 @@ impl Registry {
                 consumers.push(state.services.bus.consume(def.spec, def.handler).await?);
             }
         }
-        Ok(Background::start(state, consumers))
+        Ok(Background::start(state, consumers, self.schedules(enabled)))
+    }
+
+    /// Job periodici dei moduli attivi.
+    pub fn schedules(&self, enabled: &[usize]) -> Vec<crate::Schedule> {
+        let mut out = Vec::new();
+        for &i in enabled {
+            let m = &self.entries[i].manifest;
+            for (job, spec) in &m.module.jobs {
+                if let Some(every) = spec.schedule.as_deref().and_then(noct_manifest::parse_duration) {
+                    out.push(crate::Schedule {
+                        name: format!("{}.{job}", m.name()),
+                        subject: spec.subject.clone(),
+                        every_secs: every,
+                    });
+                }
+            }
+        }
+        out
     }
 
     /// Gate del login dei moduli attivi.
@@ -206,6 +226,43 @@ impl Registry {
     /// Fornitori di dati personali dei moduli attivi.
     pub fn personal_data(&self, enabled: &[usize]) -> crate::PersonalDataProviders {
         crate::PersonalDataProviders::new(enabled.iter().flat_map(|&i| (self.entries[i].def.personal_data)()).collect())
+    }
+
+    /// Sezioni di amministrazione dei moduli attivi.
+    pub fn admin_sections(&self, enabled: &[usize]) -> crate::AdminSections {
+        crate::AdminSections::new(enabled.iter().flat_map(|&i| (self.entries[i].def.admin_sections)()).collect())
+    }
+
+    /// Collega allo stato tutto ciò che dipende dai moduli attivi (estensioni, gate del login, dati
+    /// personali, sezioni di amministrazione, elenco dei nomi). Un solo punto per l'avvio, per i
+    /// test e per la ricostruzione dopo l'attivazione a caldo di un modulo.
+    pub fn wire(&self, enabled: &[usize], state: AppState) -> Result<AppState, String> {
+        let extensions = self.extensions(enabled)?;
+        Ok(state
+            .with_extensions(extensions)
+            .with_login_gates(self.login_gates(enabled))
+            .with_personal_data(self.personal_data(enabled))
+            .with_admin_sections(self.admin_sections(enabled))
+            .with_catalog(self.catalog())
+            .with_modules(self.names(enabled)))
+    }
+
+    /// Tutti i moduli compilati, con tipo e dipendenze.
+    pub fn catalog(&self) -> Vec<crate::ModuleInfo> {
+        self.entries
+            .iter()
+            .map(|e| {
+                let m = &e.manifest.module.module;
+                crate::ModuleInfo {
+                    name: m.name.clone(),
+                    version: m.version.clone(),
+                    kind: if m.kind == Kind::Core { "core" } else { "optional" }.to_string(),
+                    description: m.description.clone().unwrap_or_default(),
+                    requires: m.requires.clone(),
+                    default_enabled: m.default_enabled,
+                }
+            })
+            .collect()
     }
 
     /// Nomi dei moduli attivi.

@@ -20,6 +20,12 @@ uuid.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
 regex.workspace = true
+noct-platform.workspace = true
+flate2.workspace = true
+sha2.workspace = true
+hex.workspace = true
+bytes.workspace = true
+tracing.workspace = true
 
 [build-dependencies]
 noct-codegen.workspace = true

@@ -23,16 +23,22 @@ serde_json.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tower-http.workspace = true
+regex.workspace = true
+tower.workspace = true
 
 [dev-dependencies]
 noct-bundle = { workspace = true, features = ["sandbox"] }
 noct-manifest.workspace = true
-tower.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 futures.workspace = true
 noct-security.workspace = true
 noct-auth-mfa.workspace = true
 noct-newsletter.workspace = true
+noct-audit.workspace = true
+noct-blogs.workspace = true
+noct-backup.workspace = true
+noct-storage.workspace = true
+zip.workspace = true
 http-body-util = "0.1"
 sha2.workspace = true

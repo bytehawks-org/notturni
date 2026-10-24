@@ -131,6 +131,11 @@ fn validate_module_file(m: &ModuleFile, issues: &mut Issues) {
         if spec.backoff.iter().any(|b| parse_duration(b).is_none()) {
             issues.push(name, &loc, "`backoff` ammette solo durate come `10s`, `1m`, `1h`");
         }
+        if let Some(every) = &spec.schedule
+            && !parse_duration(every).is_some_and(|s| s >= 10)
+        {
+            issues.push(name, &loc, "`schedule` ammette durate come `1m`, `1h`, `1d` (almeno 10s)");
+        }
     }
 }
 

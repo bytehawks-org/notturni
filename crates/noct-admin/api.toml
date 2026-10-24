@@ -1,0 +1,283 @@
+# Compatibile con /api/v1/admin/* della v1 (utenti, blog, post, audit-log, overview, config). Le rotte
+# che toccano dati di un modulo opzionale stanno nel modulo: `/admin/comments` in `comments`,
+# `/admin/blogs/{id}/reports` e `/admin/blogs/{id}/action` in `reports`, `/admin/gdpr` in `gdpr`.
+
+[type.AdminUserOut]
+id = "uuid"
+username = "string"
+email = "string"
+platform_role = "string"
+is_active = "bool"
+mfa_enabled = "bool"
+created_at = "timestamp"
+blogs_count = "int"
+# ultimo uso di una sessione di refresh
+last_seen_at = { type = "timestamp", nullable = true }
+
+[type.AdminUserUpdate]
+platform_role = { type = "string", optional = true }
+is_active = "bool?"
+# obbligatoria se cambiano ruolo o attivazione; finisce nel registro di audit
+note = { type = "string", max = 5000, optional = true }
+
+[type.AdminBlogOut]
+id = "uuid"
+slug = "string"
+title = "string"
+owner_username = "string"
+visibility = "string"
+is_suspended = "bool"
+is_paused = "bool"
+deleted_at = { type = "timestamp", nullable = true }
+created_at = "timestamp"
+posts_count = "int"
+reports_open = "int"
+
+[type.AdminBlogUpdate]
+is_suspended = "bool"
+note = { type = "string", max = 5000, optional = true }
+
+[type.AdminPostOut]
+id = "uuid"
+title = "string"
+slug = "string"
+blog_slug = "string"
+blog_title = "string"
+author_username = "string"
+status = "string"
+is_hidden = "bool"
+published_at = { type = "timestamp", nullable = true }
+created_at = "timestamp"
+reports_open = "int"
+
+[type.AdminPostUpdate]
+is_hidden = "bool"
+note = { type = "string", max = 5000, optional = true }
+
+[type.AuditLogOut]
+id = "uuid"
+occurred_at = "timestamp"
+actor_type = "string"
+# web | api | system, derivato da actor_type
+channel = "string"
+actor_id = { type = "uuid", nullable = true }
+actor_label = { type = "string", nullable = true }
+action = "string"
+target_type = { type = "string", nullable = true }
+target_id = { type = "uuid", nullable = true }
+blog_id = { type = "uuid", nullable = true }
+ip = { type = "string", nullable = true }
+user_agent = { type = "string", nullable = true }
+payload = "json"
+
+[type.AdminOverview]
+users_total = "int"
+users_new_7d = "int"
+blogs_total = "int"
+blogs_suspended = "int"
+posts_published = "int"
+queue_pending_comments = "int"
+queue_posts_in_review = "int"
+queue_hidden_posts = "int"
+queue_open_reports = "int"
+audit_today = "int"
+# [{name, status: ok|down, detail}]
+services = "json"
+deployment_mode = "string"
+
+# I campi dei moduli attivi si aggiungono a quelli del core; un campo di un modulo spento è assente.
+[type.AdminConfigOut]
+default_locale = "string"
+registration_mode = "string"
+mfa_required_for_admins = "bool"
+reserved_blog_names = "string[]"
+reserved_builtin = "string[]"
+moderation_threshold = "float"
+max_blogs_per_user = "int"
+audit_retention_days = "int"
+footer_column1_markdown = { type = "string", nullable = true }
+footer_column2_markdown = { type = "string", nullable = true }
+footer_column3_markdown = { type = "string", nullable = true }
+footer_bottom_bar_markdown = { type = "string", nullable = true }
+max_blog_storage_mb = { type = "int", nullable = true }
+updated_at = { type = "timestamp", nullable = true }
+# riepilogo dell'ambiente (mai segreti)
+infrastructure = "json"
+
+# Tutti i campi sono opzionali e vengono validati dall'handler (anche quelli dei moduli).
+[type.AdminConfigUpdate]
+default_locale = "string?"
+registration_mode = "string?"
+mfa_required_for_admins = "bool?"
+reserved_blog_names = "string[]?"
+moderation_threshold = "float?"
+max_blogs_per_user = "int?"
+audit_retention_days = "int?"
+footer_column1_markdown = "string?"
+footer_column2_markdown = "string?"
+footer_column3_markdown = "string?"
+footer_bottom_bar_markdown = "string?"
+# 0 = nessun limite
+max_blog_storage_mb = "int?"
+
+[[route]]
+id = "admin_overview"
+method = "GET"
+path = "/admin/overview"
+auth = "platform_role:super_admin,amministratore,moderatore"
+kind = "custom"
+handler = "admin_overview"
+response = "AdminOverview"
+summary = "KPI, code aperte, audit di oggi e salute dei servizi"
+
+[[route]]
+id = "list_users"
+method = "GET"
+path = "/admin/users"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "list_users"
+response = "AdminUserOut[]"
+summary = "Utenti con numero di blog e ultimo accesso (`q` su username/email)"
+
+[[route]]
+id = "update_user"
+method = "PATCH"
+path = "/admin/users/{user_id}"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "update_user"
+request = "AdminUserUpdate"
+response = "AdminUserOut"
+summary = "Ruolo e attivazione (nota obbligatoria; i ruoli di amministrazione solo dal Super Admin)"
+
+[[route]]
+id = "reset_user_password"
+method = "POST"
+path = "/admin/users/{user_id}/reset-password"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "reset_user_password"
+status = 202
+rate_limit = { key = "user", max = 20, window = "5m" }
+summary = "Avvia per l'utente lo stesso ciclo email della password dimenticata"
+
+[[route]]
+id = "list_blogs"
+method = "GET"
+path = "/admin/blogs"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "list_blogs"
+response = "AdminBlogOut[]"
+summary = "Tutti i blog con contatori; filtri `q`, `visibility`, `state` (active|suspended|paused|deleted|reported)"
+
+[[route]]
+id = "update_blog"
+method = "PATCH"
+path = "/admin/blogs/{blog_id}"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "update_blog"
+request = "AdminBlogUpdate"
+response = "AdminBlogOut"
+summary = "Sospende o riattiva un blog (nota obbligatoria se cambia)"
+
+[[route]]
+id = "list_posts"
+method = "GET"
+path = "/admin/posts"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "list_posts"
+response = "AdminPostOut[]"
+summary = "Tutti i post con segnalazioni aperte (`q`)"
+
+[[route]]
+id = "update_post"
+method = "PATCH"
+path = "/admin/posts/{post_id}"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "update_post"
+request = "AdminPostUpdate"
+response = "AdminPostOut"
+summary = "Nasconde o mostra un post (nota obbligatoria se cambia)"
+
+[[route]]
+id = "list_audit_log"
+method = "GET"
+path = "/admin/audit-log"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "list_audit_log"
+response = "AuditLogOut[]"
+summary = "Registro di audit, dal più recente; filtri action, actor_id, target_id, blog_id, channel, since, until, limit (max 500), offset"
+
+[[route]]
+id = "get_config"
+method = "GET"
+path = "/admin/config"
+auth = "platform_role:super_admin"
+kind = "custom"
+handler = "get_config"
+response = "AdminConfigOut"
+summary = "Impostazioni di piattaforma, comprese quelle dei moduli attivi"
+
+[[route]]
+id = "update_config"
+method = "PATCH"
+path = "/admin/config"
+auth = "platform_role:super_admin"
+kind = "custom"
+handler = "update_config"
+request = "AdminConfigUpdate"
+response = "AdminConfigOut"
+summary = "Aggiorna le impostazioni; ogni modifica va nel registro di audit con i valori precedenti"
+
+[type.ModuleOut]
+name = "string"
+version = "string"
+# core | optional
+kind = "string"
+description = "string"
+requires = "string[]"
+default_enabled = "bool"
+# voluto dall'amministratore
+enabled = "bool"
+# in esecuzione in questa replica (le altre convergono entro pochi secondi)
+active = "bool"
+pending = "bool"
+error = { type = "string", nullable = true }
+# moduli attivi che dipendono da questo
+required_by = "string[]"
+
+[[route]]
+id = "list_modules"
+method = "GET"
+path = "/admin/modules"
+auth = "platform_role:super_admin"
+kind = "custom"
+handler = "list_modules"
+response = "ModuleOut[]"
+summary = "Moduli compilati nel binario con stato voluto e in esecuzione"
+
+[[route]]
+id = "enable_module"
+method = "POST"
+path = "/admin/modules/{name}/enable"
+auth = "platform_role:super_admin"
+kind = "custom"
+handler = "enable_module"
+response = "ModuleOut"
+summary = "Attiva un modulo opzionale (a caldo: migra lo schema, monta le rotte, avvia i consumer)"
+
+[[route]]
+id = "disable_module"
+method = "POST"
+path = "/admin/modules/{name}/disable"
+auth = "platform_role:super_admin"
+kind = "custom"
+handler = "disable_module"
+response = "ModuleOut"
+summary = "Disattiva un modulo opzionale (rotte smontate, dati e tabelle intatti; rifiutato se un altro modulo attivo lo richiede)"

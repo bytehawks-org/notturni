@@ -145,4 +145,6 @@ mod tests {
     }
 }
 
+pub mod jobs;
+pub mod maintenance;
 pub mod personal_data;

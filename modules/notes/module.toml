@@ -7,4 +7,5 @@ requires = ["users", "blogs", "posts"]
 description = "Note a piè di pagina dei post, libreria note del blog (duplicati, merge, BibTeX) e bibliografie (campo notes di post)"
 
 [lifecycle]
+admin_sections = true
 extensions = true

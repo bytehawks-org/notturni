@@ -178,3 +178,32 @@ handler = "unblock_author"
 scope = { blog = "slug" }
 status = 204
 summary = "Sblocca un autore"
+
+[type.AdminCommentOut]
+id = "uuid"
+post_id = "uuid"
+parent_id = { type = "uuid", nullable = true }
+author_id = { type = "uuid", nullable = true }
+author_display_name = "string"
+author_avatar_url = { type = "string", nullable = true }
+status = "string"
+content = "string"
+created_at = "timestamp"
+reported_to_platform = "bool"
+report_note = { type = "string", nullable = true }
+reported_at = { type = "timestamp", nullable = true }
+post_title = "string"
+post_slug = "string"
+blog_id = "uuid"
+blog_slug = "string"
+blog_title = "string"
+
+[[route]]
+id = "list_all_comments"
+method = "GET"
+path = "/admin/comments"
+auth = "platform_role:super_admin,amministratore,moderatore"
+kind = "custom"
+handler = "list_all_comments"
+response = "AdminCommentOut[]"
+summary = "Commenti di tutti i blog (`status`, default pending; `reported=true` per i segnalati; `q`)"

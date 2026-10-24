@@ -1,6 +1,6 @@
 name: SAST (CodeQL)
 
-# Analisi statica del codice (Python backend/moderation, TypeScript/JS
+# Analisi statica del codice (Rust backend, Python moderation, TypeScript/JS
 # frontend) tramite CodeQL — nativo GitHub, gratuito sui repository pubblici.
 # Il report è consultabile nella tab "Security -> Code scanning" del repository,
 # non come artifact separato.
@@ -32,9 +32,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # backend + moderation sono entrambi Python, analizzati insieme;
-        # frontend è TypeScript/JavaScript.
-        language: [python, javascript-typescript]
+        # backend Rust; moderation Python; frontend TypeScript/JavaScript.
+        # Nessuna compilazione: l'analisi di tutti e tre lavora sui sorgenti.
+        language: [rust, python, javascript-typescript]
 
     steps:
       - name: Checkout
@@ -44,9 +44,7 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
-
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+          build-mode: none
 
       - name: Analisi CodeQL
         uses: github/codeql-action/analyze@v3

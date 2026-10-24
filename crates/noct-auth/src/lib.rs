@@ -25,6 +25,7 @@ pub mod session {
     pub use crate::handlers_impl::{issue_session, session_response};
     pub use crate::util::{clear_refresh_cookie, cookie_value, set_session_cookies};
 }
+pub use handlers_impl::enqueue_password_reset;
 pub mod jobs;
 pub mod startup;
 

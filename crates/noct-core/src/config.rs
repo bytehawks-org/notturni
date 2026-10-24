@@ -55,6 +55,14 @@ pub struct Config {
     /// Dominio pubblico dell'istanza (`NOCT_INSTANCE_FQDN`): base dei link nelle email, degli
     /// identificatori di federazione e dominio email «blu» del sigillo di verifica.
     pub instance_fqdn: String,
+    /// Origini ammesse per le chiamate dal browser (CORS, `NOCT_CORS_ORIGINS`, separate da virgola).
+    pub cors_origins: Vec<String>,
+    /// Origini a wildcard in aggiunta (`NOCT_CORS_ORIGIN_REGEX`), per i sottodomini per-blog che non
+    /// si possono elencare in anticipo; il match è sull'intera origine.
+    pub cors_origin_regex: Option<String>,
+    /// Site key pubblica di Cloudflare Turnstile (`NOCT_TURNSTILE_SITE_KEY`): il frontend la usa per
+    /// mostrare il captcha sui commenti aperti a tutti. La secret key è del modulo `comments`.
+    pub turnstile_site_key: Option<String>,
 }
 
 impl Config {
@@ -87,6 +95,9 @@ impl Config {
             revalidate_secret: None,
             moderation_service_url: None,
             instance_fqdn: "notturni.eu".into(),
+            cors_origins: vec!["http://localhost:3000".into()],
+            cors_origin_regex: None,
+            turnstile_site_key: None,
         }
     }
 
@@ -195,6 +206,15 @@ impl Config {
         cfg.moderation_service_url = get("NOCT_MODERATION_SERVICE_URL");
         if let Some(v) = get("NOCT_INSTANCE_FQDN") {
             cfg.instance_fqdn = v.trim().trim_end_matches('.').to_lowercase();
+        }
+        cfg.turnstile_site_key = get("NOCT_TURNSTILE_SITE_KEY");
+        if let Some(v) = get("NOCT_CORS_ORIGINS") {
+            cfg.cors_origins =
+                v.split(',').map(|s| s.trim().trim_end_matches('/').to_string()).filter(|s| !s.is_empty()).collect();
+        }
+        if let Some(v) = get("NOCT_CORS_ORIGIN_REGEX") {
+            regex::Regex::new(&format!("^(?:{v})$")).map_err(|e| format!("NOCT_CORS_ORIGIN_REGEX non valida: {e}"))?;
+            cfg.cors_origin_regex = Some(v);
         }
         Ok(cfg)
     }

@@ -20,10 +20,11 @@ subject = "newsletter.campaign.send"
 max_deliver = 5
 backoff = ["30s", "5m", "30m"]
 
-# Fa partire le campagne pianificate arrivate a scadenza. Va accodato a intervalli regolari dal
-# pianificatore dei job periodici (Fase 7); vedi `jobs::dispatch_due`.
+# Fa partire le campagne pianificate arrivate a scadenza; lo accoda ogni minuto il pianificatore dei
+# job periodici (vedi `jobs::dispatch_due`).
 [jobs.dispatch_due]
 subject = "newsletter.campaigns.dispatch"
+schedule = "1m"
 max_deliver = 3
 backoff = ["30s", "5m"]
 

@@ -27,3 +27,24 @@ indexes = [
   { columns = ["action", "occurred_at"] },
   { columns = ["blog_id", "occurred_at"] },
 ]
+
+# Una riga per settimana ISO archiviata su storage (anche vuota: il watermark avanza lo stesso).
+# `max(period_end)` è il limite oltre cui la cancellazione dal database non si spinge mai.
+[[table]]
+name = "audit_archive_runs"
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "created_at", type = "timestamptz", default = "now()" },
+  { name = "period_start", type = "timestamptz" },
+  { name = "period_end", type = "timestamptz" },
+  # es. 2026w36
+  { name = "week_label", type = "varchar(10)" },
+  # assente se la settimana non aveva eventi
+  { name = "object_key", type = "varchar(255)", null = true },
+  { name = "storage_backend", type = "varchar(20)" },
+  { name = "row_count", type = "integer" },
+  { name = "byte_size", type = "bigint", default = "0" },
+  { name = "sha256", type = "varchar(64)", null = true },
+]
+uniques = [{ name = "uq_audit_archive_week", columns = ["week_label"] }]
+indexes = [{ columns = ["period_end"] }]

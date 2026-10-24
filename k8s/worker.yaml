@@ -1,0 +1,36 @@
+# Elaborazione in background (`noct-worker`): relay dell'outbox, pianificatore dei job periodici
+# (campagne newsletter pianificate, manutenzione dell'audit, pulizia dei blog cancellati, backup
+# infrastrutturale) e consumer di eventi e job di tutti i moduli attivi. Sostituisce i tre Deployment
+# di consumer e i due CronJob della versione Python.
+#
+# Più repliche sono sicure: NATS distribuisce i job fra i consumer di uno stesso gruppo e lo scheduler
+# assegna ogni intervallo a una sola replica con un UPDATE atomico su `noct_schedules`. Segue anche
+# l'attivazione a caldo dei moduli (POST /admin/modules/{name}/enable): rilegge lo stato desiderato
+# ogni pochi secondi e riavvia i consumer. Nessun Service: non riceve richieste in ingresso.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: notturni
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      containers:
+        - name: worker
+          image: ghcr.io/bytehawks-org/notturni-backend:sha-fd6ce11
+          imagePullPolicy: IfNotPresent
+          command: ["noct-worker"]
+          envFrom:
+            - configMapRef: {name: notturni-config}
+            - secretRef: {name: notturni-secrets}
+          # le migrazioni le applica l'API all'avvio (advisory lock): il worker le troverebbe già fatte
+          env:
+            - name: NOCT_AUTO_MIGRATE
+              value: "false"

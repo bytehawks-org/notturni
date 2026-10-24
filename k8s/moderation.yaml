@@ -4,7 +4,7 @@
 #
 # Servizio di moderazione automatica delle immagini (moderation/, modello
 # open-source per rilevare nudità/contenuti sensibili), chiamato da
-# app/domain/moderation.py ad ogni upload. "Fail open": un problema di
+# `noct-media` ad ogni upload. "Fail open": un problema di
 # questo servizio non blocca mai l'upload, semplicemente nessuna immagine
 # viene moderata finché non torna raggiungibile — non un errore visibile
 # all'utente, ma un rischio reale per un'istanza pubblica se resta giù a

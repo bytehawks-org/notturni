@@ -2,6 +2,86 @@
   "enums": [],
   "tables": [
     {
+      "name": "noct_module_state",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "null": false,
+          "default": "1",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "version",
+          "type": "bigint",
+          "null": false,
+          "default": "0",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "last_error",
+          "type": "text",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [],
+      "uniques": []
+    },
+    {
+      "name": "noct_modules",
+      "columns": [
+        {
+          "name": "name",
+          "type": "varchar(100)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "enabled",
+          "type": "boolean",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "updated_by_id",
+          "type": "uuid",
+          "null": true,
+          "default": null,
+          "references": {
+            "table": "users",
+            "column": "id",
+            "on_delete": "set_null"
+          },
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "name"
+      ],
+      "indexes": [],
+      "uniques": []
+    },
+    {
       "name": "platform_config",
       "columns": [
         {
@@ -65,6 +145,14 @@
           "type": "integer",
           "null": false,
           "default": "105",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "mfa_required_for_admins",
+          "type": "boolean",
+          "null": false,
+          "default": "false",
           "references": null,
           "renamed_from": null
         },
