@@ -1,0 +1,80 @@
+/* Font self-hosted (pacchetti @fontsource, nessuna richiesta a Google né al build né a runtime).
+ * Un @font-face per ogni peso, con unicode-range per sottoinsieme (latin, latin-ext, cyrillic, ...):
+ * il browser scarica solo i file che servono. Le classi `.font-blog-*` definiscono la variabile CSS
+ * `--font-blog-*` letta da BlogPageShell; `--font-body`/`--font-heading` sono i default di piattaforma. */
+
+@import "@fontsource/lora/400.css";
+@import "@fontsource/lora/500.css";
+@import "@fontsource/lora/600.css";
+@import "@fontsource/lora/400-italic.css";
+@import "@fontsource/lora/500-italic.css";
+@import "@fontsource/lora/600-italic.css";
+@import "@fontsource/merriweather/400.css";
+@import "@fontsource/merriweather/700.css";
+@import "@fontsource/merriweather/400-italic.css";
+@import "@fontsource/merriweather/700-italic.css";
+@import "@fontsource/playfair-display/400.css";
+@import "@fontsource/playfair-display/500.css";
+@import "@fontsource/playfair-display/600.css";
+@import "@fontsource/playfair-display/400-italic.css";
+@import "@fontsource/playfair-display/500-italic.css";
+@import "@fontsource/playfair-display/600-italic.css";
+@import "@fontsource/source-serif-4/400.css";
+@import "@fontsource/source-serif-4/500.css";
+@import "@fontsource/source-serif-4/600.css";
+@import "@fontsource/source-serif-4/400-italic.css";
+@import "@fontsource/source-serif-4/500-italic.css";
+@import "@fontsource/source-serif-4/600-italic.css";
+@import "@fontsource/crimson-pro/400.css";
+@import "@fontsource/crimson-pro/500.css";
+@import "@fontsource/crimson-pro/600.css";
+@import "@fontsource/crimson-pro/400-italic.css";
+@import "@fontsource/crimson-pro/500-italic.css";
+@import "@fontsource/crimson-pro/600-italic.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/nunito-sans/400.css";
+@import "@fontsource/nunito-sans/500.css";
+@import "@fontsource/nunito-sans/600.css";
+@import "@fontsource/work-sans/400.css";
+@import "@fontsource/work-sans/500.css";
+@import "@fontsource/work-sans/600.css";
+@import "@fontsource/source-sans-3/400.css";
+@import "@fontsource/source-sans-3/500.css";
+@import "@fontsource/source-sans-3/600.css";
+@import "@fontsource/karla/400.css";
+@import "@fontsource/karla/500.css";
+@import "@fontsource/karla/600.css";
+@import "@fontsource/jetbrains-mono/300.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/fira-code/400.css";
+@import "@fontsource/fira-code/500.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/source-code-pro/400.css";
+@import "@fontsource/source-code-pro/500.css";
+@import "@fontsource/space-mono/400.css";
+@import "@fontsource/space-mono/700.css";
+
+.font-blog-lora { --font-blog-lora: "Lora", serif; }
+.font-blog-merriweather { --font-blog-merriweather: "Merriweather", serif; }
+.font-blog-playfair-display { --font-blog-playfair-display: "Playfair Display", serif; }
+.font-blog-source-serif-4 { --font-blog-source-serif-4: "Source Serif 4", serif; }
+.font-blog-crimson-pro { --font-blog-crimson-pro: "Crimson Pro", serif; }
+.font-blog-inter { --font-blog-inter: "Inter", sans-serif; }
+.font-blog-nunito-sans { --font-blog-nunito-sans: "Nunito Sans", sans-serif; }
+.font-blog-work-sans { --font-blog-work-sans: "Work Sans", sans-serif; }
+.font-blog-source-sans-3 { --font-blog-source-sans-3: "Source Sans 3", sans-serif; }
+.font-blog-karla { --font-blog-karla: "Karla", sans-serif; }
+.font-blog-jetbrains-mono { --font-blog-jetbrains-mono: "JetBrains Mono", monospace; }
+.font-blog-fira-code { --font-blog-fira-code: "Fira Code", monospace; }
+.font-blog-ibm-plex-mono { --font-blog-ibm-plex-mono: "IBM Plex Mono", monospace; }
+.font-blog-source-code-pro { --font-blog-source-code-pro: "Source Code Pro", monospace; }
+.font-blog-space-mono { --font-blog-space-mono: "Space Mono", monospace; }
+
+:root {
+  --font-body: "Source Sans 3", system-ui, sans-serif;
+  --font-heading: "Lora", Georgia, serif;
+}

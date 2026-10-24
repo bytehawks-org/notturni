@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Lora, Source_Sans_3 } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 import { headers } from "next/headers";
@@ -13,20 +12,8 @@ import { NonceProvider } from "@/lib/nonce-context";
 import { SITE_URL } from "@/lib/site";
 import { ThemeProvider } from "@/lib/theme-context";
 
+import "./fonts.css";
 import "./globals.css";
-
-const bodyFont = Source_Sans_3({
-  variable: "--font-body",
-  subsets: ["latin", "latin-ext"],
-  weight: ["400", "500", "600"],
-});
-
-const headingFont = Lora({
-  variable: "--font-heading",
-  subsets: ["latin", "latin-ext"],
-  weight: ["400", "500", "600"],
-  style: ["normal", "italic"],
-});
 
 const DEFAULT_DESCRIPTION =
   "Piattaforma opensource di microblogging e newsletter, multilingua ed EU-centrica.";
@@ -60,7 +47,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang={locale}
-      className={`${bodyFont.variable} ${headingFont.variable} h-full antialiased`}
+      className="h-full antialiased"
     >
       <body className="min-h-full flex flex-col bg-background text-foreground font-sans">
         {/* File esterno (public/theme-init.js), non inline — comunque
