@@ -1,0 +1,10 @@
+[package]
+name = "noct-codegen"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+noct-manifest.workspace = true
+noct-migrate.workspace = true

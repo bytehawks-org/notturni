@@ -1,0 +1,206 @@
+{
+  "enums": [
+    {
+      "name": "blog_role",
+      "values": [
+        "autore",
+        "co_autore",
+        "revisore",
+        "mediatore"
+      ]
+    },
+    {
+      "name": "blog_visibility",
+      "values": [
+        "public",
+        "members",
+        "private"
+      ]
+    }
+  ],
+  "tables": [
+    {
+      "name": "blog_memberships",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "null": false,
+          "default": "gen_random_uuid()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "blog_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "blogs",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "users",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "role",
+          "type": "enum:blog_role",
+          "null": false,
+          "default": "'autore'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [],
+      "uniques": [
+        {
+          "name": "uq_membership_blog_user",
+          "columns": [
+            "blog_id",
+            "user_id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "blogs",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "null": false,
+          "default": "gen_random_uuid()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "slug",
+          "type": "varchar(63)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "title",
+          "type": "varchar(255)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "owner_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "users",
+            "column": "id",
+            "on_delete": "restrict"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "visibility",
+          "type": "enum:blog_visibility",
+          "null": false,
+          "default": "'public'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "is_suspended",
+          "type": "boolean",
+          "null": false,
+          "default": "false",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "is_paused",
+          "type": "boolean",
+          "null": false,
+          "default": "false",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "deleted_at",
+          "type": "timestamptz",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "ix_blogs_owner_id",
+          "columns": [
+            "owner_id"
+          ],
+          "unique": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "uq_blogs_slug",
+          "columns": [
+            "slug"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+[[enum]]
+name = "sandbox_note_kind"
+values = ["note", "todo"]
+
+[[table]]
+name = "sandbox_notes"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "blog_id", type = "uuid", ref = "blogs.id", on_delete = "cascade" },
+  { name = "title", type = "varchar(80)" },
+  { name = "body", type = "text", null = true },
+  { name = "kind", type = "enum:sandbox_note_kind", default = "'note'" },
+  { name = "position", type = "integer", default = "0" },
+]
+indexes = [{ columns = ["blog_id", "position"] }]
+uniques = [{ name = "uq_sandbox_note_title", columns = ["blog_id", "title"] }]

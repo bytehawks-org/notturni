@@ -1,0 +1,19 @@
+[module]
+name = "sandbox"
+version = "0.1.0"
+kind = "optional"
+default_enabled = false
+requires = ["blogs"]
+description = "Modulo di riferimento e banco di prova del sistema dichiarativo (non è una funzione di prodotto)"
+
+[config]
+greeting = { type = "string", env = "NOCT_SANDBOX_GREETING", default = "ciao" }
+max_title = { type = "int", env = "NOCT_SANDBOX_MAX_TITLE", default = 80 }
+
+[events]
+publishes = ["sandbox.note.created"]
+
+[jobs.cleanup]
+subject = "sandbox.cleanup"
+max_deliver = 3
+backoff = ["10s", "1m"]

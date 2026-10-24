@@ -1,0 +1,10 @@
+[[table]]
+name = "categories"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "blog_id", type = "uuid", ref = "blogs.id", on_delete = "cascade" },
+  { name = "name", type = "varchar(50)" },
+  { name = "slug", type = "varchar(60)" },
+]
+uniques = [{ name = "uq_category_blog_slug", columns = ["blog_id", "slug"] }]

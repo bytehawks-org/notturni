@@ -19,7 +19,7 @@
 # browser) né i backup dei post o gli archivi di audit.
 #
 # "s3" è ora anche in RESERVED_SUBDOMAINS (frontend/src/proxy.ts) e
-# RESERVED_BLOG_SLUGS (backend/app/domain/blog_rules.py): un utente non può
+# RESERVED_BLOG_SLUGS (legacy/backend/app/domain/blog_rules.py): un utente non può
 # registrare un blog con quello slug.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute

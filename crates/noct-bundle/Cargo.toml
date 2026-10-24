@@ -1,0 +1,18 @@
+[package]
+name = "noct-bundle"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+default = ["taxonomy"]
+taxonomy = ["dep:noct-taxonomy"]
+sandbox = ["dep:noct-sandbox"]
+
+[dependencies]
+noct-core.workspace = true
+noct-users.workspace = true
+noct-blogs.workspace = true
+noct-taxonomy = { workspace = true, optional = true }
+noct-sandbox = { workspace = true, optional = true }

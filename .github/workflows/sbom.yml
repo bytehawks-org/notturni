@@ -40,7 +40,7 @@ jobs:
       - name: SBOM backend (Python)
         uses: anchore/sbom-action@v0
         with:
-          path: ./backend
+          path: ./legacy/backend
           format: cyclonedx-json
           output-file: sbom-backend.cyclonedx.json
           upload-artifact: false
@@ -98,7 +98,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build immagine backend
-        run: docker build -t notturni-backend:ci ./backend
+        run: docker build -t notturni-backend:ci ./legacy/backend
 
       - name: Build immagine frontend
         run: docker build -t notturni-frontend:ci ./frontend

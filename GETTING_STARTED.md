@@ -3,8 +3,8 @@
 Percorso più rapido per portare su tutto lo stack in locale e fare un primo
 giro di prova, dalla registrazione alla pubblicazione di un post. Per il
 dettaglio di ogni pezzo vedi [README.md](README.md) (panoramica e struttura),
-[backend/API.md](backend/API.md) (riferimento endpoint) e i README di
-[backend](backend/README.md)/[frontend](frontend/README.md).
+[legacy/backend/API.md](legacy/backend/API.md) (riferimento endpoint) e i README di
+[backend](legacy/backend/README.md)/[frontend](frontend/README.md).
 
 ## Prerequisiti
 
@@ -114,7 +114,7 @@ nel `.env`, questo passaggio non serve: il primo utente registrato è già
 Super Admin.
 
 Per l'accesso diretto all'API senza passare da editor/admin (motore core,
-script), vedi lo script di bootstrap in [backend/API.md](backend/API.md#come-ottenere-il-primo-token).
+script), vedi lo script di bootstrap in [legacy/backend/API.md](legacy/backend/API.md#come-ottenere-il-primo-token).
 
 ## 5. Primo giro di test — interfaccia web
 
@@ -146,7 +146,7 @@ script), vedi lo script di bootstrap in [backend/API.md](backend/API.md#come-ott
 ## 6. Primo giro di test — API diretta
 
 Alternativa (o complemento) al punto 5, utile per capire cosa sta succedendo
-sotto al frontend. Riferimento completo in [backend/API.md](backend/API.md).
+sotto al frontend. Riferimento completo in [legacy/backend/API.md](legacy/backend/API.md).
 
 ```bash
 # registrazione + login
@@ -221,7 +221,7 @@ podman compose down -v       # ferma e cancella anche i dati (riparti da zero)
 Una volta verificato che tutto gira, per approfondire:
 
 - [README.md](README.md) — panoramica, stack, struttura del repository.
-- [backend/API.md](backend/API.md) — ogni endpoint, con esempi di
+- [legacy/backend/API.md](legacy/backend/API.md) — ogni endpoint, con esempi di
   richiesta/risposta e le regole di autorizzazione.
 - [ROADMAP.md](ROADMAP.md) — tabella completa delle specifiche di prodotto,
   il loro stato di avanzamento e il backlog dei prossimi sviluppi.

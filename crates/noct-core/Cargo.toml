@@ -1,0 +1,22 @@
+[package]
+name = "noct-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+noct-manifest.workspace = true
+noct-migrate = { workspace = true, features = ["apply"] }
+axum.workspace = true
+tokio.workspace = true
+sqlx.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tower.workspace = true

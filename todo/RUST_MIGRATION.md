@@ -198,7 +198,7 @@ consegna federata con retry (AT Protocol/ActivityPub).
 | # | Fase | Output / DoD |
 |---|---|---|
 | 0 | Decisioni | ✅ prese (§9) |
-| 1 | **Spike verticale** | `backend/` → `legacy/backend/`, workspace, parser+validator manifest, motore migrazioni (additivo), codegen rotte→axum+OpenAPI, **un modulo reale piccolo** (`pages` o `taxonomy`) end-to-end con DB vero. **Go/no-go** sull'approccio dichiarativo |
+| 1 | **Spike verticale** ✅ (§11) | `backend/` → `legacy/backend/`, workspace, parser+validator manifest, motore migrazioni (additivo), codegen rotte→axum+OpenAPI, **un modulo reale piccolo** (`pages` o `taxonomy`) end-to-end con DB vero. **Go/no-go** sull'approccio dichiarativo |
 | 2 | Core infrastruttura | storage, cache, bus (NATS + outbox), mail, markdown, config; health; `noct-ctl` |
 | 3 | Core auth | utenti, sessioni, JWT, API token, ruoli, audit, bootstrap super admin |
 | 4 | Core contenuti | `blogs`, `posts`, media, permalink |
@@ -247,3 +247,74 @@ Punti di attenzione: audit di ogni toggle; solo Super Admin; la route di
 amministrazione dei moduli è core e non disattivabile; migrazioni distruttive mai
 a caldo; in cluster l'attivazione è completata solo quando tutte le repliche
 confermano (ack su subject dedicato) — altrimenti stato `pending` visibile in admin.
+
+## 11. Fase 1 — esito dello spike (go/no-go)
+
+**Esito: GO.** Il sistema dichiarativo regge su un caso reale (categorie per-blog, con
+contratto della v1 invariato) e su un modulo di riferimento (`sandbox`) che esercita
+tutte le funzioni: CRUD generato, enum Postgres, PATCH tri-stato, default del DB,
+rate limit, configurazione da env, handler `custom`, policy per ruolo di piattaforma.
+
+| Misura | Python (v1) | Dichiarativo |
+|---|---|---|
+| Categorie: endpoint + dominio + modello | 143 + 23 + 23 righe, più la migrazione Alembic | `api.toml` 66 + `db.toml` 10 + `module.toml` 7 righe, **0 righe di Rust**; migrazione SQL generata (14 righe) |
+| Rebuild dopo una modifica di `api.toml` | n/a | ~2 s |
+| Validazione dei manifest | a runtime, dai test | a build-time e in CI (`noct-ctl validate`), errori raccolti tutti insieme |
+
+Test: 45 (manifest 15, migrazioni 12 su Postgres reale, codegen 6, API end-to-end 10 su
+Postgres reale, runtime 2). `clippy -D warnings` e `fmt` puliti. Verifica dal vivo con il
+binario `noct-api` e `curl` (creazione, duplicato 409, slug non valido 400, lista,
+rate limit 429 con `Retry-After`, PATCH `{"body": null}`).
+
+### Cosa è stato realizzato
+
+| Crate | Ruolo |
+|---|---|
+| `noct-manifest` | parsing, normalizzazione e validazione di `module/api/db.toml`; grafo dipendenze; configurazione; OpenAPI 3.1 |
+| `noct-migrate` | diff schema → SQL, file versionati con checksum, applicazione con advisory lock, `verify_live` |
+| `noct-codegen` | `build.rs`: DTO + validazione + handler/router axum + sorgenti incorporati |
+| `noct-core` | `ApiError`, `Config`, `AppState`, autorizzazione (`enforce`), rate limit, `Patch<T>`, `Registry` |
+| `noct-users`, `noct-blogs` | moduli **core** (solo tabelle: utenti, blog, membership) |
+| `modules/taxonomy` | modulo opzionale reale (categorie) |
+| `modules/sandbox` | modulo di riferimento/banco di prova (non attivo di default) |
+| `noct-bundle` | elenco dei moduli compilati (feature Cargo) |
+| `bins/noct-api`, `bins/noct-ctl` | server (migra all'avvio, `NOCT_AUTO_MIGRATE=false` per saltare) e CLI |
+
+### Scostamenti dal piano
+
+* `noct-config` non è un crate a parte: la configurazione di piattaforma sta in `noct-core` (`Config`); quella dei moduli è dichiarata nei loro `module.toml`.
+* Migrazioni: non "diff a ogni avvio" ma **file SQL generati e committati** + `schema.lock.json` (istantanea), come da §2. Il drift fra `db.toml` e lock fa fallire `noct-ctl validate` e l'avvio.
+* Query: runtime (`query_as`/`QueryBuilder`), nessuna macro `query!`, come previsto.
+
+### Limiti noti / da fare nelle fasi successive
+
+* **Autenticazione provvisoria**: `NOCT_DEV_AUTH=1` accetta `Authorization: Bearer dev:<uuid-utente>`; JWT, sessioni e API token arrivano con il crate auth (Fase 3). Un solo punto da sostituire: `noct_core::authenticate`.
+* **Attivazione a caldo** (§10) non ancora implementata: oggi i moduli si scelgono all'avvio (`NOCT_MODULES`). Il `Registry` espone già `resolve_enabled`/`router`/`migrate` per costruirla.
+* **Rate limit in memoria** (un solo processo); applicato prima della policy (un anonimo può esaurire il proprio bucket IP anche su rotte protette). Versione condivisa in Fase 2 (`noct-cache`).
+* Eventi e job (`[events]`, `[jobs]`) sono validati ma non ancora eseguiti (Fase 2, NATS).
+* Migrazioni: solo cambiamenti additivi automatici (tabelle, enum e valori, colonne nullable/con default, indici, unique, rename con `renamed_from`); il resto è **bloccato** con motivazione e richiede SQL a mano + `noct-ctl migrate lock`.
+* `ON CONFLICT`/upsert, filtri dinamici (feed), join e paginazione non sono esprimibili nei `kind` CRUD: andranno come handler `custom`.
+* Non ancora: CORS, tracing HTTP, `/health` con dettagli, CI Rust, Dockerfile/compose/k8s per il nuovo binario (Fase 7).
+
+### Guida rapida
+
+```bash
+# Postgres di prova (qualsiasi 16+); i test lo usano con un database per test
+export NOCT_TEST_DATABASE_URL=postgres://postgres@127.0.0.1:5432/postgres
+cargo test --workspace --all-features
+cargo clippy --workspace --all-features --all-targets -- -D warnings
+
+# ciclo di sviluppo di un modulo
+$EDITOR modules/taxonomy/db.toml modules/taxonomy/api.toml
+cargo run -p noct-ctl -- migrate plan                # cosa cambierebbe
+cargo run -p noct-ctl -- migrate generate            # scrive migrations/NNNN_*.sql + schema.lock.json (da rivedere e committare)
+cargo run -p noct-ctl -- validate                    # manifest + drift (per la CI)
+NOCT_DATABASE_URL=postgres://... cargo run -p noct-ctl -- migrate dev   # genera e applica da disco
+
+# avvio
+NOCT_DATABASE_URL=postgres://... NOCT_MODULES=taxonomy NOCT_DEV_AUTH=1 cargo run -p noct-api
+curl localhost:8000/api/v1/openapi.json
+```
+
+Nuovo modulo: copiare `modules/sandbox` (o `taxonomy` se non servono handler), rinominare,
+aggiungerlo a `Cargo.toml` (workspace + `noct-bundle`) e a `noct-bundle::all()`.

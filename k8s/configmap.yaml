@@ -110,7 +110,7 @@ data:
   # dominio (solo IP nodo) non c'è alcun sottodominio da coprire, resta vuoto.
   NOCT_CORS_ORIGIN_REGEX: "https://([a-z0-9-]+\\.)?notturni\\.eu"
 
-  # Cookie di sessione (refresh token httpOnly, backend/API.md).
+  # Cookie di sessione (refresh token httpOnly, legacy/backend/API.md).
   # NOCT_SESSION_COOKIE_SECURE="true" perché ingress.yaml/ingressroute.yaml
   # servono ora https (TLS via cert-manager, certificate.yaml) — un cookie
   # Secure non verrebbe accettato dal browser su una connessione non
@@ -126,7 +126,7 @@ data:
   # frontend per l'SSR (il browser usa invece l'host pubblico).
   NOCT_BACKEND_INTERNAL_URL: "http://backend:8000"
   # invalidazione on-demand della cache del frontend dopo publish/update di
-  # contenuti pubblici (vedi backend/app/core/revalidation.py). Il secret
+  # contenuti pubblici (vedi legacy/backend/app/core/revalidation.py). Il secret
   # corrispondente è in secret.yaml (NOCT_REVALIDATE_SECRET), condiviso tra
   # backend e frontend; se assente la funzione è disattivata (solo cache a tempo).
   NOCT_FRONTEND_REVALIDATE_URL: "http://frontend:3000/api/revalidate"

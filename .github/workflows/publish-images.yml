@@ -46,7 +46,7 @@ jobs:
       matrix:
         include:
           - name: backend
-            context: ./backend
+            context: ./legacy/backend
             build-args: ""
           - name: frontend
             context: ./frontend

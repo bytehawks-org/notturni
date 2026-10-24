@@ -18,8 +18,8 @@ Per tutto il resto, la fonte giusta dipende da cosa serve:
 | Se una specifica è già implementata, parziale o da fare | [ROADMAP.md](ROADMAP.md) — **controllalo sempre prima di iniziare un blocco di lavoro** |
 | Panoramica, stack, struttura del repository | [README.md](README.md) |
 | Primo avvio locale passo-passo, primo giro di test | [GETTING_STARTED.md](GETTING_STARTED.md) |
-| Riferimento endpoint (richieste/risposte, autorizzazione) | [backend/API.md](backend/API.md) |
-| Setup/test/migrazioni backend | [backend/README.md](backend/README.md) |
+| Riferimento endpoint (richieste/risposte, autorizzazione) | [legacy/backend/API.md](legacy/backend/API.md) |
+| Setup/test/migrazioni backend | [legacy/backend/README.md](legacy/backend/README.md) |
 | Setup frontend | [frontend/README.md](frontend/README.md) |
 | Manifest Kubernetes | [k8s/README.md](k8s/README.md) |
 | Servizio di moderazione immagini | [moderation/README.md](moderation/README.md) |
@@ -44,7 +44,7 @@ sessione/richiesta — non a "big bang" su più funzionalità insieme.
    sessione successiva.
 3. **Verifica prima di dichiarare fatto un blocco**, nell'ordine che si
    applica alla modifica:
-   * Backend: `python -m pytest` in `backend/` (vedi [backend/README.md](backend/README.md#test)).
+   * Backend: `python -m pytest` in `backend/` (vedi [legacy/backend/README.md](legacy/backend/README.md#test)).
    * Frontend: `tsc`, `eslint`, `npm run build`.
    * Se la modifica cambia comportamento a runtime (non solo tipi/test):
      rebuild del/i servizio/i coinvolto/i (`podman compose build --no-cache
@@ -55,7 +55,7 @@ sessione/richiesta — non a "big bang" su più funzionalità insieme.
 4. **Documentazione**, nella stessa modifica che tocca il codice, non in un
    passaggio successivo:
    * Aggiorna la riga corrispondente in ROADMAP.md (stato + nota).
-   * Aggiorna [backend/API.md](backend/API.md) se cambiano endpoint, payload
+   * Aggiorna [legacy/backend/API.md](legacy/backend/API.md) se cambiano endpoint, payload
      o risposta.
    * Aggiorna README.md solo se cambia la lista "Funzionalità implementate" a
      livello di onboarding — non per ogni dettaglio interno.
@@ -76,7 +76,7 @@ Da rispettare sempre, indipendentemente dal blocco in corso:
 * **Nessun file `.md` tracciato nel repository deve citare `CLAUDE.md`** — è
   documentazione interna, non linkata pubblicamente (lo stesso ROADMAP.md lo
   richiama in apertura). Alcune citazioni residue da prima di questa regola
-  esistono ancora in `backend/API.md`, `ROADMAP.md` e `moderation/README.md`:
+  esistono ancora in `legacy/backend/API.md`, `ROADMAP.md` e `moderation/README.md`:
   vanno ripulite in un blocco dedicato quando richiesto esplicitamente, non
   corrette di riflesso durante un blocco non correlato.
 * **Dockerfile e manifest agnostici rispetto all'architettura** (x86_64 in
@@ -92,7 +92,7 @@ Da rispettare sempre, indipendentemente dal blocco in corso:
   opzionale. In alternativa a S3, `NOCT_STORAGE_BACKEND=localstorage` scrive
   su filesystem locale, servito dal backend stesso — pensato per
   installazioni `solo` senza hardware/competenze per gestire uno storage
-  S3-compatible. Vedi `backend/app/core/storage.py`.
+  S3-compatible. Vedi `legacy/backend/app/core/storage.py`.
 * **Prefisso env**: variabili Podman/Kubernetes con prefisso `NOCT_`/`noct_`
   (maiuscolo o minuscolo a seconda del contesto d'uso).
 * **Formato delle risposte in chat**: evitare intro o conclusioni
@@ -125,10 +125,10 @@ Da rispettare sempre, indipendentemente dal blocco in corso:
 * **`cover_image_is_sensitive` nel PATCH dei post**: ha effetto solo se
   inviato **nella stessa richiesta** che include anche un nuovo
   `cover_image_url` — comportamento intenzionale, documentato nel codice e in
-  `backend/API.md`, non un bug da correggere se sembra "ignorato" inviandolo
+  `legacy/backend/API.md`, non un bug da correggere se sembra "ignorato" inviandolo
   da solo.
 * **Filtri del feed** (tag, categoria, locale, ...): seguono tutti lo stesso
-  pattern di join in `backend/app/api/v1/feed.py` — un nuovo filtro va
+  pattern di join in `legacy/backend/app/api/v1/feed.py` — un nuovo filtro va
   aggiunto lì con lo stesso stile (`stmt.join(...).where(...)` condizionale),
   non con un endpoint/query separata.
 
@@ -227,7 +227,7 @@ L'identity provider è gestito centralmente da FastAPI, fungendo da Master per l
 Stato di avanzamento (inclusa la limitazione nota: SSO non testabile
 end-to-end senza credenziali OAuth reali) ed endpoint:
 [ROADMAP.md § 4](ROADMAP.md#4-autenticazione-e-sso) e
-[backend/API.md](backend/API.md).
+[legacy/backend/API.md](legacy/backend/API.md).
 
 ## 8. Ambiente locale
 

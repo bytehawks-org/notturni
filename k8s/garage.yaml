@@ -4,7 +4,7 @@
 #
 # Un Garage appena avviato non è utilizzabile: nodo senza ruolo nel layout,
 # nessuna chiave, nessun bucket. Ci pensa l'initContainer `garage-bootstrap`
-# di backend.yaml (backend/scripts/garage_bootstrap.py, idempotente).
+# di backend.yaml (legacy/backend/scripts/garage_bootstrap.py, idempotente).
 #
 # Le letture pubbliche (avatar, media) NON passano da qui direttamente: vedi
 # s3-public.yaml (Garage non ha le bucket policy S3).

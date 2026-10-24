@@ -1,0 +1,94 @@
+{
+  "enums": [
+    {
+      "name": "platform_role",
+      "values": [
+        "super_admin",
+        "amministratore",
+        "moderatore",
+        "utente"
+      ]
+    }
+  ],
+  "tables": [
+    {
+      "name": "users",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "null": false,
+          "default": "gen_random_uuid()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "username",
+          "type": "varchar(32)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "email",
+          "type": "varchar(255)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "platform_role",
+          "type": "enum:platform_role",
+          "null": false,
+          "default": "'utente'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "is_active",
+          "type": "boolean",
+          "null": false,
+          "default": "true",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [],
+      "uniques": [
+        {
+          "name": "uq_users_username",
+          "columns": [
+            "username"
+          ]
+        },
+        {
+          "name": "uq_users_email",
+          "columns": [
+            "email"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -106,13 +106,13 @@ services:
       - garage_meta:/var/lib/garage/meta
       - garage_data:/var/lib/garage/data
 
-  # Job one-shot idempotente (backend/scripts/garage_bootstrap.py): layout del
+  # Job one-shot idempotente (legacy/backend/scripts/garage_bootstrap.py): layout del
   # nodo, chiave applicativa (NOCT_S3_ACCESS_KEY_ID/_SECRET_ACCESS_KEY, formato
   # Garage GK+24hex / 64hex) e bucket con alias globale. Va rieseguito solo se
   # cambiano bucket/chiave: `podman compose up -d garage-bootstrap`.
   garage-bootstrap:
     build:
-      context: ./backend
+      context: ./legacy/backend
     restart: "no"
     env_file: .env
     environment:
@@ -166,7 +166,7 @@ services:
 
   backend:
     build:
-      context: ./backend
+      context: ./legacy/backend
     restart: on-failure
     env_file: .env
     environment:
@@ -177,7 +177,7 @@ services:
       <<: *s3-env
       NOCT_MODERATION_SERVICE_URL: http://moderation:8100
       # invalidazione on-demand della cache del frontend dopo publish/update
-      # di contenuti pubblici (vedi backend/app/core/revalidation.py). Il
+      # di contenuti pubblici (vedi legacy/backend/app/core/revalidation.py). Il
       # frontend si raggiunge per nome servizio nella rete di compose.
       NOCT_FRONTEND_REVALIDATE_URL: http://frontend:3000/api/revalidate
       NOCT_REVALIDATE_SECRET: ${NOCT_REVALIDATE_SECRET:-dev-revalidate-secret}
@@ -197,7 +197,7 @@ services:
 
   worker-post-backup:
     build:
-      context: ./backend
+      context: ./legacy/backend
     restart: on-failure
     env_file: .env
     environment:
@@ -213,7 +213,7 @@ services:
 
   worker-email-otp:
     build:
-      context: ./backend
+      context: ./legacy/backend
     restart: on-failure
     env_file: .env
     environment:
@@ -239,7 +239,7 @@ services:
   # anche da postgres.
   worker-newsletter:
     build:
-      context: ./backend
+      context: ./legacy/backend
     restart: on-failure
     env_file: .env
     environment:
@@ -259,7 +259,7 @@ services:
 
   worker-audit-maintenance:
     build:
-      context: ./backend
+      context: ./legacy/backend
     restart: on-failure
     env_file: .env
     environment:
@@ -282,7 +282,7 @@ services:
   # realmente esterno e separato.
   worker-backup:
     build:
-      context: ./backend
+      context: ./legacy/backend
     restart: on-failure
     env_file: .env
     environment:

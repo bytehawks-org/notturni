@@ -179,7 +179,7 @@ delle specifiche di prodotto e il loro stato di avanzamento, vedi
   ATProto in prima battuta).
 
 Dettagli, esempi di richiesta/risposta e limitazioni note (SSO non testabile
-end-to-end senza credenziali reali) sono in [backend/API.md](backend/API.md). Per lo stato di
+end-to-end senza credenziali reali) sono in [legacy/backend/API.md](legacy/backend/API.md). Per lo stato di
 avanzamento di ogni funzionalità, incluse quelle ancora parziali o non
 iniziate, vedi [ROADMAP.md](ROADMAP.md).
 
@@ -205,7 +205,7 @@ In sintesi, ad alto livello (l'elenco completo, specifica per specifica, è in
 
 ```text
 .
-├── backend/            # API FastAPI
+├── legacy/backend/     # API FastAPI (POC Python, in dismissione)
 │   ├── app/
 │   │   ├── core/          # configurazione (env NOCT_*), DB, sicurezza, storage S3, broker
 │   │   ├── models/         # entità SQLAlchemy (User, Blog, Post, Category, Tag, Page, Comment, Follow, ...)
@@ -248,7 +248,7 @@ Servizi esposti:
 - Storage S3 (Garage): API <http://localhost:3900>, letture pubbliche <http://localhost:9000>
 
 Al primo avvio le migrazioni del database non vengono applicate automaticamente;
-vanno eseguite manualmente (vedi [backend/README.md](backend/README.md)):
+vanno eseguite manualmente (vedi [legacy/backend/README.md](legacy/backend/README.md)):
 
 ```bash
 podman exec -it <container-backend> alembic upgrade head
@@ -262,16 +262,16 @@ rispettivi README.
 ## Schema del database
 
 Lo schema (tabelle, tipi enum, vincoli) è versionato tramite le migrazioni
-Alembic in `backend/alembic/versions/`. Una copia SQL di sola lettura, utile per
+Alembic in `legacy/backend/alembic/versions/`. Una copia SQL di sola lettura, utile per
 consultazione rapida senza dover leggere Python, è in
-[backend/schema.sql](backend/schema.sql) — va rigenerata con
+[legacy/backend/schema.sql](legacy/backend/schema.sql) — va rigenerata con
 `alembic upgrade head --sql` ad ogni modifica dello schema, non modificata a mano.
 
 ## API e autenticazione
 
 Riferimento di tutti gli endpoint, i due meccanismi di autenticazione
 (sessione utente vs API token), formato del token e come ottenere il primo:
-[backend/API.md](backend/API.md).
+[legacy/backend/API.md](legacy/backend/API.md).
 
 ## Test
 
@@ -286,7 +286,7 @@ python -m pytest
 
 Serve solo Postgres raggiungibile (usa un database separato, `notturni_test`
 di default); lo storage S3 e RabbitMQ sono sostituiti da fake/mock nei test, non
-servono in esecuzione. Dettagli in [backend/README.md](backend/README.md#test).
+servono in esecuzione. Dettagli in [legacy/backend/README.md](legacy/backend/README.md#test).
 
 ## CI e sicurezza
 
@@ -317,7 +317,7 @@ vorrà imporre una soglia.
 
 ## Backend e frontend in locale (senza container)
 
-Vedi [backend/README.md](backend/README.md) e [frontend/README.md](frontend/README.md).
+Vedi [legacy/backend/README.md](legacy/backend/README.md) e [frontend/README.md](frontend/README.md).
 
 ## Kubernetes
 

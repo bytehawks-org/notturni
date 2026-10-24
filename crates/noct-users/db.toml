@@ -1,0 +1,18 @@
+[[enum]]
+name = "platform_role"
+values = ["super_admin", "amministratore", "moderatore", "utente"]
+
+[[table]]
+name = "users"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "username", type = "varchar(32)" },
+  { name = "email", type = "varchar(255)" },
+  { name = "platform_role", type = "enum:platform_role", default = "'utente'" },
+  { name = "is_active", type = "boolean", default = "true" },
+]
+uniques = [
+  { name = "uq_users_username", columns = ["username"] },
+  { name = "uq_users_email", columns = ["email"] },
+]

@@ -1,0 +1,21 @@
+[package]
+name = "noct-ctl"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+# moduli di sviluppo/riferimento compilati nel binario
+sandbox = ["noct-bundle/sandbox"]
+
+[dependencies]
+noct-core.workspace = true
+noct-manifest.workspace = true
+noct-migrate.workspace = true
+noct-bundle.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+tokio.workspace = true
+sqlx.workspace = true
+serde_json.workspace = true

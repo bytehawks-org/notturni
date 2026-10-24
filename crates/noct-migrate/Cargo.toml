@@ -1,0 +1,22 @@
+[package]
+name = "noct-migrate"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+default = ["apply"]
+# Esecuzione su Postgres. Disattivabile per usare solo diff/render (es. in build.rs).
+apply = ["dep:sqlx"]
+
+[dependencies]
+noct-manifest.workspace = true
+sha2.workspace = true
+hex.workspace = true
+thiserror.workspace = true
+sqlx = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio.workspace = true
+uuid.workspace = true

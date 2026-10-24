@@ -1,0 +1,103 @@
+[type.Note]
+id = "uuid"
+title = "string"
+body = { type = "string", nullable = true }
+kind = "enum:sandbox_note_kind"
+position = "int"
+
+[type.NoteCreate]
+title = { type = "string", max = 80, non_blank = true }
+body = { type = "string", nullable = true, optional = true }
+kind = { type = "enum:sandbox_note_kind", optional = true }
+position = { type = "int", min = 0, max = 1000, optional = true }
+
+[type.NoteUpdate]
+title = { type = "string", max = 80, non_blank = true, optional = true }
+body = { type = "string", nullable = true, optional = true }
+kind = { type = "enum:sandbox_note_kind", optional = true }
+position = { type = "int", min = 0, max = 1000, optional = true }
+
+[type.Echo]
+word = "string"
+greeting = "string"
+
+[[route]]
+id = "list_notes"
+method = "GET"
+path = "/blogs/{slug}/sandbox/notes"
+auth = "public"
+kind = "list"
+table = "sandbox_notes"
+scope = { blog = "slug" }
+order_by = ["position", "title"]
+response = "Note[]"
+
+[[route]]
+id = "get_note"
+method = "GET"
+path = "/blogs/{slug}/sandbox/notes/{note_id}"
+auth = "public"
+kind = "get"
+table = "sandbox_notes"
+scope = { blog = "slug" }
+key = { param = "note_id", column = "id" }
+response = "Note"
+not_found = "Nota non trovata."
+
+[[route]]
+id = "create_note"
+method = "POST"
+path = "/blogs/{slug}/sandbox/notes"
+auth = "blog_write"
+kind = "create"
+table = "sandbox_notes"
+scope = { blog = "slug" }
+request = "NoteCreate"
+response = "Note"
+conflict = [{ constraint = "uq_sandbox_note_title", status = 409, message = "Titolo già usato." }]
+
+[[route]]
+id = "update_note"
+method = "PATCH"
+path = "/blogs/{slug}/sandbox/notes/{note_id}"
+auth = "blog_write"
+kind = "update"
+table = "sandbox_notes"
+scope = { blog = "slug" }
+key = { param = "note_id", column = "id" }
+request = "NoteUpdate"
+response = "Note"
+not_found = "Nota non trovata."
+conflict = [{ constraint = "uq_sandbox_note_title", status = 409, message = "Titolo già usato." }]
+
+[[route]]
+id = "delete_note"
+method = "DELETE"
+path = "/blogs/{slug}/sandbox/notes/{note_id}"
+auth = "blog_write"
+kind = "delete"
+table = "sandbox_notes"
+scope = { blog = "slug" }
+key = { param = "note_id", column = "id" }
+not_found = "Nota non trovata."
+
+# handler scritto a mano, con rate limit e configurazione del modulo
+[[route]]
+id = "echo"
+method = "GET"
+path = "/sandbox/echo/{word}"
+auth = "user"
+kind = "custom"
+handler = "echo"
+response = "Echo"
+rate_limit = { key = "user", max = 3, window = "1m" }
+
+# riservata ai ruoli di piattaforma indicati
+[[route]]
+id = "admin_ping"
+method = "GET"
+path = "/sandbox/admin-ping"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "admin_ping"
+status = 204

@@ -36,7 +36,7 @@ resources:
 # file di questa directory (il suffisso hash nel nome fa ripartire i pod al
 # cambio di contenuto). Copie di ../garage/garage.toml e
 # ../s3-public/default.conf.template (kustomize non legge fuori da questa
-# directory): tenere allineate — backend/tests/test_deploy_configs.py lo verifica.
+# directory): tenere allineate — legacy/backend/tests/test_deploy_configs.py lo verifica.
 configMapGenerator:
   - name: garage-config
     files:

@@ -1,0 +1,34 @@
+[[enum]]
+name = "blog_visibility"
+values = ["public", "members", "private"]
+
+[[enum]]
+name = "blog_role"
+values = ["autore", "co_autore", "revisore", "mediatore"]
+
+[[table]]
+name = "blogs"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "slug", type = "varchar(63)" },
+  { name = "title", type = "varchar(255)" },
+  { name = "owner_id", type = "uuid", ref = "users.id" },
+  { name = "visibility", type = "enum:blog_visibility", default = "'public'" },
+  { name = "is_suspended", type = "boolean", default = "false" },
+  { name = "is_paused", type = "boolean", default = "false" },
+  { name = "deleted_at", type = "timestamptz", null = true },
+]
+uniques = [{ name = "uq_blogs_slug", columns = ["slug"] }]
+indexes = [{ columns = ["owner_id"] }]
+
+[[table]]
+name = "blog_memberships"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "blog_id", type = "uuid", ref = "blogs.id", on_delete = "cascade" },
+  { name = "user_id", type = "uuid", ref = "users.id", on_delete = "cascade" },
+  { name = "role", type = "enum:blog_role", default = "'autore'" },
+]
+uniques = [{ name = "uq_membership_blog_user", columns = ["blog_id", "user_id"] }]

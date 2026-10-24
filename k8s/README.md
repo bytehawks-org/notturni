@@ -145,7 +145,7 @@ build, non a runtime — vedi nota più sotto).
 - Lo storage a oggetti è **Garage** (`garage.yaml`, nodo singolo, config in
   `garage.toml`). Un Garage appena avviato non è utilizzabile (nessun layout,
   nessuna chiave): l'initContainer `garage-bootstrap` di `backend.yaml`
-  (`backend/scripts/garage_bootstrap.py`, idempotente) assegna il nodo al
+  (`legacy/backend/scripts/garage_bootstrap.py`, idempotente) assegna il nodo al
   layout, importa la chiave applicativa e crea i bucket con alias globale.
   La chiave deve avere il formato Garage: `NOCT_S3_ACCESS_KEY_ID` (in
   `configmap.yaml`) = `GK` + 24 hex, `NOCT_S3_SECRET_ACCESS_KEY` (in
@@ -160,7 +160,7 @@ build, non a runtime — vedi nota più sotto).
   e archivi di audit restano irraggiungibili). `garage.toml` e
   `s3-public.conf.template` sono copie di `garage/garage.toml` e
   `s3-public/default.conf.template` (usati da `compose.yaml`; kustomize non
-  legge fuori da questa directory): `backend/tests/test_deploy_configs.py`
+  legge fuori da questa directory): `legacy/backend/tests/test_deploy_configs.py`
   verifica che non divergano.
 - `ingressroute-s3.yaml` (`IngressRoute` Traefik) espone il solo proxy
   `s3-public` sull'host configurato in `NOCT_S3_PUBLIC_URL` (`configmap.yaml`,
@@ -170,7 +170,7 @@ build, non a runtime — vedi nota più sotto).
   produzione: upload riuscito ma media irraggiungibili). Le scritture
   restano dietro le credenziali `NOCT_S3_ACCESS_KEY_ID`/`_SECRET_ACCESS_KEY`,
   solo server-side. `s3` è anche in `RESERVED_SUBDOMAINS`/`RESERVED_BLOG_SLUGS`
-  (`frontend/src/proxy.ts`, `backend/app/domain/blog_rules.py`): un utente
+  (`frontend/src/proxy.ts`, `legacy/backend/app/domain/blog_rules.py`): un utente
   non può registrare un blog con quello slug.
 - Il backend di storage alternativo (`NOCT_STORAGE_BACKEND=localstorage`,
   vedi [ROADMAP.md](../ROADMAP.md#3-architettura-stack-e-infrastruttura)) non

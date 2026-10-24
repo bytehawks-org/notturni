@@ -1,0 +1,108 @@
+{
+  "enums": [
+    {
+      "name": "sandbox_note_kind",
+      "values": [
+        "note",
+        "todo"
+      ]
+    }
+  ],
+  "tables": [
+    {
+      "name": "sandbox_notes",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "null": false,
+          "default": "gen_random_uuid()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "blog_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "blogs",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "title",
+          "type": "varchar(80)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "body",
+          "type": "text",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "kind",
+          "type": "enum:sandbox_note_kind",
+          "null": false,
+          "default": "'note'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "position",
+          "type": "integer",
+          "null": false,
+          "default": "0",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "ix_sandbox_notes_blog_id_position",
+          "columns": [
+            "blog_id",
+            "position"
+          ],
+          "unique": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "uq_sandbox_note_title",
+          "columns": [
+            "blog_id",
+            "title"
+          ]
+        }
+      ]
+    }
+  ]
+}
