@@ -24,7 +24,7 @@ import { formatDate, readingMinutes } from "@/lib/format";
 import { languageName } from "@/lib/languages";
 import { excerpt, renderPost } from "@/lib/markdown";
 import { getPublicBacklinks, getPublicBlog, getPublicOutline, getPublicBlogConfig, getPublicPostByPermalink, getPublicPostTranslations, getPublicPublication, getPublicPublications } from "@/lib/server-api";
-import { SITE_URL } from "@/lib/site";
+import { siteUrl } from "@/lib/site";
 import { blogLinks } from "@/lib/blog-path";
 import { ancestorsOf, neighbours } from "@/lib/outline-tree";
 import { effectiveDisplayMode } from "@/lib/space-mode";
@@ -117,12 +117,12 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
     "@type": "BlogPosting",
     headline: post.title,
     description: excerpt(post.content),
-    url: `${SITE_URL}${post.permalink}`,
-    mainEntityOfPage: `${SITE_URL}${post.permalink}`,
+    url: `${siteUrl()}${post.permalink}`,
+    mainEntityOfPage: `${siteUrl()}${post.permalink}`,
     datePublished: post.published_at ?? undefined,
     inLanguage: post.locale,
     author: { "@type": "Person", name: post.author_display_name },
-    isPartOf: { "@type": "Blog", name: blogTitle, url: `${SITE_URL}/${blogSlug}` },
+    isPartOf: { "@type": "Blog", name: blogTitle, url: `${siteUrl()}/${blogSlug}` },
     ...(post.cover_image_url && !post.cover_image_is_sensitive ? { image: post.cover_image_url } : {}),
   };
 

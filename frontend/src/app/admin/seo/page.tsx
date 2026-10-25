@@ -13,7 +13,7 @@ import { useToast } from "@/components/ui/Toast";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { LOCALES, LOCALE_NAMES, isLocale } from "@/i18n/config";
-import { SITE_URL } from "@/lib/site";
+import { DEFAULT_SITE_NAME, siteUrl } from "@/lib/site";
 import type { SeoAdmin, SeoLocaleText } from "@/lib/types";
 
 const TITLE_HINT = 60;
@@ -188,7 +188,7 @@ export default function AdminSeoPage() {
   const iconPreviews = Object.entries(data.branding.icons)
     .sort((a, b) => Number(a[0]) - Number(b[0]))
     .map(([side, url]) => ({ label: `${side}×${side}`, url }));
-  const host = new URL(SITE_URL).host;
+  const host = new URL(siteUrl()).host;
 
   return (
     <form onSubmit={save} className="flex max-w-3xl flex-col gap-6">
@@ -206,7 +206,7 @@ export default function AdminSeoPage() {
             <Label htmlFor="seo-site-name" hint={t("siteNameHint")}>
               {t("siteName")}
             </Label>
-            <Input id="seo-site-name" maxLength={100} placeholder="Notturni" value={siteName} onChange={(e) => setSiteName(e.target.value)} />
+            <Input id="seo-site-name" maxLength={100} placeholder={DEFAULT_SITE_NAME} value={siteName} onChange={(e) => setSiteName(e.target.value)} />
           </FieldGroup>
           <ImageSlot
             title={t("iconTitle")}
@@ -291,7 +291,7 @@ export default function AdminSeoPage() {
         </FieldGroup>
         <div className="rounded-lg border border-border bg-background px-4 py-3" aria-label={t("snippet")}>
           <p className="text-[12px] text-muted">{host}</p>
-          <p className="text-lg leading-snug text-primary">{current.title || siteName || "Notturni"}</p>
+          <p className="text-lg leading-snug text-primary">{current.title || siteName || DEFAULT_SITE_NAME}</p>
           <p className="text-[13px] text-muted">{current.description || t("noDescription")}</p>
         </div>
       </Card>
@@ -356,15 +356,15 @@ export default function AdminSeoPage() {
         <dl className="grid gap-x-4 gap-y-2 text-[13px] sm:grid-cols-[170px_minmax(0,1fr)]">
           <dt className="text-muted">{t("sitemapGlobal")}</dt>
           <dd className="break-all font-mono text-xs">
-            <a href={`${SITE_URL}/sitemap.xml`} target="_blank" rel="noreferrer" className="text-primary no-underline hover:underline">{`${SITE_URL}/sitemap.xml`}</a>
+            <a href={`${siteUrl()}/sitemap.xml`} target="_blank" rel="noreferrer" className="text-primary no-underline hover:underline">{`${siteUrl()}/sitemap.xml`}</a>
           </dd>
           <dt className="text-muted">{t("sitemapSpace")}</dt>
-          <dd className="break-all font-mono text-xs">{`${SITE_URL}/{slug}/sitemap.xml`}</dd>
+          <dd className="break-all font-mono text-xs">{`${siteUrl()}/{slug}/sitemap.xml`}</dd>
           <dt className="text-muted">{t("sitemapSubdomain")}</dt>
           <dd className="break-all font-mono text-xs">{`https://{slug}.${host}/sitemap.xml`}</dd>
           <dt className="text-muted">robots.txt</dt>
           <dd className="break-all font-mono text-xs">
-            <a href={`${SITE_URL}/robots.txt`} target="_blank" rel="noreferrer" className="text-primary no-underline hover:underline">{`${SITE_URL}/robots.txt`}</a>
+            <a href={`${siteUrl()}/robots.txt`} target="_blank" rel="noreferrer" className="text-primary no-underline hover:underline">{`${siteUrl()}/robots.txt`}</a>
           </dd>
         </dl>
       </Card>

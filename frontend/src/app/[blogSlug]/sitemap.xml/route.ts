@@ -1,6 +1,6 @@
 import { getSpaceSitemap } from "@/lib/server-api";
 import { urlsetXml, xmlResponse } from "@/lib/sitemap-xml";
-import { SITE_URL } from "@/lib/site";
+import { siteUrl } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
@@ -10,5 +10,5 @@ export async function GET(_req: Request, { params }: { params: Promise<{ blogSlu
   const { blogSlug } = await params;
   const sitemap = await getSpaceSitemap(blogSlug);
   if (!sitemap) return new Response("Not found", { status: 404 });
-  return xmlResponse(urlsetXml(sitemap.entries, SITE_URL));
+  return xmlResponse(urlsetXml(sitemap.entries, siteUrl()));
 }

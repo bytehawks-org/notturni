@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import Image from "next/image";
 import Link from "next/link";
 
-import { SITE_HOST } from "@/lib/site";
+import { siteHost } from "@/lib/site";
 import type { Blog } from "@/lib/types";
 
 const hue = (s: string) => `oklch(0.55 0.06 ${[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % 360})`;
@@ -40,7 +40,7 @@ export function BlogDirectoryGridClient({ blogs }: { blogs: Blog[] }) {
                 {b.title}
               </Link>
               <span className="font-mono text-xs text-muted">
-                {b.slug}.{SITE_HOST}
+                {b.slug}.{siteHost()}
               </span>
             </div>
           </div>

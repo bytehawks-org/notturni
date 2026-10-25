@@ -62,15 +62,10 @@ jobs:
           - name: frontend
             context: ./frontend
             file: ./frontend/Dockerfile
-            # NEXT_PUBLIC_* è inglobato nel bundle in fase di build, non
-            # letto a runtime (vedi frontend/Dockerfile, k8s/README.md): i
-            # valori qui sono quelli di produzione, sovrascrivibili senza
-            # toccare questo file impostando le repository/organization
-            # variable NEXT_PUBLIC_API_URL/NEXT_PUBLIC_SITE_URL (Settings ->
-            # Secrets and variables -> Actions -> Variables).
-            build-args: |
-              NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'https://notturni.eu' }}
-              NEXT_PUBLIC_SITE_URL=${{ vars.NEXT_PUBLIC_SITE_URL || 'https://notturni.eu' }}
+            # Nessun build-arg: URL del sito/API e nome si risolvono a runtime
+            # dalle env del container (NOCT_*, vedi frontend/src/lib/site.ts),
+            # così la stessa immagine serve qualunque dominio.
+            build-args: ""
           - name: moderation
             context: ./moderation
             file: ./moderation/Dockerfile

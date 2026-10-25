@@ -117,9 +117,8 @@ aggiornare i tre `newTag`/eventualmente `newName` in `kustomization.yaml`
 di conseguenza, poi in `configmap.yaml` sostituire
 `NOCT_CORS_ORIGINS`/`NOCT_OAUTH_REDIRECT_BASE_URL` con l'indirizzo davvero
 raggiungibile (es. `http://<ip-nodo>`, vedi i commenti accanto a quelle
-variabili) — e ricostruire l'immagine frontend con
-`--build-arg NEXT_PUBLIC_API_URL=http://<ip-nodo>` (letto solo in fase di
-build, non a runtime — vedi nota più sotto).
+variabili) — e impostare `NOCT_SITE_URL=http://<ip-nodo>` (letto a runtime, nessun
+rebuild — vedi nota più sotto).
 
 ## Note
 
@@ -194,15 +193,10 @@ build, non a runtime — vedi nota più sotto).
   è cablato in questi manifest: richiederebbe un volume dedicato sul
   Deployment del backend e non è comunque pensato per repliche multiple
   (filesystem non condiviso tra pod).
-- `NEXT_PUBLIC_API_URL` (frontend) viene inglobato nel bundle in fase di
-  build dell'immagine (`docker build --build-arg NEXT_PUBLIC_API_URL=...`),
-  non letto a runtime: non basta un env/ConfigMap sul Deployment, l'immagine
-  va ricostruita con l'URL pubblico reale dell'API prima del deploy. Stesso
-  discorso per `NEXT_PUBLIC_SITE_URL` (SEO: `metadataBase`/canonical/
-  `sitemap.xml`/`robots.txt`, `frontend/src/lib/site.ts`) — va ricostruita con
-  il dominio pubblico reale del sito (es. `https://notturni.eu`), non
-  `localhost`, altrimenti canonical/sitemap/robots puntano tutti all'host
-  sbagliato.
+- URL del sito, URL dell'API e nome della piattaforma del frontend sono letti **a runtime** dal ConfigMap
+  (`NOCT_INSTANCE_FQDN`/`NOCT_SITE_URL`, `NOCT_API_PUBLIC_URL`, `NOCT_SITE_NAME`, `frontend/src/lib/site.ts`):
+  la stessa immagine serve qualunque dominio, cambiarli richiede solo un restart del Deployment `frontend`.
+  Le `NEXT_PUBLIC_*` sono solo un fallback per lo sviluppo locale.
 - `worker.yaml` (Deployment, 2 repliche, nessun `Service`): `noct-worker`, che esegue relay
   dell'outbox, pianificatore dei job periodici e consumer di eventi e job di **tutti** i moduli
   attivi (email di MFA e di reset, conferme e invio della newsletter, copia dei post, ...). Sostituisce

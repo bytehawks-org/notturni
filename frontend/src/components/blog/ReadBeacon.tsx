@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-import { API_URL } from "@/lib/api";
+import { apiUrl } from "@/lib/site";
 
 const READ_DELAY_MS = 8000;
 
@@ -13,7 +13,7 @@ const READ_DELAY_MS = 8000;
 export function ReadBeacon({ postId }: { postId: string }) {
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      const url = `${API_URL}/api/v1/posts/${postId}/read`;
+      const url = `${apiUrl()}/api/v1/posts/${postId}/read`;
       try {
         if (!navigator.sendBeacon || !navigator.sendBeacon(url)) {
           void fetch(url, { method: "POST", keepalive: true }).catch(() => undefined);

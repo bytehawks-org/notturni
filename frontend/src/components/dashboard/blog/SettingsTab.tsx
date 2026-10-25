@@ -16,7 +16,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { formatDate } from "@/lib/format";
 import { languageName } from "@/lib/languages";
-import { SITE_HOST } from "@/lib/site";
+import { siteHost } from "@/lib/site";
 import { useExperimentalFeatures } from "@/lib/experimental";
 import { effectiveDisplayMode } from "@/lib/space-mode";
 import type { Blog, BlogMember, BlogVisibility, Category, CommentsMode, SpaceDisplayMode } from "@/lib/types";
@@ -180,7 +180,7 @@ export function SettingsTab({ blog, canEdit, onUpdated }: { blog: Blog; canEdit:
                 {t("slug")}
               </Label>
               <span className="flex items-center gap-1 rounded-lg border border-border bg-surface px-3 py-2.5 font-mono text-[13px] text-muted">
-                <span className="text-foreground">{blog.slug}</span>.{SITE_HOST}
+                <span className="text-foreground">{blog.slug}</span>.{siteHost()}
               </span>
             </FieldGroup>
             <FieldGroup className="mb-0">
@@ -360,7 +360,7 @@ export function SettingsTab({ blog, canEdit, onUpdated }: { blog: Blog; canEdit:
             <Label htmlFor="blog-domain">{t("customDomain")}</Label>
             <Input id="blog-domain" disabled value={blog.custom_domain ?? ""} placeholder={`${blog.slug}.example.eu`} />
           </FieldGroup>
-          <span className="text-[13px] text-muted">{t("domainNote", { host: `${blog.slug}.${SITE_HOST}` })}</span>
+          <span className="text-[13px] text-muted">{t("domainNote", { host: `${blog.slug}.${siteHost()}` })}</span>
         </section>
 
         {canEdit && (

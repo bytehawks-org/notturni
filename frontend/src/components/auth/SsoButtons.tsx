@@ -1,6 +1,6 @@
 import { useTranslations } from "next-intl";
 
-import { API_URL } from "@/lib/api";
+import { apiUrl } from "@/lib/site";
 
 const PROVIDER_LABELS: Record<string, string> = {
   google: "Google",
@@ -31,7 +31,7 @@ export function SsoButtons({ providers }: { providers: string[] }) {
         {providers.map((provider) => (
           <a
             key={provider}
-            href={`${API_URL}/api/v1/auth/sso/${provider}/login`}
+            href={`${apiUrl()}/api/v1/auth/sso/${provider}/login`}
             className="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-3.5 py-2 text-sm font-medium text-foreground no-underline transition hover:bg-foreground/5"
           >
             {t("ssoContinueWith", { provider: PROVIDER_LABELS[provider] ?? provider })}

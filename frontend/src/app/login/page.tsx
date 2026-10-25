@@ -1,5 +1,6 @@
 "use client";
 
+import { useSiteName } from "@/components/SiteConfigProvider";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -25,6 +26,7 @@ export default function LoginPage() {
 }
 
 function LoginForm() {
+  const siteName = useSiteName();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login, verifyMfa } = useAuth();
@@ -111,7 +113,7 @@ function LoginForm() {
     <main className="flex flex-1 items-center justify-center px-6 py-16">
       <div className="w-full max-w-sm">
         <Link href="/" className="font-serif text-2xl font-semibold text-foreground no-underline">
-          Notturni
+          {siteName}
         </Link>
 
         {!challenge ? (

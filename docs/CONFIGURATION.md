@@ -17,7 +17,7 @@ in `k8s/configmap.yaml` (valori non sensibili) e `k8s/secret.yaml` (segreti).
 
 | Variabile | Ambito | Default | Obbligatoria | Descrizione | Esempio |
 |---|---|---|---|---|---|
-| `NOCT_INSTANCE_FQDN` | core | `notturni.eu` | no | Dominio pubblico: base dei link nelle email e degli identificatori di federazione, dominio email del sigillo di verifica, e dominio con cui la mappa dei collegamenti riconosce i link interni tra post (deve coincidere con `NEXT_PUBLIC_SITE_URL`). | `notturni.example.com` |
+| `NOCT_INSTANCE_FQDN` | core | `notturni.eu` | no | Dominio pubblico: base dei link nelle email e degli identificatori di federazione, dominio email del sigillo di verifica, e dominio con cui la mappa dei collegamenti riconosce i link interni tra post (deve coincidere con `NOCT_SITE_URL`). | `notturni.example.com` |
 | `NOCT_SITE_SLUG` | core | `notturni` | no | Namespace dei path su S3: evita collisioni tra più installazioni sullo stesso bucket. Solo minuscole, cifre, `-`. | `staging` |
 | `NOCT_DEPLOYMENT_MODE` | auth | `platform` | no | `platform` = multiutente; `solo` = un solo proprietario, il primo utente diventa Super Admin e la registrazione si chiude. | `solo` |
 | `NOCT_REGISTRATION_MODE` | auth | `open` | no | Valore **iniziale** (prima installazione) di `platform_config`: `open` · `invite` · `closed`. Poi si cambia da `/admin/config`. | `invite` |
@@ -59,8 +59,10 @@ in `k8s/configmap.yaml` (valori non sensibili) e `k8s/secret.yaml` (segreti).
 | `NOCT_FRONTEND_REVALIDATE_URL` | core | — | no | Invalidazione on-demand della cache SSR dopo una modifica a contenuti pubblici. Vuoto = solo cache a tempo. | `http://frontend:3000/api/revalidate` |
 | `NOCT_REVALIDATE_SECRET` | core + frontend | — | no | **Segreto.** Deve coincidere tra backend e frontend. | `openssl rand -base64 32` |
 | `NOCT_BACKEND_INTERNAL_URL` | frontend | `NEXT_PUBLIC_API_URL`, poi `http://localhost:8000` | consigliata | URL interno del backend usato dal rendering lato server (evita di uscire dalla rete del cluster). | `http://backend:8000` |
-| `NEXT_PUBLIC_API_URL` | frontend | `http://localhost:8000` | sì in produzione (build) | URL pubblico dell'API usato dal browser (incorporato nel build). | `https://api.example.com` |
-| `NEXT_PUBLIC_SITE_URL` | frontend | `http://localhost:3000` | sì in produzione (build) | URL pubblico del sito (link canonici, sitemap). | `https://notturni.example.com` |
+| `NOCT_SITE_NAME` | frontend | `Notturni` | no | Nome della piattaforma in header, login, dashboard, titoli, feed, manifest e testi dell'interfaccia. Il nome impostato in `/admin/seo` ha la precedenza. Letto a runtime. | `Blue Inks` |
+| `NOCT_SITE_URL` | frontend | `https://$NOCT_INSTANCE_FQDN` se `NOCT_APP_ENV=production`, poi `NEXT_PUBLIC_SITE_URL`, poi `http://localhost:3000` | no | URL pubblico del sito (canonical, sitemap, sottodomini dei blog, CSP). Letto a runtime. | `https://notturni.example.com` |
+| `NOCT_API_PUBLIC_URL` | frontend | `NEXT_PUBLIC_API_URL`, poi l'URL del sito | no | URL dell'API usato dal browser. Vuoto = stessa origine del sito (l'Ingress instrada `/api` al backend). Letto a runtime. | `https://api.example.com` |
+| `NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_SITE_URL` | frontend | vuoti | no | Solo fallback per lo sviluppo locale (build-arg, incorporati nel bundle; `compose.yaml` li imposta). In produzione usare le `NOCT_*` sopra: non servono rebuild per cambiare dominio. | `http://localhost:8000` |
 
 ## Database
 

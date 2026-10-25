@@ -88,8 +88,7 @@ import type {
   SessionResponse,
   SocialLink,
 } from "./types";
-
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { apiUrl } from "./site";
 
 export class ApiClientError extends Error {
   status: number;
@@ -136,7 +135,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     body = JSON.stringify(options.body);
   }
 
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${apiUrl()}${path}`, {
     method: options.method ?? "GET",
     headers,
     body,
@@ -320,7 +319,7 @@ export const api = {
       request<Blog>(`/api/v1/blogs/${slug}`, { method: "DELETE", token, body: { confirm_slug: confirmSlug } }),
     restore: (token: string, slug: string) => request<Blog>(`/api/v1/blogs/${slug}/restore`, { method: "POST", token }),
     /** URL dell'export ZIP (solo proprietario): scaricato con fetch + blob, vedi SettingsTab. */
-    exportUrl: (slug: string) => `${API_URL}/api/v1/blogs/${slug}/export`,
+    exportUrl: (slug: string) => `${apiUrl()}/api/v1/blogs/${slug}/export`,
     /** Immagine da incorporare nel contenuto o da usare come cover di un post.
      * `is_sensitive`: risultato della moderazione automatica (nudità/contenuti
      * sensibili) fatta lato backend al momento dell'upload — vedi API.md. */
@@ -381,7 +380,7 @@ export const api = {
       request<BlogNote>(`/api/v1/blogs/${slug}/notes/${noteId}/merge`, { method: "POST", token, body: { into_id: intoId } }),
     importNotes: (token: string, slug: string, bibtex: string) =>
       request<BlogNote[]>(`/api/v1/blogs/${slug}/notes/import`, { method: "POST", token, body: { bibtex } }),
-    notesExportUrl: (slug: string) => `${API_URL}/api/v1/blogs/${slug}/notes/export.bib`,
+    notesExportUrl: (slug: string) => `${apiUrl()}/api/v1/blogs/${slug}/notes/export.bib`,
     /** B7: libreria media (proprietario e collaboratori). */
     mediaLibrary: (token: string, slug: string) => request<MediaLibrary>(`/api/v1/blogs/${slug}/media`, { token }),
     syncMediaLibrary: (token: string, slug: string) => request<MediaLibrary>(`/api/v1/blogs/${slug}/media/sync`, { method: "POST", token }),

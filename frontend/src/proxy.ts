@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SITE_HOST, SITE_URL } from "@/lib/site";
-
-/** Stesso fallback di lib/api.ts::API_URL — non importato da lì per non
- * tirarsi dietro l'intero client API (tipi + funzioni) in un modulo che
- * gira ad ogni richiesta. */
-const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
+import { apiUrl, siteHost, siteUrl } from "@/lib/site";
 
 /** Origini per connect-src, derivate dagli URL reali configurati invece che
  * hardcodate su un dominio fisso — altrimenti il dev locale (frontend su
@@ -12,9 +7,9 @@ const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").rep
  * dalla stessa CSP pensata per la produzione. Il wildcard sui sottodomini
  * serve alle pagine blog (`{slug}.{host}`) che chiamano l'API sull'apex. */
 function connectSrcOrigins(): string {
-  const site = new URL(SITE_URL);
-  const api = new URL(API_URL);
-  const origins = new Set([`${site.protocol}//${site.host}`, `${site.protocol}//*.${SITE_HOST}`, `${api.protocol}//${api.host}`]);
+  const site = new URL(siteUrl());
+  const api = new URL(apiUrl());
+  const origins = new Set([`${site.protocol}//${site.host}`, `${site.protocol}//*.${siteHost()}`, `${api.protocol}//${api.host}`]);
   return Array.from(origins).join(" ");
 }
 
@@ -126,11 +121,11 @@ export function proxy(request: NextRequest) {
     return response;
   };
 
-  if (hostname === SITE_HOST || !hostname.endsWith(`.${SITE_HOST}`)) {
+  if (hostname === siteHost() || !hostname.endsWith(`.${siteHost()}`)) {
     return withCsp(NextResponse.next({ request: { headers: requestHeaders } }));
   }
 
-  const subdomain = hostname.slice(0, -(SITE_HOST.length + 1));
+  const subdomain = hostname.slice(0, -(siteHost().length + 1));
   // Un'etichetta con un punto (es. un sottodominio "annidato" inatteso) o
   // riservata non va mai interpretata come slug di un blog.
   if (!subdomain || subdomain.includes(".") || RESERVED_SUBDOMAINS.has(subdomain)) {

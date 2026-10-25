@@ -2249,7 +2249,7 @@ tabella propria, nessun database a grafo: vedi ROADMAP).
 - **Archi**: `in` (post → Spazio), `tag`, `category` e `link` (post → post, con `via` = `url` per un link nel testo che punta a un
   post del sito, in forma `https://{fqdn}/{blog}/{post}`, `https://{blog}.{fqdn}/{post}` o `/{blog}/{post}`, oppure `wiki` per un
   `[[pagina]]` dello stesso Spazio). Il dominio dei link interni è `NOCT_INSTANCE_FQDN`: deve coincidere con quello
-  pubblico (e con `NEXT_PUBLIC_SITE_URL`, che l'editor usa per i link inseriti dalla ricerca). Link duplicati, verso se stessi, esterni o verso post fuori dall'insieme sono scartati.
+  pubblico (e con `NOCT_SITE_URL`, che l'editor usa per i link inseriti dalla ricerca). Link duplicati, verso se stessi, esterni o verso post fuori dall'insieme sono scartati.
 - **Cosa si vede**: con `scope=mine` (predefinito) i post dei propri Spazi (proprietario o membro), solo pubblicati; `drafts=true`
   aggiunge bozze e post in revisione. Con `scope=platform` (solo `amministratore`/`super_admin`, altrimenti `403`) tutto ciò che è
   pubblico e visibile negli elenchi (mai bozze, Spazi privati, sospesi o in pausa).

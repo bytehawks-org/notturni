@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/Button";
 import { FieldGroup, Input, Label } from "@/components/ui/Field";
 import { api } from "@/lib/api";
-import { SITE_URL } from "@/lib/site";
+import { siteUrl } from "@/lib/site";
 
 export interface LinkModalValue {
   url: string;
@@ -46,7 +46,7 @@ const DEBOUNCE_MS = 250;
 
 /** Modal «Link», stesso stile di `NoteModal`/`ContentWarningModal` (overlay centrato). Oltre all'URL ha il testo
  * da mostrare (se vuoto si mostra l'URL) e una ricerca nella piattaforma — post, spazi, utenti — per collegare
- * un contenuto esistente senza incollarne l'indirizzo. I link ai contenuti sono assoluti (`SITE_URL`), così
+ * un contenuto esistente senza incollarne l'indirizzo. I link ai contenuti sono assoluti (`siteUrl()`), così
  * funzionano anche nelle email, negli export e nei repository sincronizzati. */
 export function LinkModal({ initial, editing, onSave, onRemove, onClose }: LinkModalProps) {
   const t = useTranslations("RichTextEditor");
@@ -69,10 +69,10 @@ export function LinkModal({ initial, editing, onSave, onRemove, onClose }: LinkM
           const out: Hit[] = [];
           if (posts.status === "fulfilled")
             for (const p of posts.value)
-              out.push({ kind: "post", key: `p${p.id}`, title: p.title, meta: p.blog_slug, url: `${SITE_URL}${p.permalink}` });
+              out.push({ kind: "post", key: `p${p.id}`, title: p.title, meta: p.blog_slug, url: `${siteUrl()}${p.permalink}` });
           if (blogs.status === "fulfilled")
             for (const b of blogs.value)
-              out.push({ kind: "blog", key: `b${b.slug}`, title: b.title, meta: b.slug, url: `${SITE_URL}/${b.slug}` });
+              out.push({ kind: "blog", key: `b${b.slug}`, title: b.title, meta: b.slug, url: `${siteUrl()}/${b.slug}` });
           if (users.status === "fulfilled")
             for (const u of users.value)
               out.push({
@@ -80,7 +80,7 @@ export function LinkModal({ initial, editing, onSave, onRemove, onClose }: LinkM
                 key: `u${u.username}`,
                 title: u.display_name || u.username,
                 meta: `@${u.username}`,
-                url: `${SITE_URL}/u/${u.username}`,
+                url: `${siteUrl()}/u/${u.username}`,
               });
           setHits(out);
         })

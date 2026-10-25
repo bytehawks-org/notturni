@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/shell/SiteFooter";
-import { API_URL } from "@/lib/api";
+import { apiUrl } from "@/lib/site";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("NewsletterConfirmPage");
@@ -26,7 +26,7 @@ export default async function NewsletterConfirmPage({
   let status: "confirmed" | "already_confirmed" | "invalid" = "invalid";
   if (token) {
     try {
-      const res = await fetch(`${API_URL}/api/v1/newsletter/confirm?token=${encodeURIComponent(token)}`, {
+      const res = await fetch(`${apiUrl()}/api/v1/newsletter/confirm?token=${encodeURIComponent(token)}`, {
         cache: "no-store",
       });
       if (res.ok) {

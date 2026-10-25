@@ -1,5 +1,5 @@
 import { getCrawlDirectives, getSpaceSitemap } from "@/lib/server-api";
-import { SITE_URL } from "@/lib/site";
+import { siteUrl } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +26,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ blogSlu
   group("*", search);
   const ai = sitemap ? forSubdomain(directives.ai_disallow, blogSlug) : ["/"];
   if (ai.length > 0) for (const agent of directives.ai_user_agents) group(agent, ai);
-  if (sitemap) lines.push(`Sitemap: ${SITE_URL}/${blogSlug}/sitemap.xml`);
+  if (sitemap) lines.push(`Sitemap: ${siteUrl()}/${blogSlug}/sitemap.xml`);
   return new Response(`${lines.join("\n").trim()}\n`, {
     headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "public, max-age=0, s-maxage=3600" },
   });

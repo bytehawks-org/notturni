@@ -13,7 +13,7 @@ import { NewsletterSignup } from "@/components/NewsletterSignup";
 import { SensitiveImage } from "@/components/blog/SensitiveImage";
 import { BlogHeader } from "@/components/shell/BlogHeader";
 import { FilterChip } from "@/components/ui/Pill";
-import { SITE_HOST } from "@/lib/site";
+import { siteHost } from "@/lib/site";
 import { blogLinks } from "@/lib/blog-path";
 import { childrenOf } from "@/lib/outline-tree";
 import { effectiveDisplayMode } from "@/lib/space-mode";
@@ -162,7 +162,7 @@ export default async function BlogHomePage({
             {blog.subtitle && <p className="text-lg text-muted md:text-xl">{blog.subtitle}</p>}
             {blog.description && <p className="max-w-[680px] text-[15px] leading-relaxed text-foreground/80">{blog.description}</p>}
             <span className="font-mono text-xs text-muted">
-              {blog.slug}.{SITE_HOST}
+              {blog.slug}.{siteHost()}
             </span>
           </div>
         </header>

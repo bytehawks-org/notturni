@@ -1,6 +1,6 @@
 import { getSitemapPage } from "@/lib/server-api";
 import { SITEMAP_CHUNK, urlsetXml, xmlResponse } from "@/lib/sitemap-xml";
-import { SITE_URL } from "@/lib/site";
+import { siteUrl } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
@@ -13,5 +13,5 @@ export async function GET(_req: Request, { params }: { params: Promise<{ file: s
   const page = await getSitemapPage(index * SITEMAP_CHUNK, SITEMAP_CHUNK);
   if (!page) return new Response("Sitemap non disponibile", { status: 503 });
   if (page.entries.length === 0) return new Response("Not found", { status: 404 });
-  return xmlResponse(urlsetXml(page.entries, SITE_URL));
+  return xmlResponse(urlsetXml(page.entries, siteUrl()));
 }

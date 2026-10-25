@@ -1,7 +1,7 @@
 import "server-only";
 
 import { excerpt } from "./markdown";
-import { SITE_URL } from "./site";
+import { siteUrl } from "./site";
 import type { Post } from "./types";
 
 /** RSS 2.0 / Atom 1.0 (richiesta esplicita): feed di piattaforma
@@ -49,9 +49,9 @@ export interface FeedItem {
 export function postToFeedItem(post: Post): FeedItem {
   return {
     title: post.title,
-    link: `${SITE_URL}${post.permalink}`,
+    link: `${siteUrl()}${post.permalink}`,
     description: excerpt(post.content, FEED_ITEM_LIMIT_CHARS),
-    guid: `${SITE_URL}${post.permalink}`,
+    guid: `${siteUrl()}${post.permalink}`,
     pubDate: post.published_at,
     author: post.author_display_name,
   };

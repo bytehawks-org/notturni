@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/Button";
 import { SkeletonRows } from "@/components/ui/States";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { SITE_HOST } from "@/lib/site";
+import { siteHost } from "@/lib/site";
 import { type Blog, type BlogRole } from "@/lib/types";
 
 type Tab = "overview" | "posts" | "outline" | "pages" | "publications" | "notes" | "media" | "newsletter" | "comments" | "appearance" | "git" | "collaborators" | "settings";
@@ -108,7 +108,7 @@ export default function BlogDetailPage() {
           <h1 className="truncate font-serif text-[28px] font-medium leading-tight text-foreground">{blog.title}</h1>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-muted">
             <span className="font-mono">
-              {blog.slug}.{SITE_HOST}
+              {blog.slug}.{siteHost()}
             </span>
             <VisibilityLabel visibility={blog.visibility} />
             {blog.deleted_at && <span className="font-semibold text-danger">{ta("deleted")}</span>}

@@ -9,6 +9,12 @@ data:
   # anche da smtp-relay.yaml come dominio mittenti consentito.
   NOCT_INSTANCE_FQDN: "notturni.eu"
   NOCT_SITE_SLUG: "notturni"
+  # Frontend, letti a runtime (nessun rebuild dell'immagine): nome mostrato in header, titoli, feed e
+  # manifest (il nome impostato in /admin/seo ha la precedenza); URL pubblico del sito se diverso da
+  # https://$NOCT_INSTANCE_FQDN; URL dell'API visto dal browser (vuoto = stessa origine del sito).
+  NOCT_SITE_NAME: "Notturni"
+  # NOCT_SITE_URL: "https://notturni.eu"
+  # NOCT_API_PUBLIC_URL: ""
 
   # Funzioni SPERIMENTALI, spente di default (opt-in): elenco separato da virgole di `wiki` e/o `docs`.
   # Abilitano la creazione di Spazi di quel tipo e la relativa modalità di visualizzazione; i blog non

@@ -1,5 +1,6 @@
 "use client";
 
+import { useSiteName } from "@/components/SiteConfigProvider";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -27,6 +28,7 @@ interface UsernameCheckResult {
 }
 
 export default function RegisterPage() {
+  const siteName = useSiteName();
   const router = useRouter();
   const { register, login } = useAuth();
   const t = useTranslations("Auth");
@@ -104,7 +106,7 @@ export default function RegisterPage() {
     <main className="flex flex-1 items-center justify-center px-6 py-16">
       <div className="w-full max-w-sm">
         <Link href="/" className="font-serif text-2xl font-semibold text-foreground no-underline">
-          Notturni
+          {siteName}
         </Link>
 
         {registrationMode && registrationMode !== "open" && (

@@ -10,7 +10,8 @@ import { ToastProvider } from "@/components/ui/Toast";
 import { AuthProvider } from "@/lib/auth-context";
 import { NonceProvider } from "@/lib/nonce-context";
 import { getSiteSeo } from "@/lib/server-api";
-import { SITE_URL } from "@/lib/site";
+import { SiteConfigProvider } from "@/components/SiteConfigProvider";
+import { siteConfig, siteUrl } from "@/lib/site";
 import { ThemeProvider } from "@/lib/theme-context";
 
 import "./fonts.css";
@@ -18,7 +19,6 @@ import "./globals.css";
 
 const DEFAULT_DESCRIPTION =
   "Piattaforma opensource di microblogging e newsletter, multilingua ed EU-centrica.";
-const DEFAULT_SITE_NAME = "Notturni";
 
 /** `it` → `it_IT`, `en` → `en_US`: il formato che si aspetta Open Graph. */
 const OG_LOCALES: Record<string, string> = { it: "it_IT", en: "en_US", de: "de_DE", fr: "fr_FR", es: "es_ES" };
@@ -28,7 +28,7 @@ const OG_LOCALES: Record<string, string> = { it: "it_IT", en: "en_US", de: "de_D
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getLocale();
   const seo = await getSiteSeo(locale);
-  const siteName = seo?.site_name || DEFAULT_SITE_NAME;
+  const siteName = seo?.site_name || siteConfig().siteName;
   const description = seo?.description || DEFAULT_DESCRIPTION;
   const other: Record<string, string> = {};
   if (seo?.bing_verification) other["msvalidate.01"] = seo.bing_verification;
@@ -37,7 +37,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     // Risolve i percorsi relativi passati a `openGraph.images`/`alternates.canonical` dalle pagine figlie — senza
     // questo, Next li lascerebbe relativi anche nell'HTML finale (invalidi per i consumer esterni di Open Graph).
-    metadataBase: new URL(SITE_URL),
+    metadataBase: new URL(siteUrl()),
     title: { default: seo?.title || siteName, template: `%s · ${siteName}` },
     description,
     keywords: seo?.keywords || undefined,
@@ -64,6 +64,10 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   // Lingua dell'interfaccia (src/i18n/request.ts): cookie → Accept-Language → fallback.
   const locale = await getLocale();
   const messages = await getMessages();
+  // Nome mostrato nell'interfaccia: `/admin/seo` (per lingua) → NOCT_SITE_NAME → "Notturni". URL del sito e
+  // dell'API sono risolti a runtime (lib/site.ts), non inglobati nel bundle.
+  const seo = await getSiteSeo(locale);
+  const config = { ...siteConfig(), siteName: seo?.site_name || siteConfig().siteName };
   // Nonce CSP della richiesta corrente (proxy.ts): 'self' non basta per gli
   // script inline (né i nostri né quelli che Next stesso inietta per
   // l'idratazione), va passato esplicitamente a ogni <Script>.
@@ -79,6 +83,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <Script src="/theme-init.js" strategy="beforeInteractive" nonce={nonce ?? undefined} />
         <NonceProvider nonce={nonce}>
           <NextIntlClientProvider locale={locale} messages={messages}>
+            <SiteConfigProvider config={config}>
             <ThemeProvider>
               <AuthProvider>
                 <ToastProvider>
@@ -87,6 +92,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
                 </ToastProvider>
               </AuthProvider>
             </ThemeProvider>
+            </SiteConfigProvider>
           </NextIntlClientProvider>
         </NonceProvider>
       </body>

@@ -141,9 +141,9 @@ podman compose down -v                         # ferma e CANCELLA i dati
 
 1. **Reverse proxy con TLS** sull'host (Caddy, nginx o Traefik; vedi l'esempio Caddy in [4.9](#49-reverse-proxy-e-tls)),
    che inoltra `/api/*` a `localhost:8000`, `/storage/*` (solo con `localstorage`) a `localhost:8000` e il resto a
-   `localhost:3000`; il frontend va ricostruito con l'URL pubblico:
-   `NEXT_PUBLIC_API_URL=https://example.com` e `NEXT_PUBLIC_SITE_URL=https://example.com` (build-arg del servizio
-   `frontend` in `compose.yaml`: letti **solo in fase di build**).
+   `localhost:3000`; al servizio `frontend` in `compose.yaml` si passano, come variabili d'ambiente (lette a runtime),
+   `NOCT_SITE_URL=https://example.com` e, per cambiare il nome, `NOCT_SITE_NAME`. Vanno tolti i build-arg
+   `NEXT_PUBLIC_*` pensati per `localhost`.
 2. **Chiudere le porte inutili**: togliere (o legare a `127.0.0.1:`) i `ports:` di `postgres`, `redis`, `nats`,
    `garage`, `mailhog`, `smtp-relay`, `moderation`; lasciare raggiungibili dall'esterno solo il reverse proxy.
    Il firewall dell'host deve bloccare tutto il resto.
@@ -208,10 +208,8 @@ I manifest puntano a `ghcr.io/bytehawks-org/notturni-{backend,frontend,moderatio
 (`images:` in `k8s/kustomization.yaml`), pubblicato dal workflow `publish-images` a ogni push sul branch
 `migration/rust`. Le immagini precedenti (tag `sha-…`) sono quelle Python e non vanno usate.
 
-**A. CI su GitHub** (consigliato): prima impostare le variabili di repository `NEXT_PUBLIC_API_URL` e
-`NEXT_PUBLIC_SITE_URL` (Settings → Secrets and variables → Actions → Variables) con l'URL pubblico del test
-(`https://example.com`, oppure `http://192.168.x.x` senza dominio): sono inglobate nell'immagine **frontend** in
-fase di build e il default è `https://notturni.eu`. Poi lanciare il workflow (push sul branch o *Run workflow*
+**A. CI su GitHub** (consigliato): l'immagine frontend è agnostica rispetto al dominio (URL e nome si
+configurano a runtime nel ConfigMap: `NOCT_INSTANCE_FQDN`/`NOCT_SITE_URL`, `NOCT_SITE_NAME`). Lanciare il workflow (push sul branch o *Run workflow*
 su `migration/rust`) e attendere le tre build (backend e moderazione arm64 sotto QEMU sono lente). Il pacchetto
 GHCR deve essere leggibile dal cluster: pubblico, oppure `imagePullSecrets` con un token `read:packages`.
 Per release successive il workflow pubblica anche `sha-<commit>` e, sui tag `vX.Y.Z`, la versione semver:
@@ -223,8 +221,7 @@ aggiornare i tre `newTag`.
 sudo dnf install -y podman || sudo apt install -y podman      # una delle due
 TAG=local-1
 podman build -t ghcr.io/bytehawks-org/notturni-backend:$TAG .
-podman build -t ghcr.io/bytehawks-org/notturni-frontend:$TAG \
-  --build-arg NEXT_PUBLIC_API_URL=https://example.com --build-arg NEXT_PUBLIC_SITE_URL=https://example.com ./frontend
+podman build -t ghcr.io/bytehawks-org/notturni-frontend:$TAG ./frontend
 podman build -t ghcr.io/bytehawks-org/notturni-moderation:$TAG ./moderation       # opzionale
 for i in backend frontend moderation; do
   podman save ghcr.io/bytehawks-org/notturni-$i:$TAG | sudo k3s ctr images import -
@@ -421,14 +418,14 @@ sudo install -m640 -o root -g notturni /tmp/notturni.env /etc/notturni/notturni.
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt install -y nodejs
 cd ~/notturni/frontend && npm ci
-NEXT_PUBLIC_API_URL=https://example.com NEXT_PUBLIC_SITE_URL=https://example.com npm run build
+npm run build
 sudo mkdir -p /opt/notturni/frontend
 sudo cp -r .next/standalone/. /opt/notturni/frontend/
 sudo cp -r .next/static /opt/notturni/frontend/.next/static && sudo cp -r public /opt/notturni/frontend/public
 sudo chown -R notturni:notturni /opt/notturni/frontend
 ```
 
-`NEXT_PUBLIC_*` è inglobato nel bundle in fase di build: cambiare dominio richiede di rifare `npm run build`.
+URL del sito, dell'API e nome si leggono a runtime dalle env del processo (`NOCT_SITE_URL`, `NOCT_API_PUBLIC_URL`, `NOCT_SITE_NAME`): cambiare dominio non richiede un nuovo build.
 
 ### 4.8 Servizi systemd
 
@@ -664,7 +661,7 @@ essere `ok`. Verificare che un'email di prova (reset password) arrivi: se no, `j
 | Email, newsletter, backup non partono | `noct-worker` non in esecuzione, o SMTP/`NOCT_BACKUP_S3_*` non impostati | avviare il worker; `noct-ctl dead-letters` |
 | Il browser non resta autenticato | cookie `Secure` su http, o origine non in `NOCT_CORS_ORIGINS` | https + `NOCT_SESSION_COOKIE_SECURE=true`, oppure `false` in prova su http |
 | Immagini/avatar non si vedono | `NOCT_S3_PUBLIC_URL` / `NOCT_LOCAL_STORAGE_PUBLIC_URL` errati, o `/storage` non inoltrato | correggere l'URL pubblico e il reverse proxy |
-| Il frontend chiama `localhost:8000` | `NEXT_PUBLIC_API_URL` non impostato in fase di **build** | rifare il build con l'URL pubblico |
+| Il browser chiama il dominio sbagliato | `NOCT_SITE_URL`/`NOCT_INSTANCE_FQDN` (o `NOCT_API_PUBLIC_URL`) non impostati o errati nel ConfigMap | correggerli e riavviare il Deployment `frontend` (nessun rebuild) |
 | `ImagePullBackOff` su K3s | il tag non è stato pubblicato (workflow non concluso), pacchetto GHCR privato o immagine non importata | vedi 3.4 |
 | Pod non partono su K3s con NetworkPolicy | CNI senza supporto alle policy | usare il CNI di K3s (default) o rimuovere `networkpolicy.yaml` |
 | Utenti con MFA non entrano più dopo un cambio di segreto | `NOCT_SECRETS_KEY` perso/ruotato | ripristinare la chiave originale |
