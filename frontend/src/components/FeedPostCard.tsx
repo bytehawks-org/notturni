@@ -85,7 +85,7 @@ export async function FeedPostCard({
       <span>{t("minutes", { min: readingMinutes(post.content) })}</span>
       {post.notes.length > 0 && <span>{t("notes", { count: post.notes.length })}</span>}
       {post.tags.slice(0, 3).map((tag) => (
-        <Link key={tag} href={`/?tag=${encodeURIComponent(tag)}`} className="text-muted no-underline hover:text-primary">
+        <Link key={tag} href={`/tag/${encodeURIComponent(tag)}`} className="text-muted no-underline hover:text-primary">
           #{tag}
         </Link>
       ))}

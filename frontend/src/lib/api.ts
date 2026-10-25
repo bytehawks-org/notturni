@@ -516,6 +516,11 @@ export const api = {
     recordRead: (postId: string) => request<void>(`/api/v1/posts/${postId}/read`, { method: "POST" }),
     submitForReview: (token: string, postId: string) =>
       request<Post>(`/api/v1/posts/${postId}/submit-for-review`, { method: "POST", token }),
+    /** Toglie dalla pubblicazione (anche un post pianificato): torna in bozza. */
+    unpublish: (token: string, postId: string) =>
+      request<Post>(`/api/v1/posts/${postId}/unpublish`, { method: "POST", token }),
+    /** Eliminazione definitiva (commenti, note e frammenti del post compresi). */
+    remove: (token: string, postId: string) => request<void>(`/api/v1/posts/${postId}`, { method: "DELETE", token }),
     returnToDraft: (token: string, postId: string) =>
       request<Post>(`/api/v1/posts/${postId}/return-to-draft`, { method: "POST", token }),
     translations: (postId: string) =>

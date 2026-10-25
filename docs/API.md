@@ -934,7 +934,8 @@ canali si sommano nello stesso insieme, deduplicati. Un tag è normalizzato
 caratteri): `"#Poesia"` e `" poesia "` diventano entrambi `"poesia"`. Un tag
 malformato nel campo dedicato è un errore esplicito (`400`); un hashtag
 malformato nel testo libero viene semplicemente ignorato, non fa fallire il
-salvataggio. Superare il limite di 5 (dedicato + testo insieme) è sempre un
+salvataggio. Non sono hashtag nemmeno le ancore dei link Markdown
+(`[1](#nota-1)`, i marcatori delle note). Superare il limite di 5 (dedicato + testo insieme) è sempre un
 errore esplicito (`400`) — mai un troncamento silenzioso.
 
 Ogni `PostOut` espone due campi:
@@ -1072,6 +1073,19 @@ co-autore. Sposta un post da `draft` a `pending_review` (`400` se non era in
 da `pending_review` a `draft` (rifiuto della
 revisione); `400` se non era in `pending_review`, `403` se il chiamante non è
 proprietario né revisore.
+
+**`POST /api/v1/posts/{post_id}/unpublish`** — proprietario/autore/co-autore.
+Toglie dalla pubblicazione un post `published` (anche pianificato): torna in
+`draft` con `published_at = null`. `400` se non era pubblicato, `403` senza
+scrittura sul blog. Pubblica l'evento `posts.post.unpublished` e invalida la
+cache pubblica.
+
+**`DELETE /api/v1/posts/{post_id}`** — stessa autorizzazione. Eliminazione
+**definitiva** → `204`: commenti, note, frammenti, tag, media/link citati e
+voci di pubblicazione del post cadono in cascata (FK `on_delete = cascade`);
+le altre traduzioni della famiglia restano. Pubblica `posts.post.deleted`. La
+copia Markdown già salvata su S3 dal backup non viene toccata da questa
+chiamata.
 
 **`POST /api/v1/posts/{post_id}/publish`** — pubblica subito, oppure pianifica
 se si passa una data futura:
@@ -1287,6 +1301,11 @@ richieste/minuto dallo stesso IP (rate limiting via Redis —
 mitiga l'uso di questo endpoint come
 proxy/scanner verso terzi vista l'assenza di autenticazione; fail open se
 Redis non è raggiungibile).
+
+Per gli host di YouTube (`youtube.com`, `youtu.be`, ...), che senza cookie di
+consenso servono una pagina generica identica per ogni video, titolo, canale
+(in `description`) e miniatura vengono dall'endpoint oEmbed pubblico di YouTube;
+se fallisce si ripiega sul fetch HTML normale.
 
 **Cache a due livelli** (Redis e database),
 condivisa e deduplicata per URL — due post/utenti/blog che citano lo stesso

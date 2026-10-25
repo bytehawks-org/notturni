@@ -7,11 +7,18 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::{DateTime, Utc};
-use noct_core::{ApiError, BlogRef, RouteCtx, membership_role, parse_uuid};
+use noct_core::{ApiError, BlogRef, RouteCtx, membership_role, parse_uuid, revalidate};
 use noct_posts::VISIBLE_SQL;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use uuid::Uuid;
+
+/// Le note della libreria alimentano la bibliografia pubblica del blog.
+fn revalidate_blog(ctx: &RouteCtx) {
+    if let Some(b) = &ctx.blog {
+        ctx.state.services.revalidate.spawn(vec![revalidate::blog(&b.slug)]);
+    }
+}
 
 fn blog_of(ctx: &RouteCtx) -> Result<&BlogRef, ApiError> {
     ctx.blog.as_ref().ok_or_else(|| ApiError::internal("scope `blog` assente"))
@@ -163,6 +170,7 @@ pub async fn create_blog_note(ctx: RouteCtx, body: BlogNoteCreate) -> Result<Val
     .bind(user_id(&ctx)?)
     .fetch_one(&ctx.state.db)
     .await?;
+    revalidate_blog(&ctx);
     Ok(notes_out(&ctx, &[row], None).await?.remove(0))
 }
 
@@ -215,6 +223,7 @@ pub async fn update_blog_note(ctx: RouteCtx, body: BlogNoteUpdate) -> Result<Val
             .await?;
     }
     tx.commit().await?;
+    revalidate_blog(&ctx);
     Ok(notes_out(&ctx, &[row], None).await?.remove(0))
 }
 
@@ -233,6 +242,7 @@ pub async fn delete_blog_note(ctx: RouteCtx) -> Result<(), ApiError> {
     }
     sqlx::query("DELETE FROM blog_notes WHERE id = $1").bind(note.id).execute(&mut *tx).await?;
     tx.commit().await?;
+    revalidate_blog(&ctx);
     Ok(())
 }
 
@@ -254,6 +264,7 @@ pub async fn merge_blog_note(ctx: RouteCtx, body: NoteMerge) -> Result<Value, Ap
         .await?;
     sqlx::query("DELETE FROM blog_notes WHERE id = $1").bind(source.id).execute(&mut *tx).await?;
     tx.commit().await?;
+    revalidate_blog(&ctx);
     Ok(notes_out(&ctx, &[target], None).await?.remove(0))
 }
 
@@ -335,6 +346,7 @@ pub async fn import_blog_notes(ctx: RouteCtx, body: NoteImport) -> Result<Vec<Va
         created.push(row);
     }
     tx.commit().await?;
+    revalidate_blog(&ctx);
     notes_out(&ctx, &created, None).await
 }
 

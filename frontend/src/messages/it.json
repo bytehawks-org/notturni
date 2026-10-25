@@ -213,6 +213,25 @@
     "notes": "{count, plural, one {# nota} other {# note}}",
     "in": "in"
   },
+  "TagPage": {
+    "title": "Post con il tag",
+    "noPosts": "Nessun post con questo tag.",
+    "previous": "← Più recenti",
+    "next": "Più vecchi →",
+    "page": "Pagina {page}",
+    "all": "Tutti i post"
+  },
+  "PostRowActions": {
+    "view": "Vedi",
+    "edit": "Modifica",
+    "unpublish": "Rimuovi dalla pubblicazione",
+    "delete": "Elimina",
+    "unpublishDone": "Post tornato in bozza.",
+    "deleteTitle": "Eliminare questo post?",
+    "deleteBody": "L'eliminazione è definitiva: insieme al post spariscono commenti, note e frammenti. Per confermare scrivi lo slug del post.",
+    "deleteConfirm": "Elimina definitivamente",
+    "actions": "Azioni sul post"
+  },
   "HomePage": {
     "latest": "Ultimi da tutti i blog",
     "following": "Seguiti",

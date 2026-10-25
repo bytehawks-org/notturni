@@ -2,7 +2,7 @@
 
 use crate::{DomainRequest, dns, rules};
 use noct_audit::{Entry, user_actor};
-use noct_core::{ApiError, RouteCtx, map_db_error, security::token::random_secret};
+use noct_core::{ApiError, RouteCtx, map_db_error, revalidate, security::token::random_secret};
 use noct_manifest::ConfigValue;
 use serde_json::{Value, json};
 use sqlx::PgConnection;
@@ -151,6 +151,7 @@ pub async fn verify_domain(ctx: RouteCtx) -> Result<Value, ApiError> {
         .map_err(|e| map_db_error(e, &[]))?;
     audit(&mut tx, &ctx, "user.domain_verified", me, json!({"domain": domain})).await?;
     tx.commit().await?;
+    revalidate::invalidate_user(&ctx.state, me, &[]).await;
     Ok(domain_out(&domain, "verified", &token))
 }
 
@@ -169,5 +170,8 @@ pub async fn delete_domain(ctx: RouteCtx) -> Result<(), ApiError> {
             .await?;
     }
     tx.commit().await?;
+    if removed.as_deref() == Some("verified") {
+        revalidate::invalidate_user(&ctx.state, me, &[]).await;
+    }
     Ok(())
 }

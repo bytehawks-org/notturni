@@ -654,6 +654,65 @@ pub async fn publish_post(ctx: RouteCtx, body: PublishRequest) -> Result<Value, 
     render_one(st, updated).await
 }
 
+/// Autore del post (scrittura sul blog) richiesto da `unpublish_post` e `delete_post`.
+async fn writable_post(ctx: &RouteCtx) -> Result<(Actor, PostRow, BlogRef), ApiError> {
+    let actor = actor(ctx)?;
+    let st = &ctx.state;
+    let found = row_or_404(st, path_uuid(ctx, "post_id")?).await?;
+    let blog = blog_of(st, &found).await?;
+    if !can_write_blog(st, Some(actor.user_id), &blog).await? {
+        return Err(ApiError::forbidden(MSG_WRITE));
+    }
+    Ok((actor, found, blog))
+}
+
+pub async fn unpublish_post(ctx: RouteCtx) -> Result<Value, ApiError> {
+    let (actor, found, blog) = writable_post(&ctx).await?;
+    let st = &ctx.state;
+    let mut tx = st.db.begin().await?;
+    let done = sqlx::query(
+        "UPDATE posts SET status = 'draft', published_at = NULL, updated_at = now() WHERE id = $1 AND status = 'published'",
+    )
+    .bind(found.id)
+    .execute(&mut *tx)
+    .await?;
+    if done.rows_affected() == 0 {
+        return Err(ApiError::bad_request("Il post non è pubblicato."));
+    }
+    emit(
+        &mut tx,
+        &ctx,
+        &blog,
+        &actor,
+        "posts.post.unpublished",
+        json!({"post_id": found.id, "blog_id": found.blog_id, "slug": found.slug, "locale": found.locale}),
+    )
+    .await?;
+    tx.commit().await?;
+    revalidate_post(st, &found);
+    render_one(st, row_or_404(st, found.id).await?).await
+}
+
+pub async fn delete_post(ctx: RouteCtx) -> Result<(), ApiError> {
+    let (actor, found, blog) = writable_post(&ctx).await?;
+    let st = &ctx.state;
+    let mut tx = st.db.begin().await?;
+    // commenti, note, frammenti, tag, media e link citati cadono in cascata (FK `on_delete = cascade`)
+    sqlx::query("DELETE FROM posts WHERE id = $1").bind(found.id).execute(&mut *tx).await?;
+    emit(
+        &mut tx,
+        &ctx,
+        &blog,
+        &actor,
+        "posts.post.deleted",
+        json!({"post_id": found.id, "blog_id": found.blog_id, "slug": found.slug, "locale": found.locale}),
+    )
+    .await?;
+    tx.commit().await?;
+    revalidate_post(st, &found);
+    Ok(())
+}
+
 // ---- bibliografie -------------------------------------------------------------------------------------------------------
 
 pub async fn media_bibliography(ctx: RouteCtx) -> Result<Vec<MediaBibliographyEntry>, ApiError> {

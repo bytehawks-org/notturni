@@ -79,6 +79,14 @@ interface LinkPreviewData {
   image: string | null;
 }
 
+const stripUrl = (u: string): string => u.trim().replace(/\/+$/, "");
+
+/** Toglie `el` se è un paragrafo il cui unico contenuto è l'URL `href` (link o testo semplice). */
+function removePlainLinkParagraph(el: Element | null, href: string): void {
+  if (el?.tagName !== "P") return;
+  if (stripUrl(el.textContent ?? "") === stripUrl(href)) el.remove();
+}
+
 /** Un link salvato come card dall'editor (CLAUDE.md #1) viene inserito come
  * `[url](url "card")`: il title "card" è la stessa convenzione di
  * "sensitive" sulle immagini. Qui recuperiamo l'anteprima (sempre dal vivo,
@@ -150,6 +158,9 @@ async function resolveLinkCards(document: Document): Promise<void> {
         body.append(description);
       }
       card.append(body);
+      // Con anteprima riuscita il link di testo incollato subito prima è ridondante: il paragrafo
+      // che contiene solo quell'URL viene tolto (nell'editor resta, è il testo dell'autore).
+      if (preview?.title) removePlainLinkParagraph(a.parentElement?.previousElementSibling ?? null, href);
       a.replaceWith(card);
     })
   );
@@ -206,6 +217,55 @@ function linkifyMentions(document: Document): void {
       lastIndex = MENTION_RE.lastIndex;
     }
     if (lastIndex < text.length) frag.append(document.createTextNode(text.slice(lastIndex)));
+    node.replaceWith(frag);
+  }
+}
+
+// Come `extract_hashtags` del backend (crates/noct-posts/src/rules.rs): `#` non preceduto da un
+// carattere di parola, poi un tag di al massimo 30 caratteri. Il gruppo 1 è il carattere che precede.
+const HASHTAG_RE = /(^|[^\p{L}\p{N}_&])#([A-Za-z0-9][A-Za-z0-9_-]{0,29})/gu;
+const VALID_TAG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/** Trasforma in link alla pagina `/tag/{tag}` gli #hashtag del testo che sono davvero tag del post
+ * (`tags`: il backend ne tiene al massimo 5, gli altri non sono tag). Salta link, `code` e `pre`.
+ *
+ * Muta `document` in place (vedi `wrapSensitiveImages`). */
+function linkifyHashtags(document: Document, tags: string[]): void {
+  const view = document.defaultView;
+  if (!view || tags.length === 0) return;
+  const known = new Set(tags);
+  const skip = new Set(["A", "CODE", "PRE"]);
+  const walker = document.createTreeWalker(document.body, view.NodeFilter.SHOW_TEXT);
+  const textNodes: Text[] = [];
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    let el: Element | null = (n as Text).parentElement;
+    let skipped = false;
+    while (el) {
+      if (skip.has(el.tagName)) { skipped = true; break; }
+      el = el.parentElement;
+    }
+    if (!skipped && (n as Text).data.includes("#")) textNodes.push(n as Text);
+  }
+  for (const node of textNodes) {
+    const text = node.data;
+    const frag = document.createDocumentFragment();
+    let last = 0;
+    let changed = false;
+    for (const m of text.matchAll(HASHTAG_RE)) {
+      const tag = m[2].toLowerCase().replace(/_/g, "-");
+      if (!VALID_TAG_RE.test(tag) || !known.has(tag)) continue;
+      const start = (m.index ?? 0) + m[1].length;
+      if (start > last) frag.append(document.createTextNode(text.slice(last, start)));
+      const a = document.createElement("a");
+      a.setAttribute("href", `/tag/${encodeURIComponent(tag)}`);
+      a.className = "hashtag";
+      a.textContent = `#${m[2]}`;
+      frag.append(a);
+      last = start + 1 + m[2].length;
+      changed = true;
+    }
+    if (!changed) continue;
+    if (last < text.length) frag.append(document.createTextNode(text.slice(last)));
     node.replaceWith(frag);
   }
 }
@@ -437,6 +497,8 @@ export interface RenderOptions {
   /** Se true, le @menzioni diventano link al profilo (todo/EDITOR.md: il
    * proprietario del blog può disattivarle). Default: true. */
   mentions?: boolean;
+  /** Tag effettivi del post: gli #hashtag del testo che vi compaiono diventano link a `/tag/{tag}`. */
+  tags?: string[];
   /** Note a piè di pagina del post (todo/EDITOR.md). Se presenti, i marcatori
    * nel testo diventano riferimenti in apice e viene accodato l'elenco. */
   notes?: PostNote[];
@@ -545,6 +607,7 @@ async function renderPipeline(markdown: string, options: RenderOptions, withHead
   injectCopyButtons(document, options.copyCodeLabel ?? "Copia", options.copiedCodeLabel ?? "Copiato");
   await resolveLinkCards(document);
   if (options.mentions !== false) linkifyMentions(document);
+  linkifyHashtags(document, options.tags ?? []);
   const headings = withHeadings ? anchorHeadings(document) : [];
   if (options.notes && options.notes.length > 0) {
     renderFootnotes(document, options.notes, options.footnoteLabels ?? DEFAULT_FOOTNOTE_LABELS);

@@ -5,7 +5,9 @@ use crate::rules;
 use crate::{BlockRequest, CommentCreate, ReportRequest};
 use chrono::{DateTime, Utc};
 use noct_audit::{Entry, user_actor};
-use noct_core::{Actor, ApiError, AppState, BlogRef, RouteCtx, can_view_blog, load_blog, membership_role, parse_uuid};
+use noct_core::{
+    Actor, ApiError, AppState, BlogRef, RouteCtx, can_view_blog, load_blog, membership_role, parse_uuid, revalidate,
+};
 use noct_posts::{VISIBLE_SQL, rules::UserNames};
 use serde_json::{Value, json};
 use sqlx::PgConnection;
@@ -292,6 +294,9 @@ pub async fn create_comment(ctx: RouteCtx, body: CommentCreate) -> Result<Value,
         .fetch_one(&st.db)
         .await?
     };
+    if let Some(author) = row.author_id {
+        revalidate::invalidate_user(st, author, &[]).await;
+    }
     Ok(comments_out(st, &[row], false).await?.remove(0))
 }
 
@@ -388,6 +393,10 @@ async fn moderate(ctx: RouteCtx, new_status: &str) -> Result<Value, ApiError> {
     )
     .await?;
     tx.commit().await?;
+    // l'elenco pubblico dei commenti dell'utente cambia con l'approvazione/il rifiuto
+    if let Some(author) = comment.author_id {
+        revalidate::invalidate_user(&ctx.state, author, &[]).await;
+    }
     let row = comment_by_id(&ctx.state, comment.id).await?;
     Ok(comments_out(&ctx.state, &[row], true).await?.remove(0))
 }

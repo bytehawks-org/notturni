@@ -159,13 +159,14 @@ export async function getBlogLinksBibliography(slug: string): Promise<LinkBiblio
 
 /** Feed multi-blog per la homepage: post pubblicati di tutti i blog, dal più recente. */
 export async function getPublicFeed(
-  options: { locale?: string; tag?: string; category?: string; limit?: number } = {}
+  options: { locale?: string; tag?: string; category?: string; limit?: number; offset?: number } = {}
 ): Promise<Post[]> {
   const params = new URLSearchParams();
   if (options.locale) params.set("locale", options.locale);
   if (options.tag) params.set("tag", options.tag);
   if (options.category) params.set("category", options.category);
   if (options.limit) params.set("limit", String(options.limit));
+  if (options.offset) params.set("offset", String(options.offset));
   const qs = params.toString();
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/feed/posts${qs ? `?${qs}` : ""}`, {
     next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.feed()] },
@@ -176,7 +177,7 @@ export async function getPublicFeed(
 
 /** Directory pubblica dei blog indicizzabili (`GET /api/v1/blogs`, mockup
  * 4a/4c): ricerca `q`, filtro `locale`, ordinamento `active|new|followers`,
- * con i conteggi di post e follower. Nessun tag di rivalidazione dedicato:
+ * con i conteggi di post e follower. Tag `feed` (cambia con post, follow e blog):
  * si affida alla finestra a tempo `REVALIDATE_SECONDS`. */
 export async function getPublicBlogs(
   options: { limit?: number; offset?: number; q?: string; locale?: string; sort?: "active" | "new" | "followers" } = {}
@@ -189,7 +190,7 @@ export async function getPublicBlogs(
   if (options.sort) params.set("sort", options.sort);
   const qs = params.toString();
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs${qs ? `?${qs}` : ""}`, {
-    next: { revalidate: REVALIDATE_SECONDS },
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.feed()] },
   });
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero della directory dei blog.`);
   return (await res.json()) as PublicBlog[];
@@ -279,7 +280,7 @@ export interface CrawlDirectives {
  * blog/post — vedi Blog.search_indexing_enabled/ai_crawling_enabled. */
 export async function getCrawlDirectives(): Promise<CrawlDirectives> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/seo/crawl-directives`, {
-    next: { revalidate: REVALIDATE_SECONDS },
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.feed()] },
   });
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero delle direttive crawler.`);
   return (await res.json()) as CrawlDirectives;
@@ -295,7 +296,7 @@ export interface SitemapEntries {
  * backend/app/domain/seo.py::build_sitemap_entries). */
 export async function getSitemapEntries(): Promise<SitemapEntries> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/seo/sitemap-entries`, {
-    next: { revalidate: REVALIDATE_SECONDS },
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.feed()] },
   });
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero delle voci della sitemap.`);
   return (await res.json()) as SitemapEntries;
@@ -345,7 +346,7 @@ export async function getPublicUsers(
   if (options.sort) params.set("sort", options.sort);
   const qs = params.toString();
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/users${qs ? `?${qs}` : ""}`, {
-    next: { revalidate: REVALIDATE_SECONDS },
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.feed()] },
   });
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero della directory degli utenti.`);
   return (await res.json()) as PublicUser[];
@@ -353,13 +354,12 @@ export async function getPublicUsers(
 
 /** Profilo pubblico (mockup 3e, `GET /users/{username}`, nessuna autenticazione
  * richiesta lato backend): renderizza sia i `<meta>` (layout.tsx) sia il
- * contenuto della pagina `/u/{username}` stessa. Nessun tag di
- * invalidazione: il backend non notifica ancora le modifiche al profilo,
- * resta la sola finestra a tempo (come senza `NOCT_REVALIDATE_SECRET`
- * configurato altrove). */
+ * contenuto della pagina `/u/{username}` stessa. Tag `user:{username}`:
+ * il backend lo invalida a modifica di profilo, avatar, link social, dominio
+ * personale, follow e commenti dell'utente. */
 export async function getPublicUserProfile(username: string): Promise<Profile | null> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/users/${username}`, {
-    next: { revalidate: REVALIDATE_SECONDS },
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.user(username)] },
   });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero del profilo.`);
@@ -368,11 +368,11 @@ export async function getPublicUserProfile(username: string): Promise<Profile | 
 
 /** Post/blog/commenti pubblici firmati con lo username, e follower — usati
  * dalla tab del profilo pubblico `/u/{username}` (mockup 3e). Come
- * `getPublicUserProfile`: nessuna autenticazione richiesta, nessun tag di
- * invalidazione dedicato (solo finestra a tempo). */
+ * `getPublicUserProfile`: nessuna autenticazione richiesta; i post e i blog
+ * portano anche il tag `feed`, perché cambiano a ogni modifica dei post. */
 export async function getPublicUserPosts(username: string): Promise<Post[]> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/users/${username}/posts`, {
-    next: { revalidate: REVALIDATE_SECONDS },
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.user(username), revalidateTags.feed()] },
   });
   if (!res.ok) return [];
   return (await res.json()) as Post[];
@@ -380,7 +380,7 @@ export async function getPublicUserPosts(username: string): Promise<Post[]> {
 
 export async function getPublicUserBlogs(username: string): Promise<Blog[]> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/users/${username}/blogs`, {
-    next: { revalidate: REVALIDATE_SECONDS },
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.user(username), revalidateTags.feed()] },
   });
   if (!res.ok) return [];
   return (await res.json()) as Blog[];
@@ -388,7 +388,7 @@ export async function getPublicUserBlogs(username: string): Promise<Blog[]> {
 
 export async function getPublicUserComments(username: string): Promise<PublicComment[]> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/users/${username}/comments`, {
-    next: { revalidate: REVALIDATE_SECONDS },
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.user(username)] },
   });
   if (!res.ok) return [];
   return (await res.json()) as PublicComment[];
@@ -396,7 +396,7 @@ export async function getPublicUserComments(username: string): Promise<PublicCom
 
 export async function getPublicUserFollowers(username: string): Promise<string[]> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/users/${username}/followers`, {
-    next: { revalidate: REVALIDATE_SECONDS },
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.user(username)] },
   });
   if (!res.ok) return [];
   const rows = (await res.json()) as { username: string }[];

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { BlogCard } from "@/components/blog/VisibilityBand";
+import { PostRowActions } from "@/components/dashboard/PostRowActions";
 import { StatusPill } from "@/components/blog/StatusPill";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -348,7 +349,15 @@ export default function DashboardHomePage() {
                       {formatDate(post.published_at ?? post.created_at, locale, { day: "numeric", month: "short", year: "numeric" })}
                     </span>
                   </div>
-                  <StatusPill status={displayPostStatus(post)} />
+                  <div className="flex items-center gap-3">
+                    <PostRowActions
+                      post={post}
+                      status={displayPostStatus(post)}
+                      onUpdated={(updated) => setPosts((prev) => prev?.map((p) => (p.id === updated.id ? updated : p)) ?? null)}
+                      onDeleted={(id) => setPosts((prev) => prev?.filter((p) => p.id !== id) ?? null)}
+                    />
+                    <StatusPill status={displayPostStatus(post)} />
+                  </div>
                 </li>
               ))}
             </ul>

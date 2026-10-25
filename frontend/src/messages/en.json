@@ -213,6 +213,25 @@
     "notes": "{count, plural, one {# note} other {# notes}}",
     "in": "in"
   },
+  "TagPage": {
+    "title": "Posts tagged",
+    "noPosts": "No posts with this tag.",
+    "previous": "← Newer",
+    "next": "Older →",
+    "page": "Page {page}",
+    "all": "All posts"
+  },
+  "PostRowActions": {
+    "view": "View",
+    "edit": "Edit",
+    "unpublish": "Unpublish",
+    "delete": "Delete",
+    "unpublishDone": "Post moved back to draft.",
+    "deleteTitle": "Delete this post?",
+    "deleteBody": "Deletion is permanent: comments, notes and fragments go with the post. Type the post slug to confirm.",
+    "deleteConfirm": "Delete permanently",
+    "actions": "Post actions"
+  },
   "HomePage": {
     "latest": "Latest from all blogs",
     "following": "Following",

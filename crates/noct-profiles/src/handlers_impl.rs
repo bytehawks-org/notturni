@@ -12,7 +12,7 @@ use noct_audit::{Entry, user_actor};
 use noct_core::{
     ApiError, AppState, RouteCtx,
     bus::{Kind, outbox},
-    map_db_error,
+    map_db_error, revalidate,
     security::{
         constant_time_eq,
         otp::derive_otp,
@@ -189,11 +189,15 @@ pub async fn update_my_profile(ctx: RouteCtx, body: ProfileUpdate) -> Result<Val
         .execute(&mut *tx)
         .await
         .map_err(|e| map_db_error(e, &[("uq_users_username", 409, "Username già in uso.")]))?;
+    let was_renamed = renamed.is_some();
     if let Some(new) = renamed {
         audit(&mut tx, &ctx, "user.username_changed", me, json!({"old_username": current, "new_username": new}))
             .await?;
     }
     tx.commit().await?;
+    // dopo una rinomina la pagina col vecchio username non esiste più
+    let old_names: Vec<String> = was_renamed.then(|| current.clone()).into_iter().collect();
+    revalidate::invalidate_user(st, me, &old_names).await;
     view::me_json(st, &view::fetch(st, me).await?).await
 }
 
@@ -220,6 +224,7 @@ pub async fn upload_avatar(ctx: RouteCtx) -> Result<Value, ApiError> {
     {
         tracing::warn!(error = %e, old, "cancellazione dell'avatar precedente non riuscita");
     }
+    revalidate::invalidate_user(st, me, &[]).await;
     Ok(json!(AvatarOut { avatar_url: view::avatar_url(st, Some(&key)) }))
 }
 
@@ -236,6 +241,7 @@ pub async fn delete_avatar(ctx: RouteCtx) -> Result<(), ApiError> {
         if let Err(e) = st.services.storage.delete(&st.config.storage.bucket_avatars, &old).await {
             tracing::warn!(error = %e, old, "cancellazione dell'avatar non riuscita");
         }
+        revalidate::invalidate_user(st, me, &[]).await;
     }
     Ok(())
 }
@@ -267,6 +273,7 @@ pub async fn add_social_link(ctx: RouteCtx, body: SocialLinkCreate) -> Result<Va
     .fetch_one(&mut *tx)
     .await?;
     tx.commit().await?;
+    revalidate::invalidate_user(&ctx.state, me, &[]).await;
     Ok(json!({"id": id, "label": label, "url": url, "position": next}))
 }
 
@@ -285,6 +292,7 @@ pub async fn delete_social_link(ctx: RouteCtx) -> Result<(), ApiError> {
     if done == 0 {
         return Err(ApiError::not_found("Link non trovato."));
     }
+    revalidate::invalidate_user(&ctx.state, me, &[]).await;
     Ok(())
 }
 

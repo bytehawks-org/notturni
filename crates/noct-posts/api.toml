@@ -238,6 +238,26 @@ request = "PublishRequest"
 response = "PostOut"
 summary = "Pubblica (subito o pianificato)"
 
+[[route]]
+id = "unpublish_post"
+method = "POST"
+path = "/posts/{post_id}/unpublish"
+auth = "user"
+kind = "custom"
+handler = "unpublish_post"
+response = "PostOut"
+summary = "Toglie dalla pubblicazione un post pubblicato (o pianificato): torna in bozza"
+
+[[route]]
+id = "delete_post"
+method = "DELETE"
+path = "/posts/{post_id}"
+auth = "user"
+kind = "custom"
+handler = "delete_post"
+status = 204
+summary = "Elimina definitivamente un post (con commenti, note, frammenti e traduzioni solo di quel post)"
+
 # ---- viste «tutti i miei blog» (blog di cui sono proprietario o collaboratore, esclusi quelli in cancellazione) ----
 
 # citations: [{post_title, post_slug, permalink, locale, used_at, blog_slug, blog_title}]

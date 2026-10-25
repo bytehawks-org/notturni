@@ -39,6 +39,11 @@ pub fn extract_hashtags(content: &str) -> Vec<String> {
         if content[..whole.start()].chars().next_back().is_some_and(is_word_char) {
             continue;
         }
+        // `](#ancora)`: destinazione di un link Markdown interno alla pagina (es. i marcatori
+        // di nota `[1](#nota-1)`), non un hashtag
+        if content[..whole.start()].ends_with("](") {
+            continue;
+        }
         if let Ok(tag) = normalize_tag(&m[1])
             && !seen.contains(&tag)
         {
@@ -283,6 +288,7 @@ mod tests {
         assert_eq!(extract_hashtags("#".repeat(3).as_str()), Vec::<String>::new());
         // troppo lungo: ignorato senza far fallire il salvataggio
         assert!(extract_hashtags(&format!("#{}", "a".repeat(40))).len() <= 1);
+        assert_eq!(extract_hashtags("nota[1](#nota-1) e #vero"), ["vero"]);
         assert_eq!(extract_hashtags("inizio #uno\n#due\t#tre"), ["uno", "due", "tre"]);
     }
 

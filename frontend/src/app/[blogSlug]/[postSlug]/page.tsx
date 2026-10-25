@@ -87,6 +87,7 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
 
   const { html, headings } = await renderPost(post.content, {
     mentions: post.mentions_enabled,
+    tags: post.tags,
     notes: post.notes,
     footnoteLabels: { title: tPost("notes"), backToText: tPost("backToText") },
     expandImageLabel: tPost("expandImage"),
@@ -118,24 +119,11 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
 
   const rail = (
     <div className="flex flex-col gap-6 text-[13px]">
+      {/* L'elenco completo delle note è già a piè di corpo (renderFootnotes): qui solo il rimando */}
       {post.notes.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-[.08em] text-muted">
-            {t("footnotes", { count: post.notes.length })}
-          </span>
-          <ol className="flex list-decimal flex-col gap-1 pl-4 text-muted">
-            {post.notes.slice(0, 5).map((n) => (
-              <li key={n.idx}>
-                <a href={`#fn-${n.idx}`} className="line-clamp-2 no-underline hover:text-foreground">
-                  {n.content}
-                </a>
-              </li>
-            ))}
-          </ol>
-          <Link href={`${basePath}/bibliografia`} className="text-primary no-underline hover:underline">
-            {tPost("blogBibliography")}
-          </Link>
-        </div>
+        <Link href={`${basePath}/bibliografia`} className="text-primary no-underline hover:underline">
+          {tPost("blogBibliography")}
+        </Link>
       )}
       {(post.category || translations.length > 1) && (
         <div className="flex flex-col gap-2">
@@ -234,14 +222,16 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
               />
             )}
 
-            <div className="mt-6 xl:hidden">
-              <details className="rounded-xl border border-border bg-surface px-4 py-3 text-sm">
-                <summary className="cursor-pointer font-medium text-foreground">{t("inThisPost")}</summary>
-                <div className="mt-3">
-                  <PostToc headings={headings} />
-                </div>
-              </details>
-            </div>
+            {headings.length > 0 && (
+              <div className="mt-6 xl:hidden">
+                <details className="rounded-xl border border-border bg-surface px-4 py-3 text-sm">
+                  <summary className="cursor-pointer font-medium text-foreground">{t("inThisPost")}</summary>
+                  <div className="mt-3">
+                    <PostToc headings={headings} />
+                  </div>
+                </details>
+              </div>
+            )}
 
             <div style={{ fontSize: "var(--blog-body-size)" }}>
               <FragmentReader

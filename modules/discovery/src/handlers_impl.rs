@@ -1,7 +1,7 @@
 //! Handler `custom` del modulo.
 
 use chrono::{DateTime, Duration, NaiveDate, Utc};
-use noct_core::{ApiError, BlogRef, RouteCtx, load_blog, membership_role};
+use noct_core::{ApiError, BlogRef, RouteCtx, load_blog, membership_role, revalidate};
 use noct_posts::{PostRow, VISIBLE_SQL, render};
 use serde_json::{Value, json};
 use sqlx::{Postgres, QueryBuilder};
@@ -199,6 +199,12 @@ pub async fn list_public_blogs(ctx: RouteCtx) -> Result<Vec<Value>, ApiError> {
 
 // ---- follow -------------------------------------------------------------------------------------------------------------
 
+/// I conteggi dei follower compaiono nella directory dei blog (tag `feed`) e nelle pagine del blog/utente.
+fn revalidate_follow(ctx: &RouteCtx, mut tags: Vec<String>) {
+    tags.push(revalidate::feed());
+    ctx.state.services.revalidate.spawn(tags);
+}
+
 pub async fn follow_blog(ctx: RouteCtx) -> Result<(), ApiError> {
     let blog = blog_of(&ctx)?;
     sqlx::query("INSERT INTO blog_follows (follower_id, blog_id) VALUES ($1, $2) ON CONFLICT DO NOTHING")
@@ -206,6 +212,7 @@ pub async fn follow_blog(ctx: RouteCtx) -> Result<(), ApiError> {
         .bind(blog.id)
         .execute(&ctx.state.db)
         .await?;
+    revalidate_follow(&ctx, vec![revalidate::blog(&blog.slug)]);
     Ok(())
 }
 
@@ -218,6 +225,7 @@ pub async fn unfollow_blog(ctx: RouteCtx) -> Result<(), ApiError> {
         .bind(blog.id)
         .execute(&ctx.state.db)
         .await?;
+    revalidate_follow(&ctx, vec![revalidate::blog(&blog.slug)]);
     Ok(())
 }
 
@@ -256,6 +264,7 @@ pub async fn follow_user(ctx: RouteCtx) -> Result<(), ApiError> {
         .bind(target)
         .execute(&ctx.state.db)
         .await?;
+    revalidate::invalidate_user(&ctx.state, target, &[]).await;
     Ok(())
 }
 
@@ -267,6 +276,7 @@ pub async fn unfollow_user(ctx: RouteCtx) -> Result<(), ApiError> {
         .bind(target)
         .execute(&ctx.state.db)
         .await?;
+    revalidate::invalidate_user(&ctx.state, target, &[]).await;
     Ok(())
 }
 

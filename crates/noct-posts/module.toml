@@ -8,7 +8,7 @@ description = "Post: bozze, revisione, pubblicazione e pianificazione, traduzion
 # Pubblicati nella stessa transazione del salvataggio (outbox). I consumer sono di altri
 # moduli: backup su storage (operazioni) e notifica agli iscritti (newsletter).
 [events]
-publishes = ["posts.post.saved", "posts.post.published"]
+publishes = ["posts.post.saved", "posts.post.published", "posts.post.unpublished", "posts.post.deleted"]
 
 [lifecycle]
 personal_data = true

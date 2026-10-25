@@ -10,7 +10,7 @@ export function TagPills({ tags, label }: { tags: string[]; label?: string }) {
       {tags.map((tag) => (
         <Link
           key={tag}
-          href={`/?tag=${encodeURIComponent(tag)}`}
+          href={`/tag/${encodeURIComponent(tag)}`}
           className="rounded-full bg-primary/10 px-3 py-1 text-xs text-primary hover:bg-primary/20"
         >
           #{tag}
