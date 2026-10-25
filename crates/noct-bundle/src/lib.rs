@@ -24,6 +24,10 @@ pub fn all() -> Vec<ModuleDef> {
     modules.push(noct_publications::module());
     #[cfg(feature = "pages")]
     modules.push(noct_pages::module());
+    #[cfg(feature = "wiki")]
+    modules.push(noct_wiki::module());
+    #[cfg(feature = "git-sync")]
+    modules.push(noct_git_sync::module());
     #[cfg(feature = "link-preview")]
     modules.push(noct_link_preview::module());
     #[cfg(feature = "notes")]

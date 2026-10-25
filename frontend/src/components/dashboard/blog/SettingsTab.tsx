@@ -17,12 +17,14 @@ import { useAuth } from "@/lib/auth-context";
 import { formatDate } from "@/lib/format";
 import { languageName } from "@/lib/languages";
 import { SITE_HOST } from "@/lib/site";
-import type { Blog, BlogMember, BlogVisibility, Category, CommentsMode } from "@/lib/types";
+import { effectiveDisplayMode } from "@/lib/space-mode";
+import type { Blog, BlogMember, BlogVisibility, Category, CommentsMode, SpaceDisplayMode } from "@/lib/types";
 
 import { errorMessage } from "./shared";
 
-const SECTIONS = ["identity", "visibility", "languages", "features", "domain", "danger"] as const;
+const SECTIONS = ["identity", "visibility", "display", "languages", "features", "domain", "danger"] as const;
 const VISIBILITIES: BlogVisibility[] = ["public", "members", "private"];
+const DISPLAY_MODES: SpaceDisplayMode[] = ["wiki", "docs"];
 const COMMENT_MODES: CommentsMode[] = ["members", "everyone", "closed"];
 
 /** Tab Impostazioni (mockup 5c): identità, visibilità, lingue, funzionalità,
@@ -40,6 +42,7 @@ export function SettingsTab({ blog, canEdit, onUpdated }: { blog: Blog; canEdit:
   const [subtitle, setSubtitle] = useState(blog.subtitle ?? "");
   const [description, setDescription] = useState(blog.description ?? "");
   const [visibility, setVisibility] = useState<BlogVisibility>(blog.visibility);
+  const [displayMode, setDisplayMode] = useState<SpaceDisplayMode>(effectiveDisplayMode(blog));
   const [commentsMode, setCommentsMode] = useState<CommentsMode>(blog.comments_mode);
   const [mentionsEnabled, setMentionsEnabled] = useState(blog.mentions_enabled);
   const [staticPagesEnabled, setStaticPagesEnabled] = useState(blog.static_pages_enabled);
@@ -97,6 +100,7 @@ export function SettingsTab({ blog, canEdit, onUpdated }: { blog: Blog; canEdit:
           subtitle,
           description,
           visibility,
+          ...(blog.kind !== "blog" ? { display_mode: displayMode } : {}),
           comments_mode: commentsMode,
           mentions_enabled: mentionsEnabled,
           static_pages_enabled: staticPagesEnabled,
@@ -143,7 +147,7 @@ export function SettingsTab({ blog, canEdit, onUpdated }: { blog: Blog; canEdit:
   return (
     <div className="grid gap-8 lg:grid-cols-[170px_minmax(0,1fr)]">
       <nav className="hidden flex-col gap-0.5 text-sm text-muted lg:sticky lg:top-6 lg:flex lg:h-fit">
-        {SECTIONS.map((id) => (
+        {SECTIONS.filter((id) => id !== "display" || blog.kind !== "blog").map((id) => (
           <a key={id} href={`#settings-${id}`} className={`rounded-md px-2.5 py-1.5 no-underline hover:text-foreground ${id === "danger" ? "text-danger" : ""}`}>
             {t(`sections.${id}`)}
           </a>
@@ -267,6 +271,27 @@ export function SettingsTab({ blog, canEdit, onUpdated }: { blog: Blog; canEdit:
             <span className="-mt-2 text-[13px] text-muted">{t("aiCrawlingSub")}</span>
           </div>
         </section>
+
+        {blog.kind !== "blog" && (
+          <section id="settings-display" className="flex scroll-mt-6 flex-col gap-4">
+            <CardTitle>{t("sections.display")}</CardTitle>
+            <div className="grid gap-2.5 sm:grid-cols-2">
+              {DISPLAY_MODES.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  disabled={!canEdit}
+                  onClick={() => setDisplayMode(m)}
+                  aria-pressed={displayMode === m}
+                  className={`flex flex-col gap-0.5 rounded-lg border px-3.5 py-3 text-left transition ${displayMode === m ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"}`}
+                >
+                  <span className="text-sm font-semibold text-foreground">{t(`display.${m}`)}</span>
+                  <span className="text-[13px] text-muted">{t(`display.${m}Sub`)}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
 
         <section id="settings-languages" className="flex scroll-mt-6 flex-col gap-4">
           <CardTitle>{t("sections.languages")}</CardTitle>

@@ -1,0 +1,42 @@
+# Posizione di un post nell'indice di uno Spazio wiki/docs. Una riga per post; il post senza riga
+# è una radice in coda. Se la pagina padre viene eliminata i figli diventano radici.
+[[table]]
+name = "post_outline"
+timestamps = true
+columns = [
+  { name = "post_id", type = "uuid", pk = true, ref = "posts.id", on_delete = "cascade" },
+  { name = "parent_id", type = "uuid", null = true, ref = "posts.id", on_delete = "set_null" },
+  { name = "position", type = "integer", default = "0" },
+]
+indexes = [{ columns = ["parent_id"] }]
+
+# Istantanea di titolo e contenuto a ogni salvataggio che li cambia (Spazi wiki/docs). L'ultima
+# coincide con il post corrente; le più vecchie oltre il limite per post vengono scartate.
+[[table]]
+name = "post_revisions"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "post_id", type = "uuid", ref = "posts.id", on_delete = "cascade" },
+  { name = "revision", type = "integer" },
+  { name = "title", type = "varchar(255)" },
+  { name = "content", type = "text" },
+  { name = "editor_id", type = "uuid", null = true, ref = "users.id", on_delete = "set_null" },
+  { name = "summary", type = "varchar(300)", null = true },
+]
+uniques = [{ name = "uq_post_revision", columns = ["post_id", "revision"] }]
+indexes = [{ columns = ["editor_id"] }]
+
+# Link interni `[[slug]]` / `[[slug|testo]]` estratti dal Markdown, riscritti a ogni salvataggio.
+# `target_slug` è lo slug normalizzato nello stesso Spazio: si risolve in lettura, così un link
+# a una pagina creata dopo funziona senza altro.
+[[table]]
+name = "post_wikilinks"
+primary_key = ["post_id", "position"]
+columns = [
+  { name = "post_id", type = "uuid", ref = "posts.id", on_delete = "cascade" },
+  { name = "position", type = "integer" },
+  { name = "target_slug", type = "varchar(255)" },
+  { name = "label", type = "text", null = true },
+]
+indexes = [{ columns = ["target_slug"] }]

@@ -6,6 +6,8 @@ schema OpenAPI, sempre aggiornato al codice e limitato ai moduli attivi, è su
 aggiunge il contesto (uso previsto, chi lo consuma, esempi, regole di business)
 che l'OpenAPI da solo non dà.
 
+Elenco completo delle rotte per modulo: [API_REFERENCE.md](API_REFERENCE.md). Variabili d'ambiente: [CONFIGURATION.md](CONFIGURATION.md).
+
 Il contratto è quello della v1 (Python/FastAPI). Le differenze introdotte dal
 porting, e quelle ancora solo suggerite, sono in
 [todo/API_CHANGES.md](../todo/API_CHANGES.md): in caso di dubbio vale quel file.
@@ -334,15 +336,31 @@ SMTP a disposizione, mai il caso in produzione). Un errore SMTP genuino
   "default_locale": "it",
   "subtitle": "Appunti sparsi",
   "description": "Descrizione breve del blog, max 256 caratteri.",
+  "kind": "blog",
+  "display_mode": "feed",
   "visibility": "public",
   "default_author_display_name": "il-mio-username"
 }
 ```
 
+`kind` (`blog` | `wiki` | `docs`, default `blog`) è la tipologia dello **Spazio** e
+non si può cambiare dopo la creazione (non è accettato da `PATCH`). Nella
+terminologia di prodotto "blog" e "Spazio" coincidono nelle rotte: `/blogs/...`
+è lo stesso contratto di `/spaces/...`, alias riscritto prima del routing (non
+compare in `openapi.json`).
+
+`display_mode` (`feed` | `wiki` | `docs`) è la struttura delle pagine pubbliche e dipende dal tipo: un
+`blog` usa solo `feed`; `wiki` e `docs` scelgono tra `wiki` (albero di pagine, breadcrumb, backlink) e
+`docs` (sidebar, sommario della pagina a destra, precedente/successiva); se assente vale il predefinito del
+tipo. Si può cambiare con `PATCH /blogs/{slug}`; un valore non ammesso per il tipo → `400`. È distinto da
+`layout` della configurazione di presentazione (`/blogs/{slug}/config`), che riguarda solo la disposizione
+delle card nel feed. Per l'albero, le revisioni e i link interni degli Spazi wiki/docs vedi la sezione
+«Spazi wiki e documentazione».
+
 → `201`. Applica le regole di dominio (vedi
 [ROADMAP.md](../ROADMAP.md#1-prodotto-e-regole-di-dominio)): slug di almeno 4
 caratteri alfanumerici/trattino, non in blacklist (nomi riservati dalla piattaforma
-e dall'amministratore), massimo 5 blog per utente. `default_locale` è
+e dall'amministratore), massimo 5 Spazi per utente (limite unico su blog, wiki e docs, `max_blogs_per_user`). `default_locale` è
 opzionale (default `it`). `subtitle` (max 64) e `description` (max 256) sono
 opzionali. `default_author_display_name` è opzionale (il frontend lo
 pre-compila con lo username di chi crea il blog, ma resta un campo libero,
@@ -368,7 +386,7 @@ blog pubblici indicizzabili: `visibility=public`, non sospesi
 (`is_suspended=false`) e `search_indexing_enabled=true` — stesso criterio del
 `robots.txt` generato, più restrittivo del semplice "pubblico" usato dal feed
 dei post (che include anche i blog pubblici non indicizzabili). Parametri
-`limit` (default 30, max 100) e `offset` per la paginazione. `q` cerca in
+`limit` (default 30, max 100) e `offset` per la paginazione. `kind` (`blog`|`wiki`|`docs`) filtra per tipo di Spazio, altrimenti sono elencati tutti. `q` cerca in
 slug/titolo/sottotitolo (sottostringa), `locale` filtra per lingua
 principale, `sort` è `active` (default: ultimo post pubblicato, poi
 creazione), `new` (creazione) o `followers`. Ogni voce è un blog più
@@ -1116,6 +1134,82 @@ approva una revisione invece di rifiutarla con `return-to-draft`.
 Idempotente se già pubblicato e non si passa un nuovo `published_at`
 (`published_at` esistente non viene toccato); passare una nuova data lo
 sovrascrive sempre, anche per ripianificare un post già pubblicato.
+
+## Spazi wiki e documentazione (modulo `wiki`)
+
+Valgono per gli Spazi con `kind` = `wiki` o `docs` (vedi `POST /blogs`). Per gli Spazi `blog` il modulo non
+fa nulla: `parent_id` non nullo o `position` nei post vengono rifiutati (`400`), nessuna revisione e nessun
+link interno vengono registrati.
+
+**Campi dei post** (estensione di `POST /blogs/{slug}/posts`, `PATCH /posts/{id}` e delle risposte):
+- in ingresso `parent_id` (UUID di un post dello stesso Spazio; `null` = radice; assente = invariato),
+  `position` (intero ≥ 0 tra i fratelli; se manca, una pagina nuova o spostata va in coda) e
+  `revision_summary` (nota di max 300 caratteri sulla revisione creata dal salvataggio);
+- in uscita `parent_id`, `position` e `revisions` (numero di revisioni conservate).
+Un ciclo, un padre di un altro Spazio o più di 8 livelli di sottopagine → `400`. Eliminando un post i
+figli diventano radici.
+
+**`GET /api/v1/blogs/{slug}/outline`** — pubblico (`?locale=` opzionale). Elenco piatto in ordine di
+lettura (depth-first): `{id, slug, title, locale, status, parent_id, position, depth, is_visible}`. Chi può
+scrivere vede tutti i post; gli altri solo i pubblicati, e una pagina il cui padre non è visibile sale alla
+radice. Ogni traduzione è un nodo a sé.
+
+**`PUT /api/v1/blogs/{slug}/outline`** — richiede sessione con diritto di scrittura. Corpo
+`{"items": [{"id": "...", "parent_id": null}, ...]}`: l'ordine dell'elenco definisce la posizione tra i
+fratelli e l'elenco deve contenere **tutti** i post dello Spazio una sola volta, altrimenti `409` (l'indice è
+cambiato: ricaricare). Cicli o profondità eccessiva → `400`; su uno Spazio `blog` → `400`. Risponde con
+l'indice aggiornato; registra `wiki.outline_updated` nell'audit.
+
+**Revisioni** — solo per chi può scrivere nello Spazio (`401`/`403` altrimenti). A ogni salvataggio che
+cambia titolo o contenuto (compresa la creazione) viene conservata un'istantanea; se il testo è identico a
+quello dell'ultima revisione non ne nasce una nuova. Si conservano al massimo 200 revisioni per post. Il
+ripristino è un normale `PATCH` con titolo e contenuto della revisione scelta.
+- `GET /api/v1/posts/{id}/revisions` — dalla più recente: `{revision, title, editor, summary, size, created_at}`.
+  `editor` è l'alias di membership dell'autore della modifica, altrimenti lo username.
+- `GET /api/v1/posts/{id}/revisions/{n}` — revisione completa con `content`.
+- `GET /api/v1/posts/{id}/revisions/{n}/diff?against=m` — differenze per righe (`against` di default è `n-1`;
+  per la revisione 1 il confronto è con il testo vuoto): `{from, to, hunks: [{op: "equal"|"insert"|"delete", text}]}`.
+
+**Link interni** — `[[pagina]]` e `[[pagina|testo]]` nel Markdown (ignorati nel codice) puntano a un post
+dello stesso Spazio per slug, normalizzato (minuscolo, senza accenti, trattini). Si risolvono in lettura: un
+link a una pagina creata dopo funziona senza altro. Il frontend li rende come collegamenti.
+- `GET /api/v1/posts/{id}/backlinks` — pubblico: `{id, slug, title, locale}` delle pagine che rimandano a
+  quella (404 se il post non è visibile; ai lettori solo le pagine pubblicate).
+
+## Sincronizzazione Git (modulo `git_sync`)
+
+Esporta i testi di uno Spazio, come Markdown, in un branch di un repository Git remoto (GitHub, GitLab,
+Forgejo, Gitea…). Solo il **proprietario** dello Spazio la gestisce (`401`/`403` altrimenti); è solo
+un'esportazione, nessuna modifica fatta nel repository torna nella piattaforma.
+
+- **`GET /api/v1/blogs/{slug}/git-sync`** → `{configured, remote_url, branch, username, has_secret,
+  include_drafts, enabled, last_status, last_run_at, last_error, last_commit, last_pages}`. Il token non viene mai
+  restituito (`has_secret` dice solo se esiste). `last_status`: `running` · `ok` (commit inviato) · `unchanged` (nessuna
+  novità, nessun accesso alla rete) · `error` (dettaglio in `last_error`).
+- **`PUT /api/v1/blogs/{slug}/git-sync`** → `{remote_url, branch?, username?, secret?, include_drafts?, enabled?}`.
+  `remote_url` deve essere `https://` con un host pubblico e **senza credenziali incorporate**; l'host viene risolto e
+  ogni indirizzo deve essere pubblico (loopback, reti private, link-local e metadati cloud → `400`). `branch` (default
+  `notturni-backup`) segue le regole dei nomi di Git. `secret` è il token di accesso: obbligatorio alla prima
+  configurazione, poi se assente resta quello salvato (cifrato a riposo come i segreti TOTP). `branch`, `username` assenti
+  restano invariati. Cambiare repository, branch, utente, token o `include_drafts` azzera l'esito e fa rinviare tutto.
+- **`DELETE /api/v1/blogs/{slug}/git-sync`** → `204`; cancella configurazione e token, non tocca il repository remoto.
+- **`POST /api/v1/blogs/{slug}/git-sync/run`** → `202`; accoda una sincronizzazione (`409` se una è in corso, `400` se
+  disattivata). L'esito compare in `GET`. In più un giro orario accoda tutte le configurazioni attive.
+
+**Cosa viene scritto.** Un blog: `{lingua}/{slug}.md`. Wiki e docs: l'albero delle pagine, con `index.md` per le pagine che
+hanno sottopagine (`{lingua}/intro/index.md`, `{lingua}/intro/install.md`). Ogni file ha un front matter YAML (titolo,
+slug, lingua, stato, date, autore con il nome pubblico, tag; per wiki/docs anche `parent` e `position`) seguito dal
+Markdown. Le immagini restano URL. Di default solo i contenuti pubblicati; con `include_drafts` anche bozze e revisioni in
+attesa (mai i post nascosti dalla moderazione). Alla radice c'è `.notturni.json`: un branch già esistente senza questo file
+non viene mai sovrascritto.
+
+**Garanzie.** Il push è sempre normale (mai forzato) e mai sul branch predefinito del repository; un repository senza alcun
+commit viene rifiutato. Se i file generati sono identici all'ultimo esito il giro non tocca la rete. Ogni configurazione,
+rimozione ed esecuzione è nell'audit (`git_sync.configured`, `git_sync.removed`, `git_sync.run`).
+
+**Non fatto in questa versione:** SSH/chiavi di deploy (richiederebbe il pinning delle host key), importazione dal repository,
+esportazione dei file multimediali. Eliminare un contenuto o l'account (GDPR art. 17) non lo cancella dal repository remoto:
+l'utente ne è il titolare e la UI lo dichiara.
 
 ## Pubblicazioni (todo/PUBLICATIONS.md, todo/UX_REDESIGN.md B9, mockup 2d/3g)
 
@@ -2329,7 +2423,7 @@ Blog), dal più recente — pensato per la homepage della piattaforma
 (CLAUDE.md #2: "raccolta degli articoli nella lingua dell'utente, stile
 dev.to").
 
-Query param opzionali: `locale` (filtra una lingua, altrimenti tutte
+Query param opzionali: `kind` (`blog`|`wiki`|`docs`; **per default solo gli Spazi `blog`**, le pagine di wiki e documentazione non sono articoli da feed; valore sconosciuto → `422`), `locale` (filtra una lingua, altrimenti tutte
 insieme), `tag` (filtra per tag normalizzato, es. `poesia` non `#Poesia` —
 vedi sezione "Tag" sopra), `category` (filtra per slug di categoria — vedi
 sezione "Categorie" sopra; essendo la categoria per-blog, blog diversi con

@@ -1,4 +1,5 @@
-# Contratto compatibile con /api/v1/blogs della v1 (collaboratori, inviti, ciclo di vita,
+# Un "blog" del contratto è uno Spazio (blog, wiki o documentazione, campo `kind`); anche
+# raggiungibile come /api/v1/spaces. Contratto compatibile con /api/v1/blogs della v1 (collaboratori, inviti, ciclo di vita,
 # configurazione di presentazione). Direttory pubblica, follow, panoramica, copertina,
 # favicon e libreria media sono di altri crate (discovery, media).
 #
@@ -12,6 +13,10 @@ title = { type = "string", max = 255, non_blank = true, message = "Il titolo del
 default_locale = "string?"
 subtitle = "string?"
 description = "string?"
+# assente = blog; non modificabile dopo la creazione
+kind = { type = "enum:space_kind", optional = true }
+# assente = quello predefinito del tipo (blog → feed, wiki → wiki, docs → docs)
+display_mode = { type = "enum:space_display_mode", optional = true }
 visibility = { type = "enum:blog_visibility", optional = true }
 default_author_display_name = { type = "string", max = 255, optional = true }
 
@@ -21,6 +26,8 @@ title = { type = "string", max = 255, non_blank = true, optional = true, message
 subtitle = "string?"
 description = "string?"
 visibility = { type = "enum:blog_visibility", optional = true }
+# blog: solo feed; wiki e docs: wiki o docs
+display_mode = { type = "enum:space_display_mode", optional = true }
 mentions_enabled = "bool?"
 search_indexing_enabled = "bool?"
 ai_crawling_enabled = "bool?"
@@ -34,6 +41,8 @@ slug = "string"
 title = "string"
 subtitle = { type = "string", nullable = true }
 description = { type = "string", nullable = true }
+kind = "enum:space_kind"
+display_mode = "enum:space_display_mode"
 visibility = "enum:blog_visibility"
 default_locale = "string"
 extra_locales = "string[]"
@@ -114,7 +123,7 @@ handler = "create_blog"
 request = "BlogCreate"
 response = "BlogOut"
 status = 201
-summary = "Crea un blog (slug di almeno 4 caratteri, non riservato; limite per utente)"
+summary = "Crea uno Spazio (`kind` = blog|wiki|docs; slug di almeno 4 caratteri, non riservato; limite per utente su tutti gli Spazi)"
 
 [[route]]
 id = "list_my_blogs"

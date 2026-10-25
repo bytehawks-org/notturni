@@ -22,6 +22,17 @@ fn user_id(ctx: &RouteCtx) -> Result<Uuid, ApiError> {
     ctx.actor.as_ref().map(|a| a.user_id).ok_or_else(|| ApiError::unauthorized("Autenticazione richiesta."))
 }
 
+/// Filtro `kind` della query (blog|wiki|docs); un valore sconosciuto → 422.
+fn kind_param(ctx: &RouteCtx) -> Result<Option<&'static str>, ApiError> {
+    match ctx.query.get("kind").map(String::as_str) {
+        None | Some("") => Ok(None),
+        Some("blog") => Ok(Some("blog")),
+        Some("wiki") => Ok(Some("wiki")),
+        Some("docs") => Ok(Some("docs")),
+        Some(_) => Err(ApiError::unprocessable("Parametro `kind` non valido (blog, wiki o docs).")),
+    }
+}
+
 fn blog_of(ctx: &RouteCtx) -> Result<&BlogRef, ApiError> {
     ctx.blog.as_ref().ok_or_else(|| ApiError::internal("scope `blog` assente"))
 }
@@ -63,6 +74,8 @@ pub async fn list_feed(ctx: RouteCtx) -> Result<Vec<Value>, ApiError> {
     if let Some(locale) = ctx.query.get("locale") {
         qb.push(" AND p.locale = ").push_bind(locale.clone());
     }
+    // le pagine di wiki e documentazione non sono articoli da feed: entrano solo se richieste
+    qb.push(" AND b.kind = ").push_bind(kind_param(&ctx)?.unwrap_or("blog")).push("::space_kind");
     if let Some(tag) = ctx.query.get("tag") {
         qb.push(" AND EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON t.id = pt.tag_id WHERE pt.post_id = p.id AND t.name = ")
             .push_bind(tag.clone())
@@ -171,6 +184,9 @@ pub async fn list_public_blogs(ctx: RouteCtx) -> Result<Vec<Value>, ApiError> {
     }
     if let Some(locale) = ctx.query.get("locale").filter(|l| !l.is_empty()) {
         qb.push(" AND b.default_locale = ").push_bind(locale.clone());
+    }
+    if let Some(kind) = kind_param(&ctx)? {
+        qb.push(" AND b.kind = ").push_bind(kind).push("::space_kind");
     }
     qb.push(match ctx.query.get("sort").map(String::as_str) {
         Some("followers") => " ORDER BY follower_count DESC, b.created_at DESC, b.id",

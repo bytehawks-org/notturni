@@ -88,6 +88,12 @@ frontend, backend e `s3-public`. Postgres, Redis, NATS, Garage e moderation non 
 applichi le NetworkPolicy (K3s: controller integrato). Guida completa all'installazione:
 [docs/INSTALL.md](../docs/INSTALL.md#3-k3s).
 
+La policy riguarda solo l'**ingresso**: il worker può uscire verso qualsiasi host. La sincronizzazione Git
+(`git_sync`) e l'anteprima dei link contattano indirizzi scelti dagli utenti e si difendono controllando che l'host
+risolva a indirizzi pubblici, ma tra il controllo e la connessione di `git` resta una finestra di DNS rebinding. Per
+chiuderla in produzione aggiungere una NetworkPolicy di **egress** per il worker che escluda le reti private e i
+metadati cloud (`169.254.169.254`) lasciando solo i servizi del namespace e Internet pubblica.
+
 ## Setup
 
 ```bash

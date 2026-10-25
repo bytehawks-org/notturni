@@ -31,14 +31,14 @@
   },
   "Nav": {
     "overview": "Overview",
-    "myBlogs": "My blogs",
+    "myBlogs": "My spaces",
     "posts": "Posts",
     "fragments": "Fragments",
     "activity": "Activity",
     "profile": "Profile",
     "apiTokens": "API tokens",
     "users": "Users",
-    "allBlogs": "All blogs",
+    "allBlogs": "All spaces",
     "moderation": "Moderation",
     "comments": "Comments",
     "staticPages": "Static pages",
@@ -102,7 +102,8 @@
     "backToText": "Back to text",
     "expandImage": "Expand",
     "copyCode": "Copy",
-    "copiedCode": "Copied"
+    "copiedCode": "Copied",
+    "backlinks": "Pages linking here"
   },
   "Fragment": {
     "meta": "{words} words · {ratio}% of post",
@@ -258,7 +259,7 @@
     "all": "All"
   },
   "BlogAdmin": {
-    "viewBlog": "View blog ↗",
+    "viewBlog": "View space ↗",
     "writePost": "Write a post",
     "youAre": "you are {role}",
     "roles": {
@@ -268,7 +269,7 @@
       "reviewer": "reviewer",
       "mediator": "mediator"
     },
-    "notOwner": "You are not the owner of this blog: some actions are unavailable.",
+    "notOwner": "You are not the owner of this space: some actions are unavailable.",
     "deleted": "pending deletion",
     "paused": "paused",
     "suspended": "suspended"
@@ -286,7 +287,9 @@
     "appearance": "Appearance",
     "settings": "Settings",
     "media": "Media",
-    "newsletter": "Newsletter"
+    "newsletter": "Newsletter",
+    "outline": "Outline",
+    "git": "Git"
   },
   "Overview": {
     "attention": {
@@ -351,11 +354,11 @@
     "subtitle": "Subtitle",
     "description": "Short description",
     "coverImage": "Cover image",
-    "coverImageHint": "Optional, shown as a banner on the blog's public home page.",
+    "coverImageHint": "Optional, shown as a banner on the space's public home page.",
     "favicon": "Favicon",
-    "faviconHint": "Optional, a dedicated icon shown in the browser tab on the blog's public pages.",
-    "defaultAuthor": "Default author name on this blog",
-    "indexing": "Allow search engines to index this blog",
+    "faviconHint": "Optional, a dedicated icon shown in the browser tab on the space's public pages.",
+    "defaultAuthor": "Default author name on this space",
+    "indexing": "Allow search engines to index this space",
     "indexingSub": "Also controls listing in the public directory",
     "primary": "{lang} · primary",
     "addLanguage": "+ Add from your profile languages",
@@ -365,24 +368,24 @@
     "domainNote": "CNAME → {host}. Certificate issued automatically. Disabled until subdomain routing lands.",
     "dangerZone": "Danger zone",
     "danger": {
-      "delete": "Delete this blog",
+      "delete": "Delete this space",
       "deleteSub": "30-day grace period, then erased. Type the slug to confirm.",
       "deleteAction": "Delete…",
       "transfer": "Transfer ownership",
       "transferSub": "To a current co-author. You stay as co-author unless you leave.",
       "transferAction": "Transfer…",
-      "pause": "Pause this blog",
+      "pause": "Pause this space",
       "pauseSub": "Readers see a “paused” page; nothing is deleted; newsletter stops.",
       "pauseAction": "Pause",
       "export": "Export everything",
       "exportSub": "Markdown, images, notes, comments — ZIP link valid 7 days.",
       "exportAction": "Request export",
-      "resume": "Reopen this blog",
+      "resume": "Reopen this space",
       "resumeAction": "Reopen",
       "restoreAction": "Restore"
     },
     "save": "Save changes",
-    "confirmTitle": "Delete blog “{title}”?",
+    "confirmTitle": "Delete space “{title}”?",
     "confirmBody": "All posts, pages and images will be erased after a 30-day grace period. Followers are not notified. Type the slug to confirm.",
     "confirmLabel": "Delete in 30 days",
     "sections": {
@@ -393,7 +396,8 @@
       "newsletter": "Newsletter",
       "domain": "Domain",
       "danger-zone": "Danger zone",
-      "danger": "Danger zone"
+      "danger": "Danger zone",
+      "display": "Display"
     },
     "vis": {
       "public": "Public",
@@ -431,18 +435,24 @@
       "closedSub": "Existing comments stay visible."
     },
     "savedToast": "Settings saved",
-    "deletedNotice": "Blog pending deletion since {date}: it will be erased for good after 30 days.",
-    "pausedNotice": "The blog is paused: readers see a waiting page, you keep working on it from here.",
-    "restoredToast": "Blog restored",
+    "deletedNotice": "Space pending deletion since {date}: it will be erased for good after 30 days.",
+    "pausedNotice": "The space is paused: readers see a waiting page, you keep working on it from here.",
+    "restoredToast": "Space restored",
     "transferredToast": "Ownership transferred",
-    "pausedToast": "Blog paused",
-    "resumedToast": "Blog reopened",
-    "deletedToast": "Blog pending deletion: you have 30 days to restore it",
+    "pausedToast": "Space paused",
+    "resumedToast": "Space reopened",
+    "deletedToast": "Space pending deletion: you have 30 days to restore it",
     "categories": "Categories",
-    "categoriesSub": "Blog taxonomy: unlike tags, a post has at most one.",
+    "categoriesSub": "Space taxonomy: unlike tags, a post has at most one.",
     "noCategories": "No categories.",
     "categoryName": "Name",
-    "categorySlug": "Slug"
+    "categorySlug": "Slug",
+    "display": {
+      "wiki": "Wiki",
+      "wikiSub": "Page tree, breadcrumbs and pages that link to the current one.",
+      "docs": "Documentation",
+      "docsSub": "Side index, on-page contents on the right and previous/next page."
+    }
   },
   "Admin": {
     "openQueues": "Open queues",
@@ -454,7 +464,7 @@
     "operational": "operational"
   },
   "AdminBlogs": {
-    "reportsTitle": "{count} reports · blog “{slug}”",
+    "reportsTitle": "{count} reports · space “{slug}”",
     "close": "Close",
     "blogMeta": "@{owner} · created {date} · {count} posts",
     "reasons": "Reasons",
@@ -462,9 +472,9 @@
     "action": "Action",
     "auditNote": "Note for the audit register",
     "required": "required",
-    "openBlog": "Open blog ↗",
+    "openBlog": "Open space ↗",
     "col": {
-      "blog": "Blog",
+      "blog": "Space",
       "owner": "Owner",
       "visibility": "Visibility",
       "posts": "Posts",
@@ -481,20 +491,20 @@
     "review": "Review",
     "manage": "Manage",
     "act": {
-      "suspend": "Suspend blog",
+      "suspend": "Suspend space",
       "suspendSub": "Unreachable and read-only, owner included; reports get closed.",
       "hide_posts": "Hide reported posts only",
       "deactivate_owner": "Deactivate owner account",
       "dismiss": "Dismiss reports",
-      "restore": "Restore blog",
+      "restore": "Restore space",
       "restoreSub": "Lift the suspension.",
       "hide_reported_posts": "Hide reported posts only",
-      "hide_reported_postsSub": "The blog stays up; posts with open reports get hidden.",
-      "deactivate_ownerSub": "Blocks login and suspends the blog.",
-      "dismissSub": "No action on the blog, reports get closed."
+      "hide_reported_postsSub": "The space stays up; posts with open reports get hidden.",
+      "deactivate_ownerSub": "Blocks login and suspends the space.",
+      "dismissSub": "No action on the space, reports get closed."
     },
-    "title": "All blogs",
-    "summary": "{count, plural, one {# blog} other {# blogs}} · {reported} with open reports",
+    "title": "All spaces",
+    "summary": "{count, plural, one {# space} other {# spaces}} · {reported} with open reports",
     "search": "Slug, title or owner…",
     "state": {
       "all": "All",
@@ -504,12 +514,12 @@
       "paused": "Paused",
       "deleted": "Pending deletion"
     },
-    "emptyTitle": "No blogs",
-    "emptyBody": "No blog matches the filters.",
+    "emptyTitle": "No spaces",
+    "emptyBody": "No space matches the filters.",
     "created": "created {date}",
     "mfaOn": "MFA on",
     "mfaOff": "MFA off",
-    "noReports": "No open reports: you can still suspend or restore the blog.",
+    "noReports": "No open reports: you can still suspend or restore the space.",
     "reason": {
       "spam": "Spam",
       "abuse": "Abuse",
@@ -578,9 +588,9 @@
     "reservedHint": "+ any name ≤ 3 chars",
     "threshold": "Image moderation threshold",
     "thresholdNote": "Above: blurred + queued. Fail-open if the service is down.",
-    "maxBlogs": "Max blogs per user",
-    "maxBlogStorage": "Max storage per blog (MB)",
-    "maxBlogStorageHint": "0 = no limit. Media plus Markdown backups of the blog, same count as the \"Storage\" card in the overview.",
+    "maxBlogs": "Max spaces per user",
+    "maxBlogStorage": "Max storage per space (MB)",
+    "maxBlogStorageHint": "0 = no limit. Media plus Markdown backups of the space, same count as the \"Storage\" card in the overview.",
     "verification": "Verification",
     "verificationNote": "Profile verification badges assigned by hand (in addition to the automatic bronze one from a verified custom domain).",
     "verificationGold": "Manually verified (gold badge)",
@@ -594,13 +604,13 @@
     "auditRetention": "Audit log retention (days)",
     "auditRetentionNote": "Older events are deleted from the database (archived to storage first, if enabled). Minimum 7 days.",
     "footer": "Footer",
-    "footerNote": "Shown at the bottom of every public page, on the platform and on every blog. Free Markdown: images and links are supported.",
+    "footerNote": "Shown at the bottom of every public page, on the platform and on every space. Free Markdown: images and links are supported.",
     "footerColumn1": "Column 1",
     "footerColumn2": "Column 2",
     "footerColumn3": "Column 3",
-    "footerColumn3Hint": "Always platform-set: a blog cannot override it (unlike columns 1 and 2).",
+    "footerColumn3Hint": "Always platform-set: a space cannot override it (unlike columns 1 and 2).",
     "footerBottomBar": "Bottom bar",
-    "footerBottomBarHint": "Always and only platform-set, no blog can override it.",
+    "footerBottomBarHint": "Always and only platform-set, no space can override it.",
     "footerMarkdownPlaceholder": "Free Markdown…",
     "anonComments": "Anonymous comments (platform-wide allow)",
     "infra": "Infrastructure",
@@ -610,8 +620,8 @@
       "invite": "Invite",
       "closed": "Closed"
     },
-    "blogsModeration": "Blogs & moderation",
-    "reserved": "Reserved blog names",
+    "blogsModeration": "Spaces & moderation",
+    "reserved": "Reserved space names",
     "defaultLocale": "Default interface language",
     "defaultLocaleNote": "Used for visitors and new accounts; each user can override it in their profile.",
     "superAdminOnly": "Only the Super Admin can change platform settings.",
@@ -885,11 +895,11 @@
     "draftsWaiting": "{count, plural, =0 {no drafts waiting} one {# draft waiting} other {# drafts waiting}}",
     "invitesPending": "{count, plural, one {# collaboration invite} other {# collaboration invites}}",
     "commentsPending": "{count, plural, one {# comment to moderate} other {# comments to moderate}}",
-    "newBlog": "New blog",
+    "newBlog": "New space",
     "blogsLeft": "{count} of 5 left",
     "kpiPosts": "posts",
     "kpiFollowers": "followers",
-    "kpiBlogs": "blogs",
+    "kpiBlogs": "spaces",
     "invitation": "Invitation",
     "invitationLine": "<b>{by}</b> invites you to <b>{blog}</b> as {role}. You can sign posts there with an alias.",
     "accept": "Accept",
@@ -902,9 +912,9 @@
     "visibility": "Visibility",
     "creating": "Creating…",
     "create": "Create",
-    "myBlogs": "My blogs",
-    "noBlogsTitle": "No blogs yet",
-    "noBlogsBody": "Start your first blog: up to 5 per account, each with its own subdomain.",
+    "myBlogs": "My spaces",
+    "noBlogsTitle": "No spaces yet",
+    "noBlogsBody": "Start your first space: up to 5 per account, each with its own subdomain.",
     "postsInBlog": "{count, plural, one {# post} other {# posts}}",
     "recentPosts": "Recent posts",
     "filter": {
@@ -916,9 +926,16 @@
     },
     "noPosts": "No posts in this view.",
     "commentsToModerate": "Comments to moderate",
-    "sharedWithMe": "Blogs shared with me",
+    "sharedWithMe": "Spaces shared with me",
     "deletedBadge": "pending deletion",
-    "pausedBadge": "paused"
+    "pausedBadge": "paused",
+    "kind": "Space type",
+    "kindHint": "Cannot be changed after creation.",
+    "kinds": {
+      "blog": "Blog — articles in chronological order",
+      "wiki": "Wiki — linked, editable pages",
+      "docs": "Documentation — a guide structured in chapters"
+    }
   },
   "PostEditorPage": {
     "loading": "Loading…",
@@ -933,7 +950,7 @@
     "tags": "Tags",
     "translationsTab": "Translations",
     "comments": "Comments",
-    "inheritBlog": "Same as the blog",
+    "inheritBlog": "Same as the space",
     "searchEngines": "Search engines",
     "aiCrawlers": "AI/LLM crawlers",
     "allow": "Allow",
@@ -944,14 +961,19 @@
       "closed": "Closed"
     },
     "commentsShort": {
-      "inherit": "Same as blog",
+      "inherit": "Same as space",
       "everyone": "Everyone",
       "members": "Members",
       "closed": "Closed"
     },
     "statusLabel": "Status",
     "saveDraftHint": "Save",
-    "savingDraftHint": "Saving…"
+    "savingDraftHint": "Saving…",
+    "revisionSummary": "Edit note",
+    "revisionSummaryPlaceholder": "What did you change? (optional)",
+    "historyTab": "History",
+    "restoreConfirm": "Restore revision #{revision}? Unsaved changes in the editor will be lost.",
+    "restoreSummary": "Restored revision #{revision}"
   },
   "NewPostPage": {
     "titlePlaceholder": "Title",
@@ -1036,7 +1058,7 @@
     "uploadCta": "Upload favicon (PNG/JPEG/WEBP, max 512 KiB)",
     "uploading": "Uploading…",
     "remove": "Remove",
-    "faviconAlt": "Blog favicon"
+    "faviconAlt": "Space favicon"
   },
   "CoverImageUpload": {
     "uploadFailed": "Image upload failed.",
@@ -1055,8 +1077,8 @@
   "ImagePickerModal": {
     "title": "Insert image",
     "tabUpload": "Upload",
-    "tabBlogLibrary": "Blog library",
-    "tabMyLibrary": "All my blogs",
+    "tabBlogLibrary": "Space library",
+    "tabMyLibrary": "All my spaces",
     "uploadCta": "Upload an image",
     "uploading": "Uploading…",
     "uploadFailed": "Image upload failed.",
@@ -1084,13 +1106,13 @@
     },
     "newPost": "New post",
     "emptyTitle": "No posts yet",
-    "emptyBody": "The first post of this blog is waiting to be written.",
+    "emptyBody": "The first post of this space is waiting to be written.",
     "noneInFilter": "No posts in this view.",
     "view": "View",
     "publish": "Publish"
   },
   "PagesTab": {
-    "notEnabled": "Static pages are not active for this blog: you can enable them from the Settings tab.",
+    "notEnabled": "Static pages are not active for this space: you can enable them from the Settings tab.",
     "newPage": "New page",
     "empty": "No pages.",
     "published": "Published",
@@ -1112,10 +1134,10 @@
     "revoke": "Revoke"
   },
   "MyMembershipCard": {
-    "title": "Your name on this blog",
+    "title": "Your name on this space",
     "label": "Author alias",
-    "placeholder": "Leave empty to use the blog's default name or your profile alias",
-    "hint": "The name you sign the posts you write here with. It takes precedence over the blog's default name and your profile alias.",
+    "placeholder": "Leave empty to use the space's default name or your profile alias",
+    "hint": "The name you sign the posts you write here with. It takes precedence over the space's default name and your profile alias.",
     "saved": "Saved."
   },
   "CommentsTab": {
@@ -1180,8 +1202,8 @@
     "policyTitle": "Comment rules"
   },
   "Appearance": {
-    "footerOverride": "Blog footer",
-    "footerOverrideHint": "Overrides columns 1 and 2 of the platform footer for this blog only (free Markdown). Column 3 and the bottom bar always stay the platform's.",
+    "footerOverride": "Space footer",
+    "footerOverrideHint": "Overrides columns 1 and 2 of the platform footer for this space only (free Markdown). Column 3 and the bottom bar always stay the platform's.",
     "footerOverrideColumn1": "Column 1",
     "footerOverrideColumn2": "Column 2",
     "footerOverridePlaceholder": "Leave empty to use the platform default…",
@@ -1220,7 +1242,7 @@
     "saved": "Saved.",
     "save": "Save appearance",
     "preview": "Live preview · reader view",
-    "previewBlog": "Your blog",
+    "previewBlog": "Your space",
     "previewNav": "Posts · Bibliography · Media",
     "previewCategory": "Essays",
     "previewTitle": "On writing slowly, in the margins of the night",
@@ -1276,13 +1298,13 @@
       "comments": "Pending comments",
       "review": "Posts in review",
       "hidden": "Hidden posts",
-      "suspended": "Suspended blogs",
+      "suspended": "Suspended spaces",
       "reports": "Open reports"
     },
     "usersDesc": "Roles, activation and MFA of accounts.",
     "blogsDesc": "Platform list, suspension.",
-    "moderationDesc": "Hide or show posts of any blog.",
-    "commentsDesc": "Pending comments across all blogs.",
+    "moderationDesc": "Hide or show posts of any space.",
+    "commentsDesc": "Pending comments across all spaces.",
     "pagesDesc": "Editor of the main site pages.",
     "auditDesc": "History of sensitive actions.",
     "operational": "all systems operational",
@@ -1291,7 +1313,7 @@
     "kpi": {
       "users": "accounts",
       "usersNew": "{count} new in the last 7 days",
-      "blogs": "blogs",
+      "blogs": "spaces",
       "blogsSuspended": "{count} suspended",
       "posts": "published posts",
       "audit": "audit entries today"
@@ -1314,7 +1336,7 @@
       "mfa": "MFA",
       "since": "Member since",
       "status": "Status",
-      "blogs": "Blogs",
+      "blogs": "Spaces",
       "lastSeen": "Last seen",
       "actions": "Actions"
     },
@@ -1359,17 +1381,17 @@
     "emptyBody": "Create a token to use the API from scripts or integrations."
   },
   "BlogState": {
-    "suspendedLabel": "Blog suspended",
-    "suspendedTitle": "This blog was suspended by a platform administrator.",
+    "suspendedLabel": "Space suspended",
+    "suspendedTitle": "This space was suspended by a platform administrator.",
     "suspendedBody": "Reading and writing are paused, including for the owner, until the suspension is lifted.",
     "pausedLabel": "Paused",
     "pausedTitle": "{title} is paused",
-    "pausedBody": "The author paused this blog: its content will be back when they reopen it. Nothing was deleted.",
+    "pausedBody": "The author paused this space: its content will be back when they reopen it. Nothing was deleted.",
     "backHome": "← Back to the home"
   },
   "AdminComments": {
     "title": "Comment moderation",
-    "subtitle": "Escalations from blog mediators and per-state queues across the platform.",
+    "subtitle": "Escalations from space mediators and per-state queues across the platform.",
     "filter": {
       "reported": "Reported",
       "pending": "Pending",
@@ -1385,7 +1407,7 @@
       "rejected": "hidden"
     },
     "reported": "reported",
-    "reportNote": "Blog's note",
+    "reportNote": "Space's note",
     "approve": "Approve",
     "hide": "Hide"
   },
@@ -1396,7 +1418,7 @@
   },
   "Report": {
     "report": "Report",
-    "titleBlog": "Report this blog",
+    "titleBlog": "Report this space",
     "titlePost": "Report this post",
     "intro": "The report goes to the platform moderators. One per content.",
     "reason": {
@@ -1414,12 +1436,12 @@
   "AdminPosts": {
     "title": "Post moderation",
     "subtitle": "All posts on the platform with their open reports; hiding or showing requires a note for the register.",
-    "search": "Title, slug, blog or author…",
+    "search": "Title, slug, space or author…",
     "emptyTitle": "No posts",
     "emptyBody": "No post matches the search.",
     "col": {
       "post": "Post",
-      "blog": "Blog",
+      "blog": "Space",
       "status": "Status",
       "reports": "Reports",
       "moderation": "Moderation"
@@ -1459,7 +1481,7 @@
       "channel": "Channel",
       "actor": "Actor",
       "target": "Target",
-      "blogAlias": "Blog alias",
+      "blogAlias": "Space alias",
       "ip": "IP",
       "details": "Details"
     },
@@ -1490,8 +1512,8 @@
         "account_deleted": "Account deleted (GDPR)"
       },
       "blog": {
-        "suspended": "Blog suspended",
-        "unsuspended": "Blog reinstated",
+        "suspended": "Space suspended",
+        "unsuspended": "Space reinstated",
         "invitation_created": "Invitation created",
         "invitation_accepted": "Invitation accepted",
         "invitation_declined": "Invitation declined",
@@ -1718,7 +1740,7 @@
     "confirmed": "Confirmed",
     "unsubscribed": "Unsubscribed",
     "autoNotifyLabel": "Notify subscribers on every new post",
-    "autoNotifyHint": "When enabled, an email is automatically sent to this blog's confirmed subscribers every time you publish a post.",
+    "autoNotifyHint": "When enabled, an email is automatically sent to this space's confirmed subscribers every time you publish a post.",
     "campaignsTitle": "Campaigns",
     "newCampaign": "New campaign",
     "noCampaigns": "No campaign sent yet.",
@@ -1733,7 +1755,7 @@
     "title": "Email configuration",
     "hint": "Sender name and banner shown in campaign emails. Leave blank to use the defaults.",
     "senderNameLabel": "Sender name",
-    "senderNamePlaceholder": "e.g. Blog editors",
+    "senderNamePlaceholder": "e.g. Space editors",
     "bannerLabel": "Banner",
     "bannerPlaceholder": "https://...",
     "bannerPreviewAlt": "Banner preview",
@@ -1761,7 +1783,7 @@
   },
   "MyPostsPage": {
     "title": "Posts",
-    "subtitle": "Every post from every one of your blogs, in a single list.",
+    "subtitle": "Every post from every one of your spaces, in a single list.",
     "filter": {
       "all": "All",
       "draft": "Drafts",
@@ -1770,15 +1792,15 @@
       "published": "Published"
     },
     "emptyTitle": "No posts",
-    "emptyBody": "Posts you write on your blogs will show up here.",
+    "emptyBody": "Posts you write on your spaces will show up here.",
     "noneInFilter": "No posts match this filter.",
     "view": "View"
   },
   "MyMediaPage": {
     "title": "Media",
-    "subtitle": "{count, plural, one {# file} other {# file}} from all of your blogs.",
+    "subtitle": "{count, plural, one {# file} other {# file}} from all of your spaces.",
     "emptyTitle": "No images",
-    "emptyBody": "Images uploaded to your blogs will show up here.",
+    "emptyBody": "Images uploaded to your spaces will show up here.",
     "sensitive": "Sensitive",
     "missingAlt": "Missing alt text",
     "in": "in",
@@ -1786,21 +1808,92 @@
   },
   "MyPublicationsPage": {
     "title": "Publications",
-    "subtitle": "Every publication from every one of your blogs, in a single list.",
+    "subtitle": "Every publication from every one of your spaces, in a single list.",
     "emptyTitle": "No publications",
-    "emptyBody": "Publications created on your blogs will show up here.",
+    "emptyBody": "Publications created on your spaces will show up here.",
     "chaptersOf": "{published} of {total} chapters"
   },
   "MyLinksPage": {
     "title": "Links",
-    "subtitle": "Every URL cited across all your blogs' posts, grouped by site.",
+    "subtitle": "Every URL cited across all your spaces' posts, grouped by site.",
     "emptyTitle": "No links",
     "emptyBody": "Links cited in your posts will show up here."
   },
   "MyBibliographyPage": {
     "title": "Bibliography",
-    "subtitle": "Every note across all your blogs' posts, deduplicated.",
+    "subtitle": "Every note across all your spaces' posts, deduplicated.",
     "emptyTitle": "No notes",
     "emptyBody": "Footnotes from your posts will show up here."
+  },
+  "OutlineTab": {
+    "emptyTitle": "No pages",
+    "emptyBody": "Create the first page: it will show up here and you can arrange pages in a tree.",
+    "hint": "Reorder pages and nest them as subpages. Changes apply once saved.",
+    "up": "Move up",
+    "down": "Move down",
+    "outdent": "Move out one level",
+    "indent": "Make a subpage of the previous one",
+    "save": "Save outline",
+    "saving": "Saving…",
+    "discard": "Discard changes",
+    "saved": "Outline saved"
+  },
+  "PageParentSelect": {
+    "label": "Parent page",
+    "root": "None (top level)"
+  },
+  "RevisionsPanel": {
+    "empty": "No revisions.",
+    "current": "current",
+    "restore": "Restore this version",
+    "loadError": "Could not load the history."
+  },
+  "SpacePage": {
+    "index": "Space index",
+    "breadcrumb": "Breadcrumb",
+    "previous": "Previous",
+    "next": "Next",
+    "onThisPage": "On this page",
+    "noPages": "No published pages."
+  },
+  "GitSyncTab": {
+    "intro": "Exports the published texts of this space as Markdown files to a dedicated branch of a Git repository (GitHub, GitLab, Forgejo…), so you have a copy elsewhere. Export only: manual changes in the repository never come back here and get overwritten.",
+    "statusTitle": "Status",
+    "settingsTitle": "Settings",
+    "setupTitle": "Connect a repository",
+    "lastStatus": "Last result",
+    "neverRun": "Never run",
+    "lastRun": "Last run",
+    "pages": "Pages exported",
+    "commit": "Last commit",
+    "status": {
+      "running": "Running…",
+      "ok": "Pushed",
+      "unchanged": "Nothing new",
+      "error": "Error"
+    },
+    "runNow": "Sync now",
+    "running": "Running…",
+    "queued": "Sync started",
+    "saved": "Settings saved",
+    "removed": "Sync removed",
+    "url": "Repository address",
+    "urlHint": "https:// only, no credentials",
+    "branch": "Branch",
+    "branchHint": "default: notturni-backup. Cannot be the repository’s default branch",
+    "username": "Username",
+    "usernameHint": "optional (default: git)",
+    "token": "Access token",
+    "tokenHint": "with write access to this repository only",
+    "tokenSet": "already set: leave empty to keep it",
+    "includeDrafts": "Include drafts too",
+    "includeDraftsSub": "Only published content is exported by default. With this option drafts and pending reviews end up in the repository as well.",
+    "enabled": "Sync enabled",
+    "save": "Save",
+    "saving": "Saving…",
+    "remove": "Remove sync",
+    "removeTitle": "Remove the sync?",
+    "removeBody": "The stored token is deleted. The remote repository is not touched: files already pushed stay where they are. Type the space slug to confirm.",
+    "privacyNote": "The destination repository is a service of your choosing: the texts sent leave this platform and are your responsibility. Deleting content or your account here does not delete it from the remote repository."
   }
 }

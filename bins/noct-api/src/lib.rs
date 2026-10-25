@@ -220,7 +220,36 @@ pub fn app(registry: &Registry, enabled: &[usize], state: AppState) -> Router {
         }
     }
     let cors = cors_layer(&state.config);
-    app.layer(middleware::from_fn(peer_ip)).layer(cors).with_state(state)
+    let inner = app.layer(middleware::from_fn(peer_ip)).layer(cors).with_state(state);
+    // `/api/v1/spaces...` è l'alias di `/api/v1/blogs...`: la riscrittura avviene prima del routing
+    Router::new().fallback_service(tower::service_fn(move |mut req: Request| {
+        rewrite_spaces_alias(&mut req);
+        let router = inner.clone();
+        async move { tower::ServiceExt::oneshot(router, req).await }
+    }))
+}
+
+/// Riscrive il prefisso `/api/v1/spaces` in `/api/v1/blogs` (path esatto o seguito da `/`),
+/// conservando la query.
+fn rewrite_spaces_alias(req: &mut Request) {
+    const FROM: &str = "/api/v1/spaces";
+    const TO: &str = "/api/v1/blogs";
+    let uri = req.uri();
+    let Some(rest) = uri.path().strip_prefix(FROM).filter(|r| r.is_empty() || r.starts_with('/')) else {
+        return;
+    };
+    let mut pq = format!("{TO}{rest}");
+    if let Some(q) = uri.query() {
+        pq.push('?');
+        pq.push_str(q);
+    }
+    let mut parts = uri.clone().into_parts();
+    if let Ok(pq) = pq.parse() {
+        parts.path_and_query = Some(pq);
+        if let Ok(new) = axum::http::Uri::from_parts(parts) {
+            *req.uri_mut() = new;
+        }
+    }
 }
 
 /// CORS per il frontend nel browser: origini esatte più l'eventuale regex dei sottodomini, con

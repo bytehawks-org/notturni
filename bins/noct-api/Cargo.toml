@@ -35,6 +35,7 @@ futures.workspace = true
 noct-security.workspace = true
 noct-auth-mfa.workspace = true
 noct-newsletter.workspace = true
+noct-git-sync.workspace = true
 noct-audit.workspace = true
 noct-blogs.workspace = true
 noct-backup.workspace = true

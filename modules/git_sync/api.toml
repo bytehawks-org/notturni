@@ -1,0 +1,70 @@
+# Configurazione e avvio della sincronizzazione Git di uno Spazio. Solo il proprietario.
+
+[type.GitSyncIn]
+remote_url = { type = "string", max = 2048 }
+branch = { type = "string", max = 200, optional = true }
+username = { type = "string", max = 100, optional = true }
+# assente = invariato (obbligatorio alla prima configurazione); "" non è ammesso
+secret = { type = "string", max = 4096, optional = true }
+include_drafts = "bool?"
+enabled = "bool?"
+
+# `configured` = false quando lo Spazio non ha una sincronizzazione: gli altri campi sono null
+[type.GitSyncOut]
+configured = "bool"
+remote_url = { type = "string", nullable = true }
+branch = { type = "string", nullable = true }
+username = { type = "string", nullable = true }
+has_secret = "bool"
+include_drafts = "bool"
+enabled = "bool"
+last_status = { type = "string", nullable = true }
+last_run_at = { type = "timestamp", nullable = true }
+last_error = { type = "string", nullable = true }
+last_commit = { type = "string", nullable = true }
+last_pages = { type = "int", nullable = true }
+
+[[route]]
+id = "get_git_sync"
+method = "GET"
+path = "/blogs/{slug}/git-sync"
+auth = "user"
+kind = "custom"
+handler = "get_git_sync"
+scope = { blog = "slug" }
+response = "GitSyncOut"
+summary = "Configurazione e ultimo esito della sincronizzazione Git (solo proprietario; il token non viene mai restituito)"
+
+[[route]]
+id = "put_git_sync"
+method = "PUT"
+path = "/blogs/{slug}/git-sync"
+auth = "user"
+kind = "custom"
+handler = "put_git_sync"
+scope = { blog = "slug" }
+request = "GitSyncIn"
+response = "GitSyncOut"
+summary = "Imposta il repository, il branch e il token (HTTPS; branch diverso da quello predefinito del repository)"
+
+[[route]]
+id = "delete_git_sync"
+method = "DELETE"
+path = "/blogs/{slug}/git-sync"
+auth = "user"
+kind = "custom"
+handler = "delete_git_sync"
+scope = { blog = "slug" }
+status = 204
+summary = "Rimuove la sincronizzazione e cancella il token salvato (il repository remoto non viene toccato)"
+
+[[route]]
+id = "run_git_sync"
+method = "POST"
+path = "/blogs/{slug}/git-sync/run"
+auth = "user"
+kind = "custom"
+handler = "run_git_sync"
+scope = { blog = "slug" }
+status = 202
+summary = "Accoda una sincronizzazione subito; l'esito compare in `last_status` (polling su GET)"

@@ -25,6 +25,22 @@
         "members",
         "private"
       ]
+    },
+    {
+      "name": "space_display_mode",
+      "values": [
+        "feed",
+        "wiki",
+        "docs"
+      ]
+    },
+    {
+      "name": "space_kind",
+      "values": [
+        "blog",
+        "wiki",
+        "docs"
+      ]
     }
   ],
   "tables": [
@@ -342,6 +358,22 @@
             "column": "id",
             "on_delete": "restrict"
           },
+          "renamed_from": null
+        },
+        {
+          "name": "kind",
+          "type": "enum:space_kind",
+          "null": false,
+          "default": "'blog'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "display_mode",
+          "type": "enum:space_display_mode",
+          "null": false,
+          "default": "'feed'",
+          "references": null,
           "renamed_from": null
         },
         {

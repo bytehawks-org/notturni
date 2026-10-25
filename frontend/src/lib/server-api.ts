@@ -5,10 +5,12 @@ import type {
   BibliographyEntry,
   Blog,
   BlogConfig,
+  Backlink,
   Category,
   Interest,
   LinkBibliographyEntry,
   MediaBibliographyEntry,
+  OutlineNode,
   Page,
   Post,
   PostTranslationSummary,
@@ -310,6 +312,25 @@ export async function getPublicPostTranslations(postId: string): Promise<PostTra
   });
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero delle traduzioni del post.`);
   return (await res.json()) as PostTranslationSummary[];
+}
+
+/** Indice (albero) di uno Spazio wiki/docs nella lingua `locale`: solo le pagine pubblicate. */
+export async function getPublicOutline(blogSlug: string, locale?: string): Promise<OutlineNode[]> {
+  const query = locale ? `?locale=${encodeURIComponent(locale)}` : "";
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${blogSlug}/outline${query}`, {
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.blog(blogSlug)] },
+  });
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero dell'indice dello spazio.`);
+  return (await res.json()) as OutlineNode[];
+}
+
+/** Pagine dello stesso Spazio che rimandano al post con un `[[link]]` (Spazi wiki/docs). */
+export async function getPublicBacklinks(postId: string): Promise<Backlink[]> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/posts/${postId}/backlinks`, {
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.feed()] },
+  });
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero dei backlink del post.`);
+  return (await res.json()) as Backlink[];
 }
 
 /** Palette/tipografia del blog (`GET /blogs/{slug}/config`, pubblico per i

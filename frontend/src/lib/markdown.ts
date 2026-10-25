@@ -222,6 +222,65 @@ function linkifyMentions(document: Document): void {
   }
 }
 
+// Link interni degli Spazi wiki/docs: `[[pagina]]` o `[[pagina|testo]]`. Stesso criterio del modulo
+// `wiki` del backend (modules/wiki/src/rules.rs): il bersaglio si normalizza come uno slug.
+const WIKILINK_RE = /\[\[([^[\]\n|]{1,200}?)(?:\|([^[\]\n]{0,200}?))?\]\]/g;
+
+/** Slug di un bersaglio `[[...]]`: minuscolo, senza accenti, solo `[a-z0-9]` separati da `-`. */
+export function wikiSlug(raw: string): string {
+  return raw
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 255);
+}
+
+/** Trasforma i `[[link]]` in collegamenti alle pagine dello Spazio. Come `linkifyMentions` agisce
+ * solo sui nodi di testo fuori da link e codice. Muta `document` in place. */
+function linkifyWikiLinks(document: Document, hrefFor: (slug: string) => string): void {
+  const view = document.defaultView;
+  if (!view) return;
+  const skip = new Set(["A", "CODE", "PRE"]);
+  const walker = document.createTreeWalker(document.body, view.NodeFilter.SHOW_TEXT);
+  const textNodes: Text[] = [];
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    let el: Element | null = (n as Text).parentElement;
+    let skipped = false;
+    while (el) {
+      if (skip.has(el.tagName)) {
+        skipped = true;
+        break;
+      }
+      el = el.parentElement;
+    }
+    WIKILINK_RE.lastIndex = 0;
+    if (!skipped && WIKILINK_RE.test((n as Text).data)) textNodes.push(n as Text);
+  }
+
+  for (const node of textNodes) {
+    const frag = document.createDocumentFragment();
+    const text = node.data;
+    let lastIndex = 0;
+    WIKILINK_RE.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = WIKILINK_RE.exec(text)) !== null) {
+      const slug = wikiSlug(match[1]);
+      if (!slug) continue;
+      if (match.index > lastIndex) frag.append(document.createTextNode(text.slice(lastIndex, match.index)));
+      const a = document.createElement("a");
+      a.setAttribute("href", hrefFor(slug));
+      a.className = "wikilink";
+      a.textContent = (match[2] ?? "").trim() || match[1].trim();
+      frag.append(a);
+      lastIndex = WIKILINK_RE.lastIndex;
+    }
+    if (lastIndex < text.length) frag.append(document.createTextNode(text.slice(lastIndex)));
+    node.replaceWith(frag);
+  }
+}
+
 // Come `extract_hashtags` del backend (crates/noct-posts/src/rules.rs): `#` non preceduto da un
 // carattere di parola, poi un tag di al massimo 30 caratteri. Il gruppo 1 è il carattere che precede.
 const HASHTAG_RE = /(^|[^\p{L}\p{N}_&])#([A-Za-z0-9][A-Za-z0-9_-]{0,29})/gu;
@@ -498,6 +557,8 @@ export interface RenderOptions {
   /** Se true, le @menzioni diventano link al profilo (todo/EDITOR.md: il
    * proprietario del blog può disattivarle). Default: true. */
   mentions?: boolean;
+  /** Spazi wiki/docs: se presente, i `[[pagina]]` diventano link; `hrefFor` costruisce l'href dallo slug. */
+  wikiLinks?: { hrefFor: (slug: string) => string };
   /** Tag effettivi del post: gli #hashtag del testo che vi compaiono diventano link a `/tag/{tag}`. */
   tags?: string[];
   /** Note a piè di pagina del post (todo/EDITOR.md). Se presenti, i marcatori
@@ -616,6 +677,7 @@ async function renderPipeline(markdown: string, options: RenderOptions, withHead
   injectCopyButtons(document, options.copyCodeLabel ?? "Copia", options.copiedCodeLabel ?? "Copiato");
   await resolveLinkCards(document);
   if (options.mentions !== false) linkifyMentions(document);
+  if (options.wikiLinks) linkifyWikiLinks(document, options.wikiLinks.hrefFor);
   linkifyHashtags(document, options.tags ?? []);
   const headings = withHeadings ? anchorHeadings(document) : [];
   if (options.notes && options.notes.length > 0) {

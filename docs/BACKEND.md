@@ -17,7 +17,7 @@ crates/          core: noct-core (registry, runtime, hook), manifest/codegen/mig
                  blogs, posts, media, audit, events, platform, admin; infrastruttura: bus, cache, storage,
                  mail, http, markdown, security; noct-bundle (l'elenco dei moduli compilati)
 modules/         moduli opzionali: taxonomy, publications, pages, link_preview, notes, fragments, comments,
-                 discovery, interests, auth_mfa, auth_sso, reports, newsletter, custom_domains, gdpr,
+                 discovery, wiki, git_sync, interests, auth_mfa, auth_sso, reports, newsletter, custom_domains, gdpr,
                  image_moderation, backup (+ sandbox, di riferimento)
 ```
 

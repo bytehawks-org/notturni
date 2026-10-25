@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 /// Colonne di `BlogOut`. `favicon_url` contiene ancora la chiave dell'oggetto: l'URL si
 /// risolve in [`render`].
-pub const BLOG_COLUMNS: &str = "b.id, b.slug, b.title, b.subtitle, b.description, b.visibility::text AS visibility, \
+pub const BLOG_COLUMNS: &str = "b.id, b.slug, b.title, b.subtitle, b.description, b.kind::text AS kind, b.display_mode::text AS display_mode, b.visibility::text AS visibility, \
     b.default_locale, b.extra_locales, b.mentions_enabled, b.search_indexing_enabled, b.ai_crawling_enabled, \
     b.is_paused, b.is_suspended, b.deleted_at, b.default_author_display_name, b.cover_image_url, \
     b.cover_image_is_sensitive, b.cover_image_categories, b.cover_image_alt_text, \

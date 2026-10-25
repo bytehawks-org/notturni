@@ -276,6 +276,9 @@ Riferimento di tutti gli endpoint, i due meccanismi di autenticazione
 [docs/API.md](docs/API.md). Lo schema OpenAPI, sempre allineato ai moduli attivi, è su
 `/api/v1/openapi.json`.
 
+Elenco per modulo di tutte le rotte (verbo, accesso, scopo): [docs/API_REFERENCE.md](docs/API_REFERENCE.md).
+Tutte le variabili d'ambiente, con default ed esempi: [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+
 ## Test
 
 ```bash

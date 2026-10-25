@@ -20,6 +20,10 @@ fn new_blog(slug: &str) -> Value {
     json!({"slug": slug, "title": format!("Blog {slug}")})
 }
 
+async fn mine_mode(env: &Env, who: Uuid, slug: &str) -> Value {
+    env.get(&format!("/blogs/{slug}"), Some(who)).await.1["display_mode"].clone()
+}
+
 // ---- creazione --------------------------------------------------------------------------------
 
 #[tokio::test]
@@ -79,6 +83,49 @@ async fn create_blog_applies_domain_rules() {
     let blog: Uuid =
         sqlx::query_scalar("SELECT id FROM blogs WHERE slug = 'diario'").fetch_one(&env.pool).await.unwrap();
     assert_eq!(audit_actions(&env, blog).await, vec!["blog.created"]);
+    env.teardown().await;
+}
+
+#[tokio::test]
+async fn spaces_have_a_kind_fixed_at_creation_and_an_api_alias() {
+    let env = setup(&[], &[]).await;
+    let anna = env.user("anna", "utente").await;
+
+    let (_, b) = env.post("/blogs", Some(anna), new_blog("diario")).await;
+    assert_eq!(b["kind"], "blog", "il tipo predefinito è blog");
+    for kind in ["wiki", "docs"] {
+        let (s, b) =
+            env.post("/blogs", Some(anna), json!({"slug": format!("{kind}-test"), "title": "T", "kind": kind})).await;
+        assert_eq!((s, b["kind"].clone()), (StatusCode::CREATED, json!(kind)), "{b}");
+    }
+    let bad = json!({"slug": "altro", "title": "T", "kind": "forum"});
+    assert_eq!(env.post("/blogs", Some(anna), bad).await.0, StatusCode::BAD_REQUEST);
+
+    // il tipo non si cambia con un PATCH
+    let (_, b) = env.patch("/blogs/wiki-test", Some(anna), json!({"kind": "blog", "title": "Nuovo"})).await;
+    assert_eq!((b["kind"].clone(), b["title"].clone()), (json!("wiki"), json!("Nuovo")));
+
+    // la modalità di visualizzazione segue il tipo e si sceglie solo tra quelle ammesse
+    assert_eq!(mine_mode(&env, anna, "diario").await, json!("feed"));
+    assert_eq!(mine_mode(&env, anna, "wiki-test").await, json!("wiki"));
+    assert_eq!(mine_mode(&env, anna, "docs-test").await, json!("docs"));
+    let (s, b) = env.patch("/blogs/wiki-test", Some(anna), json!({"display_mode": "docs"})).await;
+    assert_eq!((s, b["display_mode"].clone()), (StatusCode::OK, json!("docs")), "{b}");
+    for (slug, mode) in [("diario", "docs"), ("wiki-test", "feed")] {
+        let (s, b) = env.patch(&format!("/blogs/{slug}"), Some(anna), json!({"display_mode": mode})).await;
+        assert_eq!((s, detail(&b).contains("non è disponibile")), (StatusCode::BAD_REQUEST, true), "{slug}: {b}");
+    }
+    let (s, _) = env
+        .post("/blogs", Some(anna), json!({"slug": "altro", "title": "T", "kind": "blog", "display_mode": "wiki"}))
+        .await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+
+    // l'alias /spaces raggiunge le stesse rotte, query compresa
+    let (s, mine) = env.get("/spaces/mine", Some(anna)).await;
+    assert_eq!((s, mine.as_array().map(Vec::len)), (StatusCode::OK, Some(3)));
+    let (s, one) = env.get("/spaces/docs-test", Some(anna)).await;
+    assert_eq!((s, one["kind"].clone()), (StatusCode::OK, json!("docs")));
+    assert_eq!(env.get("/spacesx", None).await.0, StatusCode::NOT_FOUND);
     env.teardown().await;
 }
 

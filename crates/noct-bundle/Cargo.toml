@@ -6,10 +6,12 @@ license.workspace = true
 publish.workspace = true
 
 [features]
-default = ["taxonomy", "publications", "pages", "link-preview", "notes", "fragments", "comments", "discovery", "interests", "auth-mfa", "auth-sso", "reports", "newsletter", "custom-domains", "gdpr", "image-moderation", "backup"]
+default = ["taxonomy", "publications", "pages", "wiki", "git-sync", "link-preview", "notes", "fragments", "comments", "discovery", "interests", "auth-mfa", "auth-sso", "reports", "newsletter", "custom-domains", "gdpr", "image-moderation", "backup"]
 taxonomy = ["dep:noct-taxonomy"]
 publications = ["dep:noct-publications"]
 pages = ["dep:noct-pages"]
+wiki = ["dep:noct-wiki"]
+git-sync = ["dep:noct-git-sync"]
 link-preview = ["dep:noct-link-preview"]
 notes = ["dep:noct-notes"]
 fragments = ["dep:noct-fragments"]
@@ -44,6 +46,8 @@ noct-auth.workspace = true
 noct-taxonomy = { workspace = true, optional = true }
 noct-publications = { workspace = true, optional = true }
 noct-pages = { workspace = true, optional = true }
+noct-wiki = { workspace = true, optional = true }
+noct-git-sync = { workspace = true, optional = true }
 noct-link-preview = { workspace = true, optional = true }
 noct-notes = { workspace = true, optional = true }
 noct-fragments = { workspace = true, optional = true }

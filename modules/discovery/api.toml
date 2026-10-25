@@ -72,7 +72,7 @@ auth = "public"
 kind = "custom"
 handler = "list_feed"
 response = "FeedPost[]"
-summary = "Feed del portale, dal più recente (`locale`, `tag`, `category`, `following=true`, `limit` max 50, `offset`)"
+summary = "Feed del portale, dal più recente; per default solo articoli di Spazi `blog` (`kind` = blog|wiki|docs, `locale`, `tag`, `category`, `following=true`, `limit` max 50, `offset`)"
 
 [[route]]
 id = "list_feed_locales"
@@ -114,7 +114,7 @@ auth = "public"
 kind = "custom"
 handler = "list_public_blogs"
 response = "PublicBlog[]"
-summary = "Directory pubblica dei blog (`q`, `locale`, `sort` = active|new|followers, `limit` max 100, `offset`)"
+summary = "Directory pubblica degli Spazi (`kind` = blog|wiki|docs, `q`, `locale`, `sort` = active|new|followers, `limit` max 100, `offset`)"
 
 [[route]]
 id = "follow_blog"

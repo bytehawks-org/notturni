@@ -55,6 +55,12 @@ export function isMfaRequired(res: LoginResponse): res is MfaRequiredResponse {
 /** todo/BLOG.md #2. public: tutti; members: solo utenti autenticati; private: diario del solo proprietario. */
 export type BlogVisibility = "public" | "members" | "private";
 
+/** Tipologia di Spazio: fissata alla creazione. */
+export type SpaceKind = "blog" | "wiki" | "docs";
+
+/** Struttura delle pagine pubbliche: feed cronologico, wiki (albero + backlink) o docs (sidebar + indice). */
+export type SpaceDisplayMode = "feed" | "wiki" | "docs";
+
 export const BLOG_VISIBILITY_LABELS: Record<BlogVisibility, string> = {
   public: "Pubblico",
   members: "Solo iscritti alla piattaforma",
@@ -87,6 +93,8 @@ export interface Blog {
   subtitle: string | null;
   /** Descrizione breve del blog (max 256 caratteri). */
   description: string | null;
+  kind: SpaceKind;
+  display_mode: SpaceDisplayMode;
   visibility: BlogVisibility;
   custom_domain: string | null;
   comments_mode: CommentsMode;
@@ -273,6 +281,10 @@ export interface Post {
   /** B9: pubblicazione di appartenenza (al più una) e posizione esplicita del capitolo. */
   publication: { id: string; name: string; title: string } | null;
   chapter_order: number | null;
+  /** Modulo wiki (solo Spazi wiki/docs): pagina padre, posizione tra i fratelli, numero di revisioni. */
+  parent_id?: string | null;
+  position?: number;
+  revisions?: number;
   /** Override di Blog.comments_mode per questo post: `null` eredita dal blog. */
   comments_mode: CommentsMode | null;
   /** Sempre valorizzato: comments_mode se impostato, altrimenti quello del blog. */
@@ -1066,4 +1078,69 @@ export interface NewsletterCampaign {
   recipient_count: number;
   failed_count: number;
   created_at: string;
+}
+
+/** Una pagina dell'indice di uno Spazio wiki/docs, in ordine di lettura (`depth` da 0). */
+export interface OutlineNode {
+  id: string;
+  slug: string;
+  title: string;
+  locale: string;
+  status: PostStatus;
+  parent_id: string | null;
+  position: number;
+  depth: number;
+  is_visible: boolean;
+}
+
+export interface RevisionSummary {
+  revision: number;
+  title: string;
+  editor: string | null;
+  summary: string | null;
+  size: number;
+  created_at: string;
+}
+
+export interface RevisionDetail {
+  revision: number;
+  title: string;
+  content: string;
+  editor: string | null;
+  summary: string | null;
+  created_at: string;
+}
+
+export interface DiffHunk {
+  op: "equal" | "insert" | "delete";
+  text: string;
+}
+
+export interface RevisionDiff {
+  from: number;
+  to: number;
+  hunks: DiffHunk[];
+}
+
+export interface Backlink {
+  id: string;
+  slug: string;
+  title: string;
+  locale: string;
+}
+
+/** Sincronizzazione Git di uno Spazio (`GET /blogs/{slug}/git-sync`). Il token non viene mai restituito. */
+export interface GitSyncStatus {
+  configured: boolean;
+  remote_url: string | null;
+  branch: string | null;
+  username: string | null;
+  has_secret: boolean;
+  include_drafts: boolean;
+  enabled: boolean;
+  last_status: "running" | "ok" | "unchanged" | "error" | null;
+  last_run_at: string | null;
+  last_error: string | null;
+  last_commit: string | null;
+  last_pages: number | null;
 }

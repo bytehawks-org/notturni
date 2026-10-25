@@ -2509,6 +2509,7 @@ dependencies = [
  "noct-blogs",
  "noct-bundle",
  "noct-core",
+ "noct-git-sync",
  "noct-manifest",
  "noct-newsletter",
  "noct-security",
@@ -2678,6 +2679,7 @@ dependencies = [
  "noct-events",
  "noct-fragments",
  "noct-gdpr",
+ "noct-git-sync",
  "noct-image-moderation",
  "noct-interests",
  "noct-link-preview",
@@ -2693,6 +2695,7 @@ dependencies = [
  "noct-sandbox",
  "noct-taxonomy",
  "noct-users",
+ "noct-wiki",
 ]
 
 [[package]]
@@ -2891,6 +2894,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "noct-git-sync"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "base64 0.23.1",
+ "chrono",
+ "hex",
+ "noct-audit",
+ "noct-codegen",
+ "noct-core",
+ "noct-security",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "noct-http"
 version = "0.1.0"
 dependencies = [
@@ -2943,6 +2970,7 @@ dependencies = [
  "hex",
  "noct-codegen",
  "noct-core",
+ "noct-security",
  "regex",
  "reqwest",
  "serde",
@@ -3245,6 +3273,25 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
+ "uuid",
+]
+
+[[package]]
+name = "noct-wiki"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "chrono",
+ "noct-audit",
+ "noct-codegen",
+ "noct-core",
+ "noct-posts",
+ "regex",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "unicode-normalization",
  "uuid",
 ]
 

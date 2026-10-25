@@ -42,6 +42,27 @@ fn slugs(list: &Value) -> Vec<String> {
 // ---- feed, tendenze, ricerca -----------------------------------------------------------------------------------------
 
 #[tokio::test]
+async fn feed_defaults_to_blogs_and_the_directory_filters_by_kind() {
+    let (env, anna) = world().await;
+    env.blog("diario", anna, "public").await;
+    env.blog("manuale", anna, "public").await;
+    sqlx::query("UPDATE blogs SET kind = 'docs' WHERE slug = 'manuale'").execute(&env.pool).await.unwrap();
+    published(&env, anna, "diario", "articolo", json!({})).await;
+    published(&env, anna, "manuale", "guida", json!({})).await;
+
+    assert_eq!(slugs(&env.get("/feed/posts", None).await.1), ["articolo"], "le pagine docs non entrano nel feed");
+    assert_eq!(slugs(&env.get("/feed/posts?kind=docs", None).await.1), ["guida"]);
+    assert_eq!(env.get("/feed/posts?kind=forum", None).await.0, StatusCode::UNPROCESSABLE_ENTITY);
+
+    let (_, all) = env.get("/blogs", None).await;
+    assert_eq!(all.as_array().unwrap().len(), 2, "la directory elenca tutti gli Spazi");
+    let (_, docs) = env.get("/blogs?kind=docs", None).await;
+    assert_eq!(slugs(&docs), ["manuale"]);
+    assert_eq!(docs[0]["kind"], "docs");
+    env.teardown().await;
+}
+
+#[tokio::test]
 async fn feed_shows_only_published_posts_of_listable_blogs_with_filters() {
     let (env, anna) = world().await;
     let bruno = env.user("bruno", "utente").await;

@@ -1,0 +1,31 @@
+[module]
+name = "git_sync"
+version = "0.1.0"
+kind = "optional"
+default_enabled = true
+requires = ["users", "blogs", "posts", "audit", "events"]
+description = "Sincronizzazione dei testi di uno Spazio verso un branch di un repository Git remoto (GitHub, GitLab, Forgejo...): solo esportazione, via HTTPS con token"
+
+[config]
+# Solo per sviluppo e test: consente host in reti private e URL `file://`. In produzione resta spento
+# (protezione SSRF: l'URL del repository lo sceglie l'utente).
+allow_private_hosts = { type = "bool", env = "NOCT_GIT_SYNC_ALLOW_PRIVATE", default = false }
+# Eseguibile `git` (incluso nell'immagine)
+git_bin = { type = "string", env = "NOCT_GIT_SYNC_GIT_BIN", default = "git" }
+
+# Ogni ora accoda una sincronizzazione per le configurazioni attive il cui contenuto è cambiato
+[jobs.dispatch]
+subject = "git_sync.dispatch"
+schedule = "1h"
+max_deliver = 2
+backoff = ["5m"]
+
+# Una sincronizzazione (payload: config_id, force). L'esito, anche d'errore, si registra sulla
+# configurazione: non si riprova automaticamente, ci pensa il giro successivo.
+[jobs.run]
+subject = "git_sync.run"
+max_deliver = 2
+backoff = ["1m"]
+
+[lifecycle]
+personal_data = true

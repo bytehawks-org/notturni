@@ -1,0 +1,28 @@
+# Sincronizzazione di uno Spazio verso un repository Git remoto. Una configurazione per Spazio; la
+# credenziale appartiene a chi l'ha impostata (il proprietario) ed è cifrata a riposo.
+[[table]]
+name = "git_sync_configs"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "blog_id", type = "uuid", ref = "blogs.id", on_delete = "cascade" },
+  { name = "owner_id", type = "uuid", ref = "users.id", on_delete = "cascade" },
+  { name = "remote_url", type = "varchar(2048)" },
+  { name = "branch", type = "varchar(200)", default = "'notturni-backup'" },
+  # utente per l'autenticazione HTTPS (con un token qualsiasi nome va bene per GitHub e Forgejo)
+  { name = "username", type = "varchar(100)", default = "'git'" },
+  # token cifrato (`noct_security::secrets`), mai restituito dall'API
+  { name = "secret", type = "text" },
+  { name = "include_drafts", type = "boolean", default = "false" },
+  { name = "enabled", type = "boolean", default = "true" },
+  # `running` | `ok` | `unchanged` | `error`
+  { name = "last_status", type = "varchar(16)", null = true },
+  { name = "last_run_at", type = "timestamptz", null = true },
+  { name = "last_error", type = "text", null = true },
+  { name = "last_commit", type = "varchar(64)", null = true },
+  { name = "last_pages", type = "integer", null = true },
+  # impronta dei file generati all'ultimo esito positivo: invariata = niente da fare
+  { name = "last_hash", type = "varchar(64)", null = true },
+]
+uniques = [{ name = "uq_git_sync_blog", columns = ["blog_id"] }]
+indexes = [{ columns = ["owner_id"] }]

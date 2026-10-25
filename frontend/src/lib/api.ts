@@ -22,6 +22,14 @@ import type {
   BlogReports,
   BlogRole,
   BlogVisibility,
+  Backlink,
+  GitSyncStatus,
+  OutlineNode,
+  RevisionDetail,
+  RevisionDiff,
+  RevisionSummary,
+  SpaceDisplayMode,
+  SpaceKind,
   Category,
   Comment,
   CommentStatus,
@@ -223,6 +231,7 @@ export const api = {
         default_locale?: string;
         subtitle?: string | null;
         description?: string | null;
+        kind?: SpaceKind;
         visibility?: BlogVisibility;
         default_author_display_name?: string | null;
       }
@@ -239,6 +248,8 @@ export const api = {
         subtitle?: string;
         description?: string;
         visibility?: BlogVisibility;
+        /** wiki/docs: `wiki` o `docs`; un blog usa sempre `feed`. */
+        display_mode?: SpaceDisplayMode;
         comments_mode?: CommentsMode;
         mentions_enabled?: boolean;
         static_pages_enabled?: boolean;
@@ -448,6 +459,37 @@ export const api = {
       }),
   },
 
+  gitSync: {
+    get: (token: string, slug: string) => request<GitSyncStatus>(`/api/v1/blogs/${slug}/git-sync`, { token }),
+    /** `secret` assente = invariato (obbligatorio alla prima configurazione). */
+    save: (
+      token: string,
+      slug: string,
+      payload: {
+        remote_url: string;
+        branch?: string;
+        username?: string;
+        secret?: string;
+        include_drafts?: boolean;
+        enabled?: boolean;
+      }
+    ) => request<GitSyncStatus>(`/api/v1/blogs/${slug}/git-sync`, { method: "PUT", token, body: payload }),
+    remove: (token: string, slug: string) => request<void>(`/api/v1/blogs/${slug}/git-sync`, { method: "DELETE", token }),
+    run: (token: string, slug: string) => request<void>(`/api/v1/blogs/${slug}/git-sync/run`, { method: "POST", token }),
+  },
+  wiki: {
+    outline: (token: string | null, blogSlug: string, locale?: string) =>
+      request<OutlineNode[]>(`/api/v1/blogs/${blogSlug}/outline${locale ? `?locale=${locale}` : ""}`, { token }),
+    /** Sostituisce l'indice: `items` nell'ordine voluto, con tutti i post dello Spazio. */
+    saveOutline: (token: string, blogSlug: string, items: { id: string; parent_id: string | null }[]) =>
+      request<OutlineNode[]>(`/api/v1/blogs/${blogSlug}/outline`, { method: "PUT", token, body: { items } }),
+    revisions: (token: string, postId: string) => request<RevisionSummary[]>(`/api/v1/posts/${postId}/revisions`, { token }),
+    revision: (token: string, postId: string, revision: number) =>
+      request<RevisionDetail>(`/api/v1/posts/${postId}/revisions/${revision}`, { token }),
+    diff: (token: string, postId: string, revision: number) =>
+      request<RevisionDiff>(`/api/v1/posts/${postId}/revisions/${revision}/diff`, { token }),
+    backlinks: (token: string | null, postId: string) => request<Backlink[]>(`/api/v1/posts/${postId}/backlinks`, { token }),
+  },
   posts: {
     /** Pubblico: solo pubblicati. Con token e accesso in scrittura: anche le bozze. */
     list: (token: string | null, blogSlug: string, locale?: string) =>
@@ -472,6 +514,8 @@ export const api = {
         category_id?: string | null;
         publication_id?: string | null;
         notes?: PostNote[];
+        /** Spazi wiki/docs: pagina padre (assente o null = radice). */
+        parent_id?: string | null;
       }
     ) => request<Post>(`/api/v1/blogs/${blogSlug}/posts`, { method: "POST", token, body: payload }),
     update: (
@@ -503,6 +547,10 @@ export const api = {
          * ai_crawling_enabled; valore: imposta un override per questo solo post. */
         search_indexing_enabled?: boolean | null;
         ai_crawling_enabled?: boolean | null;
+        /** Spazi wiki/docs: assente non tocca; null: radice; id: sposta sotto quella pagina. */
+        parent_id?: string | null;
+        /** Spazi wiki/docs: nota che accompagna la revisione creata da questo salvataggio. */
+        revision_summary?: string;
       }
     ) => request<Post>(`/api/v1/posts/${postId}`, { method: "PATCH", token, body: payload }),
     /** Pubblica subito, o pianifica se `publishedAt` (ISO) è nel futuro. */

@@ -5,6 +5,7 @@
 
 pub mod cookie;
 pub mod jwt;
+pub mod net;
 pub mod otp;
 pub mod password;
 pub mod secrets;

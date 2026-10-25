@@ -22,9 +22,13 @@ import { TagPills } from "@/components/TagPills";
 import { formatDate, readingMinutes } from "@/lib/format";
 import { languageName } from "@/lib/languages";
 import { excerpt, renderPost } from "@/lib/markdown";
-import { getPublicBlog, getPublicBlogConfig, getPublicPostByPermalink, getPublicPostTranslations, getPublicPublication, getPublicPublications } from "@/lib/server-api";
+import { getPublicBacklinks, getPublicBlog, getPublicOutline, getPublicBlogConfig, getPublicPostByPermalink, getPublicPostTranslations, getPublicPublication, getPublicPublications } from "@/lib/server-api";
 import { SITE_URL } from "@/lib/site";
 import { blogLinks } from "@/lib/blog-path";
+import { ancestorsOf, neighbours } from "@/lib/outline-tree";
+import { effectiveDisplayMode } from "@/lib/space-mode";
+import { SpaceNav } from "@/components/space/SpaceNav";
+import { Breadcrumbs, PrevNext } from "@/components/space/SpacePageChrome";
 
 interface PageParams {
   blogSlug: string;
@@ -85,8 +89,11 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
   const chapterIndex = publication ? publication.chapters.findIndex((c) => c.post_id === post.id) : -1;
   const chapter = chapterIndex >= 0 && publication ? { current: chapterIndex + 1, total: publication.chapters.length, prev: publication.chapters[chapterIndex - 1], next: publication.chapters[chapterIndex + 1] } : null;
 
+  const isWikiSpace = !!blog && blog.kind !== "blog";
+  const backlinks = isWikiSpace ? await getPublicBacklinks(post.id).catch(() => []) : [];
   const { html, headings } = await renderPost(post.content, {
     mentions: post.mentions_enabled,
+    wikiLinks: isWikiSpace ? { hrefFor: (slug) => `${basePath}/${slug}` } : undefined,
     tags: post.tags,
     notes: post.notes,
     footnoteLabels: { title: tPost("notes"), backToText: tPost("backToText") },
@@ -125,6 +132,20 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
           {tPost("blogBibliography")}
         </Link>
       )}
+      {backlinks.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <span className="font-mono text-[11px] uppercase tracking-[.08em] text-muted">{tPost("backlinks")}</span>
+          <ul className="flex flex-col gap-1">
+            {backlinks.map((b) => (
+              <li key={b.id}>
+                <Link href={`${basePath}/${b.slug}`} className="text-primary no-underline hover:underline">
+                  {b.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {(post.category || translations.length > 1) && (
         <div className="flex flex-col gap-2">
           <span className="font-mono text-[11px] uppercase tracking-[.08em] text-muted">{t("about")}</span>
@@ -152,6 +173,110 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
       )}
     </div>
   );
+
+  // Spazi wiki e docs: sidebar con l'indice, breadcrumb e, in modalità docs, indice a destra e
+  // pagina precedente/successiva (layout dedicati al posto dell'articolo da blog)
+  if (blog && isWikiSpace) {
+    const mode = effectiveDisplayMode(blog);
+    const tSpace = await getTranslations("SpacePage");
+    const outline = await getPublicOutline(blogSlug, post.locale).catch(() => []);
+    const hrefFor = (n: { slug: string }) => `${basePath}/${n.slug}`;
+    const trail = ancestorsOf(outline, post.id);
+    const { prev, next } = neighbours(outline, post.id);
+    const sidebar = (
+      <SpaceNav nodes={outline} currentId={post.id} hrefFor={hrefFor} openPath={new Set(trail.map((n) => n.id))} />
+    );
+    return (
+      <BlogPageShell config={config}>
+        <JsonLd data={jsonLd} />
+        <BlogHeader basePath={basePath} name={blogTitle} current="posts" hasPublications={publications.length > 0} actions={<BlogHeaderActions slug={blogSlug} />} />
+        <main className="mx-auto w-full max-w-[1280px] flex-1 px-5 py-8 lg:px-10 lg:py-12">
+          <div
+            className={`grid gap-8 lg:gap-12 ${
+              mode === "docs" ? "lg:grid-cols-[250px_minmax(0,1fr)] xl:grid-cols-[250px_minmax(0,1fr)_220px]" : "lg:grid-cols-[250px_minmax(0,1fr)]"
+            }`}
+          >
+            <aside className="lg:sticky lg:top-8 lg:max-h-[calc(100vh-4rem)] lg:self-start lg:overflow-y-auto">
+              <details className="rounded-xl border border-border bg-surface px-4 py-3 text-sm lg:hidden">
+                <summary className="cursor-pointer font-medium text-foreground">{tSpace("index")}</summary>
+                <div className="mt-3">{sidebar}</div>
+              </details>
+              <div className="hidden lg:block">{sidebar}</div>
+            </aside>
+
+            <article className="min-w-0 max-w-[760px]">
+              <Breadcrumbs
+                spaceName={blogTitle}
+                spaceHref={basePath || "/"}
+                trail={trail}
+                hrefFor={hrefFor}
+                label={tSpace("breadcrumb")}
+              />
+              <h1 className="font-serif text-[34px] font-medium leading-[1.12] tracking-tight text-foreground md:text-[42px]">
+                {post.title}
+              </h1>
+              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
+                <span>{post.author_display_name}</span>
+                <span>{t("minRead", { min: minutes })}</span>
+                <PostActions permalink={links.fromPermalink(post.permalink)} title={post.title} citation={citation} />
+                <ReportButton target={{ type: "post", id: post.id }} />
+              </div>
+              {mode === "docs" && headings.length > 0 && (
+                <details className="mt-6 rounded-xl border border-border bg-surface px-4 py-3 text-sm xl:hidden">
+                  <summary className="cursor-pointer font-medium text-foreground">{t("inThisPost")}</summary>
+                  <div className="mt-3">
+                    <PostToc headings={headings} />
+                  </div>
+                </details>
+              )}
+              <div style={{ fontSize: "var(--blog-body-size)" }}>
+                <FragmentReader
+                  postId={post.id}
+                  html={html}
+                  permalink={links.fromPermalink(post.permalink)}
+                  quoteAttribution={`${post.author_display_name}, ${post.title}`}
+                  className="notturni-prose notturni-prose--reading mt-8 leading-[1.7]"
+                />
+              </div>
+              {post.tags.length > 0 && (
+                <div className="mt-10">
+                  <TagPills tags={post.tags} />
+                </div>
+              )}
+              {backlinks.length > 0 && (
+                <section className="mt-10 rounded-xl border border-border bg-surface px-5 py-4">
+                  <h2 className="font-mono text-[11px] uppercase tracking-[.08em] text-muted">{tPost("backlinks")}</h2>
+                  <ul className="mt-2 flex flex-col gap-1 text-[15px]">
+                    {backlinks.map((b) => (
+                      <li key={b.id}>
+                        <Link href={`${basePath}/${b.slug}`} className="text-primary no-underline hover:underline">
+                          {b.title}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+              {mode === "docs" && (
+                <PrevNext prev={prev} next={next} hrefFor={hrefFor} prevLabel={tSpace("previous")} nextLabel={tSpace("next")} />
+              )}
+              <CommentsSection postId={post.id} mode={post.effective_comments_mode} />
+              <ReadBeacon postId={post.id} />
+            </article>
+
+            {mode === "docs" && (
+              <aside className="hidden xl:block">
+                <div className="sticky top-8">
+                  <span className="mb-2 block font-mono text-[11px] uppercase tracking-[.08em] text-muted">{tSpace("onThisPage")}</span>
+                  <PostToc headings={headings} />
+                </div>
+              </aside>
+            )}
+          </div>
+        </main>
+      </BlogPageShell>
+    );
+  }
 
   return (
     <BlogPageShell config={config}>

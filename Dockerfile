@@ -34,8 +34,9 @@ RUN cargo build --release --locked -p noct-api -p noct-worker -p noct-ctl
 FROM docker.io/library/debian:trixie-slim AS runtime
 # postgresql-client: `pg_dump` del backup infrastrutturale (supporta server con versione <= alla sua:
 # quella di Debian è più recente di postgres:16). ca-certificates: TLS verso SMTP, S3 e provider SSO.
+# git: sincronizzazione degli Spazi verso un repository remoto (modulo git_sync).
 RUN apt-get update \
-    && apt-get install --no-install-recommends -y ca-certificates postgresql-client tini \
+    && apt-get install --no-install-recommends -y ca-certificates git postgresql-client tini \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --uid 10001 --create-home --shell /usr/sbin/nologin appuser
 COPY --from=builder /src/target/release/noct-api /src/target/release/noct-worker /src/target/release/noct-ctl /usr/local/bin/

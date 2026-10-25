@@ -1,0 +1,174 @@
+{
+  "enums": [],
+  "tables": [
+    {
+      "name": "git_sync_configs",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "null": false,
+          "default": "gen_random_uuid()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "blog_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "blogs",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "owner_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "users",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "remote_url",
+          "type": "varchar(2048)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "branch",
+          "type": "varchar(200)",
+          "null": false,
+          "default": "'notturni-backup'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "username",
+          "type": "varchar(100)",
+          "null": false,
+          "default": "'git'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "secret",
+          "type": "text",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "include_drafts",
+          "type": "boolean",
+          "null": false,
+          "default": "false",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "enabled",
+          "type": "boolean",
+          "null": false,
+          "default": "true",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "last_status",
+          "type": "varchar(16)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "last_run_at",
+          "type": "timestamptz",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "last_error",
+          "type": "text",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "last_commit",
+          "type": "varchar(64)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "last_pages",
+          "type": "integer",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "last_hash",
+          "type": "varchar(64)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "ix_git_sync_configs_owner_id",
+          "columns": [
+            "owner_id"
+          ],
+          "unique": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "uq_git_sync_blog",
+          "columns": [
+            "blog_id"
+          ]
+        }
+      ]
+    }
+  ]
+}

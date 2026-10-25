@@ -65,7 +65,7 @@ async fn count_owned(conn: &mut PgConnection, owner: Uuid) -> Result<i64, ApiErr
 }
 
 fn limit_message(max: i32) -> String {
-    format!("Limite massimo di {max} blog per utente raggiunto.")
+    format!("Limite massimo di {max} spazi per utente raggiunto.")
 }
 
 // ---- creazione ed elenchi ---------------------------------------------------------------------
@@ -93,9 +93,12 @@ pub async fn create_blog(ctx: RouteCtx, body: BlogCreate) -> Result<Value, ApiEr
         return Err(ApiError::bad_request(limit_message(platform.max_blogs_per_user)));
     }
     let visibility = body.visibility.clone().unwrap_or_else(|| "public".into());
+    let kind = body.kind.as_deref().unwrap_or("blog");
+    let display_mode =
+        rules::resolve_display_mode(kind, body.display_mode.as_deref()).map_err(ApiError::bad_request)?;
     let id: Uuid = sqlx::query_scalar(
-        "INSERT INTO blogs (slug, title, subtitle, description, owner_id, visibility, default_locale, default_author_display_name)
-         VALUES ($1, $2, $3, $4, $5, $6::blog_visibility, $7, $8) RETURNING id",
+        "INSERT INTO blogs (slug, title, subtitle, description, owner_id, visibility, default_locale, default_author_display_name, kind, display_mode)
+         VALUES ($1, $2, $3, $4, $5, $6::blog_visibility, $7, $8, $9::space_kind, $10::space_display_mode) RETURNING id",
     )
     .bind(&body.slug)
     .bind(&body.title)
@@ -105,6 +108,8 @@ pub async fn create_blog(ctx: RouteCtx, body: BlogCreate) -> Result<Value, ApiEr
     .bind(&visibility)
     .bind(&locale)
     .bind(body.default_author_display_name.clone().filter(|s| !s.is_empty()))
+    .bind(kind)
+    .bind(display_mode)
     .fetch_one(&mut *tx)
     .await
     .map_err(|e| map_db_error(e, &[("uq_blogs_slug", 409, "Slug già in uso.")]))?;
@@ -188,10 +193,15 @@ pub async fn update_blog(ctx: RouteCtx, body: BlogUpdate) -> Result<Value, ApiEr
     }
 
     let mut tx = st.db.begin().await?;
-    let default_locale: String = sqlx::query_scalar("SELECT default_locale FROM blogs WHERE id = $1 FOR UPDATE")
-        .bind(blog.id)
-        .fetch_one(&mut *tx)
-        .await?;
+    let (default_locale, kind): (String, String) =
+        sqlx::query_as("SELECT default_locale, kind::text FROM blogs WHERE id = $1 FOR UPDATE")
+            .bind(blog.id)
+            .fetch_one(&mut *tx)
+            .await?;
+    let display_mode = match body.display_mode.as_deref() {
+        Some(m) => Some(rules::resolve_display_mode(&kind, Some(m)).map_err(ApiError::bad_request)?),
+        None => None,
+    };
     let extra_locales = match &body.extra_locales {
         Some(list) => Some(rules::normalize_extra_locales(list, &default_locale).map_err(ApiError::bad_request)?),
         None => None,
@@ -210,6 +220,9 @@ pub async fn update_blog(ctx: RouteCtx, body: BlogUpdate) -> Result<Value, ApiEr
     }
     if let Some(v) = &body.visibility {
         qb.push(", visibility = ").push_bind(v).push("::blog_visibility");
+    }
+    if let Some(v) = display_mode {
+        qb.push(", display_mode = ").push_bind(v).push("::space_display_mode");
     }
     if let Some(v) = body.mentions_enabled {
         qb.push(", mentions_enabled = ").push_bind(v);

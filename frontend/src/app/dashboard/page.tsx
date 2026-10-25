@@ -17,10 +17,11 @@ import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { formatDate } from "@/lib/format";
 import { displayPostStatus, type DisplayPostStatus } from "@/lib/post-status";
-import type { Blog, BlogComment, BlogInvitation, BlogVisibility, MembershipBlog, Post } from "@/lib/types";
+import type { Blog, BlogComment, BlogInvitation, BlogVisibility, MembershipBlog, Post, SpaceKind } from "@/lib/types";
 
 const MAX_BLOGS = 5;
 const VISIBILITIES: BlogVisibility[] = ["public", "members", "private"];
+const SPACE_KINDS: SpaceKind[] = ["blog", "wiki", "docs"];
 const POST_FILTERS: ("all" | DisplayPostStatus)[] = ["all", "draft", "review", "scheduled", "published"];
 
 /** Dashboard utente (mockup 1e desktop / 1f mobile): saluto e riepilogo,
@@ -48,6 +49,7 @@ export default function DashboardHomePage() {
   const [slug, setSlug] = useState("");
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
+  const [kind, setKind] = useState<SpaceKind>("blog");
   const [visibility, setVisibility] = useState<BlogVisibility>("public");
   // Alias di default del blog: se lasciato vuoto il backend ricade sullo
   // username (vedi _resolve_author_display_name), il suggerimento lo esplicita.
@@ -102,6 +104,7 @@ export default function DashboardHomePage() {
           slug,
           title,
           subtitle: subtitle || null,
+          kind,
           visibility,
           default_author_display_name: defaultAuthorName || null,
         })
@@ -250,6 +253,23 @@ export default function DashboardHomePage() {
             <FieldGroup>
               <Label htmlFor="default-author-name">{t("defaultAuthor")}</Label>
               <Input id="default-author-name" value={defaultAuthorName} onChange={(e) => setDefaultAuthorNameInput(e.target.value)} />
+            </FieldGroup>
+            <FieldGroup>
+              <Label htmlFor="kind" hint={t("kindHint")}>
+                {t("kind")}
+              </Label>
+              <select
+                id="kind"
+                value={kind}
+                onChange={(e) => setKind(e.target.value as SpaceKind)}
+                className="w-full max-w-xs rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
+              >
+                {SPACE_KINDS.map((k) => (
+                  <option key={k} value={k}>
+                    {t(`kinds.${k}`)}
+                  </option>
+                ))}
+              </select>
             </FieldGroup>
             <FieldGroup>
               <Label htmlFor="visibility">{t("visibility")}</Label>

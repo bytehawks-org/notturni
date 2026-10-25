@@ -11,8 +11,10 @@ import { CategorySelect } from "@/components/editor/CategorySelect";
 import { CoverImageUpload } from "@/components/editor/CoverImageUpload";
 import { EditorRail } from "@/components/editor/EditorRail";
 import { PostCommentsModeControl, PostCrawlingControl } from "@/components/editor/PostMetaControls";
+import { PageParentSelect } from "@/components/editor/PageParentSelect";
 import { PostStatusControl } from "@/components/editor/PostStatusControl";
 import { PublicationSelect } from "@/components/editor/PublicationSelect";
+import { RevisionsPanel } from "@/components/editor/RevisionsPanel";
 import { RichTextEditor } from "@/components/editor/RichTextEditorLazy";
 import { TagInput } from "@/components/editor/TagInput";
 import { TranslationsBar } from "@/components/editor/TranslationsBar";
@@ -56,6 +58,12 @@ export default function PostEditorPage() {
   const [searchIndexingEnabled, setSearchIndexingEnabled] = useState<boolean | null>(null);
   const [aiCrawlingEnabled, setAiCrawlingEnabled] = useState<boolean | null>(null);
   const [notes, setNotes] = useState<PostNote[]>([]);
+  // Spazi wiki/docs: pagina padre, nota di revisione, cronologia
+  const [isWikiSpace, setIsWikiSpace] = useState(false);
+  const [parentId, setParentId] = useState<string | null>(null);
+  const [revisionSummary, setRevisionSummary] = useState("");
+  const [historyKey, setHistoryKey] = useState(0);
+  const [editorKey, setEditorKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -81,10 +89,15 @@ export default function PostEditorPage() {
         setSearchIndexingEnabled(p.search_indexing_enabled);
         setAiCrawlingEnabled(p.ai_crawling_enabled);
         setNotes(p.notes);
+        setParentId(p.parent_id ?? null);
       })
       .catch((err) => setError(errorMessage(err, tc("unexpectedError"))));
     api.posts.translations(params.postId).then(setTranslations).catch(() => undefined);
-  }, [params.postId, accessToken, tc]);
+    api.blogs
+      .get(params.slug, accessToken)
+      .then((b) => setIsWikiSpace(b.kind !== "blog"))
+      .catch(() => undefined);
+  }, [params.postId, params.slug, accessToken, tc]);
 
   // Le lingue di fallback del profilo (vedi dashboard/profile) popolano il
   // selettore lingua in "Aggiungi traduzione", invece di dover scrivere la sigla.
@@ -118,16 +131,38 @@ export default function PostEditorPage() {
           search_indexing_enabled: searchIndexingEnabled,
           ai_crawling_enabled: aiCrawlingEnabled,
           notes,
+          ...(isWikiSpace ? { parent_id: parentId, revision_summary: revisionSummary || undefined } : {}),
         })
       );
       setPost(updated);
       setNotes(updated.notes);
       setSaved(true);
+      setRevisionSummary("");
+      setHistoryKey((k) => k + 1);
     } catch (err) {
       setError(errorMessage(err, tc("unexpectedError")));
     } finally {
       setSaving(false);
     }
+  }
+
+  /** Ripristina una revisione salvandone di nuovo titolo e contenuto; l'editor viene rimontato
+   * perché non segue i cambi esterni di `value`. Le modifiche non salvate si perdono. */
+  async function handleRestore(revision: number) {
+    if (!window.confirm(t("restoreConfirm", { revision }))) return;
+    const old = await authFetch((token) => api.wiki.revision(token, params.postId, revision));
+    const updated = await authFetch((token) =>
+      api.posts.update(token, params.postId, {
+        title: old.title,
+        content: old.content,
+        revision_summary: t("restoreSummary", { revision }),
+      })
+    );
+    setPost(updated);
+    setTitle(updated.title);
+    setContent(updated.content);
+    setEditorKey((k) => k + 1);
+    setHistoryKey((k) => k + 1);
   }
 
   async function handlePublish(publishedAt?: string) {
@@ -217,6 +252,7 @@ export default function PostEditorPage() {
           </div>
 
           <RichTextEditor
+            key={editorKey}
             value={content}
             onChange={setContent}
             blogSlug={params.slug}
@@ -253,6 +289,21 @@ export default function PostEditorPage() {
                   </div>
                   <CategorySelect blogSlug={params.slug} value={categoryId} onChange={setCategoryId} />
                   <PublicationSelect blogSlug={params.slug} value={publicationId} onChange={setPublicationId} />
+                  {isWikiSpace && (
+                    <>
+                      <PageParentSelect blogSlug={params.slug} postId={post.id} value={parentId} onChange={setParentId} />
+                      <label className="flex flex-col gap-1">
+                        <span className="text-[11px] font-medium uppercase tracking-wide text-muted">{t("revisionSummary")}</span>
+                        <input
+                          value={revisionSummary}
+                          onChange={(e) => setRevisionSummary(e.target.value)}
+                          maxLength={300}
+                          placeholder={t("revisionSummaryPlaceholder")}
+                          className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                        />
+                      </label>
+                    </>
+                  )}
                   <div>
                     <RailLabel>{t("tags")}</RailLabel>
                     <TagInput value={tags} onChange={setTags} />
@@ -267,6 +318,18 @@ export default function PostEditorPage() {
                 </>
               ),
             },
+            ...(isWikiSpace
+              ? [
+                  {
+                    id: "history",
+                    label: t("historyTab"),
+                    badge: post.revisions ?? 0,
+                    content: (
+                      <RevisionsPanel postId={post.id} refreshKey={historyKey} canRestore onRestore={handleRestore} />
+                    ),
+                  },
+                ]
+              : []),
             {
               id: "translations",
               label: t("translationsTab"),

@@ -202,6 +202,26 @@ pub fn validate_config(config: &Map<String, Value>) -> Result<(), String> {
     Ok(())
 }
 
+/// Modalità di visualizzazione di uno Spazio: quella richiesta se ammessa per il tipo, altrimenti
+/// (richiesta assente) il predefinito del tipo. Un blog usa solo `feed`; wiki e docs scelgono tra `wiki`
+/// e `docs`.
+pub fn resolve_display_mode(kind: &str, requested: Option<&str>) -> Result<&'static str, String> {
+    let default = match kind {
+        "wiki" => "wiki",
+        "docs" => "docs",
+        _ => "feed",
+    };
+    match (kind, requested) {
+        (_, None) => Ok(default),
+        ("blog", Some("feed")) => Ok("feed"),
+        ("wiki" | "docs", Some("wiki")) => Ok("wiki"),
+        ("wiki" | "docs", Some("docs")) => Ok("docs"),
+        (_, Some(m)) => {
+            Err(format!("La modalità di visualizzazione `{m}` non è disponibile per questo tipo di spazio."))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -291,5 +311,15 @@ mod tests {
         assert!(cfg(json!({"footer": {"column1": 3}})).is_err());
         assert!(cfg(json!({"footer": {"column1": "x".repeat(5001)}})).unwrap_err().contains("5000"));
         assert!(cfg(json!({"layout": "magazine", "qualsiasi": [1, 2]})).is_ok(), "chiavi libere");
+    }
+
+    #[test]
+    fn display_mode_follows_the_space_kind() {
+        assert_eq!(resolve_display_mode("blog", None), Ok("feed"));
+        assert_eq!(resolve_display_mode("wiki", None), Ok("wiki"));
+        assert_eq!(resolve_display_mode("docs", Some("wiki")), Ok("wiki"));
+        assert_eq!(resolve_display_mode("wiki", Some("docs")), Ok("docs"));
+        assert!(resolve_display_mode("blog", Some("docs")).is_err());
+        assert!(resolve_display_mode("docs", Some("feed")).is_err());
     }
 }

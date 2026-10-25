@@ -2,6 +2,19 @@
 name = "blog_visibility"
 values = ["public", "members", "private"]
 
+# Tipologia dello Spazio (la tabella resta `blogs`, vedi docs/BACKEND.md): immutabile dopo la
+# creazione, perché cambia il modello dei contenuti e il layout di lettura.
+[[enum]]
+name = "space_kind"
+values = ["blog", "wiki", "docs"]
+
+# Struttura delle pagine pubbliche: `feed` (articoli in ordine cronologico, per i blog), `wiki`
+# (albero di pagine, breadcrumb, backlink) e `docs` (sidebar, indice a destra, precedente/successiva).
+# Un blog usa sempre `feed`; wiki e docs scelgono tra `wiki` e `docs` (`rules::resolve_display_mode`).
+[[enum]]
+name = "space_display_mode"
+values = ["feed", "wiki", "docs"]
+
 [[enum]]
 name = "blog_role"
 values = ["autore", "co_autore", "revisore", "mediatore"]
@@ -22,6 +35,8 @@ columns = [
   { name = "subtitle", type = "varchar(64)", null = true },
   { name = "description", type = "varchar(256)", null = true },
   { name = "owner_id", type = "uuid", ref = "users.id" },
+  { name = "kind", type = "enum:space_kind", default = "'blog'" },
+  { name = "display_mode", type = "enum:space_display_mode", default = "'feed'" },
   { name = "visibility", type = "enum:blog_visibility", default = "'public'" },
   # lingua principale e secondarie (informative: i post possono usare qualunque lingua)
   { name = "default_locale", type = "varchar(2)", default = "'it'" },

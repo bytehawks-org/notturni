@@ -14,7 +14,9 @@ import { BlogHeader } from "@/components/shell/BlogHeader";
 import { FilterChip } from "@/components/ui/Pill";
 import { SITE_HOST } from "@/lib/site";
 import { blogLinks } from "@/lib/blog-path";
-import { getPublicPublications, getPublicBlog, getPublicBlogCategories, getPublicBlogConfig, getPublicBlogPosts } from "@/lib/server-api";
+import { childrenOf } from "@/lib/outline-tree";
+import { effectiveDisplayMode } from "@/lib/space-mode";
+import { getPublicOutline, getPublicPublications, getPublicBlog, getPublicBlogCategories, getPublicBlogConfig, getPublicBlogPosts } from "@/lib/server-api";
 
 interface PageParams {
   blogSlug: string;
@@ -69,6 +71,48 @@ export default async function BlogHomePage({
       <BlogPageShell config={config}>
         <BlogHeader basePath={basePath} name={blog.title} hasPublications={hasPublications} current="posts" />
         <BlogStateNotice blog={blog} />
+      </BlogPageShell>
+    );
+  }
+  if (effectiveDisplayMode(blog) !== "feed") {
+    // Spazi wiki e docs: la home è l'indice dello Spazio (sezioni di primo livello con le loro sottopagine)
+    const tSpace = await getTranslations("SpacePage");
+    const outline = await getPublicOutline(blogSlug, blog.default_locale).catch(() => []);
+    const roots = childrenOf(outline, null);
+    return (
+      <BlogPageShell config={config}>
+        <BlogHeader basePath={basePath} name={blog.title} hasPublications={hasPublications} current="posts" actions={<BlogHeaderActions slug={blogSlug} />} />
+        <main className="mx-auto w-full max-w-[1000px] flex-1 px-5 py-10 lg:px-12 lg:py-14">
+          <header className="flex flex-col gap-2">
+            <h1 className="font-serif text-[34px] font-medium leading-[1.12] tracking-tight text-foreground md:text-[44px]">{blog.title}</h1>
+            {blog.subtitle && <p className="text-lg text-muted md:text-xl">{blog.subtitle}</p>}
+            {blog.description && <p className="max-w-[680px] text-[15px] leading-relaxed text-foreground/80">{blog.description}</p>}
+          </header>
+          {roots.length === 0 ? (
+            <p className="py-10 text-sm text-muted">{tSpace("noPages")}</p>
+          ) : (
+            <div className="mt-10 grid gap-5 sm:grid-cols-2">
+              {roots.map((root) => (
+                <section key={root.id} className="flex flex-col gap-2 rounded-xl border border-border bg-surface px-5 py-4">
+                  <h2 className="font-serif text-xl">
+                    <Link href={`${basePath}/${root.slug}`} className="text-foreground no-underline hover:text-primary">
+                      {root.title}
+                    </Link>
+                  </h2>
+                  <ul className="flex flex-col gap-1 text-[14px]">
+                    {childrenOf(outline, root.id).map((child) => (
+                      <li key={child.id}>
+                        <Link href={`${basePath}/${child.slug}`} className="text-primary no-underline hover:underline">
+                          {child.title}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          )}
+        </main>
       </BlogPageShell>
     );
   }
