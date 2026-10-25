@@ -66,7 +66,8 @@ pub async fn scan_host(keyscan_bin: &str, host: &str, port: u16) -> Result<Strin
     Ok(lines.join("\n") + "\n")
 }
 
-/// Impronte `SHA256:...` delle chiavi di un testo `known_hosts` (o di una chiave pubblica).
+/// Impronte `SHA256:...` delle chiavi di un testo `known_hosts`, **una per riga** e nello stesso ordine
+/// (`ssh-keygen -l` ne stampa una per ogni riga valida; il numero deve coincidere).
 pub async fn fingerprints(known_hosts: &str) -> Result<Vec<String>, String> {
     let scratch = Scratch::create().map_err(|e| format!("directory temporanea non creata: {e}"))?;
     let file = scratch.write_private("keys", known_hosts).map_err(|e| format!("scrittura non riuscita: {e}"))?;

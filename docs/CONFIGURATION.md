@@ -17,7 +17,7 @@ in `k8s/configmap.yaml` (valori non sensibili) e `k8s/secret.yaml` (segreti).
 
 | Variabile | Ambito | Default | Obbligatoria | Descrizione | Esempio |
 |---|---|---|---|---|---|
-| `NOCT_INSTANCE_FQDN` | core | `notturni.eu` | no | Dominio pubblico: base dei link nelle email e degli identificatori di federazione, dominio email del sigillo di verifica. | `notturni.example.com` |
+| `NOCT_INSTANCE_FQDN` | core | `notturni.eu` | no | Dominio pubblico: base dei link nelle email e degli identificatori di federazione, dominio email del sigillo di verifica, e dominio con cui la mappa dei collegamenti riconosce i link interni tra post (deve coincidere con `NEXT_PUBLIC_SITE_URL`). | `notturni.example.com` |
 | `NOCT_SITE_SLUG` | core | `notturni` | no | Namespace dei path su S3: evita collisioni tra più installazioni sullo stesso bucket. Solo minuscole, cifre, `-`. | `staging` |
 | `NOCT_DEPLOYMENT_MODE` | auth | `platform` | no | `platform` = multiutente; `solo` = un solo proprietario, il primo utente diventa Super Admin e la registrazione si chiude. | `solo` |
 | `NOCT_REGISTRATION_MODE` | auth | `open` | no | Valore **iniziale** (prima installazione) di `platform_config`: `open` · `invite` · `closed`. Poi si cambia da `/admin/config`. | `invite` |

@@ -1151,3 +1151,153 @@ export interface GitSyncStatus {
   last_commit: string | null;
   last_pages: number | null;
 }
+
+/** Host SSH di cui la piattaforma conosce le impronte attese (`GET /admin/git-sync/known-hosts`). */
+export interface KnownHost {
+  host: string;
+  port: number;
+  fingerprints: string[];
+  note: string | null;
+  updated_at: string;
+}
+
+/** Nodo della mappa dei collegamenti (`GET /graph`). I campi extra dipendono dal tipo. */
+export interface GraphNode {
+  id: string;
+  type: "blog" | "post" | "tag" | "category";
+  label: string;
+  /** post */
+  blog?: string;
+  slug?: string;
+  locale?: string;
+  status?: string;
+  published_at?: string | null;
+  /** post: percorso pubblico `/{blog}/{slug}` */
+  path?: string;
+  /** blog */
+  kind?: "blog" | "wiki" | "docs";
+  /** tag */
+  tag?: string;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  /** `in`: post → Spazio · `tag` · `category` · `link`: post → post */
+  type: "in" | "tag" | "category" | "link";
+  /** solo `link`: `url` (link nel testo) o `wiki` (`[[pagina]]`) */
+  via?: "url" | "wiki";
+}
+
+export interface GraphData {
+  scope: "mine" | "platform";
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  truncated: boolean;
+}
+
+export type LegalDocKey = "privacy" | "cookie";
+
+/** Un documento legale in una lingua, come elencato da `GET /admin/legal`. */
+export interface LegalDocSummary {
+  doc: LegalDocKey;
+  locale: string;
+  title: string;
+  customized: boolean;
+  published: boolean;
+  /** testo, dati o funzioni attive cambiati dopo l'ultima pubblicazione */
+  stale: boolean;
+  /** variabili usate ma vuote: bloccano la pubblicazione */
+  missing: string[];
+  /** errori del modello (variabile o condizione inesistente, blocchi non chiusi) */
+  issues: string[];
+  has_template: boolean;
+  published_at: string | null;
+  updated_at: string;
+}
+
+export interface LegalDoc extends LegalDocSummary {
+  /** sorgente: Markdown con `{{variabili}}` e `{{#if funzione}}` */
+  content: string;
+  /** testo risolto, quello che si pubblica */
+  rendered: string;
+  default_content: string | null;
+}
+
+export interface LegalOverview {
+  /** dati del titolare già inseriti (i campi vuoti non compaiono; `minimum_age` è un numero in testo) */
+  settings: Record<string, string>;
+  /** valori dedotti dall'installazione */
+  values: Record<string, string>;
+  /** funzioni attive rilevate */
+  flags: Record<string, boolean>;
+  documents: LegalDocSummary[];
+  template_locales: string[];
+}
+
+export interface LegalLink {
+  doc: LegalDocKey;
+  slug: string;
+  locale: string;
+  title: string;
+}
+
+/** `GET /seo/site`: identità e meta tag del portale nella lingua richiesta (o nella migliore disponibile). */
+export interface SeoSite {
+  locale: string;
+  site_name: string;
+  title: string | null;
+  description: string | null;
+  keywords: string | null;
+  noindex: boolean;
+  google_verification: string | null;
+  bing_verification: string | null;
+  yandex_verification: string | null;
+  twitter_site: string | null;
+  theme_color: string | null;
+  extra_meta: { name: string; content: string }[];
+  icons: { url: string; sizes: string; type: string }[];
+  apple_touch_icon: string | null;
+  social_image_url: string | null;
+}
+
+export interface SeoLocaleText {
+  title: string | null;
+  description: string | null;
+  keywords: string | null;
+}
+
+/** `GET /admin/seo`. */
+export interface SeoAdmin {
+  branding: {
+    site_name: string | null;
+    noindex: boolean;
+    google_verification: string | null;
+    bing_verification: string | null;
+    yandex_verification: string | null;
+    twitter_site: string | null;
+    theme_color: string | null;
+    extra_meta: { name: string; content: string }[];
+    /** lato (px) → URL della PNG */
+    icons: Record<string, string>;
+    social_image_url: string | null;
+  };
+  locales: Record<string, SeoLocaleText>;
+}
+
+export interface SitemapEntry {
+  path: string;
+  updated_at: string | null;
+  alternates: { locale: string; path: string }[];
+}
+
+export interface SitemapPage {
+  total: number;
+  noindex: boolean;
+  entries: SitemapEntry[];
+}
+
+export interface SpaceSitemap {
+  slug: string;
+  entries: SitemapEntry[];
+}

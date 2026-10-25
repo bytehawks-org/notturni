@@ -43,6 +43,38 @@ static SCP_LIKE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^([A-Za-z0-9._-]+)@([A-Za-z0-9.-]+):([^\s:][^\s]*)$").expect("regex valida"));
 static SSH_PATH: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^/[A-Za-z0-9._~/+-]+$").expect("regex valida"));
 
+static FINGERPRINT: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^SHA256:[A-Za-z0-9+/]{43}$").expect("regex valida"));
+static HOSTNAME: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[a-z0-9]([a-z0-9.-]{0,253}[a-z0-9])?$").expect("regex valida"));
+
+/// Un'impronta nel formato che stampa OpenSSH: `SHA256:` più 43 caratteri base64 senza padding.
+pub fn validate_fingerprint(f: &str) -> Result<(), String> {
+    if FINGERPRINT.is_match(f) {
+        Ok(())
+    } else {
+        Err(format!("Impronta non valida: `{f}` (atteso SHA256:… di 43 caratteri)."))
+    }
+}
+
+/// Host (minuscolo) e porta di una voce dell'elenco degli host noti.
+pub fn validate_known_host(host: &str, port: i64) -> Result<String, String> {
+    let host = host.trim().to_ascii_lowercase();
+    if !HOSTNAME.is_match(&host) || host.starts_with('-') {
+        return Err("Host non valido: solo un nome DNS o un indirizzo, senza schema né percorso.".into());
+    }
+    if !(1..=65535).contains(&port) {
+        return Err("Porta non valida.".into());
+    }
+    Ok(host)
+}
+
+/// Delle righe `known_hosts` rilevate tiene solo quelle la cui impronta è tra `trusted`, con le impronte
+/// corrispondenti. `lines` e `fingerprints` sono parallele (una impronta per riga, stesso ordine).
+pub fn keep_trusted(lines: &[String], fingerprints: &[String], trusted: &[String]) -> (Vec<String>, Vec<String>) {
+    lines.iter().zip(fingerprints).filter(|(_, f)| trusted.contains(f)).map(|(l, f)| (l.clone(), f.clone())).unzip()
+}
+
 pub const METHODS: [&str; 2] = ["https", "ssh"];
 
 /// `https` o `ssh`.
@@ -250,6 +282,41 @@ mod tests {
         }
         assert_eq!(validate_method("ssh"), Ok("ssh"));
         assert!(validate_method("ftp").is_err());
+    }
+
+    #[test]
+    fn known_hosts_are_validated_and_filter_scanned_keys() {
+        assert!(validate_fingerprint("SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU").is_ok());
+        for bad in [
+            "",
+            "SHA256:corta",
+            "MD5:aa:bb",
+            "+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU",
+            "SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOq==",
+        ] {
+            assert!(validate_fingerprint(bad).is_err(), "{bad}");
+        }
+        assert_eq!(validate_known_host(" GitHub.com ", 22).unwrap(), "github.com");
+        for bad in [
+            ("", 22),
+            ("-x.com", 22),
+            ("a b", 22),
+            ("git@github.com", 22),
+            ("github.com/x", 22),
+            ("github.com", 0),
+            ("github.com", 70000),
+        ] {
+            assert!(validate_known_host(bad.0, bad.1).is_err(), "{bad:?}");
+        }
+        let lines: Vec<String> =
+            ["h ssh-ed25519 A", "h ecdsa-sha2-nistp256 B", "h ssh-rsa C"].map(String::from).to_vec();
+        let prints: Vec<String> = ["SHA256:a", "SHA256:b", "SHA256:c"].map(String::from).to_vec();
+        let (kept, fp) = keep_trusted(&lines, &prints, &["SHA256:c".to_string(), "SHA256:a".to_string()]);
+        assert_eq!(
+            (kept, fp),
+            (vec![lines[0].clone(), lines[2].clone()], vec!["SHA256:a".to_string(), "SHA256:c".to_string()])
+        );
+        assert!(keep_trusted(&lines, &prints, &["SHA256:zzz".to_string()]).0.is_empty());
     }
 
     #[test]

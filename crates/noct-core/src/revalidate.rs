@@ -37,6 +37,16 @@ pub fn platform_footer() -> String {
     "platform-footer".into()
 }
 
+/// Testi dell'interfaccia modificati dagli amministratori (mostrati su ogni pagina pubblica).
+pub fn site_texts() -> String {
+    "site-texts".into()
+}
+
+/// Identità e meta tag del portale (icona, titolo, descrizione, verifiche): letti dal layout di ogni pagina.
+pub fn site_seo() -> String {
+    "site-seo".into()
+}
+
 /// Invalida tutto ciò che mostra dati pubblici di un utente: la sua pagina (`user:`), i feed e
 /// le pagine dei blog di cui è proprietario (nome e avatar dell'autore, conteggi).
 /// `extra_usernames`: vecchi username, la cui pagina pubblica non esiste più (rinomina).

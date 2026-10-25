@@ -326,6 +326,39 @@ handler = "sitemap_entries"
 response = "SitemapEntries"
 summary = "Blog e post indicizzabili per sitemap.xml"
 
+[type.SitemapPage]
+# numero totale di URL (per decidere se serve un indice di sitemap)
+total = "int"
+# vero se il portale è chiuso agli indici dei motori di ricerca (`noindex` del modulo `branding`): nessuna voce
+noindex = "bool"
+# [{path, updated_at, alternates: [{locale, path}]}]
+entries = "json"
+
+[type.SpaceSitemap]
+slug = "string"
+# [{path, updated_at, alternates: [{locale, path}]}]
+entries = "json"
+
+[[route]]
+id = "sitemap_page"
+method = "GET"
+path = "/seo/sitemap"
+auth = "public"
+kind = "custom"
+handler = "sitemap_page"
+response = "SitemapPage"
+summary = "Pagina (`offset`, `limit` max 5000) delle URL indicizzabili del portale: home, pagine del sito, Spazi e post, con le traduzioni come alternative hreflang"
+
+[[route]]
+id = "space_sitemap"
+method = "GET"
+path = "/blogs/{slug}/sitemap"
+auth = "public"
+kind = "custom"
+handler = "space_sitemap"
+response = "SpaceSitemap"
+summary = "URL indicizzabili di uno Spazio pubblico: home, post (traduzioni come alternative hreflang), pagine statiche e pubblicazioni; 404 se lo Spazio non è pubblico o ha escluso i motori di ricerca"
+
 [[route]]
 id = "export_blog"
 method = "GET"

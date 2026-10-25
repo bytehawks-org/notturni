@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 import { headers } from "next/headers";
@@ -9,6 +9,7 @@ import { CodeCopyProvider } from "@/components/blog/CodeCopyProvider";
 import { ToastProvider } from "@/components/ui/Toast";
 import { AuthProvider } from "@/lib/auth-context";
 import { NonceProvider } from "@/lib/nonce-context";
+import { getSiteSeo } from "@/lib/server-api";
 import { SITE_URL } from "@/lib/site";
 import { ThemeProvider } from "@/lib/theme-context";
 
@@ -17,24 +18,47 @@ import "./globals.css";
 
 const DEFAULT_DESCRIPTION =
   "Piattaforma opensource di microblogging e newsletter, multilingua ed EU-centrica.";
+const DEFAULT_SITE_NAME = "Notturni";
 
-export const metadata: Metadata = {
-  // Risolve i percorsi relativi passati a `openGraph.images`/`alternates.canonical`
-  // dalle pagine figlie — senza questo, Next li lascerebbe relativi anche nell'HTML
-  // finale (invalidi per i consumer esterni di Open Graph/canonical).
-  metadataBase: new URL(SITE_URL),
-  title: { default: "Notturni", template: "%s · Notturni" },
-  description: DEFAULT_DESCRIPTION,
-  openGraph: {
-    siteName: "Notturni",
-    type: "website",
-    locale: "it_IT",
-    description: DEFAULT_DESCRIPTION,
-  },
-  twitter: {
-    card: "summary_large_image",
-  },
-};
+/** `it` → `it_IT`, `en` → `en_US`: il formato che si aspetta Open Graph. */
+const OG_LOCALES: Record<string, string> = { it: "it_IT", en: "en_US", de: "de_DE", fr: "fr_FR", es: "es_ES" };
+
+/** Meta tag del portale, dalle impostazioni di `/admin/seo` (modulo `branding`) nella lingua del visitatore. Se il
+ * modulo è spento o il backend non risponde restano i valori predefiniti. */
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+  const seo = await getSiteSeo(locale);
+  const siteName = seo?.site_name || DEFAULT_SITE_NAME;
+  const description = seo?.description || DEFAULT_DESCRIPTION;
+  const other: Record<string, string> = {};
+  if (seo?.bing_verification) other["msvalidate.01"] = seo.bing_verification;
+  for (const m of seo?.extra_meta ?? []) other[m.name] = m.content;
+  const social = seo?.social_image_url ? [{ url: seo.social_image_url }] : undefined;
+  return {
+    // Risolve i percorsi relativi passati a `openGraph.images`/`alternates.canonical` dalle pagine figlie — senza
+    // questo, Next li lascerebbe relativi anche nell'HTML finale (invalidi per i consumer esterni di Open Graph).
+    metadataBase: new URL(SITE_URL),
+    title: { default: seo?.title || siteName, template: `%s · ${siteName}` },
+    description,
+    keywords: seo?.keywords || undefined,
+    applicationName: siteName,
+    manifest: "/manifest.webmanifest",
+    icons: seo && seo.icons.length > 0 ? { icon: seo.icons, apple: seo.apple_touch_icon ?? undefined } : undefined,
+    robots: seo?.noindex ? { index: false, follow: false } : undefined,
+    verification: {
+      google: seo?.google_verification || undefined,
+      yandex: seo?.yandex_verification || undefined,
+      other: Object.keys(other).length > 0 ? other : undefined,
+    },
+    openGraph: { siteName, type: "website", locale: OG_LOCALES[locale] ?? locale, description, images: social },
+    twitter: { card: social ? "summary_large_image" : "summary", site: seo?.twitter_site || undefined, images: social?.map((i) => i.url) },
+  };
+}
+
+export async function generateViewport(): Promise<Viewport> {
+  const seo = await getSiteSeo(await getLocale());
+  return seo?.theme_color ? { themeColor: seo.theme_color } : {};
+}
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   // Lingua dell'interfaccia (src/i18n/request.ts): cookie → Accept-Language → fallback.

@@ -148,5 +148,7 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/|api/|favicon.ico|robots.txt|sitemap.xml|theme-init.js).*)"],
+  // robots.txt e sitemap.xml passano dal proxy: sul portale restano quelli globali, su `{slug}.{dominio}` diventano
+  // quelli dello Spazio (`/{slug}/robots.txt`, `/{slug}/sitemap.xml`).
+  matcher: ["/((?!_next/|api/|favicon.ico|theme-init.js|manifest.webmanifest).*)"],
 };

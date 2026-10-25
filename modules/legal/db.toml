@@ -1,0 +1,41 @@
+# Dati del titolare e valori che i modelli legali non possono dedurre dall'installazione. Una sola riga (`id = 1`),
+# creata al primo salvataggio. Tutti i campi sono testo libero in una riga.
+[[table]]
+name = "legal_settings"
+timestamps = true
+columns = [
+  { name = "id", type = "integer", pk = true, default = "1" },
+  { name = "controller_name", type = "varchar(255)", null = true },
+  { name = "controller_address", type = "varchar(500)", null = true },
+  { name = "controller_email", type = "varchar(255)", null = true },
+  { name = "controller_registry", type = "varchar(255)", null = true },
+  { name = "dpo_contact", type = "varchar(500)", null = true },
+  { name = "hosting_description", type = "varchar(500)", null = true },
+  # altri fornitori che trattano dati per conto del titolare (email, storage, backup...), facoltativo
+  { name = "processors", type = "varchar(1000)", null = true },
+  { name = "backup_retention", type = "varchar(255)", null = true },
+  { name = "audit_archive_retention", type = "varchar(255)", null = true },
+  { name = "minimum_age", type = "integer", null = true },
+  { name = "updated_by", type = "uuid", null = true, ref = "users.id", on_delete = "set_null" },
+]
+
+# Testo sorgente (Markdown con variabili e condizioni) di ogni documento in ogni lingua. Finché `customized` è
+# falso il testo segue il modello fornito dalla versione corrente; dopo una modifica resta quello dell'amministratore.
+# La pubblicazione scrive il testo risolto in `platform_pages` (slug `privacy` / `cookie-policy`).
+[[table]]
+name = "legal_documents"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  # `privacy` | `cookie`
+  { name = "doc", type = "varchar(16)" },
+  { name = "locale", type = "varchar(2)" },
+  { name = "title", type = "varchar(255)" },
+  { name = "content", type = "text" },
+  { name = "customized", type = "boolean", default = "false" },
+  # impronta del testo risolto pubblicato: se quello attuale differisce, il documento è «da ripubblicare»
+  { name = "published_hash", type = "varchar(64)", null = true },
+  { name = "published_at", type = "timestamptz", null = true },
+  { name = "updated_by", type = "uuid", null = true, ref = "users.id", on_delete = "set_null" },
+]
+uniques = [{ name = "uq_legal_doc_locale", columns = ["doc", "locale"] }]

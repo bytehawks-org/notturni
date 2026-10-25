@@ -1,0 +1,114 @@
+# Identità e SEO del portale. La lettura è pubblica (serve al frontend per i meta tag); la gestione è degli amministratori.
+
+[type.SeoSiteOut]
+# lingua effettivamente usata per titolo e descrizione
+locale = "string"
+site_name = "string"
+title = { type = "string", nullable = true }
+description = { type = "string", nullable = true }
+keywords = { type = "string", nullable = true }
+noindex = "bool"
+google_verification = { type = "string", nullable = true }
+bing_verification = { type = "string", nullable = true }
+yandex_verification = { type = "string", nullable = true }
+twitter_site = { type = "string", nullable = true }
+theme_color = { type = "string", nullable = true }
+# [{name, content}]
+extra_meta = "json"
+# [{url, sizes, type}] (PNG, uno per lato generato) più `apple_touch_icon` se c'è il lato 180
+icons = "json"
+apple_touch_icon = { type = "string", nullable = true }
+social_image_url = { type = "string", nullable = true }
+
+[type.SeoAdminOut]
+branding = "json"
+# lingua → {title, description, keywords}
+locales = "json"
+
+[type.SeoSettingsIn]
+site_name = { type = "string", max = 100, optional = true }
+noindex = "bool?"
+google_verification = { type = "string", max = 200, optional = true }
+bing_verification = { type = "string", max = 200, optional = true }
+yandex_verification = { type = "string", max = 200, optional = true }
+twitter_site = { type = "string", max = 50, optional = true }
+theme_color = { type = "string", max = 7, optional = true }
+# [{name, content}], massimo 10
+extra_meta = "json?"
+# lingua → {title, description, keywords}; un oggetto vuoto o `null` toglie la lingua. Il PUT sostituisce tutte le lingue.
+locales = "json?"
+
+[[route]]
+id = "get_seo_site"
+method = "GET"
+path = "/seo/site"
+auth = "public"
+kind = "custom"
+handler = "get_seo_site"
+response = "SeoSiteOut"
+summary = "Identità e meta tag del portale nella lingua richiesta (`?locale=`) o nella migliore disponibile: icone, immagine di condivisione, titolo, descrizione, verifiche, blocco dell'indicizzazione"
+
+[[route]]
+id = "get_seo_admin"
+method = "GET"
+path = "/admin/seo"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "get_seo_admin"
+response = "SeoAdminOut"
+summary = "Impostazioni di identità e SEO del portale, con le immagini caricate"
+
+[[route]]
+id = "put_seo_admin"
+method = "PUT"
+path = "/admin/seo"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "put_seo_admin"
+request = "SeoSettingsIn"
+response = "SeoAdminOut"
+summary = "Imposta nome del sito, testi per lingua, verifiche dei motori di ricerca, meta tag aggiuntivi e blocco dell'indicizzazione (sostituisce l'insieme; i campi assenti si azzerano)"
+
+[[route]]
+id = "upload_branding_icon"
+method = "POST"
+path = "/admin/branding/icon"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "upload_branding_icon"
+upload = 4194304
+response = "SeoAdminOut"
+status = 201
+summary = "Icona e favicon del portale da un'unica immagine quadrata (PNG, JPEG, WEBP; max 2 MiB; almeno 128 px): se ne ricavano 16, 32, 48, 180, 192 e 512 px compatibilmente con la dimensione di partenza"
+
+[[route]]
+id = "delete_branding_icon"
+method = "DELETE"
+path = "/admin/branding/icon"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "delete_branding_icon"
+response = "SeoAdminOut"
+summary = "Rimuove l'icona del portale (tornano quelle predefinite) e cancella i file su storage"
+
+[[route]]
+id = "upload_branding_social"
+method = "POST"
+path = "/admin/branding/social"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "upload_branding_social"
+upload = 4194304
+response = "SeoAdminOut"
+status = 201
+summary = "Immagine per le anteprime nelle condivisioni (PNG, JPEG, WEBP; max 2 MiB; almeno 600 px di larghezza; consigliata 1200×630)"
+
+[[route]]
+id = "delete_branding_social"
+method = "DELETE"
+path = "/admin/branding/social"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "delete_branding_social"
+response = "SeoAdminOut"
+summary = "Rimuove l'immagine per le condivisioni e cancella il file su storage"

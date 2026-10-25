@@ -34,4 +34,8 @@ export const revalidateTags = {
   /** Footer di piattaforma (colonne 1-3 + barra inferiore): un solo tag
    * condiviso, non per-blog — mostrato su ogni pagina pubblica. */
   platformFooter: (): string => "platform-footer",
+  /** Testi dell'interfaccia modificati dagli amministratori (`/admin/testi`). */
+  siteTexts: (): string => "site-texts",
+  /** Identità e meta tag del portale (`/admin/seo`). */
+  siteSeo: (): string => "site-seo",
 } as const;

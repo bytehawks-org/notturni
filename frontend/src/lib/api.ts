@@ -24,6 +24,15 @@ import type {
   BlogVisibility,
   Backlink,
   GitSyncStatus,
+  GraphData,
+  LegalDoc,
+  SeoAdmin,
+  SeoLocaleText,
+  LegalDocKey,
+  LegalOverview,
+  PublicBlog,
+  PublicUser,
+  KnownHost,
   OutlineNode,
   RevisionDetail,
   RevisionDiff,
@@ -207,6 +216,26 @@ export const api = {
       request<void>("/api/v1/auth/password/forgot", { method: "POST", body: payload }),
     resetPassword: (payload: { email: string; code: string; new_password: string }) =>
       request<void>("/api/v1/auth/password/reset", { method: "POST", body: payload }),
+  },
+
+  /** Ricerca pubblica nella piattaforma (post, Spazi, utenti): serve al modal del link dell'editor. */
+  search: {
+    posts: (q: string, limit = 5) => request<Post[]>(withQuery("/api/v1/search/posts", { q, limit: String(limit) })),
+    blogs: (q: string, limit = 5) => request<PublicBlog[]>(withQuery("/api/v1/blogs", { q, limit: String(limit) })),
+    users: (q: string, limit = 5) => request<PublicUser[]>(withQuery("/api/v1/users", { q, limit: String(limit) })),
+  },
+
+  graph: {
+    /** Mappa dei collegamenti dei propri Spazi (`scope=mine`) o, agli amministratori, di tutta la piattaforma. */
+    get: (token: string, params: { scope?: "mine" | "platform"; drafts?: boolean; limit?: number } = {}) =>
+      request<GraphData>(
+        withQuery("/api/v1/graph", {
+          scope: params.scope,
+          drafts: params.drafts ? "true" : undefined,
+          limit: params.limit ? String(params.limit) : undefined,
+        }),
+        { token }
+      ),
   },
 
   interests: {
@@ -459,6 +488,72 @@ export const api = {
       }),
   },
 
+  seo: {
+    /** Identità e SEO del portale (Super Admin e amministratori). */
+    get: (token: string) => request<SeoAdmin>("/api/v1/admin/seo", { token }),
+    /** Sostituisce l'insieme: i campi assenti si azzerano, le lingue non inviate spariscono. */
+    save: (
+      token: string,
+      payload: {
+        site_name?: string;
+        noindex?: boolean;
+        google_verification?: string;
+        bing_verification?: string;
+        yandex_verification?: string;
+        twitter_site?: string;
+        theme_color?: string;
+        extra_meta?: { name: string; content: string }[];
+        locales?: Record<string, Partial<SeoLocaleText>>;
+      }
+    ) => request<SeoAdmin>("/api/v1/admin/seo", { method: "PUT", token, body: payload }),
+    uploadIcon: (token: string, file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return request<SeoAdmin>("/api/v1/admin/branding/icon", { method: "POST", token, formData });
+    },
+    deleteIcon: (token: string) => request<SeoAdmin>("/api/v1/admin/branding/icon", { method: "DELETE", token }),
+    uploadSocial: (token: string, file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return request<SeoAdmin>("/api/v1/admin/branding/social", { method: "POST", token, formData });
+    },
+    deleteSocial: (token: string) => request<SeoAdmin>("/api/v1/admin/branding/social", { method: "DELETE", token }),
+  },
+
+  legal: {
+    overview: (token: string) => request<LegalOverview>("/api/v1/admin/legal", { token }),
+    saveSettings: (token: string, payload: Record<string, string | number | undefined>) =>
+      request<LegalOverview>("/api/v1/admin/legal/settings", { method: "PUT", token, body: payload }),
+    doc: (token: string, doc: LegalDocKey, locale: string) =>
+      request<LegalDoc>(`/api/v1/admin/legal/${doc}/${locale}`, { token }),
+    saveDoc: (token: string, doc: LegalDocKey, locale: string, payload: { title: string; content: string }) =>
+      request<LegalDoc>(`/api/v1/admin/legal/${doc}/${locale}`, { method: "PUT", token, body: payload }),
+    /** `from`: lingua da cui ripartire; assente = il modello della stessa lingua (solo it/en). */
+    reset: (token: string, doc: LegalDocKey, locale: string, from?: string) =>
+      request<LegalDoc>(`/api/v1/admin/legal/${doc}/${locale}/reset`, { method: "POST", token, body: from ? { from } : {} }),
+    publish: (token: string, doc: LegalDocKey, locale: string, replaceExisting = false) =>
+      request<LegalDoc>(`/api/v1/admin/legal/${doc}/${locale}/publish`, {
+        method: "POST",
+        token,
+        body: replaceExisting ? { replace_existing: true } : {},
+      }),
+    unpublish: (token: string, doc: LegalDocKey, locale: string) =>
+      request<LegalDoc>(`/api/v1/admin/legal/${doc}/${locale}/unpublish`, { method: "POST", token, body: {} }),
+    remove: (token: string, doc: LegalDocKey, locale: string) =>
+      request<void>(`/api/v1/admin/legal/${doc}/${locale}`, { method: "DELETE", token }),
+  },
+
+  siteTexts: {
+    /** Testi sovrascritti per una lingua (solo le chiavi modificate). */
+    get: (locale: string) => request<{ locale: string; texts: Record<string, string> }>(`/api/v1/site-texts?locale=${locale}`),
+    /** `null` ripristina il testo predefinito di quella chiave. */
+    save: (token: string, locale: string, texts: Record<string, string | null>) =>
+      request<{ locale: string; texts: Record<string, string> }>(`/api/v1/admin/site-texts/${locale}`, {
+        method: "PUT",
+        token,
+        body: { texts },
+      }),
+  },
   gitSync: {
     get: (token: string, slug: string) => request<GitSyncStatus>(`/api/v1/blogs/${slug}/git-sync`, { token }),
     /** `secret` (solo https) assente = invariato (obbligatorio alla prima configurazione); con `ssh` la chiave la
@@ -479,6 +574,16 @@ export const api = {
       }
     ) => request<GitSyncStatus>(`/api/v1/blogs/${slug}/git-sync`, { method: "PUT", token, body: payload }),
     remove: (token: string, slug: string) => request<void>(`/api/v1/blogs/${slug}/git-sync`, { method: "DELETE", token }),
+    /** Impronte attese delle host key dei provider (Super Admin). */
+    knownHosts: {
+      list: (token: string) => request<KnownHost[]>("/api/v1/admin/git-sync/known-hosts", { token }),
+      save: (
+        token: string,
+        payload: { host: string; port?: number; fingerprints: string[]; note?: string }
+      ) => request<KnownHost>("/api/v1/admin/git-sync/known-hosts", { method: "PUT", token, body: payload }),
+      remove: (token: string, host: string, port: number) =>
+        request<void>(`/api/v1/admin/git-sync/known-hosts/${encodeURIComponent(host)}/${port}`, { method: "DELETE", token }),
+    },
     run: (token: string, slug: string) => request<void>(`/api/v1/blogs/${slug}/git-sync/run`, { method: "POST", token }),
   },
   wiki: {

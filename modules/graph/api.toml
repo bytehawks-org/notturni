@@ -1,0 +1,21 @@
+# Mappa dei collegamenti (mind map). Nessuna tabella propria: il grafo si ricava da post, tag, categorie, link
+# citati nei post (`post_links`) e link interni `[[pagina]]` (modulo wiki), solo per i contenuti visibili a chi chiede.
+
+[type.GraphOut]
+# `scope` = mine | platform
+scope = "string"
+# nodi: {id, type: blog|post|tag|category, label, ...}; archi: {source, target, type: in|tag|category|link}
+nodes = "json"
+edges = "json"
+# `true` se i post sono stati limitati a `limit` (i più recenti)
+truncated = "bool"
+
+[[route]]
+id = "get_graph"
+method = "GET"
+path = "/graph"
+auth = "user"
+kind = "custom"
+handler = "get_graph"
+response = "GraphOut"
+summary = "Grafo dei collegamenti tra post, Spazi, tag, categorie e link: dei propri Spazi (`scope=mine`, anche con bozze se `drafts=true`) o, agli amministratori, di tutto ciò che è pubblico (`scope=platform`); filtri `blog`, `kind`, `limit` (max 800)"

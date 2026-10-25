@@ -81,3 +81,50 @@ handler = "run_git_sync"
 scope = { blog = "slug" }
 status = 202
 summary = "Accoda una sincronizzazione subito; l'esito compare in `last_status` (polling su GET)"
+
+# ---- impronte note degli host SSH (solo Super Admin) --------------------------------------------------------
+
+[type.KnownHostIn]
+host = { type = "string", max = 255 }
+port = "int?"
+# `SHA256:…` (come le pubblica il provider); sostituiscono quelle esistenti
+fingerprints = "string[]"
+note = { type = "string", max = 500, optional = true }
+
+[type.KnownHostOut]
+host = "string"
+port = "int"
+fingerprints = "string[]"
+note = { type = "string", nullable = true }
+updated_at = "timestamp"
+
+[[route]]
+id = "list_known_hosts"
+method = "GET"
+path = "/admin/git-sync/known-hosts"
+auth = "platform_role:super_admin"
+kind = "custom"
+handler = "list_known_hosts"
+response = "KnownHostOut[]"
+summary = "Host SSH di cui la piattaforma conosce le impronte attese (GitHub, GitLab...): le chiavi rilevate si fissano solo se coincidono"
+
+[[route]]
+id = "put_known_host"
+method = "PUT"
+path = "/admin/git-sync/known-hosts"
+auth = "platform_role:super_admin"
+kind = "custom"
+handler = "put_known_host"
+request = "KnownHostIn"
+response = "KnownHostOut"
+summary = "Aggiunge o aggiorna le impronte attese di un host (es. quando il provider ruota le chiavi); le configurazioni già fissate non cambiano finché l'utente non le risalva"
+
+[[route]]
+id = "delete_known_host"
+method = "DELETE"
+path = "/admin/git-sync/known-hosts/{host}/{port}"
+auth = "platform_role:super_admin"
+kind = "custom"
+handler = "delete_known_host"
+status = 204
+summary = "Toglie un host dall'elenco: tornano la fiducia al primo uso e l'impronta facoltativa dell'utente"

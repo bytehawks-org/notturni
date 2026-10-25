@@ -281,3 +281,25 @@ kind = "custom"
 handler = "disable_module"
 response = "ModuleOut"
 summary = "Disattiva un modulo opzionale (rotte smontate, dati e tabelle intatti; rifiutato se un altro modulo attivo lo richiede)"
+
+# ---- testi dell'interfaccia (la lettura pubblica è `GET /site-texts` del crate `platform`) ---------------------------
+
+[type.AdminSiteTextsIn]
+# chiave del messaggio → nuovo testo; `null` o "" ripristina quello predefinito
+texts = "json"
+
+[type.AdminSiteTextsOut]
+locale = "string"
+# chiave del messaggio → testo sovrascritto (solo le chiavi modificate)
+texts = "json"
+
+[[route]]
+id = "put_site_texts"
+method = "PUT"
+path = "/admin/site-texts/{locale}"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "put_site_texts"
+request = "AdminSiteTextsIn"
+response = "AdminSiteTextsOut"
+summary = "Modifica in blocco i testi dell'interfaccia di una lingua (atomico, in audit); solo chiavi dei gruppi ammessi, testo semplice senza graffe né tag"

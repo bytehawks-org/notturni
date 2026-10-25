@@ -1,0 +1,154 @@
+# Informativa privacy e cookie policy: dati del titolare, testi per lingua e pubblicazione come pagine del sito.
+# Tutto riservato agli amministratori, tranne l'elenco pubblico dei documenti pubblicati (per i link nel footer).
+
+[type.LegalSettingsIn]
+# i campi assenti o vuoti si azzerano (il PUT sostituisce l'insieme)
+controller_name = { type = "string", max = 255, optional = true }
+controller_address = { type = "string", max = 500, optional = true }
+controller_email = { type = "string", max = 255, optional = true }
+controller_registry = { type = "string", max = 255, optional = true }
+dpo_contact = { type = "string", max = 500, optional = true }
+hosting_description = { type = "string", max = 500, optional = true }
+processors = { type = "string", max = 1000, optional = true }
+backup_retention = { type = "string", max = 255, optional = true }
+audit_archive_retention = { type = "string", max = 255, optional = true }
+minimum_age = "int?"
+
+[type.LegalOverviewOut]
+settings = "json"
+# valori dedotti dall'installazione (dominio, durate...) e funzioni attive, che i modelli usano
+values = "json"
+flags = "json"
+documents = "json"
+template_locales = "string[]"
+
+[type.LegalDocIn]
+title = { type = "string", max = 255 }
+content = { type = "string", max = 60000 }
+
+[type.LegalResetIn]
+# lingua da cui ripartire; assente = il modello della stessa lingua (solo it/en)
+from = { type = "string", max = 2, optional = true }
+
+[type.LegalPublishIn]
+# conferma la sostituzione di una pagina con lo stesso indirizzo non creata da qui
+replace_existing = "bool?"
+
+[type.LegalDocOut]
+doc = "string"
+locale = "string"
+title = "string"
+# testo sorgente (con variabili e condizioni)
+content = "string"
+default_content = { type = "string", nullable = true }
+# testo risolto con i dati del titolare e le funzioni attive: quello che si pubblica
+rendered = "string"
+customized = "bool"
+published = "bool"
+# `true` se testo, dati o funzioni attive sono cambiati dopo l'ultima pubblicazione
+stale = "bool"
+missing = "string[]"
+issues = "string[]"
+has_template = "bool"
+published_at = { type = "timestamp", nullable = true }
+updated_at = "timestamp"
+
+[type.LegalLinkOut]
+doc = "string"
+slug = "string"
+locale = "string"
+title = "string"
+
+[[route]]
+id = "get_legal"
+method = "GET"
+path = "/admin/legal"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "get_legal"
+response = "LegalOverviewOut"
+summary = "Documenti legali: dati del titolare, funzioni attive rilevate e stato di ogni documento per lingua (completezza, pubblicazione, da ripubblicare)"
+
+[[route]]
+id = "put_legal_settings"
+method = "PUT"
+path = "/admin/legal/settings"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "put_legal_settings"
+request = "LegalSettingsIn"
+response = "LegalOverviewOut"
+summary = "Imposta i dati del titolare; i documenti già pubblicati vengono riscritti con i nuovi valori (rifiutato se lascerebbe vuoto un campo che usano)"
+
+[[route]]
+id = "get_legal_doc"
+method = "GET"
+path = "/admin/legal/{doc}/{locale}"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "get_legal_doc"
+response = "LegalDocOut"
+summary = "Un documento (`privacy` o `cookie`) in una lingua: sorgente, modello, testo risolto e cosa manca per pubblicarlo"
+
+[[route]]
+id = "put_legal_doc"
+method = "PUT"
+path = "/admin/legal/{doc}/{locale}"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "put_legal_doc"
+request = "LegalDocIn"
+response = "LegalDocOut"
+summary = "Salva titolo e testo di un documento (crea la lingua se manca); non pubblica"
+
+[[route]]
+id = "reset_legal_doc"
+method = "POST"
+path = "/admin/legal/{doc}/{locale}/reset"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "reset_legal_doc"
+request = "LegalResetIn"
+response = "LegalDocOut"
+summary = "Ripristina il modello fornito (it/en) o ricopia il testo di un'altra lingua per iniziare una traduzione"
+
+[[route]]
+id = "publish_legal_doc"
+method = "POST"
+path = "/admin/legal/{doc}/{locale}/publish"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "publish_legal_doc"
+request = "LegalPublishIn"
+response = "LegalDocOut"
+summary = "Pubblica il testo risolto come pagina del sito (/p/privacy, /p/cookie-policy); rifiutato se mancano dati o il modello ha errori"
+
+[[route]]
+id = "unpublish_legal_doc"
+method = "POST"
+path = "/admin/legal/{doc}/{locale}/unpublish"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "unpublish_legal_doc"
+response = "LegalDocOut"
+summary = "Ritira la pagina pubblicata (il testo sorgente resta)"
+
+[[route]]
+id = "delete_legal_doc"
+method = "DELETE"
+path = "/admin/legal/{doc}/{locale}"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "delete_legal_doc"
+status = 204
+summary = "Elimina una lingua aggiunta dall'amministratore (le lingue del modello, it ed en, si ripristinano ma non si eliminano)"
+
+[[route]]
+id = "list_public_legal"
+method = "GET"
+path = "/legal/public"
+auth = "public"
+kind = "custom"
+handler = "list_public_legal"
+response = "LegalLinkOut[]"
+summary = "Documenti legali pubblicati, nella lingua richiesta (`?locale=`) o nella migliore disponibile: serve ai link nel footer del sito"

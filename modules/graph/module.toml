@@ -1,0 +1,7 @@
+[module]
+name = "graph"
+version = "0.1.0"
+kind = "optional"
+default_enabled = true
+requires = ["users", "blogs", "posts"]
+description = "Mappa dei collegamenti: grafo di post, Spazi, tag, categorie e link tra post, calcolato da Postgres per i soli Spazi dell'utente (o per tutta la piattaforma, agli amministratori)"

@@ -28,6 +28,12 @@ pub fn all() -> Vec<ModuleDef> {
     modules.push(noct_wiki::module());
     #[cfg(feature = "git-sync")]
     modules.push(noct_git_sync::module());
+    #[cfg(feature = "graph")]
+    modules.push(noct_graph::module());
+    #[cfg(feature = "legal")]
+    modules.push(noct_legal::module());
+    #[cfg(feature = "branding")]
+    modules.push(noct_branding::module());
     #[cfg(feature = "link-preview")]
     modules.push(noct_link_preview::module());
     #[cfg(feature = "notes")]

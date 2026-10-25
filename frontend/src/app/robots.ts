@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-import { getCrawlDirectives } from "@/lib/server-api";
+import { getCrawlDirectives, getSiteSeo } from "@/lib/server-api";
 import { SITE_URL } from "@/lib/site";
 
 // Senza questo, Next prova a pre-renderizzare /robots.txt in fase di build
@@ -16,6 +16,8 @@ export const dynamic = "force-dynamic";
  * integra: `ai_disallow` è quindi già un superset di `search_disallow` (vedi
  * commento in build_crawl_directives), non serve unirli qui. */
 export default async function robots(): Promise<MetadataRoute.Robots> {
+  // portale chiuso agli indici (`/admin/seo`): nessun crawler è ammesso e non c'è nulla da segnalare
+  if ((await getSiteSeo("it"))?.noindex) return { rules: [{ userAgent: "*", disallow: "/" }] };
   const { search_disallow, ai_disallow, ai_user_agents } = await getCrawlDirectives();
 
   const rules: MetadataRoute.Robots["rules"] = [

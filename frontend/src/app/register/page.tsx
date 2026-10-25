@@ -190,6 +190,21 @@ export default function RegisterPage() {
 
           {error && <Alert kind="error">{error}</Alert>}
 
+          <p className="text-[13px] leading-relaxed text-muted">
+            {t.rich("legalNotice", {
+              privacy: (chunks) => (
+                <Link href="/p/privacy" target="_blank" className="text-primary no-underline hover:underline">
+                  {chunks}
+                </Link>
+              ),
+              cookie: (chunks) => (
+                <Link href="/p/cookie-policy" target="_blank" className="text-primary no-underline hover:underline">
+                  {chunks}
+                </Link>
+              ),
+            })}
+          </p>
+
           <Button type="submit" size="lg" disabled={submitting || !canSubmit}>
             {submitting ? t("creating") : t("createAccount")}
           </Button>

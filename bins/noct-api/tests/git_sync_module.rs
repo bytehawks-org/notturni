@@ -470,3 +470,94 @@ async fn ssh_remotes_are_normalized_and_blocked_on_private_hosts_in_production()
     assert_eq!((s, c["remote_url"].clone()), (StatusCode::OK, json!("ssh://git@8.8.8.8/anna/testi.git")), "{c}");
     env.teardown().await;
 }
+
+#[tokio::test]
+async fn known_host_fingerprints_are_seeded_admin_managed_and_enforced() {
+    let (ssh, keyscan, _, _, host_line) = fake_ssh_tools();
+    let (ssh_s, scan_s) = (ssh.display().to_string(), keyscan.display().to_string());
+    let env = setup(
+        &["git_sync"],
+        &[
+            ("NOCT_GIT_SYNC_ALLOW_PRIVATE", "true"),
+            ("NOCT_GIT_SYNC_SSH_BIN", &ssh_s),
+            ("NOCT_GIT_SYNC_KEYSCAN_BIN", &scan_s),
+        ],
+    )
+    .await;
+    let root = env.user("root", "super_admin").await;
+    let anna = env.user("anna", "utente").await;
+    let admin = env.user("ada", "amministratore").await;
+    space(&env, anna, "guida", "blog").await;
+    let known = "/admin/git-sync/known-hosts";
+
+    // solo il Super Admin; GitHub e GitLab.com arrivano dalla migrazione
+    assert_eq!(env.get(known, Some(anna)).await.0, StatusCode::FORBIDDEN);
+    assert_eq!(env.get(known, Some(admin)).await.0, StatusCode::FORBIDDEN);
+    let (s, list) = env.get(known, Some(root)).await;
+    assert_eq!(s, StatusCode::OK);
+    let hosts: Vec<_> = list.as_array().unwrap().iter().map(|h| h["host"].as_str().unwrap()).collect();
+    assert_eq!(hosts, ["github.com", "gitlab.com"]);
+    assert_eq!(list[0]["fingerprints"].as_array().unwrap().len(), 3);
+
+    // un host noto: le chiavi rilevate si fissano solo se hanno un'impronta attesa. L'host finto presenta
+    // una chiave sconosciuta → rifiutata, nulla viene salvato
+    let ssh_url = "ssh://git@127.0.0.1/srv/repo.git";
+    let url = "/blogs/guida/git-sync";
+    let rogue = "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    let put =
+        |fp: Vec<&str>| env.put(known, Some(root), json!({"host": "127.0.0.1", "fingerprints": fp, "note": "test"}));
+    let (s, _) = put(vec![rogue]).await;
+    assert_eq!(s, StatusCode::OK);
+    let (s, b) = env.put(url, Some(anna), json!({"remote_url": ssh_url, "auth_method": "ssh"})).await;
+    assert_eq!((s, detail(&b).contains("non corrispondono")), (StatusCode::BAD_REQUEST, true), "{b}");
+    assert_eq!(env.get(url, Some(anna)).await.1["configured"], false);
+
+    // l'amministratore aggiorna l'elenco con l'impronta vera: ora la configurazione passa
+    let real = ssh_fingerprint_of(&host_line);
+    let (s, h) = put(vec![&real, rogue]).await;
+    assert_eq!((s, h["fingerprints"].as_array().unwrap().len()), (StatusCode::OK, 2), "{h}");
+    let (s, c) = env.put(url, Some(anna), json!({"remote_url": ssh_url, "auth_method": "ssh"})).await;
+    assert_eq!(s, StatusCode::OK, "{c}");
+    assert_eq!(c["ssh_host_fingerprints"], json!([real]), "si fissano solo le chiavi attese");
+
+    // validazione e rimozione, con audit
+    for bad in [
+        json!({"host": "", "fingerprints": [real]}),
+        json!({"host": "a b", "fingerprints": [real]}),
+        json!({"host": "x.example.com", "fingerprints": []}),
+        json!({"host": "x.example.com", "fingerprints": ["SHA256:corta"]}),
+        json!({"host": "x.example.com", "port": 0, "fingerprints": [real]}),
+    ] {
+        assert_eq!(env.put(known, Some(root), bad.clone()).await.0, StatusCode::BAD_REQUEST, "{bad}");
+    }
+    assert_eq!(
+        env.put(known, Some(anna), json!({"host": "x.example.com", "fingerprints": [real]})).await.0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(env.delete(&format!("{known}/127.0.0.1/22"), Some(anna)).await, StatusCode::FORBIDDEN);
+    assert_eq!(env.delete(&format!("{known}/127.0.0.1/22"), Some(root)).await, StatusCode::NO_CONTENT);
+    assert_eq!(env.delete(&format!("{known}/127.0.0.1/22"), Some(root)).await, StatusCode::NOT_FOUND);
+    let mut actions: Vec<String> =
+        sqlx::query_scalar("SELECT action FROM audit_log WHERE action LIKE 'git_sync.known_host%' ORDER BY action")
+            .fetch_all(&env.pool)
+            .await
+            .unwrap();
+    actions.sort();
+    assert_eq!(actions, ["git_sync.known_host_removed", "git_sync.known_host_saved", "git_sync.known_host_saved"]);
+    env.teardown().await;
+}
+
+/// Impronta `SHA256:…` di una riga `host tipo chiave`, calcolata da `ssh-keygen`.
+fn ssh_fingerprint_of(line: &str) -> String {
+    let file = std::env::temp_dir().join(format!("noct-gs-fp-{}", Uuid::new_v4().simple()));
+    std::fs::write(&file, format!("{line}\n")).unwrap();
+    let out = git_free_output("ssh-keygen", &["-l", "-E", "sha256", "-f", &file.display().to_string()]);
+    let _ = std::fs::remove_file(file);
+    out.split_whitespace().nth(1).unwrap().to_string()
+}
+
+fn git_free_output(bin: &str, args: &[&str]) -> String {
+    let out = Command::new(bin).args(args).output().unwrap();
+    assert!(out.status.success());
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}

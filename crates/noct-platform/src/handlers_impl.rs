@@ -1,7 +1,7 @@
 //! Handler `custom` del crate: le rotte pubbliche di configurazione e footer.
 
 use noct_core::{ApiError, RouteCtx};
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 pub async fn public_config(ctx: RouteCtx) -> Result<Value, ApiError> {
     let st = &ctx.state;
@@ -28,4 +28,23 @@ pub async fn public_footer(ctx: RouteCtx) -> Result<Value, ApiError> {
     .await?
     .unwrap_or_default();
     Ok(json!({"column1": row.0, "column2": row.1, "column3": row.2, "bottom_bar": row.3}))
+}
+
+// ---- testi dell'interfaccia ------------------------------------------------------------------------------------------
+
+pub async fn texts_of(conn: &mut sqlx::PgConnection, locale: &str) -> Result<Value, ApiError> {
+    let rows: Vec<(String, String)> =
+        sqlx::query_as("SELECT key, value FROM site_texts WHERE locale = $1 ORDER BY key")
+            .bind(locale)
+            .fetch_all(conn)
+            .await?;
+    let texts: Map<String, Value> = rows.into_iter().map(|(k, v)| (k, Value::String(v))).collect();
+    Ok(json!({"locale": locale, "texts": texts}))
+}
+
+pub async fn get_site_texts(ctx: RouteCtx) -> Result<Value, ApiError> {
+    let locale = ctx.query.get("locale").map(|l| l.to_ascii_lowercase()).unwrap_or_default();
+    crate::rules::validate_text_locale(&locale).map_err(ApiError::bad_request)?;
+    let mut conn = ctx.state.db.acquire().await?;
+    texts_of(&mut conn, &locale).await
 }

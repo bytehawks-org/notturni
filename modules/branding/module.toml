@@ -1,0 +1,7 @@
+[module]
+name = "branding"
+version = "0.1.0"
+kind = "optional"
+default_enabled = true
+requires = ["users", "audit", "platform", "media"]
+description = "Identità e SEO del portale: icona e favicon (da un'unica immagine), immagine per le condivisioni, titolo e descrizione per lingua, verifica dei motori di ricerca, meta tag aggiuntivi e blocco dell'indicizzazione"

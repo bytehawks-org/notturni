@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 
-import type { Metadata } from "next";
+import type { Metadata, ResolvingMetadata } from "next";
+import { withSiteOpenGraph } from "@/lib/metadata";
 import { getLocale, getTranslations } from "next-intl/server";
 import Image from "next/image";
 import Link from "next/link";
@@ -35,7 +36,7 @@ interface PageParams {
   postSlug: string;
 }
 
-export async function generateMetadata({ params }: { params: Promise<PageParams> }): Promise<Metadata> {
+export async function generateMetadata({ params }: { params: Promise<PageParams> }, parent: ResolvingMetadata): Promise<Metadata> {
   const { blogSlug, postSlug } = await params;
   const post = await getPublicPostByPermalink(blogSlug, postSlug);
   if (!post) return {};
@@ -48,7 +49,8 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
     // il blocco dei crawler IA/LLM specifici passa invece da robots.txt
     // (frontend/src/app/robots.ts), non da questo meta tag.
     robots: post.effective_search_indexing_enabled ? undefined : { index: false, follow: false },
-    openGraph: {
+    // senza una copertina propria (o se è sensibile) vale l'immagine di condivisione del portale
+    openGraph: await withSiteOpenGraph(parent, {
       title: post.title,
       description,
       type: "article",
@@ -56,7 +58,7 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
       publishedTime: post.published_at ?? undefined,
       authors: [post.author_display_name],
       images: post.cover_image_url && !post.cover_image_is_sensitive ? [post.cover_image_url] : undefined,
-    },
+    }),
   };
 }
 

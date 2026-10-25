@@ -1,7 +1,7 @@
 //! Handler `custom` del modulo: configurazione della sincronizzazione Git di uno Spazio. Solo il
 //! proprietario; il token si cifra a riposo e non viene mai restituito.
 
-use crate::{GitSyncIn, SUBJECT_RUN, rules, ssh, sync};
+use crate::{GitSyncIn, KnownHostIn, SUBJECT_RUN, rules, ssh, sync};
 use chrono::{DateTime, Utc};
 use noct_audit::{Entry, user_actor};
 use noct_core::{
@@ -188,7 +188,33 @@ pub async fn put_git_sync(ctx: RouteCtx, body: GitSyncIn) -> Result<Value, ApiEr
             None => {
                 let keyscan = st.module_config_str("git_sync", "keyscan_bin").unwrap_or("ssh-keyscan");
                 let scanned = ssh::scan_host(keyscan, &host, port).await.map_err(ApiError::bad_request)?;
+                let lines: Vec<String> = scanned.lines().map(str::to_string).collect();
                 let found = ssh::fingerprints(&scanned).await.map_err(ApiError::internal)?;
+                if lines.len() != found.len() {
+                    return Err(ApiError::internal("impronte delle host key incoerenti con le chiavi rilevate"));
+                }
+                // host noto alla piattaforma: si fissano solo le chiavi con un'impronta attesa
+                let trusted: Option<String> =
+                    sqlx::query_scalar("SELECT fingerprints FROM git_sync_known_hosts WHERE host = $1 AND port = $2")
+                        .bind(host.to_ascii_lowercase())
+                        .bind(i32::from(port))
+                        .fetch_optional(&st.db)
+                        .await?;
+                let (lines, found) = match trusted {
+                    Some(list) => {
+                        let trusted: Vec<String> = list.lines().map(str::to_string).collect();
+                        let (kept, kept_fp) = rules::keep_trusted(&lines, &found, &trusted);
+                        if kept.is_empty() {
+                            return Err(ApiError::bad_request(format!(
+                                "Le chiavi presentate da {host} non corrispondono alle impronte note alla piattaforma (ricevute: {}). \
+                                 Se il provider ha cambiato le chiavi, un amministratore deve aggiornare l'elenco degli host noti.",
+                                found.join(", ")
+                            )));
+                        }
+                        (kept, kept_fp)
+                    }
+                    None => (lines, found),
+                };
                 if let Some(expected) =
                     body.host_fingerprint.as_deref().filter(|e| !found.iter().any(|f| f == e.trim()))
                 {
@@ -198,7 +224,7 @@ pub async fn put_git_sync(ctx: RouteCtx, body: GitSyncIn) -> Result<Value, ApiEr
                         found.join(", ")
                     )));
                 }
-                (Some(scanned), Some(found.join("\n")))
+                (Some(lines.join("\n") + "\n"), Some(found.join("\n")))
             }
         }
     } else {
@@ -285,6 +311,108 @@ pub async fn run_git_sync(ctx: RouteCtx) -> Result<(), ApiError> {
     outbox::enqueue(&mut tx, Kind::Job, SUBJECT_RUN, &json!({"config_id": id, "force": true}))
         .await
         .map_err(ApiError::internal)?;
+    tx.commit().await?;
+    Ok(())
+}
+
+// ---- impronte note degli host SSH (Super Admin) ------------------------------------------------------------------
+
+#[derive(FromRow)]
+struct KnownHostRow {
+    host: String,
+    port: i32,
+    fingerprints: String,
+    note: Option<String>,
+    updated_at: DateTime<Utc>,
+}
+
+fn render_known(r: KnownHostRow) -> Value {
+    json!({
+        "host": r.host, "port": r.port, "fingerprints": r.fingerprints.lines().collect::<Vec<_>>(),
+        "note": r.note, "updated_at": r.updated_at,
+    })
+}
+
+const KNOWN_SELECT: &str = "SELECT host, port, fingerprints, note, updated_at FROM git_sync_known_hosts";
+
+pub async fn list_known_hosts(ctx: RouteCtx) -> Result<Vec<Value>, ApiError> {
+    let rows: Vec<KnownHostRow> =
+        sqlx::query_as(&format!("{KNOWN_SELECT} ORDER BY host, port")).fetch_all(&ctx.state.db).await?;
+    Ok(rows.into_iter().map(render_known).collect())
+}
+
+async fn audit_known(
+    conn: &mut PgConnection,
+    ctx: &RouteCtx,
+    user: Uuid,
+    action: &str,
+    payload: Value,
+) -> Result<(), ApiError> {
+    let who = user_actor(&mut *conn, user).await.map_err(ApiError::internal)?;
+    noct_audit::record(conn, Entry { action, actor: who, target: None, blog_id: None, meta: &ctx.meta, payload })
+        .await
+        .map_err(ApiError::internal)
+}
+
+pub async fn put_known_host(ctx: RouteCtx, body: KnownHostIn) -> Result<Value, ApiError> {
+    let actor = actor(&ctx)?;
+    let port = body.port.unwrap_or(22);
+    let host = rules::validate_known_host(&body.host, port).map_err(ApiError::bad_request)?;
+    let port = port as i32; // validata in 1..=65535
+    let mut prints: Vec<String> = Vec::new();
+    for f in &body.fingerprints {
+        let f = f.trim().to_string();
+        rules::validate_fingerprint(&f).map_err(ApiError::bad_request)?;
+        if !prints.contains(&f) {
+            prints.push(f);
+        }
+    }
+    if prints.is_empty() || prints.len() > 10 {
+        return Err(ApiError::bad_request("Servono da 1 a 10 impronte."));
+    }
+    let note = body.note.as_deref().map(str::trim).filter(|n| !n.is_empty()).map(str::to_string);
+    let mut tx = ctx.state.db.begin().await?;
+    let row: KnownHostRow = sqlx::query_as(
+        "INSERT INTO git_sync_known_hosts (host, port, fingerprints, note, updated_by) VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (host, port) DO UPDATE SET fingerprints = EXCLUDED.fingerprints, note = EXCLUDED.note,
+            updated_by = EXCLUDED.updated_by, updated_at = now()
+         RETURNING host, port, fingerprints, note, updated_at",
+    )
+    .bind(&host)
+    .bind(port)
+    .bind(prints.join("\n"))
+    .bind(&note)
+    .bind(actor.user_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    audit_known(
+        &mut tx,
+        &ctx,
+        actor.user_id,
+        "git_sync.known_host_saved",
+        json!({"host": host, "port": port, "fingerprints": prints}),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(render_known(row))
+}
+
+pub async fn delete_known_host(ctx: RouteCtx) -> Result<(), ApiError> {
+    let actor = actor(&ctx)?;
+    let host = ctx.path.get("host").cloned().unwrap_or_default().to_ascii_lowercase();
+    let port: i32 =
+        ctx.path.get("port").and_then(|p| p.parse().ok()).ok_or_else(|| ApiError::bad_request("Porta non valida."))?;
+    let mut tx = ctx.state.db.begin().await?;
+    let removed = sqlx::query("DELETE FROM git_sync_known_hosts WHERE host = $1 AND port = $2")
+        .bind(&host)
+        .bind(port)
+        .execute(&mut *tx)
+        .await?;
+    if removed.rows_affected() == 0 {
+        return Err(ApiError::not_found("Host non presente nell'elenco."));
+    }
+    audit_known(&mut tx, &ctx, actor.user_id, "git_sync.known_host_removed", json!({"host": host, "port": port}))
+        .await?;
     tx.commit().await?;
     Ok(())
 }

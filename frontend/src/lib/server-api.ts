@@ -2,12 +2,13 @@ import "server-only";
 
 import { REVALIDATE_SECONDS, revalidateTags } from "./revalidate";
 import type {
+  Backlink,
   BibliographyEntry,
   Blog,
   BlogConfig,
-  Backlink,
   Category,
   Interest,
+  LegalLink,
   LinkBibliographyEntry,
   MediaBibliographyEntry,
   OutlineNode,
@@ -15,11 +16,14 @@ import type {
   Post,
   PostTranslationSummary,
   Profile,
+  Publication,
+  PublicationDetail,
   PublicBlog,
   PublicComment,
   PublicUser,
-  Publication,
-  PublicationDetail,
+  SeoSite,
+  SitemapPage,
+  SpaceSitemap,
   TrendingTag,
 } from "./types";
 
@@ -440,6 +444,83 @@ export async function getPlatformFooter(): Promise<PlatformFooter> {
   });
   if (!res.ok) return { column1: null, column2: null, column3: null, bottom_bar: null };
   return (await res.json()) as PlatformFooter;
+}
+
+/** Documenti legali pubblicati (privacy, cookie) nella lingua richiesta o nella migliore disponibile: link del
+ * footer. In caso di errore nessun link, mai un errore di pagina. */
+export async function getPublicLegalLinks(locale: string): Promise<LegalLink[]> {
+  try {
+    const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/legal/public?locale=${encodeURIComponent(locale)}`, {
+      next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.platformPages()] },
+    });
+    return res.ok ? ((await res.json()) as LegalLink[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Una pagina del sito nella prima lingua disponibile tra quelle indicate, poi tra le sue traduzioni pubblicate.
+ * Restituisce anche l'elenco delle lingue in cui esiste, per il selettore. */
+export async function getPublicPlatformPageForLocales(
+  slug: string,
+  preferred: string[]
+): Promise<{ page: Page; locales: string[] } | null> {
+  const tried = new Set<string>();
+  let found: Page | null = null;
+  for (const locale of preferred.filter(Boolean)) {
+    if (tried.has(locale)) continue;
+    tried.add(locale);
+    found = await getPublicPlatformPage(slug, locale);
+    if (found) break;
+  }
+  if (!found) return null;
+  let locales = [found.locale];
+  try {
+    const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/pages/${found.id}/translations`, {
+      next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.platformPage(slug), revalidateTags.platformPages()] },
+    });
+    if (res.ok) locales = ((await res.json()) as { locale: string }[]).map((t) => t.locale);
+  } catch {
+    // il selettore delle lingue è un di più
+  }
+  return { page: found, locales };
+}
+
+/** Identità e meta tag del portale (modulo `branding`). `null` se il modulo è spento o il backend non risponde: il
+ * layout usa i valori predefiniti, mai un errore di pagina. */
+export async function getSiteSeo(locale: string): Promise<SeoSite | null> {
+  try {
+    const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/seo/site?locale=${encodeURIComponent(locale)}`, {
+      next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.siteSeo()] },
+    });
+    return res.ok ? ((await res.json()) as SeoSite) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Una pagina della sitemap globale (`GET /seo/sitemap`). */
+export async function getSitemapPage(offset: number, limit: number): Promise<SitemapPage | null> {
+  try {
+    const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/seo/sitemap?offset=${offset}&limit=${limit}`, {
+      next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.feed(), revalidateTags.siteSeo(), revalidateTags.platformPages()] },
+    });
+    return res.ok ? ((await res.json()) as SitemapPage) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Sitemap di uno Spazio; `null` se non esiste o non è indicizzabile. */
+export async function getSpaceSitemap(slug: string): Promise<SpaceSitemap | null> {
+  try {
+    const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${encodeURIComponent(slug)}/sitemap`, {
+      next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.blog(slug), revalidateTags.feed()] },
+    });
+    return res.ok ? ((await res.json()) as SpaceSitemap) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Categorie del blog per i filtri della sua home pubblica (mockup 3f). */

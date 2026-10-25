@@ -2503,13 +2503,17 @@ dependencies = [
  "chrono",
  "futures",
  "http-body-util",
+ "image",
  "noct-audit",
  "noct-auth-mfa",
  "noct-backup",
  "noct-blogs",
+ "noct-branding",
  "noct-bundle",
  "noct-core",
  "noct-git-sync",
+ "noct-graph",
+ "noct-legal",
  "noct-manifest",
  "noct-newsletter",
  "noct-security",
@@ -2662,6 +2666,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "noct-branding"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "chrono",
+ "image",
+ "noct-audit",
+ "noct-codegen",
+ "noct-core",
+ "noct-media",
+ "noct-platform",
+ "regex",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "noct-bundle"
 version = "0.1.0"
 dependencies = [
@@ -2672,6 +2698,7 @@ dependencies = [
  "noct-auth-sso",
  "noct-backup",
  "noct-blogs",
+ "noct-branding",
  "noct-comments",
  "noct-core",
  "noct-custom-domains",
@@ -2680,8 +2707,10 @@ dependencies = [
  "noct-fragments",
  "noct-gdpr",
  "noct-git-sync",
+ "noct-graph",
  "noct-image-moderation",
  "noct-interests",
+ "noct-legal",
  "noct-link-preview",
  "noct-media",
  "noct-newsletter",
@@ -2918,6 +2947,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "noct-graph"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "noct-codegen",
+ "noct-core",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "noct-http"
 version = "0.1.0"
 dependencies = [
@@ -2957,6 +3003,28 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "noct-legal"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "hex",
+ "noct-audit",
+ "noct-blogs",
+ "noct-codegen",
+ "noct-core",
+ "noct-manifest",
+ "noct-platform",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "sqlx",
+ "tokio",
  "tracing",
  "uuid",
 ]

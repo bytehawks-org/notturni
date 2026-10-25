@@ -10,6 +10,7 @@ mod config;
 mod handlers_impl;
 mod modules;
 mod overview;
+mod site_texts;
 mod users;
 
 pub mod handlers {

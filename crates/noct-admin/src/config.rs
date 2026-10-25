@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 use sqlx::{FromRow, PgConnection};
 use std::sync::LazyLock;
 
-const LOCALES: &[&str] = &["it", "en"];
+pub(crate) const LOCALES: &[&str] = &["it", "en"];
 const REGISTRATION_MODES: &[&str] = &["open", "invite", "closed"];
 const MIN_RETENTION_DAYS: i32 = 7;
 const MAX_RETENTION_DAYS: i32 = 3650;

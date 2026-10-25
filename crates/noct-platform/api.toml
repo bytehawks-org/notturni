@@ -36,3 +36,20 @@ kind = "custom"
 handler = "public_footer"
 response = "PublicFooter"
 summary = "Footer di piattaforma in Markdown grezzo (le colonne 1-2 sono sovrascrivibili per blog)"
+
+# ---- testi dell'interfaccia modificabili dagli amministratori ------------------------------------------------------------
+
+[type.SiteTextsOut]
+locale = "string"
+# chiave del messaggio → testo sovrascritto (solo le chiavi modificate)
+texts = "json"
+
+[[route]]
+id = "get_site_texts"
+method = "GET"
+path = "/site-texts"
+auth = "public"
+kind = "custom"
+handler = "get_site_texts"
+response = "SiteTextsOut"
+summary = "Testi dell'interfaccia sovrascritti dagli amministratori per la lingua `?locale=` (vuoto se nessuno); il frontend li fonde ai predefiniti"

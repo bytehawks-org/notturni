@@ -1,0 +1,7 @@
+[module]
+name = "legal"
+version = "0.1.0"
+kind = "optional"
+default_enabled = true
+requires = ["users", "audit", "platform", "blogs", "pages"]
+description = "Informativa privacy e cookie policy: modelli multilingua che si adattano alle funzioni attive dell'istanza, dati del titolare, modifica e pubblicazione come pagine del sito (/p/privacy, /p/cookie-policy)"

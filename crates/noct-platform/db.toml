@@ -48,3 +48,18 @@ columns = [
   { name = "version", type = "bigint", default = "0" },
   { name = "last_error", type = "text", null = true },
 ]
+
+# Testi dell'interfaccia sovrascritti dagli amministratori, per lingua. La chiave è il percorso del messaggio
+# nei file di traduzione del frontend (es. `Home.pillars.noAi.title`); i valori predefiniti restano nel codice
+# e un testo assente da questa tabella usa quello predefinito. Solo prefissi ammessi (vedi `rules::EDITABLE_PREFIXES`).
+[[table]]
+name = "site_texts"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "locale", type = "varchar(2)" },
+  { name = "key", type = "varchar(120)" },
+  { name = "value", type = "text" },
+  { name = "updated_by", type = "uuid", null = true, ref = "users.id", on_delete = "set_null" },
+]
+uniques = [{ name = "uq_site_texts_locale_key", columns = ["locale", "key"] }]

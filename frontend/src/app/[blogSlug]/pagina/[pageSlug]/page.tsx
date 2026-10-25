@@ -1,4 +1,5 @@
-import type { Metadata } from "next";
+import type { Metadata, ResolvingMetadata } from "next";
+import { withSiteOpenGraph } from "@/lib/metadata";
 import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 
@@ -23,7 +24,7 @@ export async function generateMetadata({
 }: {
   params: Promise<PageParams>;
   searchParams: Promise<{ locale?: string }>;
-}): Promise<Metadata> {
+}, parent: ResolvingMetadata): Promise<Metadata> {
   const { blogSlug, pageSlug } = await params;
   const { locale = "it" } = await searchParams;
   const [page, blog] = await Promise.all([getPublicPage(blogSlug, pageSlug, locale), getPublicBlog(blogSlug)]);
@@ -34,7 +35,7 @@ export async function generateMetadata({
     description,
     alternates: { canonical: `/${blogSlug}/pagina/${pageSlug}` },
     robots: blog?.search_indexing_enabled === false ? { index: false, follow: false } : undefined,
-    openGraph: { title: page.title, description, type: "website", url: `/${blogSlug}/pagina/${pageSlug}` },
+    openGraph: await withSiteOpenGraph(parent, { title: page.title, description, type: "website", url: `/${blogSlug}/pagina/${pageSlug}` }),
   };
 }
 

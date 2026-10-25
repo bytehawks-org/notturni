@@ -44,6 +44,9 @@ noct-publications = { path = "modules/publications" }
 noct-pages = { path = "modules/pages" }
 noct-wiki = { path = "modules/wiki" }
 noct-git-sync = { path = "modules/git_sync" }
+noct-graph = { path = "modules/graph" }
+noct-legal = { path = "modules/legal" }
+noct-branding = { path = "modules/branding" }
 noct-link-preview = { path = "modules/link_preview" }
 noct-notes = { path = "modules/notes" }
 noct-fragments = { path = "modules/fragments" }

@@ -1,6 +1,6 @@
 # Riferimento API — endpoint per modulo
 
-Elenco di tutti gli endpoint esposti dal backend, ricavato dai manifest `api.toml` di ogni modulo (212 rotte in 24 moduli).
+Elenco di tutti gli endpoint esposti dal backend, ricavato dai manifest `api.toml` di ogni modulo (236 rotte in 27 moduli).
 Complementa [API.md](API.md), che descrive payload, regole di dominio ed esempi dei flussi principali; qui l'obiettivo è
 sapere **quali rotte esistono, con quale verbo, a chi sono aperte e perché esistono**. Lo schema machine-readable completo
 (tipi di richiesta/risposta) è servito da `GET /api/v1/openapi.json` del backend in esecuzione.
@@ -59,6 +59,7 @@ Amministrazione di piattaforma: panoramica, utenti, blog, post, registro di audi
 | GET | `/admin/modules` | ruolo: super admin | Moduli compilati nel binario con stato voluto e in esecuzione |  |
 | POST | `/admin/modules/{name}/enable` | ruolo: super admin | Attiva un modulo opzionale (a caldo: migra lo schema, monta le rotte, avvia i consumer) |  |
 | POST | `/admin/modules/{name}/disable` | ruolo: super admin | Disattiva un modulo opzionale (rotte smontate, dati e tabelle intatti; rifiutato se un altro modulo attivo lo richiede) |  |
+| PUT | `/admin/site-texts/{locale}` | ruolo: super admin, amministratore | Modifica in blocco i testi dell'interfaccia di una lingua (atomico, in audit); solo chiavi dei gruppi ammessi, testo semplice senza graffe né tag |  |
 
 ## auth  (core)
 
@@ -132,6 +133,7 @@ Impostazioni di piattaforma (riga unica): limiti, nomi riservati, soglia di mode
 |---|---|---|---|---|
 | GET | `/config` | pubblica | Configurazione pubblica dell'istanza: lingua, registrazioni, captcha, provider di accesso |  |
 | GET | `/footer` | pubblica | Footer di piattaforma in Markdown grezzo (le colonne 1-2 sono sovrascrivibili per blog) |  |
+| GET | `/site-texts` | pubblica | Testi dell'interfaccia sovrascritti dagli amministratori per la lingua `?locale=` (vuoto se nessuno); il frontend li fonde ai predefiniti |  |
 
 ## posts  (core)
 
@@ -158,6 +160,8 @@ Post: bozze, revisione, pubblicazione e pianificazione, traduzioni, tag, media e
 | GET | `/users/me/links` | utente | Link citati nei post (qualunque stato) di tutti i miei blog, raggruppati per URL |  |
 | GET | `/seo/crawl-directives` | pubblica | Percorsi da escludere in robots.txt (opt-out per blog e per post, motori di ricerca e IA separati) |  |
 | GET | `/seo/sitemap-entries` | pubblica | Blog e post indicizzabili per sitemap.xml |  |
+| GET | `/seo/sitemap` | pubblica | Pagina (`offset`, `limit` max 5000) delle URL indicizzabili del portale: home, pagine del sito, Spazi e post, con le traduzioni come alternative hreflang |  |
+| GET | `/blogs/{slug}/sitemap` | pubblica | URL indicizzabili di uno Spazio pubblico: home, post (traduzioni come alternative hreflang), pagine statiche e pubblicazioni; 404 se lo Spazio non è pubblico o ha escluso i motori di ricerca |  |
 | GET | `/blogs/{slug}/export` | utente | ZIP con tutto il contenuto del blog in formati aperti (solo il proprietario); i binari delle immagini restano sullo storage | raw |
 
 ## profiles  (core)
@@ -202,6 +206,20 @@ Accesso con provider esterni (Google, Microsoft, GitHub, LinkedIn) e collegament
 |---|---|---|---|---|
 | GET | `/auth/sso/{provider}/login` | pubblica | Avvia l'accesso con un provider: redirect all'autorizzazione (state e PKCE in un cookie httpOnly) | rate limit 30/5 min per ip; raw |
 | GET | `/auth/sso/{provider}/callback` | pubblica | Chiude l'accesso: sessione e redirect al frontend, oppure la sfida MFA per collegare un account esistente | rate limit 30/5 min per ip; raw |
+
+## branding  (opzionale)
+
+Identità e SEO del portale: icona e favicon (da un'unica immagine), immagine per le condivisioni, titolo e descrizione per lingua, verifica dei motori di ricerca, meta tag aggiuntivi e blocco dell'indicizzazione.
+
+| Verbo | Percorso | Accesso | Descrizione | Note |
+|---|---|---|---|---|
+| GET | `/seo/site` | pubblica | Identità e meta tag del portale nella lingua richiesta (`?locale=`) o nella migliore disponibile: icone, immagine di condivisione, titolo, descrizione, verifiche, blocco dell'indicizzazione |  |
+| GET | `/admin/seo` | ruolo: super admin, amministratore | Impostazioni di identità e SEO del portale, con le immagini caricate |  |
+| PUT | `/admin/seo` | ruolo: super admin, amministratore | Imposta nome del sito, testi per lingua, verifiche dei motori di ricerca, meta tag aggiuntivi e blocco dell'indicizzazione (sostituisce l'insieme; i campi assenti si azzerano) |  |
+| POST | `/admin/branding/icon` | ruolo: super admin, amministratore | Icona e favicon del portale da un'unica immagine quadrata (PNG, JPEG, WEBP; max 2 MiB; almeno 128 px): se ne ricavano 16, 32, 48, 180, 192 e 512 px compatibilmente con la dimensione di partenza | 201; upload |
+| DELETE | `/admin/branding/icon` | ruolo: super admin, amministratore | Rimuove l'icona del portale (tornano quelle predefinite) e cancella i file su storage |  |
+| POST | `/admin/branding/social` | ruolo: super admin, amministratore | Immagine per le anteprime nelle condivisioni (PNG, JPEG, WEBP; max 2 MiB; almeno 600 px di larghezza; consigliata 1200×630) | 201; upload |
+| DELETE | `/admin/branding/social` | ruolo: super admin, amministratore | Rimuove l'immagine per le condivisioni e cancella il file su storage |  |
 
 ## comments  (opzionale)
 
@@ -291,6 +309,17 @@ Sincronizzazione dei testi di uno Spazio verso un branch di un repository Git re
 | PUT | `/blogs/{slug}/git-sync` | utente | Imposta repository, branch e accesso: token personale via HTTPS oppure chiave di deploy SSH generata dalla piattaforma con host key pinnata (branch diverso da quello predefinito del repository) |  |
 | DELETE | `/blogs/{slug}/git-sync` | utente | Rimuove la sincronizzazione e cancella il token salvato (il repository remoto non viene toccato) | 204 |
 | POST | `/blogs/{slug}/git-sync/run` | utente | Accoda una sincronizzazione subito; l'esito compare in `last_status` (polling su GET) | 202 |
+| GET | `/admin/git-sync/known-hosts` | ruolo: super admin | Host SSH di cui la piattaforma conosce le impronte attese (GitHub, GitLab...): le chiavi rilevate si fissano solo se coincidono |  |
+| PUT | `/admin/git-sync/known-hosts` | ruolo: super admin | Aggiunge o aggiorna le impronte attese di un host (es. quando il provider ruota le chiavi); le configurazioni già fissate non cambiano finché l'utente non le risalva |  |
+| DELETE | `/admin/git-sync/known-hosts/{host}/{port}` | ruolo: super admin | Toglie un host dall'elenco: tornano la fiducia al primo uso e l'impronta facoltativa dell'utente | 204 |
+
+## graph  (opzionale)
+
+Mappa dei collegamenti: grafo di post, Spazi, tag, categorie e link tra post, calcolato da Postgres per i soli Spazi dell'utente (o per tutta la piattaforma, agli amministratori).
+
+| Verbo | Percorso | Accesso | Descrizione | Note |
+|---|---|---|---|---|
+| GET | `/graph` | utente | Grafo dei collegamenti tra post, Spazi, tag, categorie e link: dei propri Spazi (`scope=mine`, anche con bozze se `drafts=true`) o, agli amministratori, di tutto ciò che è pubblico (`scope=platform`); filtri `blog`, `kind`, `limit` (max 800) |  |
 
 ## interests  (opzionale)
 
@@ -299,6 +328,22 @@ Elenco pubblico degli interessi di piattaforma, scelti dagli utenti nel profilo 
 | Verbo | Percorso | Accesso | Descrizione | Note |
 |---|---|---|---|---|
 | GET | `/interests` | pubblica | Interessi di piattaforma selezionabili nel profilo |  |
+
+## legal  (opzionale)
+
+Informativa privacy e cookie policy: modelli multilingua che si adattano alle funzioni attive dell'istanza, dati del titolare, modifica e pubblicazione come pagine del sito (/p/privacy, /p/cookie-policy).
+
+| Verbo | Percorso | Accesso | Descrizione | Note |
+|---|---|---|---|---|
+| GET | `/admin/legal` | ruolo: super admin, amministratore | Documenti legali: dati del titolare, funzioni attive rilevate e stato di ogni documento per lingua (completezza, pubblicazione, da ripubblicare) |  |
+| PUT | `/admin/legal/settings` | ruolo: super admin, amministratore | Imposta i dati del titolare; i documenti già pubblicati vengono riscritti con i nuovi valori (rifiutato se lascerebbe vuoto un campo che usano) |  |
+| GET | `/admin/legal/{doc}/{locale}` | ruolo: super admin, amministratore | Un documento (`privacy` o `cookie`) in una lingua: sorgente, modello, testo risolto e cosa manca per pubblicarlo |  |
+| PUT | `/admin/legal/{doc}/{locale}` | ruolo: super admin, amministratore | Salva titolo e testo di un documento (crea la lingua se manca); non pubblica |  |
+| POST | `/admin/legal/{doc}/{locale}/reset` | ruolo: super admin, amministratore | Ripristina il modello fornito (it/en) o ricopia il testo di un'altra lingua per iniziare una traduzione |  |
+| POST | `/admin/legal/{doc}/{locale}/publish` | ruolo: super admin, amministratore | Pubblica il testo risolto come pagina del sito (/p/privacy, /p/cookie-policy); rifiutato se mancano dati o il modello ha errori |  |
+| POST | `/admin/legal/{doc}/{locale}/unpublish` | ruolo: super admin, amministratore | Ritira la pagina pubblicata (il testo sorgente resta) |  |
+| DELETE | `/admin/legal/{doc}/{locale}` | ruolo: super admin, amministratore | Elimina una lingua aggiunta dall'amministratore (le lingue del modello, it ed en, si ripristinano ma non si eliminano) | 204 |
+| GET | `/legal/public` | pubblica | Documenti legali pubblicati, nella lingua richiesta (`?locale=`) o nella migliore disponibile: serve ai link nel footer del sito |  |
 
 ## link_preview  (opzionale)
 

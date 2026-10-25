@@ -1226,9 +1226,101 @@ non viene mai sovrascritto.
 commit viene rifiutato. Se i file generati sono identici all'ultimo esito il giro non tocca la rete. Ogni configurazione,
 rimozione ed esecuzione è nell'audit (`git_sync.configured`, `git_sync.removed`, `git_sync.run`).
 
+**Impronte note degli host SSH (solo Super Admin).** La piattaforma tiene un elenco di host con le impronte attese delle loro
+chiavi (da GitHub e GitLab.com, inseriti dalla migrazione con le impronte che i provider pubblicano). Se l'host di un
+repository SSH è in elenco, alla configurazione si fissano **solo** le chiavi rilevate con un'impronta attesa; se nessuna
+coincide la configurazione è rifiutata (`400`, con le impronte ricevute). Per gli host non in elenco restano la fiducia al
+primo uso e l'impronta facoltativa dell'utente.
+- **`GET /api/v1/admin/git-sync/known-hosts`** → `[{host, port, fingerprints, note, updated_at}]`.
+- **`PUT /api/v1/admin/git-sync/known-hosts`** → `{host, port?, fingerprints, note?}` (da 1 a 10 impronte `SHA256:…`;
+  sostituiscono le esistenti). Va usato quando un provider ruota le chiavi. Le configurazioni già fissate non cambiano da sole:
+  la sincronizzazione fallisce finché il proprietario non salva di nuovo la configurazione, che viene riverificata sull'elenco aggiornato.
+- **`DELETE /api/v1/admin/git-sync/known-hosts/{host}/{port}`** → `204`.
+Tutte nell'audit (`git_sync.known_host_saved`, `git_sync.known_host_removed`).
+
 **Non fatto in questa versione:** importazione dal repository, esportazione dei file multimediali, chiavi SSH fornite
 dall'utente (la piattaforma le genera), CA SSH (`@cert-authority`). Eliminare un contenuto o l'account (GDPR art. 17) non lo cancella dal repository remoto:
 l'utente ne è il titolare e la UI lo dichiara.
+
+## Identità e SEO del portale (modulo `branding`)
+
+Un'icona, un'immagine di condivisione, i testi per i motori di ricerca e le verifiche, gestiti dagli amministratori da `/admin/seo`.
+La lettura è pubblica perché il frontend la usa per i meta tag di ogni pagina; se il modulo è spento valgono i predefiniti.
+
+- **`GET /api/v1/seo/site?locale=`** (pubblico) → `{locale, site_name, title, description, keywords, noindex, google_verification,
+  bing_verification, yandex_verification, twitter_site, theme_color, extra_meta[], icons[], apple_touch_icon, social_image_url}`. Titolo e
+  descrizione vengono dalla lingua richiesta, poi da quella predefinita, `it`, `en`, infine dalla prima disponibile.
+- **`GET /api/v1/admin/seo`** → `{branding, locales}` con le immagini già risolte in URL.
+- **`PUT /api/v1/admin/seo`** → `{site_name, noindex, google_verification, bing_verification, yandex_verification, twitter_site, theme_color,
+  extra_meta, locales}`. Sostituisce l'insieme: i campi assenti si azzerano e le lingue non inviate spariscono; non tocca le immagini.
+  Validazione: testo su una riga senza `< > "`; verifiche = solo il codice (non il tag intero); `twitter_site` come `@nome` (max 15
+  caratteri); `theme_color` come `#rrggbb`; `extra_meta` fino a 10 coppie `{name, content}` senza i nomi gestiti dal portale (`robots`,
+  `viewport`, `description`, `keywords`, `refresh`, `http-equiv*`…) e senza doppioni; `locales` come `{it: {title, description, keywords}}`.
+  Audit `branding.settings_updated`.
+- **`POST /api/v1/admin/branding/icon`** (multipart `file`, PNG/JPEG/WEBP, max 2 MiB) → da **un'unica immagine** quasi quadrata (lato
+  corto ≥ 128 px, rapporto entro 1,1: si ritaglia al centro) si ricavano PNG da 16, 32, 48, 180, 192 e 512 px, **mai più grandi
+  dell'originale**; servono a favicon, scorciatoie iOS/Android e manifest. Sostituisce e cancella la precedente. `400` con il motivo se
+  l'immagine è troppo piccola, non quadrata o illeggibile. `DELETE` la rimuove.
+- **`POST|DELETE /api/v1/admin/branding/social`** → immagine per le anteprime di condivisione (Open Graph e Twitter card), larghezza ≥ 600 px,
+  conservata com'è. Il frontend la usa come ripiego quando una pagina non ha un'immagine propria (la copertina di un post, se c'è e non è
+  sensibile, ha la precedenza).
+- Le immagini stanno nel bucket pubblico degli avatar sotto `branding/`. Audit `branding.icon_updated|icon_removed|social_updated|social_removed`.
+
+**Effetti sul frontend.** Titolo e descrizione, parole chiave, Open Graph e Twitter card, icone (`<link rel="icon">`, `apple-touch-icon`),
+`/manifest.webmanifest`, colore del tema, codici di verifica (`google-site-verification`, `msvalidate.01`, Yandex) e meta tag aggiuntivi.
+Con `noindex` il portale aggiunge `noindex, nofollow` a ogni pagina, `robots.txt` diventa `Disallow: /` e le sitemap si svuotano
+(non cancella ciò che i motori hanno già indicizzato).
+
+## Sitemap
+
+Generate al volo da Postgres, mai a mano, e dichiarate in `robots.txt`. Contengono solo contenuti pubblici e indicizzabili: niente bozze,
+post programmati, Spazi privati, sospesi, in pausa o in cancellazione, né ciò che l'autore ha escluso dai motori di ricerca (blog o post).
+
+- **`GET /sitemap.xml`** (frontend) → un `<urlset>`; oltre 5000 URL diventa un `<sitemapindex>` che punta a `/sitemaps/{n}.xml`. Contiene la
+  home, le pagine del sito (`/p/…`), gli Spazi e i post. Le traduzioni dichiarano tutte le lingue come `xhtml:link rel="alternate"
+  hreflang` (post: gruppo di traduzioni; pagine del sito: `?locale=`).
+- **`GET /{slug}/sitemap.xml`** → un solo Spazio: home, post, pagine statiche e pubblicazioni. Anche su `{slug}.{dominio}/sitemap.xml`
+  (riscritta da `proxy.ts`); gli indirizzi elencati sono sempre quelli canonici del portale. `404` se lo Spazio non è indicizzabile.
+- **`GET /{slug}/robots.txt`** (e `{slug}.{dominio}/robots.txt`) → esclusioni dello Spazio per motori di ricerca e crawler di IA, con i
+  percorsi riscritti per il sottodominio, e rimando alla sua sitemap; un Spazio non indicizzabile chiude tutto.
+- Backend: **`GET /api/v1/seo/sitemap?offset=&limit=`** (max 5000) → `{total, noindex, entries[{path, updated_at, alternates[]}]}` in
+  ordine stabile (home, pagine del sito, Spazi, post) e **`GET /api/v1/blogs/{slug}/sitemap`** → `{slug, entries[]}`.
+
+## Privacy policy e cookie policy (modulo `legal`)
+
+Due documenti, `privacy` e `cookie`, già scritti (italiano e inglese) per i componenti della piattaforma e adattati all'installazione.
+Il testo sorgente è Markdown con **variabili** e **condizioni sulle funzioni attive**; alla pubblicazione si risolve e diventa una
+pagina del sito (`/p/privacy`, `/p/cookie-policy`, lette con le rotte `/pages`), con le traduzioni come pagine collegate. Tutto
+riservato a `amministratore`/`super_admin`, tranne l'ultima rotta.
+
+- **Sintassi dei modelli**: `{{nome}}` (valore), `{{nome|testo di riserva}}`, `{{#if funzione}}…{{/if}}`, `{{#unless funzione}}…{{/unless}}`
+  (annidabili). Un valore vuoto senza riserva è **mancante**; un nome sconosciuto o un blocco non chiuso è un **errore**: in entrambi i
+  casi il documento non si pubblica.
+- **Funzioni** (rilevate dall'installazione): `newsletter`, `comments`, `turnstile`, `sso`, `sso_google|microsoft|github|linkedin`, `mfa`,
+  `custom_domains`, `git_sync`, `link_preview`, `image_moderation`, `smtp`, `backup`, `audit_archive`, `reports`, `gdpr_tools`, `discovery`,
+  `solo`, `transfers`. Il testo descrive solo ciò che è attivo; cambiandole va ripubblicato (il documento risulta `stale`).
+- **Variabili**: dati del titolare (`controller_name`, `controller_address`, `controller_email`, `controller_registry`, `dpo_contact`,
+  `hosting_description`, `processors`, `backup_retention`, `audit_archive_retention`, `minimum_age`) e valori dedotti (`instance_fqdn`,
+  `session_days`, `audit_days`, `deletion_days`, `grace_days`, `last_update`).
+- **`GET /api/v1/admin/legal`** → `{settings, values, flags, documents, template_locales}`; `documents` elenca ogni lingua con `published`,
+  `stale`, `customized`, `missing[]`, `issues[]`. I modelli forniti (it, en) si creano da soli; finché non sono personalizzati seguono gli
+  aggiornamenti della piattaforma.
+- **`PUT /api/v1/admin/legal/settings`** → dati del titolare (testo su una riga; `minimum_age` 10–18; `controller_email` con `@`). I campi
+  assenti si azzerano. Le pagine già pubblicate vengono riscritte con i nuovi valori; se un campo svuotato le renderebbe incomplete → `400`.
+- **`GET|PUT /api/v1/admin/legal/{doc}/{locale}`** → un documento (`LegalDocOut`: sorgente, `default_content`, testo risolto `rendered`,
+  stato). `PUT {title, content}` salva e crea la lingua se manca (qualunque codice di due lettere); non pubblica.
+- **`POST …/{doc}/{locale}/reset`** `{from?}` → ripristina il modello della lingua (it/en) o ricopia il testo di un'altra lingua (`from`).
+- **`POST …/{doc}/{locale}/publish`** `{replace_existing?}` → `400` se mancano dati o ci sono errori; `409` se esiste già una pagina con lo stesso
+  indirizzo non creata da qui (si sostituisce solo con `replace_existing: true`). `POST …/unpublish` ritira la pagina; `DELETE …/{doc}/{locale}`
+  elimina una lingua aggiunta (non `it`/`en`).
+- **`GET /api/v1/legal/public?locale=`** (pubblico) → `[{doc, slug, locale, title}]`: i documenti pubblicati nella lingua richiesta o nella
+  migliore disponibile; li usa il footer del sito.
+- Audit: `legal.settings_updated`, `legal.document_saved`, `legal.document_reset`, `legal.document_published`, `legal.document_unpublished`,
+  `legal.document_deleted`.
+
+**Limiti dichiarati.** I testi sono un modello, non una consulenza legale: fornitori, trasferimenti extra-UE e tempi di conservazione vanno
+verificati da chi gestisce l'istanza. La piattaforma **non cancella da sola gli archivi del registro di audit** sullo storage: il periodo
+indicato in `audit_archive_retention` va fatto rispettare a mano finché non esiste una scadenza automatica.
 
 ## Pubblicazioni (todo/PUBLICATIONS.md, todo/UX_REDESIGN.md B9, mockup 2d/3g)
 
@@ -1691,6 +1783,8 @@ prima della validazione di schema. Ogni citazione porta
 
 ## Pagine statiche (sito principale)
 
+> `/p/{slug}` sceglie la lingua da `?locale=`, poi da quella dell'interfaccia del visitatore, poi `it` ed `en`, infine la prima traduzione pubblicata, e mostra un selettore se la pagina ha più lingue. `privacy` e `cookie-policy` sono gestite dal modulo `legal` (vedi più sopra).
+
 Pagine come Chi siamo, Contatti, Privacy — non legate a un blog utente
 (`blog_id: null` nella risposta), gestite dal team della piattaforma, sempre
 attive (a differenza delle pagine di blog, opt-in — vedi "Pagine statiche del
@@ -2133,6 +2227,38 @@ l'hash, solo `token_prefix`.
 
 Revoca un token (imposta `revoked_at`, non lo elimina). `403` se non è un
 token proprio, `404` se l'id non esiste.
+
+## Testi del sito modificabili (`/site-texts`, `/admin/site-texts`)
+
+Gli amministratori possono riscrivere, lingua per lingua, i testi della home (manifesto, pilastri, pulsanti) e del modulo di
+iscrizione alla newsletter. I predefiniti restano nei file di traduzione del frontend; qui si salvano solo le sostituzioni.
+
+- **`GET /api/v1/site-texts?locale=it`** (pubblico) → `{locale, texts}` con le sole chiavi sovrascritte (`{"Home.eyebrow": "…"}`).
+  Il frontend le fonde ai predefiniti a ogni richiesta (cache a tempo di 60 s, invalidata dal tag `site-texts`).
+- **`PUT /api/v1/admin/site-texts/{locale}`** (`amministratore`/`super_admin`) → `{"texts": {chiave: testo | null}}`: imposta o,
+  con `null`/stringa vuota, ripristina. Atomico (un solo errore → nulla è applicato); lingue ammesse `it`, `en`; massimo 200
+  chiavi per richiesta; audit `site_texts.updated`.
+  - Chiavi ammesse: solo i gruppi `Home.` e `NewsletterSignup.` (`400` per le altre).
+  - Valore: testo semplice su una riga, fino a 2000 caratteri, **senza `{ } < >`** (i messaggi passano da un renderer ICU che
+    altrimenti si spezzerebbe). Unica eccezione: `NewsletterSignup.consent` ammette il tag `<privacy>…</privacy>` (il link
+    all'informativa), una sola volta e ben formato. Niente apostrofo subito prima di `<` o `>`.
+  - I testi con segnaposto (`{count}`) non si riscrivono dall'interfaccia.
+
+## Mappa dei collegamenti (modulo `graph`)
+
+**`GET /api/v1/graph`** (utente) → `{scope, nodes, edges, truncated}`. Il grafo è calcolato da Postgres alla richiesta (nessuna
+tabella propria, nessun database a grafo: vedi ROADMAP).
+- **Nodi**: `blog` (Spazio), `post`, `tag`, `category`, con `id` (`post:{uuid}`, `blog:{slug}`, `tag:{nome}`, `cat:{uuid}`),
+  `label` e i campi propri del tipo (per i post `blog`, `slug`, `path`, `status`, `published_at`).
+- **Archi**: `in` (post → Spazio), `tag`, `category` e `link` (post → post, con `via` = `url` per un link nel testo che punta a un
+  post del sito, in forma `https://{fqdn}/{blog}/{post}`, `https://{blog}.{fqdn}/{post}` o `/{blog}/{post}`, oppure `wiki` per un
+  `[[pagina]]` dello stesso Spazio). Il dominio dei link interni è `NOCT_INSTANCE_FQDN`: deve coincidere con quello
+  pubblico (e con `NEXT_PUBLIC_SITE_URL`, che l'editor usa per i link inseriti dalla ricerca). Link duplicati, verso se stessi, esterni o verso post fuori dall'insieme sono scartati.
+- **Cosa si vede**: con `scope=mine` (predefinito) i post dei propri Spazi (proprietario o membro), solo pubblicati; `drafts=true`
+  aggiunge bozze e post in revisione. Con `scope=platform` (solo `amministratore`/`super_admin`, altrimenti `403`) tutto ciò che è
+  pubblico e visibile negli elenchi (mai bozze, Spazi privati, sospesi o in pausa).
+- **Filtri**: `blog` (slug; `404` se non è nell'insieme), `kind` (`blog`|`wiki`|`docs`), `limit` (1–800, predefinito 300: i post più
+  recenti; `truncated` dice se ce ne sono altri). Valori non validi → `400`.
 
 ## Amministrazione di piattaforma
 

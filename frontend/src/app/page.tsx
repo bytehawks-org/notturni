@@ -1,4 +1,5 @@
-import type { Metadata } from "next";
+import type { Metadata, ResolvingMetadata } from "next";
+import { withSiteOpenGraph } from "@/lib/metadata";
 import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 
@@ -19,13 +20,15 @@ import {
   getTrendingTags,
 } from "@/lib/server-api";
 
-export const metadata: Metadata = {
-  alternates: {
-    canonical: "/",
-    types: { "application/rss+xml": "/feed.xml", "application/atom+xml": "/atom.xml" },
-  },
-  openGraph: { type: "website", url: "/" },
-};
+export async function generateMetadata(_props: unknown, parent: ResolvingMetadata): Promise<Metadata> {
+  return {
+    alternates: {
+      canonical: "/",
+      types: { "application/rss+xml": "/feed.xml", "application/atom+xml": "/atom.xml" },
+    },
+    openGraph: await withSiteOpenGraph(parent, { type: "website", url: "/" }),
+  };
+}
 
 /** Home di piattaforma (mockup 4a desktop / 4b mobile): manifesto, tendenze,
  * feed con filtri tag/categoria/lingua, tab "Seguiti" (client, richiede

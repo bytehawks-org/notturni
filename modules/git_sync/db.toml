@@ -34,3 +34,21 @@ columns = [
 ]
 uniques = [{ name = "uq_git_sync_blog", columns = ["blog_id"] }]
 indexes = [{ columns = ["owner_id"] }]
+
+# Impronte attese delle host key SSH dei provider noti (GitHub, GitLab...), gestite dagli amministratori. Se
+# l'host di un repository è qui elencato, alla configurazione si fissano solo le chiavi rilevate la cui impronta
+# coincide con una di queste; le altre vengono scartate e, se non ne resta nessuna, la configurazione è rifiutata.
+# Le righe iniziali (GitHub, GitLab.com) sono inserite dalla migrazione e possono essere modificate o rimosse.
+[[table]]
+name = "git_sync_known_hosts"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "host", type = "varchar(255)" },
+  { name = "port", type = "integer", default = "22" },
+  # impronte `SHA256:...`, una per riga
+  { name = "fingerprints", type = "text" },
+  { name = "note", type = "varchar(500)", null = true },
+  { name = "updated_by", type = "uuid", null = true, ref = "users.id", on_delete = "set_null" },
+]
+uniques = [{ name = "uq_git_sync_known_host", columns = ["host", "port"] }]

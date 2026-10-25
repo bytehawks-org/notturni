@@ -5,6 +5,7 @@ pub use crate::blogs::{list_blogs, list_posts, update_blog, update_post};
 pub use crate::config::{get_config, update_config};
 pub use crate::modules::{disable_module, enable_module, list_modules};
 pub use crate::overview::admin_overview;
+pub use crate::site_texts::put_site_texts;
 pub use crate::users::{list_users, reset_user_password, update_user};
 
 use noct_audit::{AuditActor, Entry, user_actor};

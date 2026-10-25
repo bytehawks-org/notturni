@@ -16,7 +16,7 @@ pub mod handlers {
     //! Handler delle rotte `custom` di api.toml.
     pub use crate::export::export_blog;
     pub use crate::handlers_impl::*;
-    pub use crate::seo::{crawl_directives, sitemap_entries};
+    pub use crate::seo::{crawl_directives, sitemap_entries, sitemap_page, space_sitemap};
 }
 
 pub use out::{PostRow, VISIBLE_SQL, render};
