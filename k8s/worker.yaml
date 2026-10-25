@@ -28,7 +28,7 @@ spec:
       containers:
         - name: worker
           image: ghcr.io/bytehawks-org/notturni-backend:0.2.0-rust
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           securityContext:
             allowPrivilegeEscalation: false
             capabilities: {drop: ["ALL"]}

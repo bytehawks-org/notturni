@@ -17,7 +17,7 @@ spec:
       containers:
         - name: frontend
           image: ghcr.io/bytehawks-org/notturni-frontend:0.2.0-rust
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 3000
           # NOCT_BACKEND_INTERNAL_URL (SSR) e NOCT_REVALIDATE_SECRET

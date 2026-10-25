@@ -27,7 +27,7 @@ spec:
       containers:
         - name: moderation
           image: ghcr.io/bytehawks-org/notturni-moderation:0.2.0-rust
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 8100
           # initialDelaySeconds più alto del solito (vedi backend.yaml): il
