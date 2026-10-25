@@ -40,6 +40,59 @@ fn bare_repo(seed: bool) -> (std::path::PathBuf, String) {
     (dir, url)
 }
 
+/// Finti `ssh` e `ssh-keyscan` per provare l'intero giro senza un server SSH: lo scanner stampa una host key
+/// vera generata al volo; `ssh` registra argomenti, permessi e contenuto dei file ricevuti, poi esegue il
+/// comando remoto in locale (il "server" è un repository bare sul disco). Restituisce
+/// `(ssh, keyscan, log_ssh, log_scan, host_key_line)`.
+fn fake_ssh_tools() -> (std::path::PathBuf, std::path::PathBuf, std::path::PathBuf, std::path::PathBuf, String) {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = std::env::temp_dir().join(format!("noct-gs-fake-{}", Uuid::new_v4().simple()));
+    std::fs::create_dir_all(&dir).unwrap();
+    git(&dir, &["--version"]);
+    assert!(
+        Command::new("ssh-keygen")
+            .args(["-q", "-t", "ed25519", "-N", "", "-f", "hostkey"])
+            .current_dir(&dir)
+            .status()
+            .unwrap()
+            .success()
+    );
+    let pubkey = std::fs::read_to_string(dir.join("hostkey.pub")).unwrap();
+    let line = format!("127.0.0.1 {}", pubkey.split_whitespace().take(2).collect::<Vec<_>>().join(" "));
+    let (log_ssh, log_scan) = (dir.join("ssh.log"), dir.join("scan.log"));
+    let write = |name: &str, body: String| {
+        let path = dir.join(name);
+        std::fs::write(&path, body).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        path
+    };
+    let scan = write(
+        "keyscan",
+        format!(
+            "#!/bin/sh\necho \"$*\" >> '{}'\necho '# 127.0.0.1:22 SSH-2.0-fake'\necho '{line}'\n",
+            log_scan.display()
+        ),
+    );
+    let ssh = write(
+        "ssh",
+        format!(
+            r#"#!/bin/sh
+for a in "$@"; do last="$a"; done
+prev=""
+for a in "$@"; do
+  [ "$prev" = "-i" ] && key="$a"
+  case "$a" in UserKnownHostsFile=*) kh="${{a#UserKnownHostsFile=}}";; esac
+  prev="$a"
+done
+{{ echo "ARGS: $*"; echo "KEYMODE: $(stat -c %a "$key")"; echo "KEY: $(head -1 "$key")"; echo "KNOWN: $(cat "$kh")"; }} >> '{}'
+exec sh -c "$last"
+"#,
+            log_ssh.display()
+        ),
+    );
+    (ssh, scan, log_ssh, log_scan, line)
+}
+
 async fn space(env: &Env, owner: Uuid, slug: &str, kind: &str) -> Uuid {
     let id = env.blog(slug, owner, "public").await;
     sqlx::query("UPDATE blogs SET kind = $2::space_kind WHERE id = $1")
@@ -271,5 +324,149 @@ async fn unsafe_targets_are_refused_and_recorded() {
     assert!(git(&remote, &["branch", "--list", "backup"]).trim().is_empty());
     let _ = std::fs::remove_dir_all(remote);
     let _ = std::fs::remove_dir_all(work);
+    env.teardown().await;
+}
+
+#[tokio::test]
+async fn ssh_mode_generates_a_deploy_key_pins_the_host_key_and_pushes_over_ssh() {
+    let (ssh, keyscan, ssh_log, scan_log, host_line) = fake_ssh_tools();
+    let (ssh_s, scan_s) = (ssh.display().to_string(), keyscan.display().to_string());
+    let env = setup(
+        &["git_sync"],
+        &[
+            ("NOCT_GIT_SYNC_ALLOW_PRIVATE", "true"),
+            ("NOCT_GIT_SYNC_SSH_BIN", &ssh_s),
+            ("NOCT_GIT_SYNC_KEYSCAN_BIN", &scan_s),
+        ],
+    )
+    .await;
+    let anna = env.user("anna", "utente").await;
+    let blog = space(&env, anna, "guida", "blog").await;
+    page(&env, anna, "guida", "primo", json!({}), true).await;
+    let (remote, _) = bare_repo(true);
+    let ssh_url = format!("ssh://git@127.0.0.1{}", remote.display());
+    let url = "/blogs/guida/git-sync";
+    let scans = || std::fs::read_to_string(&scan_log).map(|t| t.lines().count()).unwrap_or(0);
+
+    // il token non c'entra con SSH; l'impronta attesa deve corrispondere a quella ricevuta
+    let (s, b) =
+        env.put(url, Some(anna), json!({"remote_url": ssh_url, "auth_method": "ssh", "secret": "ghp_x"})).await;
+    assert_eq!((s, detail(&b).contains("genera la piattaforma")), (StatusCode::BAD_REQUEST, true), "{b}");
+    let (s, b) = env
+        .put(
+            url,
+            Some(anna),
+            json!({"remote_url": ssh_url, "auth_method": "ssh", "host_fingerprint": "SHA256:sbagliata"}),
+        )
+        .await;
+    assert_eq!((s, detail(&b).contains("non corrisponde")), (StatusCode::BAD_REQUEST, true), "{b}");
+    let (s, _) =
+        env.put(url, Some(anna), json!({"remote_url": "https://github.com/a/b.git", "auth_method": "ssh"})).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST, "un indirizzo https non è un indirizzo SSH");
+    assert_eq!(env.get(url, Some(anna)).await.1["configured"], false, "nulla è stato salvato");
+    let base = scans();
+
+    let (s, c) = env
+        .put(
+            url,
+            Some(anna),
+            json!({"remote_url": ssh_url, "auth_method": "ssh", "branch": "backup", "username": "git"}),
+        )
+        .await;
+    assert_eq!(s, StatusCode::OK, "{c}");
+    let public = c["ssh_public_key"].as_str().unwrap().to_string();
+    assert!(public.starts_with("ssh-ed25519 ") && public.ends_with(" notturni-guida"), "{public}");
+    assert_eq!((c["auth_method"].clone(), c["has_secret"].clone()), (json!("ssh"), json!(true)));
+    let prints = c["ssh_host_fingerprints"].as_array().unwrap();
+    assert_eq!(prints.len(), 1);
+    let fingerprint = prints[0].as_str().unwrap().to_string();
+    assert!(fingerprint.starts_with("SHA256:"));
+    assert!(!c.to_string().contains("PRIVATE KEY"), "la chiave privata non esce mai");
+    let stored: String = sqlx::query_scalar("SELECT secret FROM git_sync_configs").fetch_one(&env.pool).await.unwrap();
+    assert!(stored.starts_with("enc:v1:") && !stored.contains("OPENSSH"), "la chiave privata è cifrata a riposo");
+    assert_eq!(scans(), base + 1);
+
+    // salvare di nuovo lo stesso host non rigenera la chiave né rilegge l'host; con l'impronta giusta è accettato
+    let (s, c2) = env.put(url, Some(anna), json!({"remote_url": ssh_url, "include_drafts": false})).await;
+    assert_eq!((s, c2["ssh_public_key"].as_str()), (StatusCode::OK, Some(public.as_str())), "{c2}");
+    assert_eq!(scans(), base + 1, "host invariato: nessuna nuova scansione");
+    let (s, _) = env.put(url, Some(anna), json!({"remote_url": ssh_url, "host_fingerprint": fingerprint})).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(scans(), base + 2, "un'impronta attesa forza la verifica");
+
+    // il giro: chiave 0600 decifrata solo per il processo, host key pinnata, push normale sul branch dedicato
+    let id = config_id(&env, blog).await;
+    noct_git_sync::sync::run(&env.state, id, false).await.unwrap();
+    let (_, c) = env.get(url, Some(anna)).await;
+    assert_eq!((c["last_status"].clone(), c["last_error"].clone()), (json!("ok"), Value::Null), "{c}");
+    assert_eq!(
+        git(&remote, &["ls-tree", "-r", "--name-only", "backup"]).lines().collect::<Vec<_>>(),
+        [".notturni.json", "it/primo.md"]
+    );
+    assert_eq!(git(&remote, &["rev-list", "--count", "main"]).trim(), "1", "main non è stato toccato");
+    let log = std::fs::read_to_string(&ssh_log).unwrap();
+    for needle in [
+        "StrictHostKeyChecking=yes",
+        "IdentitiesOnly=yes",
+        "BatchMode=yes",
+        "-F /dev/null",
+        "KEYMODE: 600",
+        "KEY: -----BEGIN OPENSSH PRIVATE KEY-----",
+        &format!("KNOWN: {host_line}"),
+    ] {
+        assert!(log.contains(needle), "manca `{needle}` in:\n{log}");
+    }
+    assert!(!log.contains("accept-new") && !log.contains("StrictHostKeyChecking=no"));
+    let key_path =
+        log.split(" -i ").nth(1).and_then(|t| t.split_whitespace().next()).expect("percorso della chiave nel log");
+    assert!(
+        key_path.contains("noct-git-sync-") && !Path::new(key_path).exists(),
+        "la chiave decifrata è stata rimossa: {key_path}"
+    );
+
+    // rigenerare cambia la chiave e fa rinviare; tornare a HTTPS chiede un token e dimentica la chiave
+    let (s, c) = env.put(url, Some(anna), json!({"remote_url": ssh_url, "regenerate_key": true})).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_ne!(c["ssh_public_key"].as_str().unwrap(), public);
+    assert_eq!(c["last_status"], Value::Null, "esito azzerato: va rinviato");
+    let (s, b) =
+        env.put(url, Some(anna), json!({"remote_url": "https://8.8.8.8/a/b.git", "auth_method": "https"})).await;
+    assert_eq!((s, detail(&b).contains("obbligatorio")), (StatusCode::BAD_REQUEST, true), "{b}");
+    let (s, c) = env
+        .put(
+            url,
+            Some(anna),
+            json!({"remote_url": "https://8.8.8.8/a/b.git", "auth_method": "https", "secret": "ghp_x"}),
+        )
+        .await;
+    assert_eq!(
+        (s, c["ssh_public_key"].clone(), c["ssh_host_fingerprints"].clone()),
+        (StatusCode::OK, Value::Null, json!([])),
+        "{c}"
+    );
+    let _ = std::fs::remove_dir_all(remote);
+    env.teardown().await;
+}
+
+#[tokio::test]
+async fn ssh_remotes_are_normalized_and_blocked_on_private_hosts_in_production() {
+    let (ssh, keyscan, _, _, _) = fake_ssh_tools();
+    let (ssh_s, scan_s) = (ssh.display().to_string(), keyscan.display().to_string());
+    let env = setup(&["git_sync"], &[("NOCT_GIT_SYNC_SSH_BIN", &ssh_s), ("NOCT_GIT_SYNC_KEYSCAN_BIN", &scan_s)]).await;
+    let anna = env.user("anna", "utente").await;
+    space(&env, anna, "guida", "blog").await;
+    let url = "/blogs/guida/git-sync";
+    for bad in [
+        "git@127.0.0.1:a/b.git",
+        "ssh://git@localhost/a/b.git",
+        "ssh://git@169.254.169.254/a/b.git",
+        "ssh://git@[::1]/a/b",
+    ] {
+        let (s, b) = env.put(url, Some(anna), json!({"remote_url": bad, "auth_method": "ssh"})).await;
+        assert_eq!((s, detail(&b).contains("raggiungibile")), (StatusCode::BAD_REQUEST, true), "{bad}: {b}");
+    }
+    let (s, c) =
+        env.put(url, Some(anna), json!({"remote_url": "git@8.8.8.8:anna/testi.git", "auth_method": "ssh"})).await;
+    assert_eq!((s, c["remote_url"].clone()), (StatusCode::OK, json!("ssh://git@8.8.8.8/anna/testi.git")), "{c}");
     env.teardown().await;
 }

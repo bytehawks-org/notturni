@@ -1,7 +1,7 @@
 //! Handler `custom` del modulo: configurazione della sincronizzazione Git di uno Spazio. Solo il
 //! proprietario; il token si cifra a riposo e non viene mai restituito.
 
-use crate::{GitSyncIn, SUBJECT_RUN, rules, sync};
+use crate::{GitSyncIn, SUBJECT_RUN, rules, ssh, sync};
 use chrono::{DateTime, Utc};
 use noct_audit::{Entry, user_actor};
 use noct_core::{
@@ -9,6 +9,7 @@ use noct_core::{
     bus::{Kind, outbox},
 };
 use noct_security::secrets;
+use reqwest::Url;
 use serde_json::{Value, json};
 use sqlx::{FromRow, PgConnection};
 use uuid::Uuid;
@@ -34,7 +35,11 @@ struct Row {
     remote_url: String,
     branch: String,
     username: String,
+    auth_method: String,
     secret: String,
+    ssh_public_key: Option<String>,
+    ssh_host_key: Option<String>,
+    ssh_host_fingerprints: Option<String>,
     include_drafts: bool,
     enabled: bool,
     last_status: Option<String>,
@@ -44,23 +49,30 @@ struct Row {
     last_pages: Option<i32>,
 }
 
-const SELECT: &str =
-    "SELECT id, remote_url, branch, username, secret, include_drafts, enabled, last_status, last_run_at,
-    last_error, last_commit, last_pages FROM git_sync_configs WHERE blog_id = $1";
+const SELECT: &str = "SELECT remote_url, branch, username, auth_method, secret, ssh_public_key, ssh_host_key,
+    ssh_host_fingerprints, include_drafts, enabled, last_status, last_run_at, last_error, last_commit, last_pages
+    FROM git_sync_configs WHERE blog_id = $1";
 
 fn render(row: Option<Row>) -> Value {
     match row {
         None => json!({
-            "configured": false, "remote_url": null, "branch": null, "username": null, "has_secret": false,
+            "configured": false, "remote_url": null, "branch": null, "username": null, "auth_method": null,
+            "has_secret": false, "ssh_public_key": null, "ssh_host_fingerprints": [],
             "include_drafts": false, "enabled": false, "last_status": null, "last_run_at": null, "last_error": null,
             "last_commit": null, "last_pages": null,
         }),
-        Some(r) => json!({
-            "configured": true, "remote_url": r.remote_url, "branch": r.branch, "username": r.username,
-            "has_secret": !r.secret.is_empty(), "include_drafts": r.include_drafts, "enabled": r.enabled,
-            "last_status": r.last_status, "last_run_at": r.last_run_at, "last_error": r.last_error,
-            "last_commit": r.last_commit, "last_pages": r.last_pages,
-        }),
+        Some(r) => {
+            let ssh = r.auth_method == "ssh";
+            let fingerprints: Vec<&str> = r.ssh_host_fingerprints.as_deref().unwrap_or_default().lines().collect();
+            json!({
+                "configured": true, "remote_url": r.remote_url, "branch": r.branch, "username": r.username,
+                "auth_method": r.auth_method, "has_secret": !r.secret.is_empty(),
+                "ssh_public_key": if ssh { r.ssh_public_key } else { None }, "ssh_host_fingerprints": fingerprints,
+                "include_drafts": r.include_drafts, "enabled": r.enabled,
+                "last_status": r.last_status, "last_run_at": r.last_run_at, "last_error": r.last_error,
+                "last_commit": r.last_commit, "last_pages": r.last_pages,
+            })
+        }
     }
 }
 
@@ -98,19 +110,23 @@ pub async fn put_git_sync(ctx: RouteCtx, body: GitSyncIn) -> Result<Value, ApiEr
     let actor = actor(&ctx)?;
     let blog = owned_space(&ctx, &actor)?;
     let st = &ctx.state;
-    let url = rules::validate_remote(&body.remote_url, sync::allow_private(st)).map_err(ApiError::bad_request)?;
-    sync::check_host(&url, sync::allow_private(st)).await.map_err(ApiError::bad_request)?;
-    let secret = match body.secret.as_deref() {
-        Some(s) if s.trim().is_empty() => return Err(ApiError::bad_request("Il token non può essere vuoto.")),
-        Some(s) if s.trim() != s || s.chars().any(char::is_control) => {
-            return Err(ApiError::bad_request("Il token contiene spazi o caratteri non validi."));
-        }
-        other => other.map(|s| secrets::seal(&sync::secrets_key(st), s)),
-    };
+    let existing: Option<Row> = sqlx::query_as(SELECT).bind(blog.id).fetch_optional(&st.db).await?;
 
-    let mut tx = st.db.begin().await?;
-    let existing: Option<Row> =
-        sqlx::query_as(&format!("{SELECT} FOR UPDATE")).bind(blog.id).fetch_optional(&mut *tx).await?;
+    let method = match body.auth_method.as_deref() {
+        Some(m) => rules::validate_method(m).map_err(ApiError::bad_request)?,
+        None => rules::validate_method(existing.as_ref().map_or("https", |e| e.auth_method.as_str()))
+            .map_err(ApiError::bad_request)?,
+    };
+    let switched = existing.as_ref().is_some_and(|e| e.auth_method != method);
+    let ssh_mode = method == "ssh";
+    let url = if ssh_mode {
+        rules::validate_ssh_remote(&body.remote_url)
+    } else {
+        rules::validate_remote(&body.remote_url, sync::allow_private(st))
+    }
+    .map_err(ApiError::bad_request)?;
+    sync::check_host(&url, sync::allow_private(st)).await.map_err(ApiError::bad_request)?;
+
     // branch e utente assenti: restano quelli già impostati (o i predefiniti alla prima configurazione)
     let branch = body
         .branch
@@ -123,42 +139,110 @@ pub async fn put_git_sync(ctx: RouteCtx, body: GitSyncIn) -> Result<Value, ApiEr
         .username
         .clone()
         .filter(|u| !u.trim().is_empty())
-        .or_else(|| existing.as_ref().map(|e| e.username.clone()))
-        .unwrap_or_else(|| DEFAULT_USERNAME.into());
+        .or_else(|| existing.as_ref().filter(|_| !switched).map(|e| e.username.clone()))
+        .unwrap_or_else(|| if ssh_mode { url.username().to_string() } else { DEFAULT_USERNAME.into() });
     if username.chars().any(|c| c.is_control() || c == ':') {
         return Err(ApiError::bad_request("Nome utente non valido."));
     }
-    let secret = match (secret, &existing) {
-        (Some(s), _) => s,
-        (None, Some(e)) => e.secret.clone(),
-        (None, None) => return Err(ApiError::bad_request("Il token è obbligatorio alla prima configurazione.")),
+
+    // credenziale: token (https) oppure chiave di deploy generata qui (ssh)
+    let key = sync::secrets_key(st);
+    let (secret, public_key) = if ssh_mode {
+        if body.secret.is_some() {
+            return Err(ApiError::bad_request("Con SSH la chiave la genera la piattaforma: non inviare `secret`."));
+        }
+        match existing.as_ref() {
+            Some(e) if !switched && !body.regenerate_key.unwrap_or(false) && e.ssh_public_key.is_some() => {
+                (e.secret.clone(), e.ssh_public_key.clone())
+            }
+            _ => {
+                let pair =
+                    ssh::generate_keypair(&format!("notturni-{}", blog.slug)).await.map_err(ApiError::internal)?;
+                (secrets::seal(&key, &pair.private), Some(pair.public))
+            }
+        }
+    } else {
+        match (body.secret.as_deref(), existing.as_ref().filter(|_| !switched)) {
+            (Some(s), _) if s.trim().is_empty() => return Err(ApiError::bad_request("Il token non può essere vuoto.")),
+            (Some(s), _) if s.trim() != s || s.chars().any(char::is_control) => {
+                return Err(ApiError::bad_request("Il token contiene spazi o caratteri non validi."));
+            }
+            (Some(s), _) => (secrets::seal(&key, s), None),
+            (None, Some(e)) => (e.secret.clone(), None),
+            (None, None) => return Err(ApiError::bad_request("Il token è obbligatorio alla prima configurazione.")),
+        }
     };
-    // un repository, un branch, un utente o un token diversi (o l'inclusione delle bozze) richiedono un nuovo invio
+
+    // host key SSH: rilevata ora e fissata; cambia solo se cambia l'host o si chiede un'impronta diversa
+    let (host_key, fingerprints) = if ssh_mode {
+        let (host, port) = (url.host_str().unwrap_or_default().to_string(), url.port().unwrap_or(22));
+        let keep = existing.as_ref().filter(|e| {
+            !switched
+                && body.host_fingerprint.is_none()
+                && e.ssh_host_key.is_some()
+                && Url::parse(&e.remote_url)
+                    .is_ok_and(|old| old.host_str() == url.host_str() && old.port() == url.port())
+        });
+        match keep {
+            Some(e) => (e.ssh_host_key.clone(), e.ssh_host_fingerprints.clone()),
+            None => {
+                let keyscan = st.module_config_str("git_sync", "keyscan_bin").unwrap_or("ssh-keyscan");
+                let scanned = ssh::scan_host(keyscan, &host, port).await.map_err(ApiError::bad_request)?;
+                let found = ssh::fingerprints(&scanned).await.map_err(ApiError::internal)?;
+                if let Some(expected) =
+                    body.host_fingerprint.as_deref().filter(|e| !found.iter().any(|f| f == e.trim()))
+                {
+                    return Err(ApiError::bad_request(format!(
+                        "L'impronta dell'host ({}) non corrisponde a quella attesa. Ricevute: {}.",
+                        expected.trim(),
+                        found.join(", ")
+                    )));
+                }
+                (Some(scanned), Some(found.join("\n")))
+            }
+        }
+    } else {
+        (None, None)
+    };
+
+    let include_drafts = body.include_drafts.unwrap_or_else(|| existing.as_ref().is_some_and(|e| e.include_drafts));
+    let enabled = body.enabled.unwrap_or_else(|| existing.as_ref().is_none_or(|e| e.enabled));
+    // un repository, un accesso, un branch o l'inclusione delle bozze diversi richiedono un nuovo invio
     let changed = existing.as_ref().is_none_or(|e| {
         e.remote_url != url.as_str()
             || e.branch != branch
             || e.username != username
+            || e.auth_method != method
             || e.secret != secret
-            || e.include_drafts != body.include_drafts.unwrap_or(e.include_drafts)
+            || e.ssh_host_key != host_key
+            || e.include_drafts != include_drafts
     });
+    let mut tx = st.db.begin().await?;
     sqlx::query(
-        "INSERT INTO git_sync_configs (blog_id, owner_id, remote_url, branch, username, secret, include_drafts, enabled)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        "INSERT INTO git_sync_configs (blog_id, owner_id, remote_url, branch, username, auth_method, secret,
+                ssh_public_key, ssh_host_key, ssh_host_fingerprints, include_drafts, enabled)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          ON CONFLICT (blog_id) DO UPDATE SET owner_id = EXCLUDED.owner_id, remote_url = EXCLUDED.remote_url,
-            branch = EXCLUDED.branch, username = EXCLUDED.username, secret = EXCLUDED.secret,
-            include_drafts = EXCLUDED.include_drafts, enabled = EXCLUDED.enabled, updated_at = now(),
-            last_hash = CASE WHEN $9 THEN NULL ELSE git_sync_configs.last_hash END,
-            last_status = CASE WHEN $9 THEN NULL ELSE git_sync_configs.last_status END,
-            last_error = CASE WHEN $9 THEN NULL ELSE git_sync_configs.last_error END",
+            branch = EXCLUDED.branch, username = EXCLUDED.username, auth_method = EXCLUDED.auth_method,
+            secret = EXCLUDED.secret, ssh_public_key = EXCLUDED.ssh_public_key, ssh_host_key = EXCLUDED.ssh_host_key,
+            ssh_host_fingerprints = EXCLUDED.ssh_host_fingerprints, include_drafts = EXCLUDED.include_drafts,
+            enabled = EXCLUDED.enabled, updated_at = now(),
+            last_hash = CASE WHEN $13 THEN NULL ELSE git_sync_configs.last_hash END,
+            last_status = CASE WHEN $13 THEN NULL ELSE git_sync_configs.last_status END,
+            last_error = CASE WHEN $13 THEN NULL ELSE git_sync_configs.last_error END",
     )
     .bind(blog.id)
     .bind(actor.user_id)
     .bind(url.as_str())
     .bind(&branch)
     .bind(&username)
+    .bind(method)
     .bind(&secret)
-    .bind(body.include_drafts.unwrap_or_else(|| existing.as_ref().is_some_and(|e| e.include_drafts)))
-    .bind(body.enabled.unwrap_or_else(|| existing.as_ref().is_none_or(|e| e.enabled)))
+    .bind(&public_key)
+    .bind(&host_key)
+    .bind(&fingerprints)
+    .bind(include_drafts)
+    .bind(enabled)
     .bind(changed)
     .execute(&mut *tx)
     .await?;

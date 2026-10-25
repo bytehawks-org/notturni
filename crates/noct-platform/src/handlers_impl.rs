@@ -10,6 +10,7 @@ pub async fn public_config(ctx: RouteCtx) -> Result<Value, ApiError> {
     let mut out = json!({
         "deployment_mode": st.module_config_str("auth", "deployment_mode").unwrap_or("platform"),
         "turnstile_site_key": st.config.turnstile_site_key,
+        "experimental_features": st.config.experimental_features,
         "default_locale": platform.default_locale,
         "registration_mode": platform.registration_mode,
         "sso_providers": [],

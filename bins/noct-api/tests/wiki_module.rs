@@ -51,7 +51,7 @@ fn pairs(list: &[(&str, i64)]) -> Vec<(String, i64)> {
 
 #[tokio::test]
 async fn pages_form_a_tree_that_can_be_moved_and_reordered() {
-    let env = setup(&["wiki"], &[]).await;
+    let env = setup(&["wiki"], &[("NOCT_EXPERIMENTAL_FEATURES", "wiki,docs")]).await;
     let anna = env.user("anna", "utente").await;
     space(&env, anna, "manuale", "docs").await;
 
@@ -116,7 +116,7 @@ async fn pages_form_a_tree_that_can_be_moved_and_reordered() {
 
 #[tokio::test]
 async fn blogs_have_no_hierarchy_and_readers_see_only_published_pages() {
-    let env = setup(&["wiki"], &[]).await;
+    let env = setup(&["wiki"], &[("NOCT_EXPERIMENTAL_FEATURES", "wiki,docs")]).await;
     let anna = env.user("anna", "utente").await;
     space(&env, anna, "diario", "blog").await;
     let (s, b) = env
@@ -151,7 +151,7 @@ async fn blogs_have_no_hierarchy_and_readers_see_only_published_pages() {
 
 #[tokio::test]
 async fn revisions_record_changes_with_diffs_and_are_for_writers_only() {
-    let env = setup(&["wiki"], &[]).await;
+    let env = setup(&["wiki"], &[("NOCT_EXPERIMENTAL_FEATURES", "wiki,docs")]).await;
     let anna = env.user("anna", "utente").await;
     let bruno = env.user("bruno", "utente").await;
     space(&env, anna, "guida", "wiki").await;
@@ -207,7 +207,7 @@ async fn revisions_record_changes_with_diffs_and_are_for_writers_only() {
 
 #[tokio::test]
 async fn wikilinks_produce_backlinks_for_visible_pages_only() {
-    let env = setup(&["wiki"], &[]).await;
+    let env = setup(&["wiki"], &[("NOCT_EXPERIMENTAL_FEATURES", "wiki,docs")]).await;
     let anna = env.user("anna", "utente").await;
     space(&env, anna, "guida", "wiki").await;
     let target = page(&env, anna, "guida", "avvio-rapido", json!({})).await;

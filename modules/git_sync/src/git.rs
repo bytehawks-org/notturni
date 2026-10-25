@@ -13,6 +13,29 @@ use tokio::process::Command;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(120);
 const MAX_ERROR_CHARS: usize = 600;
 
+/// Come git si autentica presso il remoto.
+pub enum GitAuth<'a> {
+    /// `(utente, token)` via HTTPS.
+    Https { username: &'a str, token: &'a str },
+    /// Chiave privata e `known_hosts` (già scritti in file riservati) più il client SSH da usare.
+    Ssh { ssh_bin: &'a str, key: &'a Path, known_hosts: &'a Path },
+}
+
+/// Comando che git usa come client SSH: solo la chiave indicata, nessun agente né configurazione
+/// dell'utente, nessuna password, e soprattutto host key **verificata** contro il file pinnato
+/// (`StrictHostKeyChecking=yes`: una chiave diversa o sconosciuta fa fallire la connessione).
+pub fn ssh_command(ssh_bin: &str, key: &Path, known_hosts: &Path) -> String {
+    let q = |p: &str| format!("\'{}\'", p.replace('\'', "'\\''"));
+    format!(
+        "{} -F /dev/null -i {} -o IdentitiesOnly=yes -o IdentityAgent=none -o BatchMode=yes -o PasswordAuthentication=no \
+         -o KbdInteractiveAuthentication=no -o StrictHostKeyChecking=yes -o UserKnownHostsFile={} -o GlobalKnownHostsFile=/dev/null \
+         -o ForwardAgent=no -o ForwardX11=no -o ConnectTimeout=15",
+        q(ssh_bin),
+        q(&key.to_string_lossy()),
+        q(&known_hosts.to_string_lossy()),
+    )
+}
+
 pub struct Git {
     bin: String,
     repo: PathBuf,
@@ -22,32 +45,44 @@ pub struct Git {
 }
 
 impl Git {
-    /// `repo` e `home` devono già esistere. `credentials` è `(utente, token)`.
-    pub fn new(bin: &str, repo: &Path, home: &Path, credentials: Option<(&str, &str)>, allow_file: bool) -> Git {
+    /// `repo` e `home` devono già esistere. `allow_file`: consente anche il protocollo `file` (solo test).
+    pub fn new(bin: &str, repo: &Path, home: &Path, auth: &GitAuth, allow_file: bool) -> Git {
         let mut config: Vec<(&str, String)> = vec![
             ("http.followRedirects", "false".into()),
             ("core.hooksPath", "/dev/null".into()),
             ("credential.helper", String::new()),
             ("protocol.allow", "never".into()),
-            ("protocol.https.allow", "always".into()),
         ];
+        let mut allowed: Vec<&str> = Vec::new();
+        let mut secrets = Vec::new();
+        let mut env: Vec<(String, String)> = Vec::new();
+        match auth {
+            GitAuth::Https { username, token } => {
+                allowed.push("https");
+                config.push(("protocol.https.allow", "always".into()));
+                let basic = STANDARD.encode(format!("{username}:{token}"));
+                config.push(("http.extraHeader", format!("Authorization: Basic {basic}")));
+                secrets.extend([token.to_string(), basic]);
+            }
+            GitAuth::Ssh { ssh_bin, key, known_hosts } => {
+                allowed.push("ssh");
+                config.push(("protocol.ssh.allow", "always".into()));
+                env.push(("GIT_SSH_COMMAND".into(), ssh_command(ssh_bin, key, known_hosts)));
+                env.push(("GIT_SSH_VARIANT".into(), "ssh".into()));
+            }
+        }
         if allow_file {
+            allowed.push("file");
             config.push(("protocol.file.allow", "always".into()));
         }
-        let mut secrets = Vec::new();
-        if let Some((user, token)) = credentials {
-            let basic = STANDARD.encode(format!("{user}:{token}"));
-            config.push(("http.extraHeader", format!("Authorization: Basic {basic}")));
-            secrets.extend([token.to_string(), basic]);
-        }
-        let mut env: Vec<(String, String)> = vec![
-            ("GIT_TERMINAL_PROMPT".into(), "0".into()),
+        env.extend([
+            ("GIT_TERMINAL_PROMPT".to_string(), "0".to_string()),
             ("GIT_CONFIG_NOSYSTEM".into(), "1".into()),
             ("GIT_CONFIG_GLOBAL".into(), "/dev/null".into()),
-            ("GIT_ALLOW_PROTOCOL".into(), if allow_file { "https:file".into() } else { "https".into() }),
+            ("GIT_ALLOW_PROTOCOL".into(), allowed.join(":")),
             ("LC_ALL".into(), "C".into()),
             ("GIT_CONFIG_COUNT".into(), config.len().to_string()),
-        ];
+        ]);
         for (i, (k, v)) in config.into_iter().enumerate() {
             env.push((format!("GIT_CONFIG_KEY_{i}"), k.to_string()));
             env.push((format!("GIT_CONFIG_VALUE_{i}"), v));
@@ -87,5 +122,32 @@ impl Git {
         }
         let stderr = String::from_utf8_lossy(&out.stderr);
         Err(format!("git {} non riuscito: {}", args.first().unwrap_or(&""), self.redact(stderr.trim())))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ssh_client_is_locked_to_the_pinned_key_and_host() {
+        let cmd = ssh_command("ssh", Path::new("/tmp/x/key"), Path::new("/tmp/x/known"));
+        for needle in [
+            "-F /dev/null",
+            "-i '/tmp/x/key'",
+            "IdentitiesOnly=yes",
+            "IdentityAgent=none",
+            "BatchMode=yes",
+            "PasswordAuthentication=no",
+            "StrictHostKeyChecking=yes",
+            "UserKnownHostsFile='/tmp/x/known'",
+            "GlobalKnownHostsFile=/dev/null",
+            "ForwardAgent=no",
+        ] {
+            assert!(cmd.contains(needle), "manca {needle}: {cmd}");
+        }
+        assert!(!cmd.contains("accept-new") && !cmd.contains("StrictHostKeyChecking=no"));
+        let quoted = ssh_command("ssh", Path::new("/tmp/it's"), Path::new("/k"));
+        assert!(quoted.contains(r"'/tmp/it'\''s'"), "{quoted}");
     }
 }

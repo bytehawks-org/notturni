@@ -48,6 +48,9 @@ pub async fn setup_with(modules: &[&str], env: &[(&str, &str)], infra: Option<&d
 
     let mut config = Config::minimal(url);
     config.modules = Some(requested);
+    if let Some(v) = lookup("NOCT_EXPERIMENTAL_FEATURES") {
+        config.experimental_features = noct_core::parse_experimental_features(&v).unwrap_or_else(|e| panic!("{e}"));
+    }
     let storage_dir = std::env::temp_dir().join(format!("noct-e2e-{}", Uuid::new_v4().simple()));
     config.storage.local_base_path = storage_dir.clone();
     let (mut services, mailer) = Services::in_memory(&storage_dir);

@@ -283,12 +283,12 @@ Diritti GDPR: esportazione dei propri dati (art. 20), cancellazione dell'account
 
 ## git_sync  (opzionale)
 
-Sincronizzazione dei testi di uno Spazio verso un branch di un repository Git remoto (GitHub, GitLab, Forgejo...): solo esportazione, via HTTPS con token.
+Sincronizzazione dei testi di uno Spazio verso un branch di un repository Git remoto (GitHub, GitLab, Forgejo...): solo esportazione, via HTTPS con token personale o via SSH con chiave di deploy.
 
 | Verbo | Percorso | Accesso | Descrizione | Note |
 |---|---|---|---|---|
 | GET | `/blogs/{slug}/git-sync` | utente | Configurazione e ultimo esito della sincronizzazione Git (solo proprietario; il token non viene mai restituito) |  |
-| PUT | `/blogs/{slug}/git-sync` | utente | Imposta il repository, il branch e il token (HTTPS; branch diverso da quello predefinito del repository) |  |
+| PUT | `/blogs/{slug}/git-sync` | utente | Imposta repository, branch e accesso: token personale via HTTPS oppure chiave di deploy SSH generata dalla piattaforma con host key pinnata (branch diverso da quello predefinito del repository) |  |
 | DELETE | `/blogs/{slug}/git-sync` | utente | Rimuove la sincronizzazione e cancella il token salvato (il repository remoto non viene toccato) | 204 |
 | POST | `/blogs/{slug}/git-sync/run` | utente | Accoda una sincronizzazione subito; l'esito compare in `last_status` (polling su GET) | 202 |
 

@@ -39,6 +39,46 @@ pub fn validate_remote(raw: &str, allow_private: bool) -> Result<Url, String> {
     Ok(url)
 }
 
+static SCP_LIKE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^([A-Za-z0-9._-]+)@([A-Za-z0-9.-]+):([^\s:][^\s]*)$").expect("regex valida"));
+static SSH_PATH: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^/[A-Za-z0-9._~/+-]+$").expect("regex valida"));
+
+pub const METHODS: [&str; 2] = ["https", "ssh"];
+
+/// `https` o `ssh`.
+pub fn validate_method(method: &str) -> Result<&'static str, String> {
+    METHODS
+        .iter()
+        .copied()
+        .find(|m| *m == method)
+        .ok_or_else(|| "Metodo di accesso non valido: https o ssh.".to_string())
+}
+
+/// L'URL di un repository raggiunto via SSH, in forma `ssh://utente@host[:porta]/percorso` oppure scp
+/// (`git@github.com:utente/repo.git`, normalizzata alla prima). L'utente predefinito è `git`; niente
+/// password incorporate; il percorso usa solo caratteri innocui perché finisce in un comando remoto.
+pub fn validate_ssh_remote(raw: &str) -> Result<Url, String> {
+    let invalid =
+        || "Indirizzo SSH non valido: usa git@host:utente/repo.git oppure ssh://git@host/utente/repo.git.".to_string();
+    let raw = raw.trim();
+    let normalized = match SCP_LIKE.captures(raw) {
+        Some(c) if !raw.contains("://") => format!("ssh://{}@{}/{}", &c[1], &c[2], c[3].trim_start_matches('/')),
+        _ => raw.to_string(),
+    };
+    let mut url = Url::parse(&normalized).map_err(|_| invalid())?;
+    let host = url.host_str().unwrap_or_default();
+    if url.scheme() != "ssh" || host.is_empty() || host.starts_with('-') || url.password().is_some() {
+        return Err(invalid());
+    }
+    if !SSH_PATH.is_match(url.path()) || url.query().is_some() || url.fragment().is_some() {
+        return Err(invalid());
+    }
+    if url.username().is_empty() {
+        url.set_username("git").map_err(|_| invalid())?;
+    }
+    Ok(url)
+}
+
 /// Nome di branch sicuro: niente `..`, `//`, `@{`, finali `/` `.lock` `.`, né inizio con `-`.
 pub fn validate_branch(name: &str) -> Result<(), String> {
     let bad = name.contains("..")
@@ -179,6 +219,37 @@ mod tests {
             assert!(validate_remote(bad, false).is_err(), "{bad}");
         }
         assert!(validate_remote("file:///tmp/repo", true).is_ok(), "solo con allow_private");
+    }
+
+    #[test]
+    fn ssh_remotes_are_normalized_and_restricted() {
+        let ok = |raw: &str| validate_ssh_remote(raw).map(|u| u.to_string());
+        assert_eq!(ok("git@github.com:anna/testi.git").unwrap(), "ssh://git@github.com/anna/testi.git");
+        assert_eq!(
+            ok("ssh://git@gitlab.example.com:2222/grp/sub/repo.git").unwrap(),
+            "ssh://git@gitlab.example.com:2222/grp/sub/repo.git"
+        );
+        assert_eq!(
+            ok("ssh://forgejo.example.com/anna/repo").unwrap(),
+            "ssh://git@forgejo.example.com/anna/repo",
+            "utente predefinito"
+        );
+        for bad in [
+            "https://github.com/anna/testi.git",
+            "github.com:anna/testi.git",
+            "ssh://-oProxyCommand=x/anna/repo",
+            "ssh://git:pw@github.com/anna/repo.git",
+            "ssh://git@github.com/anna/re po.git",
+            "ssh://git@github.com/anna/repo.git?x=1",
+            "ssh://git@github.com/",
+            "ssh://git@github.com/a/b;rm -rf",
+            "git@github.com:$(id)",
+            "",
+        ] {
+            assert!(validate_ssh_remote(bad).is_err(), "{bad}");
+        }
+        assert_eq!(validate_method("ssh"), Ok("ssh"));
+        assert!(validate_method("ftp").is_err());
     }
 
     #[test]

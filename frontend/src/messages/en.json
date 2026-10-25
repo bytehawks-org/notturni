@@ -933,8 +933,8 @@
     "kindHint": "Cannot be changed after creation.",
     "kinds": {
       "blog": "Blog — articles in chronological order",
-      "wiki": "Wiki — linked, editable pages",
-      "docs": "Documentation — a guide structured in chapters"
+      "wiki": "Wiki — linked, editable pages (experimental)",
+      "docs": "Documentation — a guide structured in chapters (experimental)"
     }
   },
   "PostEditorPage": {
@@ -1894,6 +1894,24 @@
     "remove": "Remove sync",
     "removeTitle": "Remove the sync?",
     "removeBody": "The stored token is deleted. The remote repository is not touched: files already pushed stay where they are. Type the space slug to confirm.",
-    "privacyNote": "The destination repository is a service of your choosing: the texts sent leave this platform and are your responsibility. Deleting content or your account here does not delete it from the remote repository."
+    "privacyNote": "The destination repository is a service of your choosing: the texts sent leave this platform and are your responsibility. Deleting content or your account here does not delete it from the remote repository.",
+    "method": "Access",
+    "methods": {
+      "https": "Personal token (HTTPS)",
+      "httpsSub": "A GitHub, GitLab or Forgejo token with write access to this repository only.",
+      "ssh": "SSH deploy key",
+      "sshSub": "The platform generates a key: register it as a deploy key with write access. No token needed."
+    },
+    "urlHintSsh": "git@host:user/repo.git or ssh://git@host/user/repo.git",
+    "keyOnSave": "On save the platform generates the deploy key and shows you the public half to register on the repository; it also pins the host key.",
+    "deployKey": "Public deploy key",
+    "deployKeyHint": "add it to the repository with write access",
+    "copy": "Copy",
+    "copied": "Key copied",
+    "regenerate": "Generate a new key",
+    "hostKey": "Trusted host",
+    "hostKeyHint": "compare with the fingerprints published by the provider",
+    "expectedFingerprint": "Expected host fingerprint",
+    "expectedFingerprintHint": "optional: SHA256:… from the provider’s site; rejected if it does not match"
   }
 }

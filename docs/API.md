@@ -1137,6 +1137,11 @@ sovrascrive sempre, anche per ripianificare un post già pubblicato.
 
 ## Spazi wiki e documentazione (modulo `wiki`)
 
+**Funzione sperimentale, opt-in.** Wiki e docs sono spenti di default: si attivano con `NOCT_EXPERIMENTAL_FEATURES=wiki,docs`
+(ConfigMap in Kubernetes). Spente, `POST /blogs` con `kind` `wiki`/`docs` e `PATCH` con `display_mode` `wiki`/`docs`
+rispondono `400` («La funzione sperimentale … non è attiva»); `GET /config` espone `experimental_features` e il frontend
+propone solo i tipi attivi. Spegnerle dopo non cancella né nasconde gli Spazi già creati.
+
 Valgono per gli Spazi con `kind` = `wiki` o `docs` (vedi `POST /blogs`). Per gli Spazi `blog` il modulo non
 fa nulla: `parent_id` non nullo o `position` nei post vengono rifiutati (`400`), nessuna revisione e nessun
 link interno vengono registrati.
@@ -1182,17 +1187,31 @@ Esporta i testi di uno Spazio, come Markdown, in un branch di un repository Git 
 Forgejo, Gitea…). Solo il **proprietario** dello Spazio la gestisce (`401`/`403` altrimenti); è solo
 un'esportazione, nessuna modifica fatta nel repository torna nella piattaforma.
 
-- **`GET /api/v1/blogs/{slug}/git-sync`** → `{configured, remote_url, branch, username, has_secret,
-  include_drafts, enabled, last_status, last_run_at, last_error, last_commit, last_pages}`. Il token non viene mai
-  restituito (`has_secret` dice solo se esiste). `last_status`: `running` · `ok` (commit inviato) · `unchanged` (nessuna
-  novità, nessun accesso alla rete) · `error` (dettaglio in `last_error`).
-- **`PUT /api/v1/blogs/{slug}/git-sync`** → `{remote_url, branch?, username?, secret?, include_drafts?, enabled?}`.
-  `remote_url` deve essere `https://` con un host pubblico e **senza credenziali incorporate**; l'host viene risolto e
-  ogni indirizzo deve essere pubblico (loopback, reti private, link-local e metadati cloud → `400`). `branch` (default
-  `notturni-backup`) segue le regole dei nomi di Git. `secret` è il token di accesso: obbligatorio alla prima
-  configurazione, poi se assente resta quello salvato (cifrato a riposo come i segreti TOTP). `branch`, `username` assenti
-  restano invariati. Cambiare repository, branch, utente, token o `include_drafts` azzera l'esito e fa rinviare tutto.
-- **`DELETE /api/v1/blogs/{slug}/git-sync`** → `204`; cancella configurazione e token, non tocca il repository remoto.
+- **`GET /api/v1/blogs/{slug}/git-sync`** → `{configured, remote_url, branch, username, auth_method, has_secret,
+  ssh_public_key, ssh_host_fingerprints, include_drafts, enabled, last_status, last_run_at, last_error, last_commit,
+  last_pages}`. Token e chiave privata non vengono mai restituiti (`has_secret` dice solo se esiste una credenziale).
+  `last_status`: `running` · `ok` (commit inviato) · `unchanged` (nessuna novità, nessun accesso alla rete) · `error`
+  (dettaglio in `last_error`).
+- **`PUT /api/v1/blogs/{slug}/git-sync`** → `{remote_url, auth_method?, branch?, username?, secret?, regenerate_key?,
+  host_fingerprint?, include_drafts?, enabled?}`. Due modi di accesso, `auth_method` = `https` (predefinito) o `ssh`;
+  assente = invariato. `branch` (default `notturni-backup`) segue le regole dei nomi di Git; `branch`, `username` assenti
+  restano invariati. Cambiare repository, accesso, branch, utente, credenziale, host key o `include_drafts` azzera l'esito
+  e fa rinviare tutto. L'host del repository deve risolvere solo a indirizzi pubblici (loopback, reti private, link-local e
+  metadati cloud → `400`).
+  - **`https`**: `remote_url` è `https://` senza credenziali incorporate. `secret` è il **token personale** del provider
+    (GitHub, GitLab, Forgejo…) con scrittura sul solo repository: obbligatorio alla prima configurazione e quando si
+    passa da `ssh` a `https`, poi se assente resta quello salvato. Cifrato a riposo.
+  - **`ssh`**: `remote_url` è `git@host:utente/repo.git` oppure `ssh://git@host[:porta]/utente/repo.git` (normalizzato
+    alla seconda forma; percorso limitato a caratteri innocui). `secret` **non è ammesso**: la chiave la genera la
+    piattaforma (ed25519, privata cifrata a riposo come i segreti TOTP) e la risposta riporta `ssh_public_key`, da
+    registrare come *deploy key con permesso di scrittura* presso il provider. `regenerate_key: true` ne crea una nuova (la
+    vecchia smette di valere). Alla configurazione la piattaforma legge la **host key** dell'host (`ssh-keyscan`), la fissa
+    e ne riporta le impronte in `ssh_host_fingerprints`; da lì in poi la connessione è verificata contro quella chiave
+    (`StrictHostKeyChecking=yes`: una chiave diversa o sconosciuta fa fallire il giro, mai accettata in automatico).
+    `host_fingerprint` (`SHA256:…`, dalla documentazione del provider) è facoltativa: se la chiave rilevata non
+    corrisponde la configurazione è rifiutata (`400`). Cambiare host o porta rifà la rilevazione. Poiché la prima
+    rilevazione è una fiducia al primo uso, per i provider noti conviene sempre indicare l'impronta attesa.
+- **`DELETE /api/v1/blogs/{slug}/git-sync`** → `204`; cancella configurazione, token o chiave, non tocca il repository remoto (la deploy key va revocata presso il provider).
 - **`POST /api/v1/blogs/{slug}/git-sync/run`** → `202`; accoda una sincronizzazione (`409` se una è in corso, `400` se
   disattivata). L'esito compare in `GET`. In più un giro orario accoda tutte le configurazioni attive.
 
@@ -1207,8 +1226,8 @@ non viene mai sovrascritto.
 commit viene rifiutato. Se i file generati sono identici all'ultimo esito il giro non tocca la rete. Ogni configurazione,
 rimozione ed esecuzione è nell'audit (`git_sync.configured`, `git_sync.removed`, `git_sync.run`).
 
-**Non fatto in questa versione:** SSH/chiavi di deploy (richiederebbe il pinning delle host key), importazione dal repository,
-esportazione dei file multimediali. Eliminare un contenuto o l'account (GDPR art. 17) non lo cancella dal repository remoto:
+**Non fatto in questa versione:** importazione dal repository, esportazione dei file multimediali, chiavi SSH fornite
+dall'utente (la piattaforma le genera), CA SSH (`@cert-authority`). Eliminare un contenuto o l'account (GDPR art. 17) non lo cancella dal repository remoto:
 l'utente ne è il titolare e la UI lo dichiara.
 
 ## Pubblicazioni (todo/PUBLICATIONS.md, todo/UX_REDESIGN.md B9, mockup 2d/3g)

@@ -4,8 +4,16 @@
 remote_url = { type = "string", max = 2048 }
 branch = { type = "string", max = 200, optional = true }
 username = { type = "string", max = 100, optional = true }
-# assente = invariato (obbligatorio alla prima configurazione); "" non è ammesso
+# `https` (predefinito) o `ssh`; assente = invariato
+auth_method = { type = "string", max = 8, optional = true }
+# solo `https`: token personale (GitHub, GitLab, Forgejo...). Assente = invariato; obbligatorio alla prima
+# configurazione e quando si passa da ssh a https. Con `ssh` non è ammesso: la chiave la genera la piattaforma
 secret = { type = "string", max = 4096, optional = true }
+# solo `ssh`: genera una nuova chiave (la vecchia smette di funzionare)
+regenerate_key = "bool?"
+# solo `ssh`: impronta attesa dell'host (`SHA256:...`, dalla documentazione del provider); se la chiave
+# rilevata non corrisponde la configurazione è rifiutata
+host_fingerprint = { type = "string", max = 100, optional = true }
 include_drafts = "bool?"
 enabled = "bool?"
 
@@ -15,7 +23,12 @@ configured = "bool"
 remote_url = { type = "string", nullable = true }
 branch = { type = "string", nullable = true }
 username = { type = "string", nullable = true }
+auth_method = { type = "string", nullable = true }
 has_secret = "bool"
+# solo `ssh`: da registrare come deploy key con permesso di scrittura
+ssh_public_key = { type = "string", nullable = true }
+# solo `ssh`: impronte SHA256 della chiave dell'host a cui ci si fida (da confrontare con quelle del provider)
+ssh_host_fingerprints = "string[]"
 include_drafts = "bool"
 enabled = "bool"
 last_status = { type = "string", nullable = true }
@@ -45,7 +58,7 @@ handler = "put_git_sync"
 scope = { blog = "slug" }
 request = "GitSyncIn"
 response = "GitSyncOut"
-summary = "Imposta il repository, il branch e il token (HTTPS; branch diverso da quello predefinito del repository)"
+summary = "Imposta repository, branch e accesso: token personale via HTTPS oppure chiave di deploy SSH generata dalla piattaforma con host key pinnata (branch diverso da quello predefinito del repository)"
 
 [[route]]
 id = "delete_git_sync"

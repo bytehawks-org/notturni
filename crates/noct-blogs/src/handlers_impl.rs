@@ -12,6 +12,17 @@ use serde_json::{Value, json};
 use sqlx::{PgConnection, Postgres, QueryBuilder};
 use uuid::Uuid;
 
+/// Wiki e docs sono funzioni sperimentali da attivare con `NOCT_EXPERIMENTAL_FEATURES`: spente, non si
+/// crea nulla di quel tipo né si passa a quella modalità (gli Spazi già esistenti restano com'erano).
+fn require_experimental(st: &AppState, name: &str) -> Result<(), ApiError> {
+    match rules::experimental_feature_for(name) {
+        Some(feature) if !st.config.feature_enabled(feature) => Err(ApiError::bad_request(format!(
+            "La funzione sperimentale «{feature}» non è attiva su questa istanza (NOCT_EXPERIMENTAL_FEATURES)."
+        ))),
+        _ => Ok(()),
+    }
+}
+
 fn actor(ctx: &RouteCtx) -> Result<Actor, ApiError> {
     ctx.actor.clone().ok_or_else(|| ApiError::unauthorized("Not authenticated"))
 }
@@ -96,6 +107,8 @@ pub async fn create_blog(ctx: RouteCtx, body: BlogCreate) -> Result<Value, ApiEr
     let kind = body.kind.as_deref().unwrap_or("blog");
     let display_mode =
         rules::resolve_display_mode(kind, body.display_mode.as_deref()).map_err(ApiError::bad_request)?;
+    require_experimental(st, kind)?;
+    require_experimental(st, display_mode)?;
     let id: Uuid = sqlx::query_scalar(
         "INSERT INTO blogs (slug, title, subtitle, description, owner_id, visibility, default_locale, default_author_display_name, kind, display_mode)
          VALUES ($1, $2, $3, $4, $5, $6::blog_visibility, $7, $8, $9::space_kind, $10::space_display_mode) RETURNING id",
@@ -199,7 +212,11 @@ pub async fn update_blog(ctx: RouteCtx, body: BlogUpdate) -> Result<Value, ApiEr
             .fetch_one(&mut *tx)
             .await?;
     let display_mode = match body.display_mode.as_deref() {
-        Some(m) => Some(rules::resolve_display_mode(&kind, Some(m)).map_err(ApiError::bad_request)?),
+        Some(m) => {
+            let mode = rules::resolve_display_mode(&kind, Some(m)).map_err(ApiError::bad_request)?;
+            require_experimental(st, mode)?;
+            Some(mode)
+        }
         None => None,
     };
     let extra_locales = match &body.extra_locales {

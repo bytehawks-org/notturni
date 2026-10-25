@@ -87,8 +87,40 @@ async fn create_blog_applies_domain_rules() {
 }
 
 #[tokio::test]
-async fn spaces_have_a_kind_fixed_at_creation_and_an_api_alias() {
+async fn wiki_and_docs_spaces_are_opt_in_experimental_features() {
+    // spente di default: si crea solo un blog, e la configurazione pubblica lo dice
     let env = setup(&[], &[]).await;
+    let anna = env.user("anna", "utente").await;
+    assert_eq!(env.get("/config", None).await.1["experimental_features"], json!([]));
+    for kind in ["wiki", "docs"] {
+        let (s, b) =
+            env.post("/blogs", Some(anna), json!({"slug": format!("{kind}-test"), "title": "T", "kind": kind})).await;
+        assert_eq!(
+            (s, detail(&b).contains(kind) && detail(&b).contains("sperimentale")),
+            (StatusCode::BAD_REQUEST, true),
+            "{b}"
+        );
+    }
+    let (s, _) = env.post("/blogs", Some(anna), new_blog("diario")).await;
+    assert_eq!(s, StatusCode::CREATED, "i blog restano disponibili");
+    env.teardown().await;
+
+    // attivata una sola: l'altra resta spenta, e la modalità segue la funzione
+    let env = setup(&[], &[("NOCT_EXPERIMENTAL_FEATURES", "wiki")]).await;
+    let anna = env.user("anna", "utente").await;
+    assert_eq!(env.get("/config", None).await.1["experimental_features"], json!(["wiki"]));
+    let (s, _) = env.post("/blogs", Some(anna), json!({"slug": "guida-uno", "title": "T", "kind": "wiki"})).await;
+    assert_eq!(s, StatusCode::CREATED);
+    let (s, _) = env.post("/blogs", Some(anna), json!({"slug": "guida-due", "title": "T", "kind": "docs"})).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, b) = env.patch("/blogs/guida-uno", Some(anna), json!({"display_mode": "docs"})).await;
+    assert_eq!((s, detail(&b).contains("docs")), (StatusCode::BAD_REQUEST, true), "{b}");
+    env.teardown().await;
+}
+
+#[tokio::test]
+async fn spaces_have_a_kind_fixed_at_creation_and_an_api_alias() {
+    let env = setup(&[], &[("NOCT_EXPERIMENTAL_FEATURES", "wiki,docs")]).await;
     let anna = env.user("anna", "utente").await;
 
     let (_, b) = env.post("/blogs", Some(anna), new_blog("diario")).await;

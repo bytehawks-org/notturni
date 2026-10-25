@@ -2,17 +2,18 @@
 //! temporanea il branch di destinazione, e se qualcosa è cambiato lo committa e lo pubblica con un push
 //! normale (mai forzato) su un branch che non sia quello predefinito del repository.
 
-use crate::{git::Git, rules};
+use crate::{
+    git::{Git, GitAuth},
+    rules,
+    scratch::Scratch,
+};
 use chrono::{DateTime, Utc};
 use noct_audit::{AuditActor, Entry};
 use noct_core::{AppState, RequestMeta};
 use noct_security::{net, secrets};
 use serde_json::json;
 use sqlx::FromRow;
-use std::{
-    net::SocketAddr,
-    path::{Path, PathBuf},
-};
+use std::{net::SocketAddr, path::Path};
 use uuid::Uuid;
 
 /// Chiave dei segreti a riposo: la stessa degli altri (`NOCT_SECRETS_KEY`, dichiarata da `auth_mfa`),
@@ -33,7 +34,11 @@ pub async fn check_host(url: &reqwest::Url, allow_private: bool) -> Result<(), S
     }
     let unreachable = || "L'host del repository non è raggiungibile o non è pubblico.".to_string();
     let host = url.host_str().ok_or_else(unreachable)?;
-    let port = url.port_or_known_default().ok_or_else(unreachable)?;
+    let port = if url.scheme() == "ssh" {
+        url.port().unwrap_or(22)
+    } else {
+        url.port_or_known_default().ok_or_else(unreachable)?
+    };
     let addrs: Vec<SocketAddr> = match host.trim_matches(['[', ']']).parse::<std::net::IpAddr>() {
         Ok(ip) => vec![SocketAddr::new(ip, port)],
         Err(_) => tokio::net::lookup_host((host, port)).await.map_err(|_| unreachable())?.collect(),
@@ -51,7 +56,9 @@ struct Cfg {
     remote_url: String,
     branch: String,
     username: String,
+    auth_method: String,
     secret: String,
+    ssh_host_key: Option<String>,
     include_drafts: bool,
     last_hash: Option<String>,
     blog_slug: String,
@@ -77,33 +84,6 @@ struct PostRow {
 enum Outcome {
     Unchanged,
     Pushed { commit: String },
-}
-
-/// Directory temporanea con permessi 0700, rimossa a fine giro.
-struct Scratch(PathBuf);
-
-impl Scratch {
-    fn create() -> std::io::Result<Scratch> {
-        use std::os::unix::fs::DirBuilderExt;
-        let root = std::env::temp_dir().join(format!("noct-git-sync-{}", Uuid::new_v4()));
-        std::fs::DirBuilder::new().mode(0o700).create(&root)?;
-        let s = Scratch(root);
-        std::fs::create_dir(s.repo())?;
-        std::fs::create_dir(s.home())?;
-        Ok(s)
-    }
-    fn repo(&self) -> PathBuf {
-        self.0.join("repo")
-    }
-    fn home(&self) -> PathBuf {
-        self.0.join("home")
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
 }
 
 async fn collect(st: &AppState, cfg: &Cfg) -> Result<Vec<rules::ExportPost>, sqlx::Error> {
@@ -168,16 +148,38 @@ fn write_tree(repo: &Path, files: &[(String, String)]) -> std::io::Result<()> {
 }
 
 async fn publish(st: &AppState, cfg: &Cfg, files: &[(String, String)]) -> Result<Outcome, String> {
-    let url = rules::validate_remote(&cfg.remote_url, allow_private(st))?;
+    let method = rules::validate_method(&cfg.auth_method)?;
+    let url = match method {
+        "ssh" => rules::validate_ssh_remote(&cfg.remote_url)?,
+        _ => rules::validate_remote(&cfg.remote_url, allow_private(st))?,
+    };
     check_host(&url, allow_private(st)).await?;
-    let token =
-        secrets::open(&secrets_key(st), &cfg.secret).map_err(|_| "token illeggibile: reimpostalo".to_string())?;
+    let secret =
+        secrets::open(&secrets_key(st), &cfg.secret).map_err(|_| "credenziale illeggibile: reimpostala".to_string())?;
     let branch = cfg.branch.as_str();
     rules::validate_branch(branch)?;
 
     let scratch = Scratch::create().map_err(|e| format!("directory temporanea non creata: {e}"))?;
     let bin = st.module_config_str("git_sync", "git_bin").unwrap_or("git");
-    let git = Git::new(bin, &scratch.repo(), &scratch.home(), Some((&cfg.username, &token)), allow_private(st));
+    let ssh_bin = st.module_config_str("git_sync", "ssh_bin").unwrap_or("ssh");
+    // la chiave privata decifrata vive solo in questa directory, che sparisce a fine giro
+    let ssh_files = if method == "ssh" {
+        let known = cfg.ssh_host_key.as_deref().filter(|k| !k.trim().is_empty());
+        let known = known.ok_or("Nessuna host key SSH fissata: salva di nuovo la configurazione.")?;
+        let key =
+            scratch.write_private("id", &secret).map_err(|e| format!("scrittura della chiave non riuscita: {e}"))?;
+        let known_hosts = scratch
+            .write_private("known_hosts", known)
+            .map_err(|e| format!("scrittura di known_hosts non riuscita: {e}"))?;
+        Some((key, known_hosts))
+    } else {
+        None
+    };
+    let auth = match &ssh_files {
+        Some((key, known_hosts)) => GitAuth::Ssh { ssh_bin, key, known_hosts },
+        None => GitAuth::Https { username: &cfg.username, token: &secret },
+    };
+    let git = Git::new(bin, &scratch.repo(), &scratch.home(), &auth, allow_private(st));
     let remote = url.as_str();
 
     git.run(&["init", "-q", "--template="]).await?;
@@ -253,8 +255,8 @@ pub async fn run(st: &AppState, config_id: Uuid, force: bool) -> Result<(), sqlx
         "WITH c AS (
            UPDATE git_sync_configs SET last_status = 'running', last_run_at = now()
            WHERE id = $1 AND enabled AND (last_status IS DISTINCT FROM 'running' OR last_run_at < now() - interval '15 minutes')
-           RETURNING id, blog_id, remote_url, branch, username, secret, include_drafts, last_hash)
-         SELECT c.id, c.blog_id, c.remote_url, c.branch, c.username, c.secret, c.include_drafts, c.last_hash,
+           RETURNING id, blog_id, remote_url, branch, username, auth_method, secret, ssh_host_key, include_drafts, last_hash)
+         SELECT c.id, c.blog_id, c.remote_url, c.branch, c.username, c.auth_method, c.secret, c.ssh_host_key, c.include_drafts, c.last_hash,
                 b.slug AS blog_slug, b.kind::text AS kind
          FROM c JOIN blogs b ON b.id = c.blog_id",
     )

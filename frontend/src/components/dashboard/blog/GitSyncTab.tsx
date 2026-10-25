@@ -22,8 +22,9 @@ const POLL_MS = 3000;
 const POLL_MAX_TICKS = 40;
 
 /** Sincronizzazione Git dello Spazio (solo proprietario): i testi pubblicati vengono esportati come
- * Markdown in un branch dedicato di un repository remoto raggiunto via HTTPS con un token. Il token si
- * invia una volta e non viene più mostrato. */
+ * Markdown in un branch dedicato di un repository remoto. Due modi di accesso: token personale via HTTPS
+ * (si invia una volta e non viene più mostrato) oppure chiave di deploy SSH generata dalla piattaforma
+ * (si mostra solo la parte pubblica, insieme alle impronte dell'host a cui ci si fida). */
 export function GitSyncTab({ blogSlug }: { blogSlug: string }) {
   const { authFetch } = useAuth();
   const t = useTranslations("GitSyncTab");
@@ -34,6 +35,8 @@ export function GitSyncTab({ blogSlug }: { blogSlug: string }) {
   const [remoteUrl, setRemoteUrl] = useState("");
   const [branch, setBranch] = useState("");
   const [username, setUsername] = useState("");
+  const [method, setMethod] = useState<"https" | "ssh">("https");
+  const [hostFingerprint, setHostFingerprint] = useState("");
   const [secret, setSecret] = useState("");
   const [includeDrafts, setIncludeDrafts] = useState(false);
   const [enabled, setEnabled] = useState(true);
@@ -48,6 +51,7 @@ export function GitSyncTab({ blogSlug }: { blogSlug: string }) {
     setRemoteUrl(s.remote_url ?? "");
     setBranch(s.branch ?? "");
     setUsername(s.username ?? "");
+    setMethod(s.auth_method ?? "https");
     setIncludeDrafts(s.include_drafts);
     setEnabled(s.configured ? s.enabled : true);
   }, []);
@@ -75,7 +79,7 @@ export function GitSyncTab({ blogSlug }: { blogSlug: string }) {
     return () => clearInterval(timer);
   }, [waiting, running, authFetch, blogSlug]);
 
-  async function save(event: FormEvent) {
+  async function save(event: FormEvent, regenerateKey = false) {
     event.preventDefault();
     setBusy(true);
     setError(null);
@@ -84,19 +88,32 @@ export function GitSyncTab({ blogSlug }: { blogSlug: string }) {
         api.gitSync.save(token, blogSlug, {
           remote_url: remoteUrl.trim(),
           branch: branch.trim() || undefined,
-          username: username.trim() || undefined,
-          secret: secret || undefined,
+          auth_method: method,
+          username: method === "https" ? username.trim() || undefined : undefined,
+          secret: method === "https" ? secret || undefined : undefined,
+          regenerate_key: regenerateKey || undefined,
+          host_fingerprint: method === "ssh" ? hostFingerprint.trim() || undefined : undefined,
           include_drafts: includeDrafts,
           enabled,
         })
       );
       apply(updated);
       setSecret("");
+      setHostFingerprint("");
       notify(t("saved"));
     } catch (err) {
       setError(errorMessage(err, tc("unexpectedError")));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function copyPublicKey() {
+    try {
+      await navigator.clipboard.writeText(status?.ssh_public_key ?? "");
+      notify(t("copied"));
+    } catch {
+      // clipboard non disponibile: la chiave resta selezionabile a mano
     }
   }
 
@@ -182,14 +199,31 @@ export function GitSyncTab({ blogSlug }: { blogSlug: string }) {
           <CardTitle>{status.configured ? t("settingsTitle") : t("setupTitle")}</CardTitle>
           <div className="mt-4">
             <FieldGroup>
-              <Label htmlFor="git-url" hint={t("urlHint")}>
+              <Label>{t("method")}</Label>
+              <div className="grid gap-2.5 sm:grid-cols-2">
+                {(["https", "ssh"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    aria-pressed={method === m}
+                    onClick={() => setMethod(m)}
+                    className={`flex flex-col gap-0.5 rounded-lg border px-3.5 py-3 text-left transition ${method === m ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"}`}
+                  >
+                    <span className="text-sm font-semibold text-foreground">{t(`methods.${m}`)}</span>
+                    <span className="text-[13px] text-muted">{t(`methods.${m}Sub`)}</span>
+                  </button>
+                ))}
+              </div>
+            </FieldGroup>
+            <FieldGroup>
+              <Label htmlFor="git-url" hint={method === "ssh" ? t("urlHintSsh") : t("urlHint")}>
                 {t("url")}
               </Label>
               <Input
                 id="git-url"
-                type="url"
+                type={method === "ssh" ? "text" : "url"}
                 required
-                placeholder="https://github.com/utente/testi.git"
+                placeholder={method === "ssh" ? "git@github.com:utente/testi.git" : "https://github.com/utente/testi.git"}
                 value={remoteUrl}
                 onChange={(e) => setRemoteUrl(e.target.value)}
               />
@@ -200,26 +234,78 @@ export function GitSyncTab({ blogSlug }: { blogSlug: string }) {
               </Label>
               <Input id="git-branch" placeholder="notturni-backup" value={branch} onChange={(e) => setBranch(e.target.value)} />
             </FieldGroup>
-            <FieldGroup>
-              <Label htmlFor="git-user" hint={t("usernameHint")}>
-                {t("username")}
-              </Label>
-              <Input id="git-user" placeholder="git" value={username} onChange={(e) => setUsername(e.target.value)} />
-            </FieldGroup>
-            <FieldGroup>
-              <Label htmlFor="git-token" hint={status.has_secret ? t("tokenSet") : t("tokenHint")}>
-                {t("token")}
-              </Label>
-              <Input
-                id="git-token"
-                type="password"
-                autoComplete="off"
-                required={!status.has_secret}
-                placeholder={status.has_secret ? "••••••••" : ""}
-                value={secret}
-                onChange={(e) => setSecret(e.target.value)}
-              />
-            </FieldGroup>
+            {method === "https" ? (
+              <>
+                <FieldGroup>
+                  <Label htmlFor="git-user" hint={t("usernameHint")}>
+                    {t("username")}
+                  </Label>
+                  <Input id="git-user" placeholder="git" value={username} onChange={(e) => setUsername(e.target.value)} />
+                </FieldGroup>
+                <FieldGroup>
+                  <Label htmlFor="git-token" hint={status.has_secret && status.auth_method === "https" ? t("tokenSet") : t("tokenHint")}>
+                    {t("token")}
+                  </Label>
+                  <Input
+                    id="git-token"
+                    type="password"
+                    autoComplete="off"
+                    required={!(status.has_secret && status.auth_method === "https")}
+                    placeholder={status.has_secret && status.auth_method === "https" ? "••••••••" : ""}
+                    value={secret}
+                    onChange={(e) => setSecret(e.target.value)}
+                  />
+                </FieldGroup>
+              </>
+            ) : (
+              <>
+                {status.auth_method === "ssh" && status.ssh_public_key ? (
+                  <FieldGroup>
+                    <Label hint={t("deployKeyHint")}>{t("deployKey")}</Label>
+                    <textarea
+                      readOnly
+                      rows={3}
+                      value={status.ssh_public_key}
+                      onFocus={(e) => e.currentTarget.select()}
+                      className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 font-mono text-xs text-foreground"
+                    />
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button type="button" variant="secondary" size="sm" onClick={copyPublicKey}>
+                        {t("copy")}
+                      </Button>
+                      <Button type="button" variant="secondary" size="sm" disabled={busy} onClick={(e) => save(e, true)}>
+                        {t("regenerate")}
+                      </Button>
+                    </div>
+                  </FieldGroup>
+                ) : (
+                  <p className="mb-4 text-sm text-muted">{t("keyOnSave")}</p>
+                )}
+                {status.auth_method === "ssh" && status.ssh_host_fingerprints.length > 0 && (
+                  <FieldGroup>
+                    <Label hint={t("hostKeyHint")}>{t("hostKey")}</Label>
+                    <ul className="flex flex-col gap-1 font-mono text-xs text-foreground">
+                      {status.ssh_host_fingerprints.map((f) => (
+                        <li key={f} className="break-all">
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
+                  </FieldGroup>
+                )}
+                <FieldGroup>
+                  <Label htmlFor="git-fp" hint={t("expectedFingerprintHint")}>
+                    {t("expectedFingerprint")}
+                  </Label>
+                  <Input
+                    id="git-fp"
+                    placeholder="SHA256:…"
+                    value={hostFingerprint}
+                    onChange={(e) => setHostFingerprint(e.target.value)}
+                  />
+                </FieldGroup>
+              </>
+            )}
             <div className="mb-4 flex flex-col gap-3 rounded-xl border border-border bg-surface px-4 py-3">
               <Toggle checked={includeDrafts} onChange={setIncludeDrafts} label={t("includeDrafts")} />
               <span className="-mt-2 text-[13px] text-muted">{t("includeDraftsSub")}</span>

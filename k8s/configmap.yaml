@@ -10,6 +10,12 @@ data:
   NOCT_INSTANCE_FQDN: "notturni.eu"
   NOCT_SITE_SLUG: "notturni"
 
+  # Funzioni SPERIMENTALI, spente di default (opt-in): elenco separato da virgole di `wiki` e/o `docs`.
+  # Abilitano la creazione di Spazi di quel tipo e la relativa modalità di visualizzazione; i blog non
+  # ne dipendono. Disattivarle in seguito non cancella né nasconde gli Spazi già creati, impedisce solo di
+  # crearne di nuovi. Vuoto = solo blog. Richiede il riavvio di backend e worker.
+  NOCT_EXPERIMENTAL_FEATURES: ""
+
   # nomi dei servizi Kubernetes: risolvibili via DNS interno del cluster
   NOCT_POSTGRES_HOST: "postgres"
   NOCT_POSTGRES_PORT: "5432"

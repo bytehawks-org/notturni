@@ -23,6 +23,7 @@ in `k8s/configmap.yaml` (valori non sensibili) e `k8s/secret.yaml` (segreti).
 | `NOCT_REGISTRATION_MODE` | auth | `open` | no | Valore **iniziale** (prima installazione) di `platform_config`: `open` · `invite` · `closed`. Poi si cambia da `/admin/config`. | `invite` |
 | `NOCT_DEFAULT_LOCALE` | auth | `it` | no | Lingua iniziale dell'interfaccia (`it` · `en`); poi da `/admin/config`. | `en` |
 | `NOCT_DEFAULT_INTERESTS` | interests | elenco di 16 voci | no | JSON con l'elenco iniziale degli interessi; vuoto = predefinito. | `[{"key":"music","translations":{"it":"Musica","en":"Music"}}]` |
+| `NOCT_EXPERIMENTAL_FEATURES` | core | vuota (tutte spente) | no | **Sperimentale, opt-in.** Elenco (virgola) di `wiki` e/o `docs`: abilita la creazione di Spazi di quel tipo e la relativa modalità di visualizzazione. Spente, la piattaforma offre solo blog (l'API risponde `400` e l'interfaccia non propone i tipi). Spegnerle dopo non cancella né nasconde gli Spazi già creati. Un nome sconosciuto impedisce l'avvio. In Kubernetes vive nel ConfigMap `notturni-config`; serve il riavvio di backend e worker. | `wiki,docs` |
 | `NOCT_MODULES` | core | moduli di default | no | Moduli opzionali attivi alla **prima** installazione (virgola); poi vale lo stato nel database, modificabile da `/admin/modules`. | `wiki,git_sync,newsletter` |
 | `NOCT_BIND_ADDR` | core | `0.0.0.0:8000` | no | Indirizzo di ascolto dell'API. | `127.0.0.1:8000` |
 | `NOCT_TRUSTED_PROXIES` | core | `1` | no | Quanti proxy fidati stanno davanti all'API (IP reale in rate limit e audit). | `2` |
@@ -43,7 +44,7 @@ in `k8s/configmap.yaml` (valori non sensibili) e `k8s/secret.yaml` (segreti).
 | `NOCT_JWT_SECRET` | core | — | **sì** | **Segreto.** Firma di JWT, OTP derivati e link firmati: almeno 32 byte casuali. Il backend rifiuta valori corti o il segnaposto. | `openssl rand -base64 48` |
 | `NOCT_JWT_ACCESS_TOKEN_TTL_MINUTES` | core | `15` | no | Durata dell'access token. | `15` |
 | `NOCT_JWT_REFRESH_TOKEN_TTL_DAYS` | auth | `30` | no | Durata del refresh token (cookie di sessione). | `30` |
-| `NOCT_SECRETS_KEY` | auth_mfa | derivata da `NOCT_JWT_SECRET` | consigliata | **Segreto.** Chiave dedicata per cifrare a riposo i segreti TOTP **e i token della sincronizzazione Git**. Se vuota si deriva dal JWT: ruotare il JWT renderebbe illeggibili i valori già salvati. In produzione impostarla. | `openssl rand -base64 32` |
+| `NOCT_SECRETS_KEY` | auth_mfa | derivata da `NOCT_JWT_SECRET` | consigliata | **Segreto.** Chiave dedicata per cifrare a riposo i segreti TOTP **e le credenziali della sincronizzazione Git (token HTTPS e chiavi SSH di deploy)**. Se vuota si deriva dal JWT: ruotare il JWT renderebbe illeggibili i valori già salvati. In produzione impostarla. | `openssl rand -base64 32` |
 | `NOCT_MFA_DISABLE_REQUIRES_CODE` | auth_mfa | `true` | no | Per disattivare l'MFA serve un codice valido. `false` = comportamento della v1. | `true` |
 | `NOCT_SESSION_COOKIE_SECURE` | auth | `true` | no | Attributo `Secure` del cookie di refresh. `false` solo in sviluppo su http. | `false` |
 | `NOCT_SESSION_COOKIE_SAMESITE` | auth | `lax` | no | Attributo `SameSite` del cookie. | `lax` |
@@ -155,8 +156,10 @@ in `k8s/configmap.yaml` (valori non sensibili) e `k8s/secret.yaml` (segreti).
 | `NOCT_DNS_SERVER` | custom_domains | — (resolver di sistema) | no | Server DNS per la verifica TXT dei domini personali. | `1.1.1.1:53` |
 | `NOCT_DNS_TIMEOUT_MS` | custom_domains | `5000` | no | Timeout della verifica DNS. | `5000` |
 | `NOCT_LINK_PREVIEW_ALLOW_PRIVATE` | link_preview | `false` | no | Consente anteprime verso reti private. **Disattiva la difesa SSRF**: solo sviluppo. | `false` |
-| `NOCT_GIT_SYNC_ALLOW_PRIVATE` | git_sync | `false` | no | Consente repository su host privati e `file://`. **Disattiva la difesa SSRF**: solo sviluppo e test. | `false` |
+| `NOCT_GIT_SYNC_ALLOW_PRIVATE` | git_sync | `false` | no | Consente repository su host privati (HTTPS e SSH) e `file://`. **Disattiva la difesa SSRF**: solo sviluppo e test. | `false` |
 | `NOCT_GIT_SYNC_GIT_BIN` | git_sync | `git` | no | Eseguibile `git` (presente nell'immagine). | `/usr/bin/git` |
+| `NOCT_GIT_SYNC_SSH_BIN` | git_sync | `ssh` | no | Client SSH usato da `git` (pacchetto `openssh-client`, presente nell'immagine). Cambia solo per percorsi non standard e nei test. | `/usr/bin/ssh` |
+| `NOCT_GIT_SYNC_KEYSCAN_BIN` | git_sync | `ssh-keyscan` | no | Scanner che rileva la host key SSH alla configurazione, per fissarla. Cambia solo per percorsi non standard e nei test. | `/usr/bin/ssh-keyscan` |
 
 ## Configurazione a caldo (non è ambiente)
 
@@ -183,8 +186,9 @@ realmente esterno.
 
 ## Sicurezza e GDPR/NIS2
 
-- `NOCT_SECRETS_KEY`: custodirla fuori dal cluster (è la chiave dei segreti TOTP e dei token Git); perderla rende illeggibili
+- `NOCT_SECRETS_KEY`: custodirla fuori dal cluster (è la chiave dei segreti TOTP e delle credenziali Git: token e chiavi SSH); perderla rende illeggibili
   quei valori.
+- `NOCT_EXPERIMENTAL_FEATURES`: wiki e docs non hanno ancora la maturità del resto della piattaforma; attivarle è una scelta consapevole di chi installa.
 - `NOCT_LINK_PREVIEW_ALLOW_PRIVATE` e `NOCT_GIT_SYNC_ALLOW_PRIVATE` sono interruttori di sviluppo: in produzione devono restare `false`.
 - `NOCT_BACKUP_S3_*`: il backup contiene dati personali; il provider esterno va nel registro dei trattamenti (preferibilmente UE).
 - Il refresh token viaggia in un cookie: in https lasciare `NOCT_SESSION_COOKIE_SECURE=true`.

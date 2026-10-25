@@ -15,6 +15,7 @@ import { FilterChip } from "@/components/ui/Pill";
 import { EmptyState, SkeletonCards, SkeletonRows } from "@/components/ui/States";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { useExperimentalFeatures } from "@/lib/experimental";
 import { formatDate } from "@/lib/format";
 import { displayPostStatus, type DisplayPostStatus } from "@/lib/post-status";
 import type { Blog, BlogComment, BlogInvitation, BlogVisibility, MembershipBlog, Post, SpaceKind } from "@/lib/types";
@@ -50,6 +51,9 @@ export default function DashboardHomePage() {
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
   const [kind, setKind] = useState<SpaceKind>("blog");
+  // wiki e docs sono sperimentali: compaiono solo se l'istanza li ha attivati
+  const experimental = useExperimentalFeatures();
+  const spaceKinds = SPACE_KINDS.filter((k) => k === "blog" || experimental.includes(k));
   const [visibility, setVisibility] = useState<BlogVisibility>("public");
   // Alias di default del blog: se lasciato vuoto il backend ricade sullo
   // username (vedi _resolve_author_display_name), il suggerimento lo esplicita.
@@ -264,7 +268,7 @@ export default function DashboardHomePage() {
                 onChange={(e) => setKind(e.target.value as SpaceKind)}
                 className="w-full max-w-xs rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
               >
-                {SPACE_KINDS.map((k) => (
+                {spaceKinds.map((k) => (
                   <option key={k} value={k}>
                     {t(`kinds.${k}`)}
                   </option>

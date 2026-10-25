@@ -11,7 +11,7 @@ use uuid::Uuid;
 const MODULES: &[&str] = &["discovery", "interests", "taxonomy", "publications", "comments", "notes"];
 
 async fn world() -> (Env, Uuid) {
-    let env = setup(MODULES, &[]).await;
+    let env = setup(MODULES, &[("NOCT_EXPERIMENTAL_FEATURES", "wiki,docs")]).await;
     let anna = env.user("anna", "utente").await;
     (env, anna)
 }

@@ -63,9 +63,38 @@ pub struct Config {
     /// Site key pubblica di Cloudflare Turnstile (`NOCT_TURNSTILE_SITE_KEY`): il frontend la usa per
     /// mostrare il captcha sui commenti aperti a tutti. La secret key è del modulo `comments`.
     pub turnstile_site_key: Option<String>,
+    /// Funzioni sperimentali attive su questa istanza (`NOCT_EXPERIMENTAL_FEATURES`, valori di
+    /// [`EXPERIMENTAL_FEATURES`]). Di norma vuoto: chi installa la piattaforma sceglie di attivarle.
+    pub experimental_features: Vec<String>,
+}
+
+/// Funzioni sperimentali conosciute: `wiki` e `docs` abilitano la creazione di Spazi di quel tipo
+/// (e la scelta della relativa modalità di visualizzazione).
+pub const EXPERIMENTAL_FEATURES: &[&str] = &["wiki", "docs"];
+
+/// Interpreta l'elenco separato da virgole di `NOCT_EXPERIMENTAL_FEATURES`; un nome sconosciuto è un
+/// errore (un refuso non deve lasciare la funzione spenta in silenzio).
+pub fn parse_experimental_features(raw: &str) -> Result<Vec<String>, String> {
+    let mut out: Vec<String> = Vec::new();
+    for name in raw.split(',').map(|s| s.trim().to_ascii_lowercase()).filter(|s| !s.is_empty()) {
+        if !EXPERIMENTAL_FEATURES.contains(&name.as_str()) {
+            return Err(format!(
+                "NOCT_EXPERIMENTAL_FEATURES: funzione sconosciuta `{name}` (ammesse: {})",
+                EXPERIMENTAL_FEATURES.join(", ")
+            ));
+        }
+        if !out.contains(&name) {
+            out.push(name);
+        }
+    }
+    Ok(out)
 }
 
 impl Config {
+    pub fn feature_enabled(&self, name: &str) -> bool {
+        self.experimental_features.iter().any(|f| f == name)
+    }
+
     /// Configurazione minima, tutta in locale e in memoria: per test e prime prove.
     pub fn minimal(database_url: impl Into<String>) -> Config {
         Config {
@@ -98,6 +127,7 @@ impl Config {
             cors_origins: vec!["http://localhost:3000".into()],
             cors_origin_regex: None,
             turnstile_site_key: None,
+            experimental_features: Vec::new(),
         }
     }
 
@@ -214,6 +244,9 @@ impl Config {
             cfg.instance_fqdn = v.trim().trim_end_matches('.').to_lowercase();
         }
         cfg.turnstile_site_key = get("NOCT_TURNSTILE_SITE_KEY");
+        if let Some(v) = get("NOCT_EXPERIMENTAL_FEATURES") {
+            cfg.experimental_features = parse_experimental_features(&v)?;
+        }
         if let Some(v) = get("NOCT_CORS_ORIGINS") {
             cfg.cors_origins =
                 v.split(',').map(|s| s.trim().trim_end_matches('/').to_string()).filter(|s| !s.is_empty()).collect();
@@ -241,6 +274,18 @@ mod tests {
 
     fn cfg(vars: &[(&str, &str)]) -> Result<Config, String> {
         Config::from_env(&|k| vars.iter().find(|(n, _)| *n == k).map(|(_, v)| v.to_string()))
+    }
+
+    #[test]
+    fn experimental_features_are_opt_in_and_validated() {
+        let base = [("NOCT_DATABASE_URL", "x"), ("NOCT_JWT_SECRET", SECRET)];
+        assert!(cfg(&base).unwrap().experimental_features.is_empty(), "spente di default");
+        let on = |v: &'static str| cfg(&[base[0], base[1], ("NOCT_EXPERIMENTAL_FEATURES", v)]);
+        let c = on(" Wiki , docs,wiki ").unwrap();
+        assert_eq!(c.experimental_features, ["wiki", "docs"]);
+        assert!(c.feature_enabled("wiki") && c.feature_enabled("docs"));
+        assert!(!on("docs").unwrap().feature_enabled("wiki"));
+        assert!(on("wiki,wikii").unwrap_err().contains("wikii"));
     }
 
     #[test]

@@ -21,7 +21,9 @@ pub use authz::{
     Access, Actor, BlogRef, Identity, PEER_IP_HEADER, RequestMeta, TokenOwner, TokenPrincipal, authenticate,
     can_view_blog, can_write_blog, client_ip, enforce, load_blog, membership_role, request_meta,
 };
-pub use config::{Config, StorageBackend, StorageConfig, is_placeholder_secret};
+pub use config::{
+    Config, EXPERIMENTAL_FEATURES, StorageBackend, StorageConfig, is_placeholder_secret, parse_experimental_features,
+};
 pub use db::map_db_error;
 pub use error::ApiError;
 pub use extension::{Entity, EntityExtension, ExtCtx, Extensions, JsonMap, Op};

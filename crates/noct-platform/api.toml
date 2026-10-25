@@ -5,6 +5,8 @@
 deployment_mode = "string"
 # site key pubblica di Cloudflare Turnstile, se configurata
 turnstile_site_key = { type = "string", nullable = true }
+# funzioni sperimentali attive (`wiki`, `docs`): il frontend offre solo i tipi di Spazio abilitati
+experimental_features = "string[]"
 default_locale = "string"
 registration_mode = "string"
 # provider di accesso abilitati (con il modulo `auth_sso`); altrimenti assente

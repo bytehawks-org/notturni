@@ -933,8 +933,8 @@
     "kindHint": "Non modificabile dopo la creazione.",
     "kinds": {
       "blog": "Blog — articoli in ordine cronologico",
-      "wiki": "Wiki — pagine collegate e modificabili",
-      "docs": "Documentazione — guida strutturata a capitoli"
+      "wiki": "Wiki — pagine collegate e modificabili (sperimentale)",
+      "docs": "Documentazione — guida strutturata a capitoli (sperimentale)"
     }
   },
   "PostEditorPage": {
@@ -1894,6 +1894,24 @@
     "remove": "Rimuovi sincronizzazione",
     "removeTitle": "Rimuovere la sincronizzazione?",
     "removeBody": "Il token salvato viene cancellato. Il repository remoto non viene toccato: i file già inviati restano dove sono. Digita lo slug dello spazio per confermare.",
-    "privacyNote": "Il repository di destinazione è un servizio scelto da te: i testi inviati escono da questa piattaforma e restano sotto la tua responsabilità. Eliminare un contenuto o il tuo account qui non lo cancella dal repository remoto."
+    "privacyNote": "Il repository di destinazione è un servizio scelto da te: i testi inviati escono da questa piattaforma e restano sotto la tua responsabilità. Eliminare un contenuto o il tuo account qui non lo cancella dal repository remoto.",
+    "method": "Accesso",
+    "methods": {
+      "https": "Token personale (HTTPS)",
+      "httpsSub": "Un token di GitHub, GitLab o Forgejo con permesso di scrittura sul solo repository.",
+      "ssh": "Chiave SSH di deploy",
+      "sshSub": "La piattaforma genera una chiave: la registri come deploy key con scrittura. Il token non serve."
+    },
+    "urlHintSsh": "git@host:utente/repo.git oppure ssh://git@host/utente/repo.git",
+    "keyOnSave": "Salvando, la piattaforma genera la chiave di deploy e ti mostra la parte pubblica da registrare nel repository; fissa anche l’impronta dell’host.",
+    "deployKey": "Chiave pubblica di deploy",
+    "deployKeyHint": "aggiungila al repository con permesso di scrittura",
+    "copy": "Copia",
+    "copied": "Chiave copiata",
+    "regenerate": "Genera una nuova chiave",
+    "hostKey": "Host fidato",
+    "hostKeyHint": "confronta con le impronte pubblicate dal provider",
+    "expectedFingerprint": "Impronta attesa dell’host",
+    "expectedFingerprintHint": "facoltativa: SHA256:… dal sito del provider; se non coincide si rifiuta"
   }
 }

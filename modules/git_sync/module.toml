@@ -4,7 +4,7 @@ version = "0.1.0"
 kind = "optional"
 default_enabled = true
 requires = ["users", "blogs", "posts", "audit", "events"]
-description = "Sincronizzazione dei testi di uno Spazio verso un branch di un repository Git remoto (GitHub, GitLab, Forgejo...): solo esportazione, via HTTPS con token"
+description = "Sincronizzazione dei testi di uno Spazio verso un branch di un repository Git remoto (GitHub, GitLab, Forgejo...): solo esportazione, via HTTPS con token personale o via SSH con chiave di deploy"
 
 [config]
 # Solo per sviluppo e test: consente host in reti private e URL `file://`. In produzione resta spento
@@ -12,6 +12,10 @@ description = "Sincronizzazione dei testi di uno Spazio verso un branch di un re
 allow_private_hosts = { type = "bool", env = "NOCT_GIT_SYNC_ALLOW_PRIVATE", default = false }
 # Eseguibile `git` (incluso nell'immagine)
 git_bin = { type = "string", env = "NOCT_GIT_SYNC_GIT_BIN", default = "git" }
+# Client SSH usato da git e scanner delle host key (pacchetto openssh-client, incluso nell'immagine). Si
+# cambiano solo per percorsi non standard e nei test.
+ssh_bin = { type = "string", env = "NOCT_GIT_SYNC_SSH_BIN", default = "ssh" }
+keyscan_bin = { type = "string", env = "NOCT_GIT_SYNC_KEYSCAN_BIN", default = "ssh-keyscan" }
 
 # Ogni ora accoda una sincronizzazione per le configurazioni attive il cui contenuto è cambiato
 [jobs.dispatch]

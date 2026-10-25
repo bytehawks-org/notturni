@@ -17,6 +17,7 @@ import { useAuth } from "@/lib/auth-context";
 import { formatDate } from "@/lib/format";
 import { languageName } from "@/lib/languages";
 import { SITE_HOST } from "@/lib/site";
+import { useExperimentalFeatures } from "@/lib/experimental";
 import { effectiveDisplayMode } from "@/lib/space-mode";
 import type { Blog, BlogMember, BlogVisibility, Category, CommentsMode, SpaceDisplayMode } from "@/lib/types";
 
@@ -42,6 +43,7 @@ export function SettingsTab({ blog, canEdit, onUpdated }: { blog: Blog; canEdit:
   const [subtitle, setSubtitle] = useState(blog.subtitle ?? "");
   const [description, setDescription] = useState(blog.description ?? "");
   const [visibility, setVisibility] = useState<BlogVisibility>(blog.visibility);
+  const experimental = useExperimentalFeatures();
   const [displayMode, setDisplayMode] = useState<SpaceDisplayMode>(effectiveDisplayMode(blog));
   const [commentsMode, setCommentsMode] = useState<CommentsMode>(blog.comments_mode);
   const [mentionsEnabled, setMentionsEnabled] = useState(blog.mentions_enabled);
@@ -276,7 +278,7 @@ export function SettingsTab({ blog, canEdit, onUpdated }: { blog: Blog; canEdit:
           <section id="settings-display" className="flex scroll-mt-6 flex-col gap-4">
             <CardTitle>{t("sections.display")}</CardTitle>
             <div className="grid gap-2.5 sm:grid-cols-2">
-              {DISPLAY_MODES.map((m) => (
+              {DISPLAY_MODES.filter((m) => m === displayMode || experimental.includes(m)).map((m) => (
                 <button
                   key={m}
                   type="button"

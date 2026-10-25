@@ -11,8 +11,16 @@ columns = [
   { name = "branch", type = "varchar(200)", default = "'notturni-backup'" },
   # utente per l'autenticazione HTTPS (con un token qualsiasi nome va bene per GitHub e Forgejo)
   { name = "username", type = "varchar(100)", default = "'git'" },
-  # token cifrato (`noct_security::secrets`), mai restituito dall'API
+  # `https` (token personale) | `ssh` (chiave di deploy generata dalla piattaforma)
+  { name = "auth_method", type = "varchar(8)", default = "'https'" },
+  # `https`: token; `ssh`: chiave privata. In entrambi i casi cifrato (`noct_security::secrets`), mai restituito
   { name = "secret", type = "text" },
+  # solo `ssh`: chiave pubblica da registrare come deploy key (con scrittura) presso il provider
+  { name = "ssh_public_key", type = "text", null = true },
+  # solo `ssh`: chiave dell'host rilevata alla configurazione e da lì in poi verificata (formato known_hosts),
+  # con le impronte SHA256 (una per riga) mostrate all'utente per il confronto con quelle del provider
+  { name = "ssh_host_key", type = "text", null = true },
+  { name = "ssh_host_fingerprints", type = "text", null = true },
   { name = "include_drafts", type = "boolean", default = "false" },
   { name = "enabled", type = "boolean", default = "true" },
   # `running` | `ok` | `unchanged` | `error`

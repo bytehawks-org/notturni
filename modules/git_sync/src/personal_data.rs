@@ -20,6 +20,7 @@ struct Row {
     remote_url: String,
     branch: String,
     username: String,
+    auth_method: String,
     include_drafts: bool,
     enabled: bool,
     last_status: Option<String>,
@@ -34,7 +35,7 @@ impl PersonalData for Provider {
 
     async fn export(&self, st: &AppState, user: Uuid) -> Result<JsonMap, ApiError> {
         let rows: Vec<Row> = sqlx::query_as(
-            "SELECT b.slug AS blog_slug, c.remote_url, c.branch, c.username, c.include_drafts, c.enabled, c.last_status, c.last_run_at
+            "SELECT b.slug AS blog_slug, c.remote_url, c.branch, c.username, c.auth_method, c.include_drafts, c.enabled, c.last_status, c.last_run_at
              FROM git_sync_configs c JOIN blogs b ON b.id = c.blog_id WHERE c.owner_id = $1 ORDER BY b.slug",
         )
         .bind(user)
@@ -43,7 +44,7 @@ impl PersonalData for Provider {
         let list: Vec<_> = rows
             .into_iter()
             .map(|r| {
-                json!({"blog_slug": r.blog_slug, "remote_url": r.remote_url, "branch": r.branch, "username": r.username,
+                json!({"blog_slug": r.blog_slug, "remote_url": r.remote_url, "branch": r.branch, "username": r.username, "auth_method": r.auth_method,
                        "include_drafts": r.include_drafts, "enabled": r.enabled, "last_status": r.last_status,
                        "last_run_at": r.last_run_at})
             })

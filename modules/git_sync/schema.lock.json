@@ -61,9 +61,41 @@
           "renamed_from": null
         },
         {
+          "name": "auth_method",
+          "type": "varchar(8)",
+          "null": false,
+          "default": "'https'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
           "name": "secret",
           "type": "text",
           "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "ssh_public_key",
+          "type": "text",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "ssh_host_key",
+          "type": "text",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "ssh_host_fingerprints",
+          "type": "text",
+          "null": true,
           "default": null,
           "references": null,
           "renamed_from": null

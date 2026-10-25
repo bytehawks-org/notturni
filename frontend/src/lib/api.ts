@@ -461,15 +461,19 @@ export const api = {
 
   gitSync: {
     get: (token: string, slug: string) => request<GitSyncStatus>(`/api/v1/blogs/${slug}/git-sync`, { token }),
-    /** `secret` assente = invariato (obbligatorio alla prima configurazione). */
+    /** `secret` (solo https) assente = invariato (obbligatorio alla prima configurazione); con `ssh` la chiave la
+     * genera la piattaforma e `host_fingerprint` è l'impronta attesa dell'host. */
     save: (
       token: string,
       slug: string,
       payload: {
         remote_url: string;
+        auth_method?: "https" | "ssh";
         branch?: string;
         username?: string;
         secret?: string;
+        regenerate_key?: boolean;
+        host_fingerprint?: string;
         include_drafts?: boolean;
         enabled?: boolean;
       }

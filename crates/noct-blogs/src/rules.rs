@@ -205,6 +205,16 @@ pub fn validate_config(config: &Map<String, Value>) -> Result<(), String> {
 /// Modalità di visualizzazione di uno Spazio: quella richiesta se ammessa per il tipo, altrimenti
 /// (richiesta assente) il predefinito del tipo. Un blog usa solo `feed`; wiki e docs scelgono tra `wiki`
 /// e `docs`.
+/// Funzione sperimentale richiesta da un tipo di Spazio o da una modalità di visualizzazione
+/// (`blog`/`feed` non ne richiedono).
+pub fn experimental_feature_for(name: &str) -> Option<&'static str> {
+    match name {
+        "wiki" => Some("wiki"),
+        "docs" => Some("docs"),
+        _ => None,
+    }
+}
+
 pub fn resolve_display_mode(kind: &str, requested: Option<&str>) -> Result<&'static str, String> {
     let default = match kind {
         "wiki" => "wiki",

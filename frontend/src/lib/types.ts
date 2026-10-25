@@ -838,6 +838,8 @@ export interface InstanceConfig {
    * se l'istanza non ha il captcha configurato — in quel caso i commenti
    * aperti a tutti non sono selezionabili (vedi CommentsMode). */
   turnstile_site_key: string | null;
+  /** Funzioni sperimentali attive (`wiki`, `docs`): decidono quali tipi di Spazio si possono creare. */
+  experimental_features: string[];
   /** B6: valori pubblici di platform_config. */
   default_locale: string;
   registration_mode: "open" | "invite" | "closed";
@@ -1135,7 +1137,12 @@ export interface GitSyncStatus {
   remote_url: string | null;
   branch: string | null;
   username: string | null;
+  auth_method: "https" | "ssh" | null;
   has_secret: boolean;
+  /** Solo `ssh`: chiave di deploy da registrare presso il provider con permesso di scrittura. */
+  ssh_public_key: string | null;
+  /** Solo `ssh`: impronte SHA256 della chiave dell'host fissata alla configurazione. */
+  ssh_host_fingerprints: string[];
   include_drafts: boolean;
   enabled: boolean;
   last_status: "running" | "ok" | "unchanged" | "error" | null;
