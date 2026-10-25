@@ -9,10 +9,12 @@ on:
     branches:
       - main
       - develop
+      - migration/rust
   pull_request:
     branches:
       - main
       - develop
+      - migration/rust
   workflow_dispatch: {}
   schedule:
     # lunedì 03:17 UTC: cadenza indipendente da push/PR, cattura anche
