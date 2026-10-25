@@ -108,7 +108,7 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
   const publishedDate = post.published_at ? formatDate(post.published_at, locale) : null;
   const citation = `${post.author_display_name}, “${post.title}”, ${blogTitle}${publishedDate ? `, ${publishedDate}.` : "."}`;
 
-  // Dati strutturati Schema.org (SEO, todo/UX_REDESIGN.md): `dateModified`
+  // Dati strutturati Schema.org: `dateModified`
   // non è tracciato separatamente da `created_at`/`published_at` nel modello
   // (nessun campo "ultima modifica" sul post), quindi resta assente invece
   // di riportare un valore non affidabile.

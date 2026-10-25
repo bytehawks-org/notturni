@@ -2,7 +2,7 @@
  * a partire dal titolo, editor/posts/new): minuscolo, accenti rimossi,
  * qualunque sequenza di caratteri non alfanumerici diventa un trattino.
  * Nessun vincolo di lunghezza minima/formato oltre a questo — a differenza
- * dello slug di blog (backend/app/domain/blog_rules.py), il backend non
+ * dello slug di blog, il backend non
  * impone un formato allo slug di un post, solo l'unicità per blog+lingua e
  * l'esclusione delle parole riservate (permalinks.py). */
 export function slugify(text: string, maxLength = 80): string {

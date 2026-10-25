@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // alla navigazione client-side ma si perde a un reload completo, motivo
   // per cui all'avvio si tenta sempre un refresh silenzioso — il refresh
   // token vero e proprio è nel cookie httpOnly impostato dal backend
-  // (ROADMAP.md "Sessione in localStorage", backend/app/api/v1/auth.py).
+  //.
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const locale = useLocale();

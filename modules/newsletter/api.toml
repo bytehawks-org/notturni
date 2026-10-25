@@ -1,5 +1,5 @@
 # Compatibile con /api/v1/newsletter/*, /blogs/{slug}/newsletter/* e /admin/newsletter/* della v1.
-# Differenze: vedi todo/API_CHANGES.md (link di conferma derivato e non salvato, conferma solo di
+# Differenze: (link di conferma derivato e non salvato, conferma solo di
 # iscrizioni in attesa, errori di validazione come `400`).
 
 [type.SubscribeRequest]

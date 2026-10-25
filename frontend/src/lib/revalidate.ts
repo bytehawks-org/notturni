@@ -7,7 +7,7 @@
  * pagine statiche): vedi la route handler `app/api/revalidate`.
  *
  * Le stringhe dei tag devono restare identiche a quelle usate dal backend in
- * `backend/app/core/revalidation.py` — cambiarle in un solo posto rompe
+ * `crates/noct-core/src/revalidate.rs` — cambiarle in un solo posto rompe
  * l'invalidazione senza errori visibili.
  */
 

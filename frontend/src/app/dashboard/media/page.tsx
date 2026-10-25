@@ -15,7 +15,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** Vista "tutti i miei blog" (todo/UX_REDESIGN.md), generalizza la griglia
+/** Vista "tutti i miei blog", generalizza la griglia
  * media del singolo blog (MediaTab.tsx, sola lettura qui) a tutti i blog
  * dell'utente insieme, con l'attribuzione del blog per elemento. */
 export default function MyMediaPage() {

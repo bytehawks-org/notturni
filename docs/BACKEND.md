@@ -4,7 +4,7 @@ Workspace Cargo: un'API HTTP (`noct-api`), un processo di elaborazione in backgr
 uno strumento di sviluppo e amministrazione (`noct-ctl`), più i crate del core e i moduli opzionali.
 Postgres, NATS JetStream, Redis e uno storage S3-compatible (o il filesystem) sono i servizi esterni.
 Il frontend (Next.js) resta in [`frontend/`](../frontend/README.md). Il contratto HTTP è in
-[API.md](API.md); la storia e le decisioni della riscrittura in [`todo/RUST_MIGRATION.md`](../todo/RUST_MIGRATION.md).
+[API.md](API.md).
 
 ## Struttura
 

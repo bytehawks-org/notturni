@@ -172,7 +172,7 @@ async function resolveLinkCards(document: Document): Promise<void> {
 // `-`/`_` interni). Il gruppo 1 è l'eventuale carattere che precede la `@`.
 const MENTION_RE = /(^|[^\w@])@([a-z0-9]+(?:[-_][a-z0-9]+)*)/g;
 
-/** todo/USERS.md #1, todo/EDITOR.md: trasforma le @menzioni nel testo in link
+/** trasforma le @menzioni nel testo in link
  * al profilo pubblico dell'utente citato. Opera solo sui nodi di testo,
  * saltando quelli già dentro un link, `code` o `pre`.
  *
@@ -423,7 +423,7 @@ function buildNoteCitationElement(
   return p;
 }
 
-/** todo/EDITOR.md: trasforma i marcatori di nota nel testo in riferimenti in
+/** trasforma i marcatori di nota nel testo in riferimenti in
  * apice (con il testo della nota come tooltip) e accoda l'elenco numerato a
  * piè di pagina. La sorgente è l'elenco strutturato `notes`, non il corpo.
  *
@@ -554,14 +554,14 @@ function anchorHeadings(document: Document): PostHeading[] {
 }
 
 export interface RenderOptions {
-  /** Se true, le @menzioni diventano link al profilo (todo/EDITOR.md: il
+  /** Se true, le @menzioni diventano link al profilo (il
    * proprietario del blog può disattivarle). Default: true. */
   mentions?: boolean;
   /** Spazi wiki/docs: se presente, i `[[pagina]]` diventano link; `hrefFor` costruisce l'href dallo slug. */
   wikiLinks?: { hrefFor: (slug: string) => string };
   /** Tag effettivi del post: gli #hashtag del testo che vi compaiono diventano link a `/tag/{tag}`. */
   tags?: string[];
-  /** Note a piè di pagina del post (todo/EDITOR.md). Se presenti, i marcatori
+  /** Note a piè di pagina del post. Se presenti, i marcatori
    * nel testo diventano riferimenti in apice e viene accodato l'elenco. */
   notes?: PostNote[];
   /** Etichette dell'elenco note nella lingua dell'interfaccia (next-intl). */

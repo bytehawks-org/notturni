@@ -3,7 +3,7 @@
 # Garage non implementa le bucket policy (PutBucketPolicy -> 501): gli oggetti
 # pubblici si servono dal suo web endpoint (:3902), che risolve il bucket
 # dall'header Host e non conosce URL path-style. Il backend però costruisce
-# link `{NOCT_S3_PUBLIC_URL}/{bucket}/{key}` (app/core/storage.py::_public_url):
+# link `{NOCT_S3_PUBLIC_URL}/{bucket}/{key}` (crates/noct-storage, URL pubblico):
 # questo proxy li traduce in `Host: {bucket}` + `/{key}`, esponendo SOLO i
 # prefissi pubblici e SOLO in lettura. Tutto il resto (listing, post
 # .../posts/*.md, archivi di audit, backup) risponde 404: la restrizione per

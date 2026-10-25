@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 
 import type { BlogVisibility } from "@/lib/types";
 
-/** todo/BLOG.md #2: banda verde / arancio / strisce rosso-nero sul bordo
+/** banda verde / arancio / strisce rosso-nero sul bordo
  * destro della card (variabili `--vis-*` in globals.css). */
 const BAND: Record<BlogVisibility, string> = {
   public: "var(--vis-public)",

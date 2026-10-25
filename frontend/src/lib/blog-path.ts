@@ -12,7 +12,7 @@ export interface BlogLinks {
   basePath: string;
   /** Converte un permalink assoluto già prefissato con lo slug (es.
    * `Post.permalink`, `/{blogSlug}/{postSlug}`, calcolato dal backend — vedi
-   * backend/app/domain/permalinks.py) nell'href corretto per il contesto
+   * crates/noct-posts) nell'href corretto per il contesto
    * corrente: invariato path-based, con lo slug tolto in testa sul
    * sottodominio. Va sempre usato per gli href che arrivano già formati
    * dall'API, mai concatenato manualmente come `${basePath}${permalink}`. */

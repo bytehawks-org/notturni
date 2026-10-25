@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/Field";
 import { ApiClientError, api } from "@/lib/api";
 
 /** Modulo di iscrizione alla newsletter (doppio opt-in,
- * backend/app/api/v1/newsletter.py): `variant="blog"` per il digest di un
+ * modules/newsletter): `variant="blog"` per il digest di un
  * singolo blog (richiede `blogSlug`), `variant="platform"` per il digest di
  * piattaforma. La risposta è sempre la stessa conferma generica — anche se
  * l'indirizzo è già iscritto — per non far trapelare quello stato

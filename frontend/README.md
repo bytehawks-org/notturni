@@ -89,7 +89,7 @@ pagine) ha già il proprio modello locale+slug lato backend e resta separata.
 Server Component: `getTranslations()`; Client Component: `useTranslations()`.
 Nuova lingua = nuovo file JSON + voce in `LOCALES` (`src/i18n/config.ts`).
 Le stringhe non ancora migrate (editor, alcune tab e pagine admin) sono in
-italiano hardcoded: vedi `todo/UX_REDESIGN.md` A0.
+italiano hardcoded.
 
 ## Tipografia e palette
 

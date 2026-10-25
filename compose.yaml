@@ -65,7 +65,7 @@ services:
   # richiede comunque un dominio con SPF/DKIM/reverse DNS a posto per una
   # buona deliverability, cosa che il container da solo non risolve) sia per
   # l'inoltro verso uno smarthost esterno con autenticazione (un provider
-  # transazionale reale). Non è il default di worker-email-otp, che resta
+  # transazionale reale). Non è il default del servizio `worker`, che resta
   # puntato a mailhog per non richiedere credenziali reali in sviluppo — per
   # usarlo, impostare NOCT_SMTP_HOST=smtp-relay/NOCT_SMTP_PORT=587 lì sotto
   # (porta submission: l'immagine non espone la 25 di proposito).
@@ -143,7 +143,7 @@ services:
   # self-hosted — vedi moderation/. Container separato apposta: le
   # dipendenze ML (torch/transformers) resterebbero fuori posto in
   # un'immagine backend pensata per essere leggera. Mai un requisito rigido
-  # per il backend (fail open, vedi app/domain/moderation.py): un
+  # per il backend (fail open, vedi modules/image_moderation): un
   # depends_on con service_started basta, non service_healthy.
   moderation:
     build:

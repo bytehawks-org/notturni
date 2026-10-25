@@ -25,7 +25,7 @@ async function resolve(slug: string, requested?: string) {
  * Privacy, ...), gestita da Amministratore/Super Admin (CLAUDE.md #1).
  * Permalink dedicato `/p/{slug}`: un solo carattere, già sotto la lunghezza
  * minima per gli slug dei blog, quindi nessun blog può mai collidere con
- * questo prefisso (vedi backend/app/domain/blog_rules.py). */
+ * questo prefisso. */
 export async function generateMetadata({
   params,
   searchParams,

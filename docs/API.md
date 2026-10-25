@@ -8,9 +8,7 @@ che l'OpenAPI da solo non dà.
 
 Elenco completo delle rotte per modulo: [API_REFERENCE.md](API_REFERENCE.md). Variabili d'ambiente: [CONFIGURATION.md](CONFIGURATION.md).
 
-Il contratto è quello della v1 (Python/FastAPI). Le differenze introdotte dal
-porting, e quelle ancora solo suggerite, sono in
-[todo/API_CHANGES.md](../todo/API_CHANGES.md): in caso di dubbio vale quel file.
+Il contratto è quello della v1 (Python/FastAPI), con alcune differenze introdotte dal porting in Rust.
 Due differenze valgono per tutto il documento: gli errori di validazione dei corpi sono `400`
 con `{"detail": "…"}` (FastAPI rispondeva `422` con un elenco), e le rotte e i campi di un
 modulo opzionale spento non esistono (`404`, campi assenti dalle risposte).
@@ -102,7 +100,7 @@ dell'ultimo cambio password.
 
 → `201`, utente creato (`platform_role=utente`, MFA disattiva). Nessun login
 automatico: va fatto separatamente. `409` se username o email già in uso.
-`400` se lo username non rispetta il formato (todo/USERS.md #1): minuscole,
+`400` se lo username non rispetta il formato: minuscole,
 cifre, `-` e `_` come separatori interni (mai a inizio/fine né ripetuti),
 3–32 caratteri, e non in blacklist. Lo username è
 l'identificatore citabile come `@username` nei contenuti. `400` anche se la
@@ -396,7 +394,7 @@ creazione), `new` (creazione) o `followers`. Ogni voce è un blog più
 
 **`GET /api/v1/blogs/{slug}/overview`** — richiede sessione: proprietario o
 membro con qualunque ruolo (`403` altrimenti, `404` se il blog non esiste).
-Conteggi per la tab Panoramica del blog (todo/UX_REDESIGN.md B1, mockup 5a):
+Conteggi per la tab Panoramica del blog:
 
 ```json
 {
@@ -458,7 +456,7 @@ esclude anche tutti i suoi post, indipendentemente da un eventuale override
 per singolo post),
 `default_author_display_name` — nome pubblico degli autori sui post di
 questo blog. Se valorizzato è **imposto** (nessun override per singolo
-autore o post — todo/USERS.md #2), a meno che il collaboratore non abbia un
+autore o post), a meno che il collaboratore non abbia un
 proprio alias di membership, che ha la precedenza. Stringa vuota `""` lo
 azzera, assente lo lascia invariato.
 `is_paused` (bool, B3 — mockup 5c "Pause this blog"): blog in pausa
@@ -516,8 +514,7 @@ segue il blog.
 **`GET /api/v1/blogs/{slug}/config`** — pubblico. Configurazione di
 presentazione del blog (palette/tipografia/layout — vedi
 [ROADMAP.md](../ROADMAP.md#2-estetica) per i vincoli), applicata dal frontend
-a tutte le pagine pubbliche del blog (`BlogPageShell`, todo/UX_REDESIGN.md
-B10): palette come variabili CSS, `typography.heading_font`/`body_font`/
+a tutte le pagine pubbliche del blog (`BlogPageShell`): palette come variabili CSS, `typography.heading_font`/`body_font`/
 `monospace_font` come `--font-heading`/`--font-body`/`--font-monospace` (font
 self-hostati al build, nessuna richiesta a Google a runtime — quest'ultimo
 usato per i blocchi di codice, blocco "evidenziazione sintassi"),
@@ -646,8 +643,8 @@ contiene (`q` vuoto → primi risultati per username). `limit` 1–25 (default
 str|null}]`. Se il blog ha `mentions_enabled=false`, ritorna sempre `[]`.
 
 **`GET /api/v1/blogs/{slug}/bibliography`** — token opzionale, segue la
-`visibility` del blog (`404` se non visibile). Bibliografia automatica
-(todo/EDITOR.md): tutte le note a piè di pagina dei post **pubblicati**,
+`visibility` del blog (`404` se non visibile). Bibliografia automatica:
+tutte le note a piè di pagina dei post **pubblicati**,
 raggruppate per testo identico (confronto senza distinzione di
 maiuscole/spaziatura) e ordinate per recency del primo post che le cita:
 
@@ -795,7 +792,7 @@ opzionali.
 ### Collaboratori e inviti
 
 Il proprietario può invitare altri utenti registrati come **co-autore** o
-**mediatore** (todo/BLOG.md #3). L'invito resta `pending` finché l'invitato
+**mediatore**. L'invito resta `pending` finché l'invitato
 non lo accetta dalla propria dashboard; solo all'accettazione nasce la
 `BlogMembership`. Una sola riga di invito per (blog, utente): un nuovo invito
 dopo un rifiuto/revoca riusa la stessa riga.
@@ -819,8 +816,8 @@ Lato proprietario (tutti `403` se non sei il proprietario del blog):
 Lato collaboratore:
 
 - **`PATCH /api/v1/blogs/{slug}/my-membership`** — `{"author_display_name": "..."}`
-  (`""` azzera): l'alias con cui il collaboratore firma i post su questo blog
-  (todo/BLOG.md #4). `404` se non sei un collaboratore.
+  (`""` azzera): l'alias con cui il collaboratore firma i post su questo blog.
+  `404` se non sei un collaboratore.
 
 Lato invitato (sull'utente corrente, path senza slug per non collidere con
 `GET /blogs/{slug}`):
@@ -840,7 +837,7 @@ Il contenuto (`content`) è **Markdown**: nessun rendering lato backend, la
 conversione a HTML (con sanificazione) è responsabilità del frontend al
 momento della lettura.
 
-**Menzioni `@username`** (todo/USERS.md #1): nel testo, una `@` a inizio riga
+**Menzioni `@username`**: nel testo, una `@` a inizio riga
 o preceduta da spazio seguita da uno username valido (minuscole/cifre,
 `-`/`_` interni) è una menzione. Il backend non la elabora — resta `@username`
 nel Markdown; è il frontend a trasformarla in link al profilo `/u/{username}`
@@ -849,7 +846,7 @@ sezione Blog). `PostOut` riporta `mentions_enabled` del blog per comodità del
 client. L'endpoint `GET /blogs/{slug}/mentionable-users` alimenta
 l'autocomplete dell'editor.
 
-**Note a piè di pagina** (todo/EDITOR.md): sono un elenco strutturato del
+**Note a piè di pagina**: sono un elenco strutturato del
 post (`notes`: `[{"idx": 1, "content": "testo Markdown inline"}]`), **non nel
 corpo**. `idx` è il numero (1–999) della nota; nel `content` del post il
 riferimento è il marcatore link `[idx](#nota-idx)` (l'editor lo inserisce
@@ -916,7 +913,7 @@ Accoda anche un backup su S3 (vedi sezione "Media e backup" più sotto).
 {"slug": "primo-post", "title": "...", "content": "# Markdown...", "locale": null, "cover_image_url": null, "tags": null, "category_id": null, "notes": null}
 ```
 
-Il nome pubblico dell'autore **non** è indicato dal client (todo/USERS.md #2):
+Il nome pubblico dell'autore **non** è indicato dal client:
 è calcolato come primo valore applicabile in questo ordine:
 
 1. alias del collaboratore su *questo* blog (`PATCH /blogs/{slug}/my-membership`);
@@ -1322,7 +1319,7 @@ riservato a `amministratore`/`super_admin`, tranne l'ultima rotta.
 verificati da chi gestisce l'istanza. La piattaforma **non cancella da sola gli archivi del registro di audit** sullo storage: il periodo
 indicato in `audit_archive_retention` va fatto rispettare a mano finché non esiste una scadenza automatica.
 
-## Pubblicazioni (todo/PUBLICATIONS.md, todo/UX_REDESIGN.md B9, mockup 2d/3g)
+## Pubblicazioni
 
 Una pubblicazione raccoglie post di un blog come capitoli sotto
 `/{blog}/pub/{name}`: ordine cronologico dal più vecchio, oppure esplicito
@@ -1353,7 +1350,7 @@ pubblicati (`404` se nessuno); chi scrive vede anche bozze/pianificati con
 nell'ordine voluto (mockup 3g drag-to-order); i post non elencati seguono
 in coda in ordine cronologico; `400` se un id non è della pubblicazione.
 
-## Libreria note del blog (todo/UX_REDESIGN.md B8, mockup 3b)
+## Libreria note del blog
 
 Le note a piè di pagina dei post (`post_notes`) vengono agganciate, al
 salvataggio del post, a una **nota del blog** (`blog_notes`) con lo stesso
@@ -1428,9 +1425,8 @@ condividere lo stesso bucket fisico (o la stessa directory, sul backend
   database resta la fonte di verità, questa è solo una copia di sicurezza).
   **Privato** — non pensato per essere servito direttamente ai visitatori.
 
-Il worker va avviato separatamente (`python -m
-app.workers.post_backup_consumer`, già presente in `compose.yaml` come
-servizio `worker-post-backup`); senza, i messaggi restano semplicemente in
+Il worker va avviato separatamente (`noct-worker`, già presente in `compose.yaml` come
+servizio `worker`); senza, i messaggi restano semplicemente in
 coda finché il worker non viene avviato.
 
 ### Moderazione automatica delle immagini
@@ -1462,7 +1458,7 @@ non deve mai far fallire un upload altrimenti riuscito (stesso principio
 già in atto per il backup dei post su S3). Non è pensato come barriera di
 sicurezza legale, solo come aiuto automatico all'autore.
 
-## Libreria media del blog (todo/UX_REDESIGN.md B7, mockup 3c)
+## Libreria media del blog
 
 `POST /api/v1/blogs/{slug}/media` (upload, vedi sopra) ora registra ogni
 immagine in `media_files` e risponde anche con `media_id`.
@@ -1615,7 +1611,7 @@ autorizzazione di `pending` (quindi utilizzabili anche da Amministratore/
 Super Admin/Moderatore su un commento di un blog di cui non hanno nessuna
 membership). Cambiano lo stato del commento.
 
-### Coda estesa (todo/UX_REDESIGN.md B4, mockup 5b)
+### Coda estesa
 
 `GET /api/v1/blogs/{blog_slug}/comments` accetta anche `reported=true`
 (commenti segnalati alla piattaforma, qualunque stato). Ogni commento
@@ -1643,7 +1639,7 @@ Un autore bloccato riceve `403` su `POST /posts/{id}/comments` di quel blog.
 giorni da `published_at`, `effective_comments_mode` del post diventa
 `closed` (`403` ai nuovi commenti, i già scritti restano visibili).
 
-## Segnalazioni (todo/UX_REDESIGN.md B5)
+## Segnalazioni
 
 **`POST /api/v1/blogs/{slug}/report`** / **`POST /api/v1/posts/{post_id}/report`**
 — richiede sessione. `{reason: spam | abuse | illegal | other, note?}`
@@ -1934,10 +1930,10 @@ dalla directory pubblica (`GET /users` sotto), attivo di default — il
 profilo resta comunque sempre raggiungibile dal link diretto `@username`,
 questo flag esclude solo dall'elenco/ricerca.
 
-`display_name` è un alias pubblico globale (todo/BLOG.md #4): quando
+`display_name` è un alias pubblico globale: quando
 valorizzato, è l'intestazione del profilo pubblico al posto di username /
 nome e cognome.
-`post_author_name_style` (todo/USERS.md #2) è la preferenza dell'utente su
+`post_author_name_style` è la preferenza dell'utente su
 cosa mostrare come nome autore sui propri post — `username` (default),
 `full_name` (nome e cognome), `display_name` (alias globale) o
 `verified_domain` (dominio personalizzato verificato, vedi sotto) —
@@ -2271,7 +2267,7 @@ Consumati dalle sezioni
 personali), non un'app a parte — vedi ROADMAP.md.
 
 **`GET /api/v1/admin/overview`** — accetta anche `moderatore`. Panoramica
-di piattaforma (todo/UX_REDESIGN.md B1, mockup 5d): `users_total`,
+di piattaforma: `users_total`,
 `users_new_7d`, `blogs_total`, `blogs_suspended`, `posts_published`, le code
 `queue_pending_comments`/`queue_posts_in_review`/`queue_hidden_posts`,
 `queue_open_reports`, `audit_today` (voci del registro dalla mezzanotte UTC), `deployment_mode` e
@@ -2289,7 +2285,7 @@ caratteri, `400` altrimenti) quando cambiano davvero lo stato; la nota
 finisce in `payload.note` della voce di audit. Nessuna nota richiesta se
 la richiesta non cambia nulla.
 
-### Impostazioni di piattaforma (todo/UX_REDESIGN.md B6, mockup 5f)
+### Impostazioni di piattaforma
 
 **`GET /api/v1/admin/config`** / **`PATCH /api/v1/admin/config`** — solo
 `super_admin` (`403` altrimenti). Riga unica `platform_config`, creata al
@@ -2557,7 +2553,7 @@ opzionali: `action`, `actor_id`, `target_id`, `blog_id` (uguaglianza esatta),
 intervallo `[since, until)` su `occurred_at`), `limit` (1–500, default 100),
 `offset` (default 0). Solo gli eventi ancora nel database: quelli già
 archiviati stanno su storage, reimportabili con
-`python -m app.workers.audit_maintenance --restore AAAAwSS`.
+`noct-ctl audit restore AAAAwSS`.
 
 ## Feed (homepage multi-blog)
 

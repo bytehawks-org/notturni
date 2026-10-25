@@ -1,5 +1,5 @@
 /** Categorie di avviso sui contenuti, stile Bluesky (CLAUDE.md #3) — stesso
- * vocabolario di backend/app/domain/content_media.py::SENSITIVITY_CATEGORIES.
+ * vocabolario di crates/noct-posts/src/rules.rs.
  * Viaggiano nel `title` Markdown delle immagini incorporate nel contenuto
  * (`![alt](url "sensitive:nudity,explicit")`, vedi frontend/src/lib/markdown.ts
  * per la resa sfocata/cliccabile sulla pagina pubblica), o in un campo
@@ -23,7 +23,7 @@ export const SENSITIVITY_CATEGORY_LABELS: Record<SensitivityCategory, string> = 
 
 /** Estrae le categorie da un `title` Markdown (`"sensitive"` o
  * `"sensitive:cat1,cat2"`) — stesso parsing di
- * backend/app/domain/content_media.py::parse_sensitivity_categories. */
+ * crates/noct-posts/src/rules.rs. */
 export function parseSensitivityCategories(title: string | null | undefined): SensitivityCategory[] {
   if (!title || !title.startsWith("sensitive")) return [];
   const raw = title.slice("sensitive".length).replace(/^:/, "");

@@ -1,6 +1,6 @@
 /** Un font per ogni voce di SERIF_FONTS/SANS_SERIF_FONTS (lib/types.ts), self-hostato con i pacchetti
  * `@fontsource/*` (vedi app/fonts.css, importato dal layout radice): nessuna richiesta a Google né al
- * build né a runtime — vedi todo/UX_REDESIGN.md, "nessun font di terze parti nelle pagine pubbliche".
+ * build né a runtime (nessun font di terze parti nelle pagine pubbliche).
  * Ogni classe `.font-blog-*` imposta la variabile CSS `--font-blog-*`; quale delle due variabili
  * (titoli/corpo) legge `--font-heading`/`--font-body` è deciso da `BlogPageShell` in base a
  * `typography.heading_font`/`body_font`. */

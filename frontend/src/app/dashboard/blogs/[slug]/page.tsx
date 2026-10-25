@@ -32,9 +32,8 @@ import { type Blog, type BlogRole } from "@/lib/types";
 type Tab = "overview" | "posts" | "outline" | "pages" | "publications" | "notes" | "media" | "newsletter" | "comments" | "appearance" | "git" | "collaborators" | "settings";
 const TABS: Tab[] = ["overview", "posts", "outline", "pages", "publications", "notes", "media", "newsletter", "comments", "appearance", "git", "collaborators", "settings"];
 
-/** Tab visibili per ruolo (frontend-prototype/frontend-kit/ADMIN-IA.md,
- * todo/UX_REDESIGN.md "Gating per ruolo delle tab"): rispecchia le capacità
- * reali del backend (`backend/app/domain/authorization.py` —
+/** Tab visibili per ruolo: rispecchia le capacità
+ * reali del backend (`crates/noct-core/src/authz.rs` —
  * WRITE_ROLES/MODERATE_ROLES/REVIEW_ROLES), non solo proprietario/non
  * proprietario come prima. "Panoramica" è sempre visibile a chi ha una
  * membership (la pagina non viene raggiunta da chi non ne ha nessuna). */

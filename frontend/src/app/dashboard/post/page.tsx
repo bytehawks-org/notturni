@@ -17,7 +17,7 @@ import type { Post } from "@/lib/types";
 
 const FILTERS: ("all" | DisplayPostStatus)[] = ["all", "draft", "review", "scheduled", "published"];
 
-/** Vista "tutti i miei blog" (todo/UX_REDESIGN.md), generalizza il tab Post
+/** Vista "tutti i miei blog", generalizza il tab Post
  * del singolo blog (PostsTab.tsx) a tutti i blog dell'utente insieme, con
  * l'attribuzione del blog per riga. */
 export default function MyPostsPage() {

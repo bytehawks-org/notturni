@@ -112,7 +112,7 @@ interface RequestOptions {
 const CSRF_COOKIE_NAME = "noct_csrf_token";
 
 /** Letto dal cookie (non httpOnly per costruzione, pattern double-submit —
- * vedi backend/app/api/v1/auth.py) e riecheggiato come header per le sole
+ * vedi crates/noct-auth) e riecheggiato come header per le sole
  * richieste autenticate dal cookie di refresh. */
 export function readCsrfCookie(): string | null {
   if (typeof document === "undefined") return null;
@@ -247,7 +247,7 @@ export const api = {
 
   blogs: {
     listMine: (token: string) => request<Blog[]>("/api/v1/blogs/mine", { token }),
-    /** Blog altrui su cui l'utente ha una membership (todo/BLOG.md #3). */
+    /** Blog altrui su cui l'utente ha una membership. */
     memberOf: (token: string) => request<MembershipBlog[]>("/api/v1/blogs/member-of", { token }),
     /** Il token è opzionale ma necessario per i blog `members`/`private`. */
     get: (slug: string, token?: string | null) =>
@@ -442,7 +442,7 @@ export const api = {
     deletePage: (token: string, slug: string, pageId: string) =>
       request<void>(`/api/v1/blogs/${slug}/pages/${pageId}`, { method: "DELETE", token }),
 
-    // --- Collaboratori: membership e inviti (todo/BLOG.md #3) ---
+    // --- Collaboratori: membership e inviti ---
     members: (token: string, slug: string) =>
       request<BlogMember[]>(`/api/v1/blogs/${slug}/members`, { token }),
     updateMemberRole: (token: string, slug: string, userId: string, role: BlogRole) =>
@@ -453,7 +453,7 @@ export const api = {
       }),
     removeMember: (token: string, slug: string, userId: string) =>
       request<void>(`/api/v1/blogs/${slug}/members/${userId}`, { method: "DELETE", token }),
-    /** Il collaboratore imposta il proprio alias per questo blog (todo/BLOG.md #4). */
+    /** Il collaboratore imposta il proprio alias per questo blog. */
     updateMyMembership: (token: string, slug: string, authorDisplayName: string) =>
       request<MembershipBlog>(`/api/v1/blogs/${slug}/my-membership`, {
         method: "PATCH",
@@ -763,7 +763,7 @@ export const api = {
       payload: {
         ui_locale?: string;
         /** Citabile ovunque come @username; unico, minuscolo (vedi
-         * backend/app/domain/usernames.py). Assente non tocca. */
+         * crates/noct-security/src/validate.rs). Assente non tocca. */
         username?: string;
         bio?: string;
         first_name?: string;
@@ -808,10 +808,10 @@ export const api = {
     following: (username: string) =>
       request<{ username: string }[]>(`/api/v1/users/${username}/following`),
     /** GDPR Art. 20: istantanea di tutti i dati collegati all'account,
-     * struttura libera (vedi backend/app/domain/gdpr.py::export_user_data). */
+     * struttura libera. */
     exportData: (token: string) => request<Record<string, unknown>>("/api/v1/users/me/export-data", { token }),
     /** GDPR Art. 17: anonimizza l'account (non lo cancella fisicamente — vedi
-     * backend/app/domain/gdpr.py). Richiede di ridigitare il proprio username. */
+     * modules/gdpr). Richiede di ridigitare il proprio username. */
     deleteAccount: (token: string, confirmUsername: string) =>
       request<void>("/api/v1/users/me", {
         method: "DELETE",
@@ -994,7 +994,7 @@ export const api = {
   newsletter: {
     /** Pubblico, nessuna autenticazione: doppio opt-in. Risposta sempre
      * generica (202 `{status:"ok"}`), anche se l'indirizzo è già iscritto —
-     * anti-enumerazione, vedi backend/app/api/v1/newsletter.py. */
+     * anti-enumerazione, vedi modules/newsletter. */
     subscribe: (payload: { email: string; blog_slug?: string | null; locale?: string | null }) =>
       request<{ status: string }>("/api/v1/newsletter/subscribe", { method: "POST", body: payload }),
     confirm: (token: string) =>

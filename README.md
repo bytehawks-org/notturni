@@ -230,7 +230,6 @@ In sintesi, ad alto livello (l'elenco completo, specifica per specifica, è in
 ├── Dockerfile           # immagine del backend (cargo-chef, multi-arch): noct-api, noct-worker, noct-ctl
 ├── k8s/                  # manifest Kubernetes
 ├── garage/, s3-public/  # configurazione di Garage e del proxy delle letture pubbliche
-├── todo/                 # piano della riscrittura Rust e modifiche all'API (API_CHANGES.md)
 ├── compose.yaml         # stack locale via Podman/Docker compose (include il servizio moderation)
 ├── deny.toml            # cargo-deny: licenze, fonti, vulnerabilità
 └── .env.example          # variabili d'ambiente (prefisso NOCT_)

@@ -29,7 +29,7 @@ const STATUS_TONE: Record<NewsletterCampaignStatus, "neutral" | "ok" | "warn" | 
 
 /** Tab Newsletter (dashboard blog): iscritti, avviso automatico alla
  * pubblicazione (`newsletter_auto_notify_enabled`) e campagne manuali,
- * backend/app/api/v1/newsletter.py. */
+ * modules/newsletter. */
 export function NewsletterTab({
   blogSlug,
   initialSettings,

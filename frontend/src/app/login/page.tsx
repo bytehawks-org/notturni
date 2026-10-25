@@ -38,7 +38,7 @@ function LoginForm() {
   const [submitting, setSubmitting] = useState(false);
 
   // Arrivo da un redirect del backend dopo un login SSO (navigazione vera
-  // del browser, non una fetch — backend/app/api/v1/auth.py::sso_callback
+  // del browser, non una fetch — crates/noct-auth
   // non può restituire il challenge nel corpo di una risposta letta da JS,
   // lo passa in query string): stato iniziale letto direttamente da
   // useSearchParams(), disponibile già al primo render, non da un effect

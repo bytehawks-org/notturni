@@ -15,7 +15,7 @@ export interface CurrentUser {
   ui_locale: string | null;
 }
 
-/** todo/USERS.md #2: cosa mostrare come nome autore sui propri post quando il
+/** cosa mostrare come nome autore sui propri post quando il
  * blog non impone un alias. */
 export type PostAuthorNameStyle = "username" | "full_name" | "display_name" | "verified_domain";
 
@@ -33,7 +33,7 @@ export const PLATFORM_ADMIN_ROLES: PlatformRole[] = ["super_admin", "amministrat
 export const PLATFORM_MODERATION_ROLES: PlatformRole[] = ["super_admin", "amministratore", "moderatore"];
 
 /** Il refresh token non è più qui: viaggia solo in un cookie httpOnly
- * impostato dal backend (vedi backend/app/api/v1/auth.py), mai leggibile da
+ * impostato dal backend, mai leggibile da
  * JS/localStorage — ROADMAP.md "Sessione in localStorage". */
 export interface SessionResponse {
   access_token: string;
@@ -52,7 +52,7 @@ export function isMfaRequired(res: LoginResponse): res is MfaRequiredResponse {
   return (res as MfaRequiredResponse).mfa_required === true;
 }
 
-/** todo/BLOG.md #2. public: tutti; members: solo utenti autenticati; private: diario del solo proprietario. */
+/** public: tutti; members: solo utenti autenticati; private: diario del solo proprietario. */
 export type BlogVisibility = "public" | "members" | "private";
 
 /** Tipologia di Spazio: fissata alla creazione. */
@@ -70,7 +70,7 @@ export const BLOG_VISIBILITY_LABELS: Record<BlogVisibility, string> = {
 /** Ruolo utente specifico di un blog (CLAUDE.md #1). */
 export type BlogRole = "autore" | "co_autore" | "revisore" | "mediatore";
 
-/** Ruoli assegnabili invitando un collaboratore (todo/BLOG.md #3). */
+/** Ruoli assegnabili invitando un collaboratore. */
 export const INVITABLE_BLOG_ROLES: Extract<BlogRole, "co_autore" | "mediatore">[] = [
   "co_autore",
   "mediatore",
@@ -98,17 +98,17 @@ export interface Blog {
   visibility: BlogVisibility;
   custom_domain: string | null;
   comments_mode: CommentsMode;
-  /** todo/EDITOR.md: @menzioni nel contenuto trasformate in link (default: true). */
+  /** @menzioni nel contenuto trasformate in link (default: true). */
   mentions_enabled: boolean;
   /** Pagine statiche del blog: feature opt-in, disattiva di default. */
   static_pages_enabled: boolean;
-  /** Opt-in per crawler (backend/app/domain/seo.py), attivi di default.
+  /** Opt-in per crawler, attivi di default.
    * Escludere il blog esclude anche tutti i suoi post, indipendentemente da
    * un eventuale override di Post.search_indexing_enabled/ai_crawling_enabled. */
   search_indexing_enabled: boolean;
   ai_crawling_enabled: boolean;
   /** Invio automatico di una notifica newsletter ad ogni post pubblicato
-   * (backend/app/api/v1/newsletter.py), gestito da PATCH .../newsletter/settings. */
+   *, gestito da PATCH .../newsletter/settings. */
   newsletter_auto_notify_enabled: boolean;
   /** Come sopra, gestiti dallo stesso endpoint: nome mittente e banner
    * mostrati nelle email di campagna (app/workers/newsletter_consumer.py). */
@@ -163,7 +163,7 @@ export interface PublicUser {
   follower_count: number;
 }
 
-/** `GET /blogs/{slug}/overview` (todo/UX_REDESIGN.md B1): conteggi per la tab Panoramica. */
+/** `GET /blogs/{slug}/overview`: conteggi per la tab Panoramica. */
 export interface BlogOverview {
   posts_total: number;
   posts_published: number;
@@ -228,7 +228,7 @@ export interface BlogConfig {
   [key: string]: unknown;
 }
 
-/** Stessi elenchi curati di `backend/app/domain/blog_config.py` (CLAUDE.md
+/** Stessi elenchi curati di `crates/noct-blogs/src/rules.rs` (CLAUDE.md
  * §5 Estetica: titoli in serif, corpo/link in sans-serif) — tenerli in
  * sincronia se cambia uno dei due lati. */
 export const SERIF_FONTS = ["Lora", "Merriweather", "Playfair Display", "Source Serif 4", "Crimson Pro"];
@@ -270,7 +270,7 @@ export interface Post {
   permalink: string;
   /** Se il blog ha le @menzioni attive: il rendering le trasforma in link. */
   mentions_enabled: boolean;
-  /** Note a piè di pagina (todo/EDITOR.md), ordinate per `idx`. */
+  /** Note a piè di pagina, ordinate per `idx`. */
   notes: PostNote[];
   /** Solo i tag del campo dedicato (per ripresentarli in modifica). */
   manual_tags: string[];
@@ -290,7 +290,7 @@ export interface Post {
   /** Sempre valorizzato: comments_mode se impostato, altrimenti quello del blog. */
   effective_comments_mode: CommentsMode;
   /** Override di Blog.search_indexing_enabled/ai_crawling_enabled per questo
-   * post: `null` eredita dal blog (backend/app/domain/seo.py). */
+   * post: `null` eredita dal blog. */
   search_indexing_enabled: boolean | null;
   ai_crawling_enabled: boolean | null;
   /** Sempre valorizzati: tengono già conto del blocco a cascata se il blog
@@ -752,7 +752,7 @@ export interface AdminComment extends BlogComment {
 
 export type AuditActorType = "user" | "core_token" | "user_token" | "system" | "anonymous";
 /** Canale da cui è partita l'azione, calcolato server-side da `actor_type`
- * (nessuna colonna dedicata, vedi `backend/app/api/v1/admin.py`). */
+ *. */
 export type AuditChannel = "web" | "api" | "system";
 
 /** `GET /api/v1/admin/audit-log` (admin/registro). Registro append-only
@@ -774,7 +774,7 @@ export interface AuditLogEntry {
   payload: Record<string, unknown>;
 }
 
-/** Azioni note del registro di audit (`backend/app/domain/audit.py` e
+/** Azioni note del registro di audit (`crates/noct-audit` e
  * chiamanti): solo gli identificativi, l'etichetta è in
  * `messages/{it,en}.json` → `AdminAuditLog.action.<entità>.<evento>`
  * (navigazione a percorso annidato sullo stesso punto dell'id). Un'azione
@@ -939,7 +939,7 @@ export interface FragmentCollectionEntry {
   permalink: string;
 }
 
-/** Viste aggregate "tutti i miei blog" (backend/app/api/v1/fragments.py,
+/** Viste aggregate "tutti i miei blog" (modules/fragments,
  * sezione dedicata in fondo al file): stessa forma degli equivalenti
  * per-blog, con l'attribuzione del blog di appartenenza per riga (`blog_slug`/
  * `blog_title`). Vista autore, mai filtrata dalla visibilità pubblica. */
@@ -1009,7 +1009,7 @@ export interface MyBibliographyEntry extends StructuredNoteFields {
   citations: MyBibliographyCitation[];
 }
 
-/** Newsletter/mailing-list (backend/app/api/v1/newsletter.py): iscrizione
+/** Newsletter/mailing-list: iscrizione
  * pubblica a doppio opt-in per un blog (`blog_id` valorizzato) o per il
  * digest di piattaforma (`blog_id` null). */
 export type NewsletterCampaignKind = "post_notification" | "manual";
@@ -1025,7 +1025,7 @@ export interface NewsletterStats {
   unsubscribed: number;
 }
 
-/** Configurazione delle campagne (backend/app/api/v1/newsletter.py): nome
+/** Configurazione delle campagne: nome
  * mittente e banner mostrati nell'email HTML, oltre all'avviso automatico
  * per blog. PATCH è tri-state: un campo omesso lascia il valore invariato,
  * `null` lo azzera esplicitamente. */

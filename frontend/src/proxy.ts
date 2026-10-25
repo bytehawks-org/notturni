@@ -29,7 +29,7 @@ function storageOrigin(): string {
 }
 
 /** Sottodomini riservati alla piattaforma stessa, mai risolti come blog —
- * stessa lista di backend/app/domain/blog_rules.py::RESERVED_BLOG_SLUGS
+ * stessa lista di crates/noct-blogs/src/rules.rs
  * (tenerle allineate: quella lista è la fonte di verità, applicata anche in
  * fase di creazione del blog). */
 const RESERVED_SUBDOMAINS = new Set([

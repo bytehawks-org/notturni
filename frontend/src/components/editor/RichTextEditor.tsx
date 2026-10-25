@@ -53,7 +53,7 @@ export interface RichTextEditorProps {
   blogSlug?: string;
   authFetch: <T>(fn: (token: string) => Promise<T>) => Promise<T>;
   placeholder?: string;
-  /** Note a piè di pagina del post (todo/EDITOR.md). Assenti per contenuti
+  /** Note a piè di pagina del post. Assenti per contenuti
    * che non le prevedono (es. pagine statiche, CLAUDE.md #1): in quel caso
    * il pulsante "Nota" e l'elenco delle note non vengono mostrati. */
   notes?: PostNote[];
@@ -118,7 +118,7 @@ interface MentionCandidate {
 // caratteri del formato username (vedi app/domain/usernames.py).
 const MENTION_TRIGGER_RE = /(?:^|\s)@([a-z0-9_-]{0,32})$/;
 
-/** Autocomplete delle @menzioni nell'editor (todo/EDITOR.md): rileva la
+/** Autocomplete delle @menzioni nell'editor: rileva la
  * digitazione di `@parola`, propone gli utenti del blog e, alla selezione,
  * inserisce `@username ` come testo semplice (il Markdown resta pulito, il
  * link si forma al rendering — vedi src/lib/markdown.ts). Se il blog ha le

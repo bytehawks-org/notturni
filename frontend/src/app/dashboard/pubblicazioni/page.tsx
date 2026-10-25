@@ -10,7 +10,7 @@ import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import type { MyPublication } from "@/lib/types";
 
-/** Vista "tutti i miei blog" (todo/UX_REDESIGN.md), generalizza l'elenco
+/** Vista "tutti i miei blog", generalizza l'elenco
  * pubblicazioni del singolo blog (PublicationsTab.tsx, sola lettura qui) a
  * tutti i blog dell'utente insieme, con l'attribuzione del blog per riga. */
 export default function MyPublicationsPage() {

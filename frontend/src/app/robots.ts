@@ -11,7 +11,7 @@ import { SITE_URL } from "@/lib/site";
 export const dynamic = "force-dynamic";
 
 /** Robots.txt generato dinamicamente (punto 6: opt-in per crawler a livello
- * di blog/post — vedi backend/app/domain/seo.py). Un gruppo user-agent
+ * di blog/post — vedi crates/noct-posts/src/seo.rs). Un gruppo user-agent
  * specifico sostituisce interamente `User-agent: *` per quel bot, non lo
  * integra: `ai_disallow` è quindi già un superset di `search_disallow` (vedi
  * commento in build_crawl_directives), non serve unirli qui. */

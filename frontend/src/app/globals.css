@@ -146,7 +146,7 @@ body {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-/* @menzione (todo/USERS.md #1): link al profilo, senza sottolineatura per
+/* @menzione: link al profilo, senza sottolineatura per
    distinguerla dai link normali nel testo. */
 .notturni-prose a.mention {
   text-decoration: none;
@@ -155,7 +155,7 @@ body {
 .notturni-prose a.mention:hover {
   text-decoration: underline;
 }
-/* Note a piè di pagina (todo/EDITOR.md): riferimento in apice nel testo,
+/* Note a piè di pagina: riferimento in apice nel testo,
    elenco numerato in fondo. Il testo della nota è anche nell'attributo
    title del <sup>, quindi il browser mostra un tooltip al passaggio. */
 .notturni-prose .footnote-ref {

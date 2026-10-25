@@ -4,7 +4,7 @@ import { SiteFooter } from "@/components/shell/SiteFooter";
 import { BLOG_FONT_CLASSES, BLOG_FONT_VARS } from "@/lib/blog-fonts";
 import type { BlogConfig } from "@/lib/types";
 
-/** Copia di `DEFAULT_BLOG_CONFIG.palette`/`typography` (backend/app/domain/blog_config.py):
+/** Copia di `DEFAULT_BLOG_CONFIG.palette`/`typography`:
  * un blog mai personalizzato deve restare identico allo shell di piattaforma,
  * quindi palette e font di default non vengono iniettati. */
 const DEFAULT_PALETTE: Record<string, string> = {

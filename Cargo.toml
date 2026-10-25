@@ -23,7 +23,7 @@ opt-level = 3
 
 # Nessun codice `unsafe` nei crate del progetto: `forbid` non è aggirabile con `#[allow]`
 # e vale anche per il codice generato dai manifest. (Le dipendenze esterne restano fuori
-# da questa regola; vedi todo/RUST_MIGRATION.md.)
+# da questa regola.)
 [workspace.lints.rust]
 unsafe_code = "forbid"
 

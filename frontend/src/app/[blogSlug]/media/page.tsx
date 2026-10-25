@@ -49,7 +49,7 @@ function MediaFigure({
   // `is_sensitive`, non `categories.length > 0`: un'immagine segnalata
   // dalla sola automoderazione (o dal modal senza una categoria specifica
   // scelta) ha `categories` vuoto ma è comunque sensibile — vedi
-  // backend/app/models/post_media.py e la pagina del post, che la sfoca
+  // crates/noct-media e la pagina del post, che la sfoca
   // già in base allo stesso flag.
   const sensitive = entry.is_sensitive;
   const first = entry.citations[0];

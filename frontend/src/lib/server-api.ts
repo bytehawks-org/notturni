@@ -251,7 +251,7 @@ export async function searchBlogPosts(
 
 /** Lingue con almeno un post pubblico, con conteggio — per le pillole di
  * lingua della homepage (fino a 5, dalla più frequente: vedi
- * backend/app/api/v1/feed.py::list_feed_locales). */
+ * modules/discovery). */
 export async function getFeedLocales(): Promise<{ locale: string; count: number }[]> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/feed/locales`, {
     next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.feed()] },
@@ -282,7 +282,7 @@ export interface CrawlDirectives {
 }
 
 /** Percorsi da escludere in robots.txt (`app/robots.ts`), calcolati dal
- * backend (backend/app/domain/seo.py) a partire dagli opt-in per crawler di
+ * backend a partire dagli opt-in per crawler di
  * blog/post — vedi Blog.search_indexing_enabled/ai_crawling_enabled. */
 export async function getCrawlDirectives(): Promise<CrawlDirectives> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/seo/crawl-directives`, {
@@ -299,7 +299,7 @@ export interface SitemapEntries {
 
 /** Voci per `sitemap.xml` (`app/sitemap.ts`): solo blog/post effettivamente
  * indicizzabili — stesso criterio di `getCrawlDirectives` sopra (vedi
- * backend/app/domain/seo.py::build_sitemap_entries). */
+ * crates/noct-posts/src/seo.rs). */
 export async function getSitemapEntries(): Promise<SitemapEntries> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/seo/sitemap-entries`, {
     next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.feed()] },

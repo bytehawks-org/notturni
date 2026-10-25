@@ -9,7 +9,7 @@ interface SiteFooterProps {
   /** Presente solo quando il footer compare dentro un blog: le colonne 1/2
    * possono essere sovrascritte da `blogConfig.footer` (mai la 3 né la barra
    * inferiore, sempre e solo di piattaforma) — vedi
-   * `backend/app/domain/blog_config.py`. */
+   * `crates/noct-blogs/src/rules.rs`. */
   blogConfig?: BlogConfig | null;
 }
 

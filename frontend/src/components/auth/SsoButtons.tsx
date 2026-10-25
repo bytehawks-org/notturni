@@ -13,7 +13,7 @@ const PROVIDER_LABELS: Record<string, string> = {
  * una fetch: il flow OAuth2/OIDC richiede una navigazione vera del browser,
  * non una chiamata XHR) — mostrati solo se configurati sull'istanza e
  * abilitati a livello di piattaforma (`GET /api/v1/config::sso_providers`,
- * già l'intersezione dei due, vedi backend/app/api/v1/health.py). Assente
+ * già l'intersezione dei due, vedi crates/noct-core). Assente
  * (array vuoto) su un'istanza senza alcun provider SSO: login/registrazione
  * restano solo via email/password, nessun placeholder mostrato. */
 export function SsoButtons({ providers }: { providers: string[] }) {
