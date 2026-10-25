@@ -215,6 +215,8 @@ export default async function PublicPostPage({ params }: { params: Promise<PageP
               <SensitiveImage
                 src={post.cover_image_url}
                 sensitive={post.cover_image_is_sensitive}
+                priority
+                sizes="(min-width: 768px) 680px, 100vw"
                 className="mt-8 block aspect-[16/9] w-full overflow-hidden rounded-xl object-cover"
                 revealLabel={t("revealCover")}
                 sensitiveLabel={t("sensitiveCover")}

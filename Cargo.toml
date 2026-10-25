@@ -94,6 +94,9 @@ clap = { version = "4", features = ["derive", "env"] }
 
 async-trait = "0.1"
 bytes = "1"
+# immagini: decodifica/ridimensionamento (solo i formati ammessi in upload) e WebP con perdita (libwebp)
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+webp = { version = "0.3", default-features = false }
 futures = "0.3"
 tokio-util = "0.7"
 aws-config = { version = "1", default-features = false, features = ["rt-tokio", "default-https-client", "behavior-version-latest"] }

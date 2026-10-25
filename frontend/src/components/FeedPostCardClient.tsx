@@ -2,6 +2,8 @@
 
 import { useLocale, useTranslations } from "next-intl";
 import Image from "next/image";
+
+import { FillImage } from "@/components/FillImage";
 import Link from "next/link";
 
 import { excerptClient } from "@/lib/excerpt-client";
@@ -66,12 +68,9 @@ export function FeedPostCardClient({ post, blogTitle, showBlog = true }: { post:
       </div>
       {post.cover_image_url && (
         <Link href={post.permalink} className="relative hidden h-24 w-full overflow-hidden rounded-lg border border-border md:block">
-          <Image
+          <FillImage
             src={post.cover_image_url}
-            alt=""
-            fill
             sizes="128px"
-            unoptimized
             className={`object-cover ${post.cover_image_is_sensitive ? "blur-md" : ""}`}
           />
         </Link>

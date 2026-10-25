@@ -1,6 +1,7 @@
 use crate::{
     CoverImageUpdate, MediaFileUpdate, MediaLibraryOut, MediaUploaded,
     upload::{self, FAVICON_TYPES, MAX_FAVICON_BYTES, MAX_MEDIA_BYTES, MEDIA_TYPES, Upload},
+    variants::{self, PrepareError},
 };
 use axum::http::header::CONTENT_TYPE;
 use chrono::{DateTime, Utc};
@@ -63,10 +64,39 @@ async fn store_content_image(ctx: &RouteCtx, up: &Upload) -> Result<Stored, ApiE
     let st = &ctx.state;
     let b = blog(ctx)?;
     let ext = upload::check_image(up, MEDIA_TYPES, MAX_MEDIA_BYTES, "PNG, JPEG, WEBP o GIF", "10 MiB")?;
-    assert_quota(st, b.id, up.data.len()).await?;
-    let key = upload::media_key(&st.config.site_slug, b.owner_id, b.id, ext);
+    // varianti WebP responsive (le GIF restano com'è: potrebbero essere animate). Decodifica e
+    // ridimensionamento pesano sulla CPU: fuori dal thread del runtime.
+    let prepared = if ext == "gif" {
+        None
+    } else {
+        let data = up.data.clone();
+        match tokio::task::spawn_blocking(move || variants::prepare(&data)).await.map_err(ApiError::internal)? {
+            Ok(p) => p,
+            Err(PrepareError::TooLarge) => {
+                return Err(ApiError::bad_request(format!(
+                    "L'immagine supera i {} megapixel consentiti.",
+                    variants::MAX_PIXELS / 1_000_000
+                )));
+            }
+        }
+    };
+    let total = up.data.len() + prepared.as_ref().map_or(0, |p| p.variants.iter().map(|v| v.data.len()).sum());
+    assert_quota(st, b.id, total).await?;
+    let key =
+        upload::media_key(&st.config.site_slug, b.owner_id, b.id, ext, prepared.as_ref().map(|p| (p.width, p.height)));
     let bucket = &st.config.storage.bucket_content;
     st.services.storage.put(bucket, &key, up.data.clone(), &up.content_type).await.map_err(ApiError::internal)?;
+    if let Some(p) = prepared {
+        for v in p.variants {
+            if let Some(vkey) = variants::variant_key(&key, v.width) {
+                st.services
+                    .storage
+                    .put(bucket, &vkey, v.data.into(), "image/webp")
+                    .await
+                    .map_err(ApiError::internal)?;
+            }
+        }
+    }
     // la classificazione è del modulo opzionale `image_moderation`: spento, nessun controllo
     let is_sensitive = if st.module_enabled("image_moderation") {
         let threshold = noct_platform::get(&st.db).await?.moderation_threshold;
@@ -78,7 +108,7 @@ async fn store_content_image(ctx: &RouteCtx, up: &Upload) -> Result<Stored, ApiE
         url: st.services.storage.public_url(bucket, &key),
         key,
         content_type: up.content_type.clone(),
-        size: up.data.len(),
+        size: total,
         is_sensitive,
     })
 }
@@ -268,11 +298,14 @@ pub async fn delete_media(ctx: RouteCtx) -> Result<(), ApiError> {
         return Err(ApiError::conflict("L'immagine è ancora usata in un post: rimuovila prima dal contenuto."));
     }
     sqlx::query("DELETE FROM media_files WHERE id = $1").bind(id).execute(&st.db).await?;
-    if let Some(key) = key
-        && let Err(e) = st.services.storage.delete(&st.config.storage.bucket_content, &key).await
-    {
-        // la riga è già andata: un oggetto orfano non deve far fallire la richiesta
-        tracing::warn!(error = %e, key, "cancellazione dell'oggetto su storage non riuscita");
+    if let Some(key) = key {
+        let bucket = &st.config.storage.bucket_content;
+        for k in std::iter::once(key.clone()).chain(variants::variant_keys(&key)) {
+            if let Err(e) = st.services.storage.delete(bucket, &k).await {
+                // la riga è già andata: un oggetto orfano non deve far fallire la richiesta
+                tracing::warn!(error = %e, key = k, "cancellazione dell'oggetto su storage non riuscita");
+            }
+        }
     }
     Ok(())
 }

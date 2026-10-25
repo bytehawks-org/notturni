@@ -24,7 +24,10 @@ regex.workspace = true
 bytes.workspace = true
 futures.workspace = true
 multer.workspace = true
+image.workspace = true
+webp.workspace = true
 tracing.workspace = true
+tokio.workspace = true
 
 [build-dependencies]
 noct-codegen.workspace = true

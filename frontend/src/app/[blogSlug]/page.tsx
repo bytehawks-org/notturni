@@ -84,6 +84,7 @@ export default async function BlogHomePage({
           <SensitiveImage
             src={blog.cover_image_url}
             sensitive={blog.cover_image_is_sensitive}
+            priority
             className="mb-8 block aspect-[21/6] w-full overflow-hidden rounded-xl object-cover"
             revealLabel={t("revealCover")}
             sensitiveLabel={t("sensitiveCover")}

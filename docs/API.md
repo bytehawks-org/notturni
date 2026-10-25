@@ -601,8 +601,23 @@ che lo supererebbe risponde `413` invece di essere accettato — nessun
 controllo (comportamento invariato) se il limite non è impostato.
 
 ```json
-{"url": "https://.../notturni/userdata/{user_uuid}/{blog_uuid}/media/{uuid}.png"}
+{"url": "https://.../notturni/userdata/{user_uuid}/{blog_uuid}/media/{uuid}-2400x1600.png"}
 ```
+
+**Varianti responsive.** Per PNG, JPEG e WEBP (non per le GIF, che potrebbero
+essere animate) l'upload — sia `media` sia `cover-image` — genera anche
+versioni **WebP** a 100% (massimo 2560 px di larghezza), 75%, 50% e 25%
+dell'originale, scartando quelle sotto i 320 px; l'originale resta com'è. Le
+dimensioni stanno nel nome (`{uuid}-{W}x{H}.{ext}`) e una variante è
+`{uuid}-{W}x{H}-{w}.webp`: il frontend ricalcola le larghezze `w` da `W`
+(`frontend/src/lib/responsive-image.ts`, stessa regola di
+`crates/noct-media/src/variants.rs`) e ne ricava `srcset`, `width` e `height`
+senza chiamate in più. Le immagini caricate prima di questa funzione, le GIF e
+quelle di altri siti non hanno varianti e si servono come prima. La decodifica
+applica l'orientamento EXIF; le varianti non portano metadati (l'originale sì:
+è così com'è stato caricato). Immagini oltre 40 megapixel → `400`. Lo spazio
+occupato dalle varianti conta nella quota del blog e `DELETE
+.../media/{id}` le cancella insieme all'originale.
 
 **`GET /api/v1/blogs/{slug}/mentionable-users?q=<prefisso>&limit=8`** —
 richiede sessione e accesso in scrittura al blog. Suggerimenti per

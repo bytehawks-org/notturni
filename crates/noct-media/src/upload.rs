@@ -77,8 +77,16 @@ pub fn check_image(
 
 /// `{site}/userdata/{proprietario}/{blog}/media/{uuid}.{ext}`: il prefisso per utente e blog
 /// permette di calcolare e cancellare lo spazio occupato da un blog.
-pub fn media_key(site_slug: &str, owner: Uuid, blog: Uuid, ext: &str) -> String {
-    format!("{site_slug}/userdata/{owner}/{blog}/media/{}.{ext}", Uuid::new_v4())
+///
+/// Con `dims` (larghezza, altezza) il nome diventa `{uuid}-{W}x{H}.{ext}`: dice al frontend che esistono
+/// le varianti responsive e quali (vedi [`crate::variants`]).
+pub fn media_key(site_slug: &str, owner: Uuid, blog: Uuid, ext: &str, dims: Option<(u32, u32)>) -> String {
+    let id = Uuid::new_v4();
+    let name = match dims {
+        Some((w, h)) => format!("{id}-{w}x{h}"),
+        None => id.to_string(),
+    };
+    format!("{site_slug}/userdata/{owner}/{blog}/media/{name}.{ext}")
 }
 
 pub fn favicon_key(blog: Uuid, ext: &str) -> String {
@@ -121,8 +129,9 @@ mod tests {
     #[test]
     fn keys_are_scoped_by_owner_and_blog() {
         let (o, b) = (Uuid::new_v4(), Uuid::new_v4());
-        let k = media_key("notturni", o, b, "png");
+        let k = media_key("notturni", o, b, "png", None);
         assert!(k.starts_with(&format!("notturni/userdata/{o}/{b}/media/")) && k.ends_with(".png"));
+        assert!(media_key("notturni", o, b, "jpg", Some((800, 600))).ends_with("-800x600.jpg"));
         assert!(favicon_key(b, "webp").starts_with(&format!("favicons/{b}/")));
     }
 

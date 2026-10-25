@@ -97,7 +97,7 @@ const CSRF_COOKIE_NAME = "noct_csrf_token";
 /** Letto dal cookie (non httpOnly per costruzione, pattern double-submit —
  * vedi backend/app/api/v1/auth.py) e riecheggiato come header per le sole
  * richieste autenticate dal cookie di refresh. */
-function readCsrfCookie(): string | null {
+export function readCsrfCookie(): string | null {
   if (typeof document === "undefined") return null;
   const match = document.cookie.match(new RegExp(`(?:^|; )${CSRF_COOKIE_NAME}=([^;]*)`));
   return match ? decodeURIComponent(match[1]) : null;

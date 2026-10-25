@@ -1,5 +1,7 @@
 import { getLocale, getTranslations } from "next-intl/server";
 import Image from "next/image";
+
+import { FillImage } from "@/components/FillImage";
 import Link from "next/link";
 
 import { formatDate, readingMinutes } from "@/lib/format";
@@ -107,12 +109,9 @@ export async function FeedPostCard({
       <article className="flex flex-col gap-3 border-b border-border py-5 last:border-0">
         {post.cover_image_url && (
           <Link href={permalink} className="relative block aspect-[16/9] w-full overflow-hidden rounded-lg border border-border">
-            <Image
+            <FillImage
               src={post.cover_image_url}
-              alt=""
-              fill
               sizes="(min-width: 768px) 640px, 100vw"
-              unoptimized
               className={`object-cover ${post.cover_image_is_sensitive ? "blur-md" : ""}`}
             />
           </Link>
@@ -135,12 +134,9 @@ export async function FeedPostCard({
       </div>
       {post.cover_image_url && (
         <Link href={permalink} className="relative hidden h-24 w-full overflow-hidden rounded-lg border border-border md:block">
-          <Image
+          <FillImage
             src={post.cover_image_url}
-            alt=""
-            fill
             sizes="128px"
-            unoptimized
             className={`object-cover ${post.cover_image_is_sensitive ? "blur-md" : ""}`}
           />
         </Link>

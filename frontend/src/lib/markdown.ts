@@ -7,6 +7,7 @@ import MarkdownIt from "markdown-it";
 import { codeBlockMarkdownPlugin, textAlignMarkdownPlugin, underlineMarkdownPlugin } from "./markdown-format-extensions";
 import { REVALIDATE_SECONDS } from "./revalidate";
 import { ensureLanguagesLoaded, highlightCode } from "./shiki-highlighter";
+import { responsiveImage } from "./responsive-image";
 import type { PostNote } from "./types";
 
 // Stessa risoluzione di server-api.ts::BACKEND_INTERNAL_URL — endpoint
@@ -603,6 +604,14 @@ async function renderPipeline(markdown: string, options: RenderOptions, withHead
     // comunque disponibile senza JS aggiuntivo.
     img.setAttribute("loading", "lazy");
     img.setAttribute("decoding", "async");
+    // varianti WebP generate all'upload + dimensioni intrinseche (niente salti di layout)
+    const responsive = responsiveImage(img.getAttribute("src") ?? "");
+    if (responsive) {
+      img.setAttribute("width", String(responsive.width));
+      img.setAttribute("height", String(responsive.height));
+      img.setAttribute("srcset", responsive.srcSet);
+      img.setAttribute("sizes", "(min-width: 720px) 680px, calc(100vw - 40px)");
+    }
   });
   injectCopyButtons(document, options.copyCodeLabel ?? "Copia", options.copiedCodeLabel ?? "Copiato");
   await resolveLinkCards(document);

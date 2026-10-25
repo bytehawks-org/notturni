@@ -6,7 +6,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 
 import { setUiLocale } from "@/i18n/actions";
 
-import { ApiClientError, api } from "./api";
+import { ApiClientError, api, readCsrfCookie } from "./api";
 import type { CurrentUser, LoginResponse } from "./types";
 import { isMfaRequired } from "./types";
 
@@ -47,6 +47,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user?.ui_locale, locale, router]);
 
   useEffect(() => {
+    // Senza cookie CSRF (impostato e rimosso insieme alla sessione) il refresh
+    // fallirebbe sempre con 403: a un visitatore anonimo risparmia una
+    // richiesta a ogni pagina e un errore in console.
+    if (!readCsrfCookie()) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLoading(false);
+      return;
+    }
     api.auth
       .refresh()
       .then(async (session) => {

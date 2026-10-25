@@ -244,6 +244,8 @@ services:
       # Variabile normale, non build-arg: letta a runtime, non inglobata nel
       # bundle — non richiede un rebuild dell'immagine per essere cambiata.
       NOCT_BACKEND_INTERNAL_URL: http://backend:8000
+      # origine degli oggetti su Garage (avatar, media): serve alla CSP `img-src` in sviluppo, dove è http
+      NOCT_S3_PUBLIC_URL: http://localhost:9000
       # secret condiviso con il backend per la route /api/revalidate: deve
       # coincidere con NOCT_REVALIDATE_SECRET del servizio backend. Se assente
       # da entrambi, la cache si affida solo alla rivalidazione a tempo.

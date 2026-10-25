@@ -12,7 +12,7 @@
   --surface: #ffffff;
   --foreground: #232220;
   --primary: #3d6b5e;
-  --muted: #857e74;
+  --muted: #6e675e;
   --border-color: #e5dfd5;
   --shadow: 0 1px 2px rgb(35 34 32 / 5%), 0 8px 24px rgb(35 34 32 / 6%);
   /* Evidenziatore dei frammenti salvati (task frammenti): colore funzionale,
@@ -194,7 +194,8 @@ body {
   display: inline;
 }
 .notturni-prose .footnote-backref {
-  text-decoration: none;
+  /* sottolineato: distinguerlo dal testo solo col colore non basta (a11y, link-in-text-block) */
+  text-decoration: underline;
   margin-left: 0.35rem;
 }
 /* Campi bibliografici opzionali (autore/titolo/pagina/ISBN/DOI, modal "Nota"
@@ -316,6 +317,7 @@ body {
 }
 .notturni-prose img {
   max-width: 100%;
+  height: auto;
   border-radius: 0.5em;
   margin: 0.75em 0;
 }

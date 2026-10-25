@@ -18,6 +18,16 @@ function connectSrcOrigins(): string {
   return Array.from(origins).join(" ");
 }
 
+/** Origine pubblica dello storage (`NOCT_S3_PUBLIC_URL`, letta a runtime): `https:` è già ammesso in
+ * `img-src`, ma in sviluppo gli oggetti stanno su http://localhost:9000 e la CSP li bloccherebbe. */
+function storageOrigin(): string {
+  try {
+    return process.env.NOCT_S3_PUBLIC_URL ? new URL(process.env.NOCT_S3_PUBLIC_URL).origin : "";
+  } catch {
+    return "";
+  }
+}
+
 /** Sottodomini riservati alla piattaforma stessa, mai risolti come blog —
  * stessa lista di backend/app/domain/blog_rules.py::RESERVED_BLOG_SLUGS
  * (tenerle allineate: quella lista è la fonte di verità, applicata anche in
@@ -79,7 +89,7 @@ const PLATFORM_ONLY_PATHS = new Set([
 function cspHeaderValue(nonce: string): string {
   const csp = `
     default-src 'self';
-    img-src 'self' data: https:;
+    img-src 'self' data: https: ${storageOrigin()};
     style-src 'self' 'unsafe-inline';
     script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://challenges.cloudflare.com;
     frame-src https://challenges.cloudflare.com;
