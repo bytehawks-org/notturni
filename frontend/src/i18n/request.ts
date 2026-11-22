@@ -1,6 +1,10 @@
 import { getRequestConfig } from "next-intl/server";
 import { cookies, headers } from "next/headers";
 
+import { applySiteTexts } from "@/lib/site-texts";
+import { siteConfig } from "@/lib/site";
+import { revalidateTags } from "@/lib/revalidate";
+
 import { FALLBACK_LOCALE, LOCALE_COOKIE, isLocale, type Locale } from "./config";
 
 /**
@@ -27,6 +31,32 @@ async function platformDefaultLocale(): Promise<Locale | undefined> {
     return undefined;
   }
 }
+/** Testi riscritti dagli amministratori per questa lingua; in caso di errore si usano i predefiniti. */
+async function siteTextOverrides(locale: Locale): Promise<Record<string, unknown>> {
+  try {
+    const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/site-texts?locale=${locale}`, {
+      next: { revalidate: 60, tags: [revalidateTags.siteTexts()] },
+    });
+    if (!res.ok) return {};
+    const data = (await res.json()) as { texts?: Record<string, unknown> };
+    return data.texts ?? {};
+  } catch {
+    return {};
+  }
+}
+
+/** I messaggi sono scritti con il nome e il dominio predefiniti ("Notturni", "notturni.eu"): sull'istanza
+ * si sostituiscono con quelli configurati (`NOCT_SITE_NAME`, host di `NOCT_SITE_URL`). Applicato ai
+ * messaggi di base, prima dei testi riscritti dagli amministratori. */
+function brandMessages<T>(messages: T): T {
+  const { siteName, siteUrl } = siteConfig();
+  const host = new URL(siteUrl).hostname;
+  if (siteName === "Notturni" && host === "notturni.eu") return messages;
+  return JSON.parse(
+    JSON.stringify(messages).replaceAll("Notturni", siteName).replaceAll("notturni.eu", host),
+  ) as T;
+}
+
 export default getRequestConfig(async () => {
   const fromCookie = (await cookies()).get(LOCALE_COOKIE)?.value;
   let locale: Locale | undefined = isLocale(fromCookie) ? fromCookie : undefined;
@@ -41,7 +71,7 @@ export default getRequestConfig(async () => {
   locale ??= FALLBACK_LOCALE;
   return {
     locale,
-    messages: (await import(`../messages/${locale}.json`)).default,
+    messages: applySiteTexts(brandMessages((await import(`../messages/${locale}.json`)).default), await siteTextOverrides(locale)),
     timeZone: "Europe/Rome",
   };
 });

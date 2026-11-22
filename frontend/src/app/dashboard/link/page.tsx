@@ -18,7 +18,7 @@ function hostOf(url: string): string {
   }
 }
 
-/** Vista "tutti i miei blog" (todo/UX_REDESIGN.md), generalizza la
+/** Vista "tutti i miei blog", generalizza la
  * bibliografia dei link del singolo blog (/{blog}/link) a tutti i blog
  * dell'utente insieme, con l'attribuzione del blog per citazione. */
 export default function MyLinksPage() {

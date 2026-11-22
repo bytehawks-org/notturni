@@ -1,0 +1,31 @@
+{
+  "enums": [],
+  "tables": [
+    {
+      "name": "interests_settings",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "null": false,
+          "default": "1",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "items",
+          "type": "jsonb",
+          "null": false,
+          "default": "'[]'",
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [],
+      "uniques": []
+    }
+  ]
+}

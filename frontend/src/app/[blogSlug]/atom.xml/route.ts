@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 
 import { FEED_HEADERS, buildAtom, postToFeedItem } from "@/lib/feed";
 import { getPublicBlog, getPublicBlogPosts } from "@/lib/server-api";
-import { SITE_URL } from "@/lib/site";
+import { siteUrl } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
@@ -23,8 +23,8 @@ export async function GET(_request: Request, { params }: { params: Promise<Route
     {
       title: blog.title,
       description: blog.description ?? blog.subtitle ?? `Post pubblicati su ${blog.title}.`,
-      link: `${SITE_URL}/${blogSlug}`,
-      feedUrl: `${SITE_URL}/${blogSlug}/atom.xml`,
+      link: `${siteUrl()}/${blogSlug}`,
+      feedUrl: `${siteUrl()}/${blogSlug}/atom.xml`,
       language: blog.default_locale,
     },
     posts.map((post) => postToFeedItem(post))

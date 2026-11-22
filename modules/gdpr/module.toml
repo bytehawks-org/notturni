@@ -1,0 +1,7 @@
+[module]
+name = "gdpr"
+version = "0.1.0"
+kind = "optional"
+default_enabled = true
+requires = ["users", "audit"]
+description = "Diritti GDPR: esportazione dei propri dati (art. 20), cancellazione dell'account per anonimizzazione (art. 17) e coda delle richieste con scadenza legale"

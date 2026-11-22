@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SITE_HOST, SITE_URL } from "@/lib/site";
-
-/** Stesso fallback di lib/api.ts::API_URL — non importato da lì per non
- * tirarsi dietro l'intero client API (tipi + funzioni) in un modulo che
- * gira ad ogni richiesta. */
-const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
+import { apiUrl, siteHost, siteUrl } from "@/lib/site";
 
 /** Origini per connect-src, derivate dagli URL reali configurati invece che
  * hardcodate su un dominio fisso — altrimenti il dev locale (frontend su
@@ -12,14 +7,24 @@ const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").rep
  * dalla stessa CSP pensata per la produzione. Il wildcard sui sottodomini
  * serve alle pagine blog (`{slug}.{host}`) che chiamano l'API sull'apex. */
 function connectSrcOrigins(): string {
-  const site = new URL(SITE_URL);
-  const api = new URL(API_URL);
-  const origins = new Set([`${site.protocol}//${site.host}`, `${site.protocol}//*.${SITE_HOST}`, `${api.protocol}//${api.host}`]);
+  const site = new URL(siteUrl());
+  const api = new URL(apiUrl());
+  const origins = new Set([`${site.protocol}//${site.host}`, `${site.protocol}//*.${siteHost()}`, `${api.protocol}//${api.host}`]);
   return Array.from(origins).join(" ");
 }
 
+/** Origine pubblica dello storage (`NOCT_S3_PUBLIC_URL`, letta a runtime): `https:` è già ammesso in
+ * `img-src`, ma in sviluppo gli oggetti stanno su http://localhost:9000 e la CSP li bloccherebbe. */
+function storageOrigin(): string {
+  try {
+    return process.env.NOCT_S3_PUBLIC_URL ? new URL(process.env.NOCT_S3_PUBLIC_URL).origin : "";
+  } catch {
+    return "";
+  }
+}
+
 /** Sottodomini riservati alla piattaforma stessa, mai risolti come blog —
- * stessa lista di backend/app/domain/blog_rules.py::RESERVED_BLOG_SLUGS
+ * stessa lista di crates/noct-blogs/src/rules.rs
  * (tenerle allineate: quella lista è la fonte di verità, applicata anche in
  * fase di creazione del blog). */
 const RESERVED_SUBDOMAINS = new Set([
@@ -79,7 +84,7 @@ const PLATFORM_ONLY_PATHS = new Set([
 function cspHeaderValue(nonce: string): string {
   const csp = `
     default-src 'self';
-    img-src 'self' data: https:;
+    img-src 'self' data: https: ${storageOrigin()};
     style-src 'self' 'unsafe-inline';
     script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://challenges.cloudflare.com;
     frame-src https://challenges.cloudflare.com;
@@ -116,11 +121,11 @@ export function proxy(request: NextRequest) {
     return response;
   };
 
-  if (hostname === SITE_HOST || !hostname.endsWith(`.${SITE_HOST}`)) {
+  if (hostname === siteHost() || !hostname.endsWith(`.${siteHost()}`)) {
     return withCsp(NextResponse.next({ request: { headers: requestHeaders } }));
   }
 
-  const subdomain = hostname.slice(0, -(SITE_HOST.length + 1));
+  const subdomain = hostname.slice(0, -(siteHost().length + 1));
   // Un'etichetta con un punto (es. un sottodominio "annidato" inatteso) o
   // riservata non va mai interpretata come slug di un blog.
   if (!subdomain || subdomain.includes(".") || RESERVED_SUBDOMAINS.has(subdomain)) {
@@ -138,5 +143,7 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/|api/|favicon.ico|robots.txt|sitemap.xml|theme-init.js).*)"],
+  // robots.txt e sitemap.xml passano dal proxy: sul portale restano quelli globali, su `{slug}.{dominio}` diventano
+  // quelli dello Spazio (`/{slug}/robots.txt`, `/{slug}/sitemap.xml`).
+  matcher: ["/((?!_next/|api/|favicon.ico|theme-init.js|manifest.webmanifest).*)"],
 };

@@ -1,0 +1,6 @@
+[module]
+name = "media"
+version = "0.1.0"
+kind = "core"
+requires = ["users", "blogs", "posts", "platform"]
+description = "Immagini dei blog: upload per l'editor con libreria media, copertina e favicon del blog, limite di spazio per blog, moderazione automatica (fail open)"

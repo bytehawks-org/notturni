@@ -7,13 +7,15 @@ RUN npm ci
 
 FROM node:22-slim AS builder
 WORKDIR /app
-# NEXT_PUBLIC_* è inglobato nel bundle client in fase di build, non letto a
-# runtime: va passato come build-arg, non come env del container finale.
-ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+# URL del sito, dell'API e nome della piattaforma si risolvono a RUNTIME dalle env del container
+# (NOCT_SITE_URL / NOCT_INSTANCE_FQDN, NOCT_API_PUBLIC_URL, NOCT_SITE_NAME — vedi src/lib/site.ts):
+# la stessa immagine serve qualunque dominio. I build-arg NEXT_PUBLIC_* qui sotto sono solo un
+# fallback per lo sviluppo locale (inglobato nel bundle); vuoti di default = stessa origine.
+ARG NEXT_PUBLIC_API_URL=
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 # URL pubblico del sito (SEO: metadataBase/canonical/sitemap.xml/robots.txt —
 # vedi frontend/src/lib/site.ts), stesso schema di NEXT_PUBLIC_API_URL sopra.
-ARG NEXT_PUBLIC_SITE_URL=http://localhost:3000
+ARG NEXT_PUBLIC_SITE_URL=
 ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

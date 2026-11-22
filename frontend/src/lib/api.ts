@@ -22,6 +22,23 @@ import type {
   BlogReports,
   BlogRole,
   BlogVisibility,
+  Backlink,
+  GitSyncStatus,
+  GraphData,
+  LegalDoc,
+  SeoAdmin,
+  SeoLocaleText,
+  LegalDocKey,
+  LegalOverview,
+  PublicBlog,
+  PublicUser,
+  KnownHost,
+  OutlineNode,
+  RevisionDetail,
+  RevisionDiff,
+  RevisionSummary,
+  SpaceDisplayMode,
+  SpaceKind,
   Category,
   Comment,
   CommentStatus,
@@ -71,8 +88,7 @@ import type {
   SessionResponse,
   SocialLink,
 } from "./types";
-
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { apiUrl } from "./site";
 
 export class ApiClientError extends Error {
   status: number;
@@ -95,9 +111,9 @@ interface RequestOptions {
 const CSRF_COOKIE_NAME = "noct_csrf_token";
 
 /** Letto dal cookie (non httpOnly per costruzione, pattern double-submit —
- * vedi backend/app/api/v1/auth.py) e riecheggiato come header per le sole
+ * vedi crates/noct-auth) e riecheggiato come header per le sole
  * richieste autenticate dal cookie di refresh. */
-function readCsrfCookie(): string | null {
+export function readCsrfCookie(): string | null {
   if (typeof document === "undefined") return null;
   const match = document.cookie.match(new RegExp(`(?:^|; )${CSRF_COOKIE_NAME}=([^;]*)`));
   return match ? decodeURIComponent(match[1]) : null;
@@ -119,7 +135,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     body = JSON.stringify(options.body);
   }
 
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${apiUrl()}${path}`, {
     method: options.method ?? "GET",
     headers,
     body,
@@ -187,11 +203,38 @@ export const api = {
       request<void>("/api/v1/auth/mfa/email/setup", { method: "POST", token }),
     emailConfirm: (token: string, code: string) =>
       request<void>("/api/v1/auth/mfa/email/confirm", { method: "POST", token, body: { code } }),
-    disableMfa: (token: string) => request<void>("/api/v1/auth/mfa/disable", { method: "POST", token }),
+    /** Senza `code` il backend risponde 202 (`code_required`; con il metodo email spedisce il codice),
+     * con un `code` valido 204. */
+    disableMfa: (token: string, code?: string) =>
+      request<{ code_required: boolean; method: "totp" | "email" } | undefined>("/api/v1/auth/mfa/disable", {
+        method: "POST",
+        token,
+        body: code ? { code } : {},
+      }),
     forgotPassword: (payload: { email: string }) =>
       request<void>("/api/v1/auth/password/forgot", { method: "POST", body: payload }),
     resetPassword: (payload: { email: string; code: string; new_password: string }) =>
       request<void>("/api/v1/auth/password/reset", { method: "POST", body: payload }),
+  },
+
+  /** Ricerca pubblica nella piattaforma (post, Spazi, utenti): serve al modal del link dell'editor. */
+  search: {
+    posts: (q: string, limit = 5) => request<Post[]>(withQuery("/api/v1/search/posts", { q, limit: String(limit) })),
+    blogs: (q: string, limit = 5) => request<PublicBlog[]>(withQuery("/api/v1/blogs", { q, limit: String(limit) })),
+    users: (q: string, limit = 5) => request<PublicUser[]>(withQuery("/api/v1/users", { q, limit: String(limit) })),
+  },
+
+  graph: {
+    /** Mappa dei collegamenti dei propri Spazi (`scope=mine`) o, agli amministratori, di tutta la piattaforma. */
+    get: (token: string, params: { scope?: "mine" | "platform"; drafts?: boolean; limit?: number } = {}) =>
+      request<GraphData>(
+        withQuery("/api/v1/graph", {
+          scope: params.scope,
+          drafts: params.drafts ? "true" : undefined,
+          limit: params.limit ? String(params.limit) : undefined,
+        }),
+        { token }
+      ),
   },
 
   interests: {
@@ -203,7 +246,7 @@ export const api = {
 
   blogs: {
     listMine: (token: string) => request<Blog[]>("/api/v1/blogs/mine", { token }),
-    /** Blog altrui su cui l'utente ha una membership (todo/BLOG.md #3). */
+    /** Blog altrui su cui l'utente ha una membership. */
     memberOf: (token: string) => request<MembershipBlog[]>("/api/v1/blogs/member-of", { token }),
     /** Il token è opzionale ma necessario per i blog `members`/`private`. */
     get: (slug: string, token?: string | null) =>
@@ -216,6 +259,7 @@ export const api = {
         default_locale?: string;
         subtitle?: string | null;
         description?: string | null;
+        kind?: SpaceKind;
         visibility?: BlogVisibility;
         default_author_display_name?: string | null;
       }
@@ -232,6 +276,8 @@ export const api = {
         subtitle?: string;
         description?: string;
         visibility?: BlogVisibility;
+        /** wiki/docs: `wiki` o `docs`; un blog usa sempre `feed`. */
+        display_mode?: SpaceDisplayMode;
         comments_mode?: CommentsMode;
         mentions_enabled?: boolean;
         static_pages_enabled?: boolean;
@@ -273,7 +319,7 @@ export const api = {
       request<Blog>(`/api/v1/blogs/${slug}`, { method: "DELETE", token, body: { confirm_slug: confirmSlug } }),
     restore: (token: string, slug: string) => request<Blog>(`/api/v1/blogs/${slug}/restore`, { method: "POST", token }),
     /** URL dell'export ZIP (solo proprietario): scaricato con fetch + blob, vedi SettingsTab. */
-    exportUrl: (slug: string) => `${API_URL}/api/v1/blogs/${slug}/export`,
+    exportUrl: (slug: string) => `${apiUrl()}/api/v1/blogs/${slug}/export`,
     /** Immagine da incorporare nel contenuto o da usare come cover di un post.
      * `is_sensitive`: risultato della moderazione automatica (nudità/contenuti
      * sensibili) fatta lato backend al momento dell'upload — vedi API.md. */
@@ -334,7 +380,7 @@ export const api = {
       request<BlogNote>(`/api/v1/blogs/${slug}/notes/${noteId}/merge`, { method: "POST", token, body: { into_id: intoId } }),
     importNotes: (token: string, slug: string, bibtex: string) =>
       request<BlogNote[]>(`/api/v1/blogs/${slug}/notes/import`, { method: "POST", token, body: { bibtex } }),
-    notesExportUrl: (slug: string) => `${API_URL}/api/v1/blogs/${slug}/notes/export.bib`,
+    notesExportUrl: (slug: string) => `${apiUrl()}/api/v1/blogs/${slug}/notes/export.bib`,
     /** B7: libreria media (proprietario e collaboratori). */
     mediaLibrary: (token: string, slug: string) => request<MediaLibrary>(`/api/v1/blogs/${slug}/media`, { token }),
     syncMediaLibrary: (token: string, slug: string) => request<MediaLibrary>(`/api/v1/blogs/${slug}/media/sync`, { method: "POST", token }),
@@ -395,7 +441,7 @@ export const api = {
     deletePage: (token: string, slug: string, pageId: string) =>
       request<void>(`/api/v1/blogs/${slug}/pages/${pageId}`, { method: "DELETE", token }),
 
-    // --- Collaboratori: membership e inviti (todo/BLOG.md #3) ---
+    // --- Collaboratori: membership e inviti ---
     members: (token: string, slug: string) =>
       request<BlogMember[]>(`/api/v1/blogs/${slug}/members`, { token }),
     updateMemberRole: (token: string, slug: string, userId: string, role: BlogRole) =>
@@ -406,7 +452,7 @@ export const api = {
       }),
     removeMember: (token: string, slug: string, userId: string) =>
       request<void>(`/api/v1/blogs/${slug}/members/${userId}`, { method: "DELETE", token }),
-    /** Il collaboratore imposta il proprio alias per questo blog (todo/BLOG.md #4). */
+    /** Il collaboratore imposta il proprio alias per questo blog. */
     updateMyMembership: (token: string, slug: string, authorDisplayName: string) =>
       request<MembershipBlog>(`/api/v1/blogs/${slug}/my-membership`, {
         method: "PATCH",
@@ -441,6 +487,117 @@ export const api = {
       }),
   },
 
+  seo: {
+    /** Identità e SEO del portale (Super Admin e amministratori). */
+    get: (token: string) => request<SeoAdmin>("/api/v1/admin/seo", { token }),
+    /** Sostituisce l'insieme: i campi assenti si azzerano, le lingue non inviate spariscono. */
+    save: (
+      token: string,
+      payload: {
+        site_name?: string;
+        noindex?: boolean;
+        google_verification?: string;
+        bing_verification?: string;
+        yandex_verification?: string;
+        twitter_site?: string;
+        theme_color?: string;
+        extra_meta?: { name: string; content: string }[];
+        locales?: Record<string, Partial<SeoLocaleText>>;
+      }
+    ) => request<SeoAdmin>("/api/v1/admin/seo", { method: "PUT", token, body: payload }),
+    uploadIcon: (token: string, file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return request<SeoAdmin>("/api/v1/admin/branding/icon", { method: "POST", token, formData });
+    },
+    deleteIcon: (token: string) => request<SeoAdmin>("/api/v1/admin/branding/icon", { method: "DELETE", token }),
+    uploadSocial: (token: string, file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return request<SeoAdmin>("/api/v1/admin/branding/social", { method: "POST", token, formData });
+    },
+    deleteSocial: (token: string) => request<SeoAdmin>("/api/v1/admin/branding/social", { method: "DELETE", token }),
+  },
+
+  legal: {
+    overview: (token: string) => request<LegalOverview>("/api/v1/admin/legal", { token }),
+    saveSettings: (token: string, payload: Record<string, string | number | undefined>) =>
+      request<LegalOverview>("/api/v1/admin/legal/settings", { method: "PUT", token, body: payload }),
+    doc: (token: string, doc: LegalDocKey, locale: string) =>
+      request<LegalDoc>(`/api/v1/admin/legal/${doc}/${locale}`, { token }),
+    saveDoc: (token: string, doc: LegalDocKey, locale: string, payload: { title: string; content: string }) =>
+      request<LegalDoc>(`/api/v1/admin/legal/${doc}/${locale}`, { method: "PUT", token, body: payload }),
+    /** `from`: lingua da cui ripartire; assente = il modello della stessa lingua (solo it/en). */
+    reset: (token: string, doc: LegalDocKey, locale: string, from?: string) =>
+      request<LegalDoc>(`/api/v1/admin/legal/${doc}/${locale}/reset`, { method: "POST", token, body: from ? { from } : {} }),
+    publish: (token: string, doc: LegalDocKey, locale: string, replaceExisting = false) =>
+      request<LegalDoc>(`/api/v1/admin/legal/${doc}/${locale}/publish`, {
+        method: "POST",
+        token,
+        body: replaceExisting ? { replace_existing: true } : {},
+      }),
+    unpublish: (token: string, doc: LegalDocKey, locale: string) =>
+      request<LegalDoc>(`/api/v1/admin/legal/${doc}/${locale}/unpublish`, { method: "POST", token, body: {} }),
+    remove: (token: string, doc: LegalDocKey, locale: string) =>
+      request<void>(`/api/v1/admin/legal/${doc}/${locale}`, { method: "DELETE", token }),
+  },
+
+  siteTexts: {
+    /** Testi sovrascritti per una lingua (solo le chiavi modificate). */
+    get: (locale: string) => request<{ locale: string; texts: Record<string, string> }>(`/api/v1/site-texts?locale=${locale}`),
+    /** `null` ripristina il testo predefinito di quella chiave. */
+    save: (token: string, locale: string, texts: Record<string, string | null>) =>
+      request<{ locale: string; texts: Record<string, string> }>(`/api/v1/admin/site-texts/${locale}`, {
+        method: "PUT",
+        token,
+        body: { texts },
+      }),
+  },
+  gitSync: {
+    get: (token: string, slug: string) => request<GitSyncStatus>(`/api/v1/blogs/${slug}/git-sync`, { token }),
+    /** `secret` (solo https) assente = invariato (obbligatorio alla prima configurazione); con `ssh` la chiave la
+     * genera la piattaforma e `host_fingerprint` è l'impronta attesa dell'host. */
+    save: (
+      token: string,
+      slug: string,
+      payload: {
+        remote_url: string;
+        auth_method?: "https" | "ssh";
+        branch?: string;
+        username?: string;
+        secret?: string;
+        regenerate_key?: boolean;
+        host_fingerprint?: string;
+        include_drafts?: boolean;
+        enabled?: boolean;
+      }
+    ) => request<GitSyncStatus>(`/api/v1/blogs/${slug}/git-sync`, { method: "PUT", token, body: payload }),
+    remove: (token: string, slug: string) => request<void>(`/api/v1/blogs/${slug}/git-sync`, { method: "DELETE", token }),
+    /** Impronte attese delle host key dei provider (Super Admin). */
+    knownHosts: {
+      list: (token: string) => request<KnownHost[]>("/api/v1/admin/git-sync/known-hosts", { token }),
+      save: (
+        token: string,
+        payload: { host: string; port?: number; fingerprints: string[]; note?: string }
+      ) => request<KnownHost>("/api/v1/admin/git-sync/known-hosts", { method: "PUT", token, body: payload }),
+      remove: (token: string, host: string, port: number) =>
+        request<void>(`/api/v1/admin/git-sync/known-hosts/${encodeURIComponent(host)}/${port}`, { method: "DELETE", token }),
+    },
+    run: (token: string, slug: string) => request<void>(`/api/v1/blogs/${slug}/git-sync/run`, { method: "POST", token }),
+  },
+  wiki: {
+    outline: (token: string | null, blogSlug: string, locale?: string) =>
+      request<OutlineNode[]>(`/api/v1/blogs/${blogSlug}/outline${locale ? `?locale=${locale}` : ""}`, { token }),
+    /** Sostituisce l'indice: `items` nell'ordine voluto, con tutti i post dello Spazio. */
+    saveOutline: (token: string, blogSlug: string, items: { id: string; parent_id: string | null }[]) =>
+      request<OutlineNode[]>(`/api/v1/blogs/${blogSlug}/outline`, { method: "PUT", token, body: { items } }),
+    revisions: (token: string, postId: string) => request<RevisionSummary[]>(`/api/v1/posts/${postId}/revisions`, { token }),
+    revision: (token: string, postId: string, revision: number) =>
+      request<RevisionDetail>(`/api/v1/posts/${postId}/revisions/${revision}`, { token }),
+    diff: (token: string, postId: string, revision: number) =>
+      request<RevisionDiff>(`/api/v1/posts/${postId}/revisions/${revision}/diff`, { token }),
+    backlinks: (token: string | null, postId: string) => request<Backlink[]>(`/api/v1/posts/${postId}/backlinks`, { token }),
+  },
   posts: {
     /** Pubblico: solo pubblicati. Con token e accesso in scrittura: anche le bozze. */
     list: (token: string | null, blogSlug: string, locale?: string) =>
@@ -465,6 +622,8 @@ export const api = {
         category_id?: string | null;
         publication_id?: string | null;
         notes?: PostNote[];
+        /** Spazi wiki/docs: pagina padre (assente o null = radice). */
+        parent_id?: string | null;
       }
     ) => request<Post>(`/api/v1/blogs/${blogSlug}/posts`, { method: "POST", token, body: payload }),
     update: (
@@ -496,6 +655,10 @@ export const api = {
          * ai_crawling_enabled; valore: imposta un override per questo solo post. */
         search_indexing_enabled?: boolean | null;
         ai_crawling_enabled?: boolean | null;
+        /** Spazi wiki/docs: assente non tocca; null: radice; id: sposta sotto quella pagina. */
+        parent_id?: string | null;
+        /** Spazi wiki/docs: nota che accompagna la revisione creata da questo salvataggio. */
+        revision_summary?: string;
       }
     ) => request<Post>(`/api/v1/posts/${postId}`, { method: "PATCH", token, body: payload }),
     /** Pubblica subito, o pianifica se `publishedAt` (ISO) è nel futuro. */
@@ -509,6 +672,11 @@ export const api = {
     recordRead: (postId: string) => request<void>(`/api/v1/posts/${postId}/read`, { method: "POST" }),
     submitForReview: (token: string, postId: string) =>
       request<Post>(`/api/v1/posts/${postId}/submit-for-review`, { method: "POST", token }),
+    /** Toglie dalla pubblicazione (anche un post pianificato): torna in bozza. */
+    unpublish: (token: string, postId: string) =>
+      request<Post>(`/api/v1/posts/${postId}/unpublish`, { method: "POST", token }),
+    /** Eliminazione definitiva (commenti, note e frammenti del post compresi). */
+    remove: (token: string, postId: string) => request<void>(`/api/v1/posts/${postId}`, { method: "DELETE", token }),
     returnToDraft: (token: string, postId: string) =>
       request<Post>(`/api/v1/posts/${postId}/return-to-draft`, { method: "POST", token }),
     translations: (postId: string) =>
@@ -594,7 +762,7 @@ export const api = {
       payload: {
         ui_locale?: string;
         /** Citabile ovunque come @username; unico, minuscolo (vedi
-         * backend/app/domain/usernames.py). Assente non tocca. */
+         * crates/noct-security/src/validate.rs). Assente non tocca. */
         username?: string;
         bio?: string;
         first_name?: string;
@@ -639,10 +807,10 @@ export const api = {
     following: (username: string) =>
       request<{ username: string }[]>(`/api/v1/users/${username}/following`),
     /** GDPR Art. 20: istantanea di tutti i dati collegati all'account,
-     * struttura libera (vedi backend/app/domain/gdpr.py::export_user_data). */
+     * struttura libera. */
     exportData: (token: string) => request<Record<string, unknown>>("/api/v1/users/me/export-data", { token }),
     /** GDPR Art. 17: anonimizza l'account (non lo cancella fisicamente — vedi
-     * backend/app/domain/gdpr.py). Richiede di ridigitare il proprio username. */
+     * modules/gdpr). Richiede di ridigitare il proprio username. */
     deleteAccount: (token: string, confirmUsername: string) =>
       request<void>("/api/v1/users/me", {
         method: "DELETE",
@@ -825,7 +993,7 @@ export const api = {
   newsletter: {
     /** Pubblico, nessuna autenticazione: doppio opt-in. Risposta sempre
      * generica (202 `{status:"ok"}`), anche se l'indirizzo è già iscritto —
-     * anti-enumerazione, vedi backend/app/api/v1/newsletter.py. */
+     * anti-enumerazione, vedi modules/newsletter. */
     subscribe: (payload: { email: string; blog_slug?: string | null; locale?: string | null }) =>
       request<{ status: string }>("/api/v1/newsletter/subscribe", { method: "POST", body: payload }),
     confirm: (token: string) =>

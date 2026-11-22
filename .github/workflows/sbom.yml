@@ -3,7 +3,7 @@ name: SBOM
 # Software Bill of Materials, formato CycloneDX: un inventario delle
 # dipendenze, non un'analisi di vulnerabilità (per quello vedi SAST/DAST negli
 # altri due workflow). Due livelli distinti:
-#   - "sorgenti": da requirements.txt/package-lock.json, un file per
+#   - "sorgenti": da Cargo.lock/package-lock.json/requirements.txt, un file per
 #     sotto-progetto (backend, frontend, moderation) — veloce, sempre eseguito.
 #   - "immagini": dal contenuto reale delle immagini container backend/
 #     frontend effettivamente costruite — più preciso (include anche
@@ -19,10 +19,12 @@ on:
     branches:
       - main
       - develop
+      - migration/rust
   pull_request:
     branches:
       - main
       - develop
+      - migration/rust
   workflow_dispatch: {}
 
 permissions:
@@ -35,12 +37,12 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      - name: SBOM backend (Python)
+      - name: SBOM backend (Rust, da Cargo.lock)
         uses: anchore/sbom-action@v0
         with:
-          path: ./backend
+          file: ./Cargo.lock
           format: cyclonedx-json
           output-file: sbom-backend.cyclonedx.json
           upload-artifact: false
@@ -62,7 +64,7 @@ jobs:
           upload-artifact: false
 
       - name: Carica i report SBOM sorgenti
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: sbom-sorgenti
           path: |
@@ -95,10 +97,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Build immagine backend
-        run: docker build -t notturni-backend:ci ./backend
+        run: docker build -t notturni-backend:ci .
 
       - name: Build immagine frontend
         run: docker build -t notturni-frontend:ci ./frontend
@@ -120,7 +122,7 @@ jobs:
           upload-artifact: false
 
       - name: Carica i report SBOM immagini
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: sbom-immagini
           path: |

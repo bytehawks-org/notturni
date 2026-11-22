@@ -1,0 +1,32 @@
+[[table]]
+name = "user_follows"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "follower_id", type = "uuid", ref = "users.id", on_delete = "cascade" },
+  { name = "followed_user_id", type = "uuid", ref = "users.id", on_delete = "cascade" },
+]
+uniques = [{ name = "uq_user_follow_pair", columns = ["follower_id", "followed_user_id"] }]
+indexes = [{ columns = ["followed_user_id"] }]
+
+[[table]]
+name = "blog_follows"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "follower_id", type = "uuid", ref = "users.id", on_delete = "cascade" },
+  { name = "blog_id", type = "uuid", ref = "blogs.id", on_delete = "cascade" },
+]
+uniques = [{ name = "uq_blog_follow_pair", columns = ["follower_id", "blog_id"] }]
+indexes = [{ columns = ["blog_id"] }]
+
+# Letture di un post aggregate per giorno UTC. Nessun cookie, nessun identificativo del lettore,
+# nessun IP persistito: il de-duplicare a breve termine passa dal rate limit (volatile).
+[[table]]
+name = "post_reads_daily"
+primary_key = ["post_id", "day"]
+columns = [
+  { name = "post_id", type = "uuid", ref = "posts.id", on_delete = "cascade" },
+  { name = "day", type = "date" },
+  { name = "reads", type = "integer", default = "0" },
+]

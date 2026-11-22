@@ -1,0 +1,130 @@
+# Configurazione e avvio della sincronizzazione Git di uno Spazio. Solo il proprietario.
+
+[type.GitSyncIn]
+remote_url = { type = "string", max = 2048 }
+branch = { type = "string", max = 200, optional = true }
+username = { type = "string", max = 100, optional = true }
+# `https` (predefinito) o `ssh`; assente = invariato
+auth_method = { type = "string", max = 8, optional = true }
+# solo `https`: token personale (GitHub, GitLab, Forgejo...). Assente = invariato; obbligatorio alla prima
+# configurazione e quando si passa da ssh a https. Con `ssh` non è ammesso: la chiave la genera la piattaforma
+secret = { type = "string", max = 4096, optional = true }
+# solo `ssh`: genera una nuova chiave (la vecchia smette di funzionare)
+regenerate_key = "bool?"
+# solo `ssh`: impronta attesa dell'host (`SHA256:...`, dalla documentazione del provider); se la chiave
+# rilevata non corrisponde la configurazione è rifiutata
+host_fingerprint = { type = "string", max = 100, optional = true }
+include_drafts = "bool?"
+enabled = "bool?"
+
+# `configured` = false quando lo Spazio non ha una sincronizzazione: gli altri campi sono null
+[type.GitSyncOut]
+configured = "bool"
+remote_url = { type = "string", nullable = true }
+branch = { type = "string", nullable = true }
+username = { type = "string", nullable = true }
+auth_method = { type = "string", nullable = true }
+has_secret = "bool"
+# solo `ssh`: da registrare come deploy key con permesso di scrittura
+ssh_public_key = { type = "string", nullable = true }
+# solo `ssh`: impronte SHA256 della chiave dell'host a cui ci si fida (da confrontare con quelle del provider)
+ssh_host_fingerprints = "string[]"
+include_drafts = "bool"
+enabled = "bool"
+last_status = { type = "string", nullable = true }
+last_run_at = { type = "timestamp", nullable = true }
+last_error = { type = "string", nullable = true }
+last_commit = { type = "string", nullable = true }
+last_pages = { type = "int", nullable = true }
+
+[[route]]
+id = "get_git_sync"
+method = "GET"
+path = "/blogs/{slug}/git-sync"
+auth = "user"
+kind = "custom"
+handler = "get_git_sync"
+scope = { blog = "slug" }
+response = "GitSyncOut"
+summary = "Configurazione e ultimo esito della sincronizzazione Git (solo proprietario; il token non viene mai restituito)"
+
+[[route]]
+id = "put_git_sync"
+method = "PUT"
+path = "/blogs/{slug}/git-sync"
+auth = "user"
+kind = "custom"
+handler = "put_git_sync"
+scope = { blog = "slug" }
+request = "GitSyncIn"
+response = "GitSyncOut"
+summary = "Imposta repository, branch e accesso: token personale via HTTPS oppure chiave di deploy SSH generata dalla piattaforma con host key pinnata (branch diverso da quello predefinito del repository)"
+
+[[route]]
+id = "delete_git_sync"
+method = "DELETE"
+path = "/blogs/{slug}/git-sync"
+auth = "user"
+kind = "custom"
+handler = "delete_git_sync"
+scope = { blog = "slug" }
+status = 204
+summary = "Rimuove la sincronizzazione e cancella il token salvato (il repository remoto non viene toccato)"
+
+[[route]]
+id = "run_git_sync"
+method = "POST"
+path = "/blogs/{slug}/git-sync/run"
+auth = "user"
+kind = "custom"
+handler = "run_git_sync"
+scope = { blog = "slug" }
+status = 202
+summary = "Accoda una sincronizzazione subito; l'esito compare in `last_status` (polling su GET)"
+
+# ---- impronte note degli host SSH (solo Super Admin) --------------------------------------------------------
+
+[type.KnownHostIn]
+host = { type = "string", max = 255 }
+port = "int?"
+# `SHA256:…` (come le pubblica il provider); sostituiscono quelle esistenti
+fingerprints = "string[]"
+note = { type = "string", max = 500, optional = true }
+
+[type.KnownHostOut]
+host = "string"
+port = "int"
+fingerprints = "string[]"
+note = { type = "string", nullable = true }
+updated_at = "timestamp"
+
+[[route]]
+id = "list_known_hosts"
+method = "GET"
+path = "/admin/git-sync/known-hosts"
+auth = "platform_role:super_admin"
+kind = "custom"
+handler = "list_known_hosts"
+response = "KnownHostOut[]"
+summary = "Host SSH di cui la piattaforma conosce le impronte attese (GitHub, GitLab...): le chiavi rilevate si fissano solo se coincidono"
+
+[[route]]
+id = "put_known_host"
+method = "PUT"
+path = "/admin/git-sync/known-hosts"
+auth = "platform_role:super_admin"
+kind = "custom"
+handler = "put_known_host"
+request = "KnownHostIn"
+response = "KnownHostOut"
+summary = "Aggiunge o aggiorna le impronte attese di un host (es. quando il provider ruota le chiavi); le configurazioni già fissate non cambiano finché l'utente non le risalva"
+
+[[route]]
+id = "delete_known_host"
+method = "DELETE"
+path = "/admin/git-sync/known-hosts/{host}/{port}"
+auth = "platform_role:super_admin"
+kind = "custom"
+handler = "delete_known_host"
+status = 204
+summary = "Toglie un host dall'elenco: tornano la fiducia al primo uso e l'impronta facoltativa dell'utente"

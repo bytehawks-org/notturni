@@ -1,4 +1,5 @@
-import type { Metadata } from "next";
+import type { Metadata, ResolvingMetadata } from "next";
+import { withSiteOpenGraph } from "@/lib/metadata";
 import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -17,7 +18,7 @@ interface PageParams {
   blogSlug: string;
 }
 
-export async function generateMetadata({ params }: { params: Promise<PageParams> }): Promise<Metadata> {
+export async function generateMetadata({ params }: { params: Promise<PageParams> }, parent: ResolvingMetadata): Promise<Metadata> {
   const { blogSlug } = await params;
   const [blog, t] = await Promise.all([getPublicBlog(blogSlug), getTranslations("BlogNav")]);
   if (!blog) return { title: t("bibliography") };
@@ -26,7 +27,7 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
     title,
     alternates: { canonical: `/${blogSlug}/bibliografia` },
     robots: blog.search_indexing_enabled ? undefined : { index: false, follow: false },
-    openGraph: { title, type: "website", url: `/${blogSlug}/bibliografia` },
+    openGraph: await withSiteOpenGraph(parent, { title, type: "website", url: `/${blogSlug}/bibliografia` }),
   };
 }
 

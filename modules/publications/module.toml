@@ -1,0 +1,10 @@
+[module]
+name = "publications"
+version = "0.1.0"
+kind = "optional"
+default_enabled = true
+requires = ["blogs", "posts"]
+description = "Pubblicazioni: raccolte di post come capitoli, indice pubblico e ordine esplicito (campi publication_id/publication/chapter_order di post)"
+
+[lifecycle]
+extensions = true

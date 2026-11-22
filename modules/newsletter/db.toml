@@ -1,0 +1,98 @@
+[[enum]]
+name = "newsletter_subscriber_status"
+values = ["pending", "confirmed", "unsubscribed"]
+
+[[enum]]
+name = "newsletter_campaign_kind"
+values = ["post_notification", "manual"]
+
+[[enum]]
+name = "newsletter_campaign_status"
+values = ["draft", "scheduled", "sending", "sent", "canceled", "failed"]
+
+# Un iscritto per email e per lista. `list_key` è `blog:<id>` o `platform` (digest): serve a rendere
+# univoca la coppia anche per il digest, dove `blog_id` è nullo e Postgres non confronta i NULL.
+# L'email è sempre salvata in minuscolo.
+[[table]]
+name = "newsletter_subscribers"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "list_key", type = "varchar(64)" },
+  { name = "blog_id", type = "uuid", null = true, ref = "blogs.id", on_delete = "cascade" },
+  { name = "email", type = "varchar(255)" },
+  { name = "locale", type = "varchar(2)", null = true },
+  { name = "status", type = "enum:newsletter_subscriber_status", default = "'pending'" },
+  # utente registrato con la stessa email, se c'è: serve all'esportazione e alla cancellazione dei suoi dati
+  { name = "user_id", type = "uuid", null = true, ref = "users.id", on_delete = "set_null" },
+  # il token di conferma si deriva da id e `confirm_nonce` con la chiave del server, non è salvato;
+  # una nuova richiesta cambia il nonce e invalida il link precedente
+  { name = "confirm_nonce", type = "uuid", null = true },
+  { name = "confirm_expires_at", type = "timestamptz", null = true },
+  { name = "consent_ip", type = "varchar(64)", null = true },
+  { name = "consent_user_agent", type = "varchar(512)", null = true },
+  { name = "confirmed_at", type = "timestamptz", null = true },
+  { name = "unsubscribed_at", type = "timestamptz", null = true },
+  { name = "unsubscribe_reason", type = "varchar(500)", null = true },
+]
+uniques = [{ name = "uq_newsletter_subscriber_list_email", columns = ["list_key", "email"] }]
+indexes = [{ columns = ["blog_id", "status"] }, { columns = ["user_id"] }]
+
+[[table]]
+name = "newsletter_campaigns"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  # nullo = digest di piattaforma
+  { name = "blog_id", type = "uuid", null = true, ref = "blogs.id", on_delete = "cascade" },
+  { name = "kind", type = "enum:newsletter_campaign_kind" },
+  # solo per le notifiche automatiche: un solo invio per post, anche se l'evento si ripete
+  { name = "post_id", type = "uuid", null = true, ref = "posts.id", on_delete = "cascade" },
+  # nullo per l'invio automatico
+  { name = "created_by_id", type = "uuid", null = true, ref = "users.id", on_delete = "set_null" },
+  { name = "subject", type = "varchar(255)" },
+  # nullo per le notifiche: il corpo si genera dal post al momento dell'invio
+  { name = "body_markdown", type = "text", null = true },
+  { name = "status", type = "enum:newsletter_campaign_status", default = "'draft'" },
+  { name = "scheduled_at", type = "timestamptz", null = true },
+  { name = "sent_at", type = "timestamptz", null = true },
+  { name = "recipient_count", type = "integer", default = "0" },
+  { name = "failed_count", type = "integer", default = "0" },
+]
+uniques = [{ name = "uq_newsletter_campaign_post", columns = ["post_id"] }]
+indexes = [{ columns = ["blog_id"] }, { columns = ["status", "scheduled_at"] }]
+
+# Chi ha già ricevuto una campagna: se l'invio viene interrotto e ripreso, non si rispedisce a nessuno.
+[[table]]
+name = "newsletter_deliveries"
+primary_key = ["campaign_id", "subscriber_id"]
+columns = [
+  { name = "campaign_id", type = "uuid", ref = "newsletter_campaigns.id", on_delete = "cascade" },
+  { name = "subscriber_id", type = "uuid", ref = "newsletter_subscribers.id", on_delete = "cascade" },
+  { name = "sent_at", type = "timestamptz", default = "now()" },
+]
+
+# Personalizzazione per blog (riga creata alla prima modifica; senza riga: invio automatico attivo).
+[[table]]
+name = "newsletter_blog_settings"
+timestamps = true
+primary_key = ["blog_id"]
+columns = [
+  { name = "blog_id", type = "uuid", ref = "blogs.id", on_delete = "cascade" },
+  { name = "auto_notify_enabled", type = "boolean", default = "true" },
+  { name = "sender_name", type = "varchar(120)", null = true },
+  { name = "banner_url", type = "varchar(2048)", null = true },
+  { name = "banner_alt_text", type = "varchar(300)", default = "''" },
+]
+
+# Come sopra, per il digest di piattaforma; riga unica.
+[[table]]
+name = "newsletter_platform_settings"
+timestamps = true
+primary_key = ["id"]
+columns = [
+  { name = "id", type = "integer", default = "1" },
+  { name = "sender_name", type = "varchar(120)", null = true },
+  { name = "banner_url", type = "varchar(2048)", null = true },
+  { name = "banner_alt_text", type = "varchar(300)", default = "''" },
+]

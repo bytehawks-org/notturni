@@ -1,0 +1,37 @@
+# Identità e indicizzazione del portale. Una sola riga (`id = 1`), creata al primo salvataggio.
+[[table]]
+name = "site_branding"
+timestamps = true
+columns = [
+  { name = "id", type = "integer", pk = true, default = "1" },
+  { name = "site_name", type = "varchar(100)", null = true },
+  # prefisso delle chiavi su storage dell'icona (`{prefisso}-{lato}.png` per ogni lato generato)
+  { name = "icon_key", type = "varchar(255)", null = true },
+  # lati (px) generati dall'icona, separati da virgola (es. `16,32,48,180,192,512`)
+  { name = "icon_sizes", type = "varchar(64)", null = true },
+  # immagine per le anteprime nelle condivisioni (Open Graph / Twitter card), chiave dell'oggetto
+  { name = "social_image_key", type = "varchar(255)", null = true },
+  # vero = nessun motore di ricerca deve indicizzare il portale (meta robots, robots.txt e sitemap vuota)
+  { name = "noindex", type = "boolean", default = "false" },
+  { name = "google_verification", type = "varchar(200)", null = true },
+  { name = "bing_verification", type = "varchar(200)", null = true },
+  { name = "yandex_verification", type = "varchar(200)", null = true },
+  { name = "twitter_site", type = "varchar(50)", null = true },
+  { name = "theme_color", type = "varchar(7)", null = true },
+  # altri meta tag `name`/`content` (verifiche di altri servizi), validati
+  { name = "extra_meta", type = "jsonb", default = "'[]'" },
+  { name = "updated_by", type = "uuid", null = true, ref = "users.id", on_delete = "set_null" },
+]
+
+# Titolo, descrizione e parole chiave del portale per lingua.
+[[table]]
+name = "site_seo"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "locale", type = "varchar(2)" },
+  { name = "title", type = "varchar(120)", null = true },
+  { name = "description", type = "varchar(400)", null = true },
+  { name = "keywords", type = "varchar(300)", null = true },
+]
+uniques = [{ name = "uq_site_seo_locale", columns = ["locale"] }]

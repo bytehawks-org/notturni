@@ -1,4 +1,5 @@
-import type { Metadata } from "next";
+import type { Metadata, ResolvingMetadata } from "next";
+import { withSiteOpenGraph } from "@/lib/metadata";
 import { getLocale, getTranslations } from "next-intl/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -19,7 +20,7 @@ interface PageParams {
   blogSlug: string;
 }
 
-export async function generateMetadata({ params }: { params: Promise<PageParams> }): Promise<Metadata> {
+export async function generateMetadata({ params }: { params: Promise<PageParams> }, parent: ResolvingMetadata): Promise<Metadata> {
   const { blogSlug } = await params;
   const [blog, t] = await Promise.all([getPublicBlog(blogSlug), getTranslations("BlogNav")]);
   if (!blog) return { title: t("media") };
@@ -28,7 +29,7 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
     title,
     alternates: { canonical: `/${blogSlug}/media` },
     robots: blog.search_indexing_enabled ? undefined : { index: false, follow: false },
-    openGraph: { title, type: "website", url: `/${blogSlug}/media` },
+    openGraph: await withSiteOpenGraph(parent, { title, type: "website", url: `/${blogSlug}/media` }),
   };
 }
 
@@ -48,7 +49,7 @@ function MediaFigure({
   // `is_sensitive`, non `categories.length > 0`: un'immagine segnalata
   // dalla sola automoderazione (o dal modal senza una categoria specifica
   // scelta) ha `categories` vuoto ma è comunque sensibile — vedi
-  // backend/app/models/post_media.py e la pagina del post, che la sfoca
+  // crates/noct-media e la pagina del post, che la sfoca
   // già in base allo stesso flag.
   const sensitive = entry.is_sensitive;
   const first = entry.citations[0];

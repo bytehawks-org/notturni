@@ -12,7 +12,7 @@
   --surface: #ffffff;
   --foreground: #232220;
   --primary: #3d6b5e;
-  --muted: #857e74;
+  --muted: #6e675e;
   --border-color: #e5dfd5;
   --shadow: 0 1px 2px rgb(35 34 32 / 5%), 0 8px 24px rgb(35 34 32 / 6%);
   /* Evidenziatore dei frammenti salvati (task frammenti): colore funzionale,
@@ -146,7 +146,7 @@ body {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-/* @menzione (todo/USERS.md #1): link al profilo, senza sottolineatura per
+/* @menzione: link al profilo, senza sottolineatura per
    distinguerla dai link normali nel testo. */
 .notturni-prose a.mention {
   text-decoration: none;
@@ -155,7 +155,7 @@ body {
 .notturni-prose a.mention:hover {
   text-decoration: underline;
 }
-/* Note a piè di pagina (todo/EDITOR.md): riferimento in apice nel testo,
+/* Note a piè di pagina: riferimento in apice nel testo,
    elenco numerato in fondo. Il testo della nota è anche nell'attributo
    title del <sup>, quindi il browser mostra un tooltip al passaggio. */
 .notturni-prose .footnote-ref {
@@ -194,7 +194,8 @@ body {
   display: inline;
 }
 .notturni-prose .footnote-backref {
-  text-decoration: none;
+  /* sottolineato: distinguerlo dal testo solo col colore non basta (a11y, link-in-text-block) */
+  text-decoration: underline;
   margin-left: 0.35rem;
 }
 /* Campi bibliografici opzionali (autore/titolo/pagina/ISBN/DOI, modal "Nota"
@@ -316,6 +317,7 @@ body {
 }
 .notturni-prose img {
   max-width: 100%;
+  height: auto;
   border-radius: 0.5em;
   margin: 0.75em 0;
 }
@@ -418,18 +420,25 @@ img[data-lightbox] {
    ::resolveLinkCards per come un link con title="card" diventa questo blocco. */
 .link-preview-card {
   display: block;
-  max-width: 28rem;
-  margin: 1em 0;
+  width: 90%;
+  margin: 1em auto;
   border: 1px solid var(--color-border);
   border-radius: 0.75rem;
   overflow: hidden;
   text-decoration: none;
   transition: border-color 0.15s;
 }
+.notturni-prose a.link-preview-card {
+  text-decoration: none;
+}
 .link-preview-card:hover {
   border-color: var(--color-primary);
 }
-.link-preview-card img {
+/* `.notturni-prose img` darebbe all'immagine margini e angoli propri, staccandola dal bordo della card */
+.notturni-prose .link-preview-card img {
+  margin: 0;
+  border-radius: 0;
+  max-width: none;
   display: block;
   width: 100%;
   height: 10rem;

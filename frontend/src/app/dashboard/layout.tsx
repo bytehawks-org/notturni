@@ -47,6 +47,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { href: "/dashboard/media", label: t("media"), icon: "▣", mobile: true },
     { href: "/dashboard/pubblicazioni", label: t("publications"), icon: "▥", mobile: true },
     { href: "/dashboard/link", label: t("links"), icon: "⛓", mobile: true },
+    { href: "/dashboard/mappa", label: t("map"), icon: "◎", mobile: false },
     { href: "/dashboard/bibliografia", label: t("bibliography"), icon: "❦", mobile: true },
     { href: "/dashboard/frammenti", label: t("fragments"), icon: "❝", mobile: true },
     { href: "/dashboard/profile", label: t("profile"), icon: "◯", mobile: true },

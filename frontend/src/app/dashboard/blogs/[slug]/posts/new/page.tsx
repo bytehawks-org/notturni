@@ -3,7 +3,7 @@
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -16,6 +16,7 @@ import {
   PostCrawlingControl,
   type NewPostStatus,
 } from "@/components/editor/PostMetaControls";
+import { PageParentSelect } from "@/components/editor/PageParentSelect";
 import { PublicationSelect } from "@/components/editor/PublicationSelect";
 import { RichTextEditor } from "@/components/editor/RichTextEditorLazy";
 import { TagInput } from "@/components/editor/TagInput";
@@ -30,7 +31,7 @@ const FORM_ID = "new-post-form";
 export default function NewPostPage() {
   const params = useParams<{ slug: string }>();
   const router = useRouter();
-  const { authFetch } = useAuth();
+  const { accessToken, authFetch } = useAuth();
   const t = useTranslations("NewPostPage");
   const tEditor = useTranslations("PostEditorPage");
   const tc = useTranslations("Common");
@@ -50,12 +51,21 @@ export default function NewPostPage() {
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [publicationId, setPublicationId] = useState<string | null>(null);
   const [notes, setNotes] = useState<PostNote[]>([]);
+  const [isWikiSpace, setIsWikiSpace] = useState(false);
+  const [parentId, setParentId] = useState<string | null>(null);
   const [status, setStatus] = useState<NewPostStatus>("draft");
   const [commentsMode, setCommentsMode] = useState<CommentsMode | null>(null);
   const [searchIndexingEnabled, setSearchIndexingEnabled] = useState<boolean | null>(null);
   const [aiCrawlingEnabled, setAiCrawlingEnabled] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    api.blogs
+      .get(params.slug, accessToken)
+      .then((b) => setIsWikiSpace(b.kind !== "blog"))
+      .catch(() => undefined);
+  }, [params.slug, accessToken]);
 
   function handleTitleChange(value: string) {
     setTitle(value);
@@ -80,6 +90,7 @@ export default function NewPostPage() {
           category_id: categoryId,
           publication_id: publicationId,
           notes,
+          ...(isWikiSpace ? { parent_id: parentId } : {}),
         })
       );
       // I metadati sotto (commenti, crawler) non fanno parte di
@@ -188,6 +199,7 @@ export default function NewPostPage() {
                   <NewPostStatusControl value={status} onChange={setStatus} />
                   <CategorySelect blogSlug={params.slug} value={categoryId} onChange={setCategoryId} />
                   <PublicationSelect blogSlug={params.slug} value={publicationId} onChange={setPublicationId} />
+                  {isWikiSpace && <PageParentSelect blogSlug={params.slug} value={parentId} onChange={setParentId} />}
                   <div>
                     <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[.04em] text-muted">
                       {t("tags")}

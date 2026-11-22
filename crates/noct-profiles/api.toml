@@ -1,0 +1,261 @@
+# Contratto compatibile con /api/v1/users della v1: profilo pubblico e privato, avatar, link
+# social, cambio email, directory degli utenti, blog e post pubblici di un utente. Il cambio
+# password è del crate `auth`; follow e follower del modulo `discovery`; il dominio personale,
+# l'esportazione e la cancellazione dell'account di moduli opzionali.
+
+[type.ProfileUpdate]
+# cooldown di 5 giorni tra due cambi; assente lascia invariato
+username = { type = "string", max = 64, optional = true }
+bio = { type = "string", max = 5000, optional = true }
+first_name = { type = "string", max = 100, optional = true }
+last_name = { type = "string", max = 100, optional = true }
+# alias pubblico globale; "" azzera
+display_name = { type = "string", max = 255, optional = true }
+# username | full_name | display_name | verified_domain
+post_author_name_style = { type = "string", max = 32, optional = true }
+# ISO 3166-1 alpha-2; "" azzera
+country = { type = "string", max = 8, optional = true }
+# ISO 639-1; "" azzera
+native_language = { type = "string", max = 8, optional = true }
+# assente = invariate; lista (anche vuota) = sostituisce
+fallback_languages = "string[]?"
+# lingua dell'interfaccia; "" = default di piattaforma
+ui_locale = { type = "string", max = 8, optional = true }
+directory_listed = "bool?"
+# chiavi dell'elenco `GET /interests`; al più 5
+interests = "string[]?"
+
+[type.SocialLinkCreate]
+label = { type = "string", max = 100, non_blank = true, message = "L'etichetta del link non può essere vuota (max 100 caratteri)." }
+url = { type = "string", max = 2048, non_blank = true, message = "L'URL del link non può essere vuoto (max 2048 caratteri)." }
+
+[type.SocialLink]
+id = "uuid"
+label = "string"
+url = "string"
+position = "int"
+
+[type.AvatarOut]
+avatar_url = { type = "string", nullable = true }
+
+[type.EmailChangeRequestIn]
+new_email = { type = "string", max = 255 }
+
+[type.EmailChangeCode]
+code = { type = "string", max = 32 }
+
+[type.Detail]
+detail = "string"
+
+# Profilo pubblico (`GET /users/{username}`)
+[type.ProfileOut]
+username = "string"
+bio = { type = "string", nullable = true }
+first_name = { type = "string", nullable = true }
+last_name = { type = "string", nullable = true }
+display_name = { type = "string", nullable = true }
+post_author_name_style = "string"
+country = { type = "string", nullable = true }
+native_language = { type = "string", nullable = true }
+fallback_languages = "string[]"
+interests = "string[]"
+avatar_url = { type = "string", nullable = true }
+# elenco di SocialLink
+social_links = "json"
+created_at = "timestamp"
+# none | bronze | blue | silver | gold, calcolato al momento della lettura
+verification_tier = "string"
+custom_domain = { type = "string", nullable = true }
+# identificativi calcolati per una futura federazione, non persistiti
+atproto_did = "string"
+activitypub_actor_id = "string"
+
+# `ProfileOut` + campi privati: email, cooldown dello username, cambio email in corso,
+# impostazione della directory e, con il modulo `custom_domains`, lo stato del dominio personale
+[type.MeProfileOut]
+username = "string"
+email = "string"
+username_changed_at = { type = "timestamp", nullable = true }
+next_username_change_allowed_at = { type = "timestamp", nullable = true }
+pending_email_change = "json"
+directory_listed = "bool"
+domain_pending_verification = { type = "string", nullable = true }
+domain_status = { type = "string", nullable = true }
+domain_verification_instructions = "json"
+
+[type.DirectoryUser]
+username = "string"
+display_name = { type = "string", nullable = true }
+bio = { type = "string", nullable = true }
+avatar_url = { type = "string", nullable = true }
+verification_tier = "string"
+custom_domain = { type = "string", nullable = true }
+interests = "string[]"
+follower_count = "int"
+
+# Forma completa `BlogOut` (blogs) / `PostOut` (posts), più i campi dei moduli attivi
+[type.UserBlog]
+id = "uuid"
+slug = "string"
+title = "string"
+
+[type.UserPost]
+id = "uuid"
+blog_slug = "string"
+slug = "string"
+title = "string"
+permalink = "string"
+published_at = { type = "timestamp", nullable = true }
+
+[[route]]
+id = "list_users"
+method = "GET"
+path = "/users"
+auth = "public"
+kind = "custom"
+handler = "list_users"
+response = "DirectoryUser[]"
+summary = "Directory pubblica degli utenti (`q`, `locale`, `interest`, `sort` = new|followers, `limit` max 100, `offset`)"
+
+[[route]]
+id = "get_my_profile"
+method = "GET"
+path = "/users/me"
+auth = "user"
+kind = "custom"
+handler = "get_my_profile"
+response = "MeProfileOut"
+summary = "Profilo privato del proprietario (con l'email)"
+
+[[route]]
+id = "update_my_profile"
+method = "PATCH"
+path = "/users/me"
+auth = "user"
+kind = "custom"
+handler = "update_my_profile"
+request = "ProfileUpdate"
+response = "MeProfileOut"
+summary = "Aggiorna il profilo; i campi assenti restano invariati, \"\" azzera i campi testuali"
+
+[[route]]
+id = "get_profile"
+method = "GET"
+path = "/users/{username}"
+auth = "public"
+kind = "custom"
+handler = "get_profile"
+response = "ProfileOut"
+summary = "Profilo pubblico, per username o per dominio personale verificato"
+
+[[route]]
+id = "upload_avatar"
+method = "POST"
+path = "/users/me/avatar"
+auth = "user"
+kind = "custom"
+handler = "upload_avatar"
+upload = 2621440
+response = "AvatarOut"
+rate_limit = { key = "user", max = 20, window = "10m" }
+summary = "Avatar (PNG, JPEG, WEBP; max 2 MiB)"
+
+[[route]]
+id = "delete_avatar"
+method = "DELETE"
+path = "/users/me/avatar"
+auth = "user"
+kind = "custom"
+handler = "delete_avatar"
+status = 204
+summary = "Rimuove l'avatar"
+
+[[route]]
+id = "add_social_link"
+method = "POST"
+path = "/users/me/social-links"
+auth = "user"
+kind = "custom"
+handler = "add_social_link"
+request = "SocialLinkCreate"
+response = "SocialLink"
+status = 201
+summary = "Aggiunge un link social (max 5)"
+
+[[route]]
+id = "delete_social_link"
+method = "DELETE"
+path = "/users/me/social-links/{link_id}"
+auth = "user"
+kind = "custom"
+handler = "delete_social_link"
+status = 204
+summary = "Rimuove un link social"
+
+[[route]]
+id = "request_email_change"
+method = "POST"
+path = "/users/me/email/request"
+auth = "user"
+kind = "custom"
+handler = "request_email_change"
+request = "EmailChangeRequestIn"
+response = "Detail"
+status = 202
+rate_limit = { key = "user", max = 5, window = "10m" }
+summary = "Passo 1/3 del cambio email: codice alla casella attuale"
+
+[[route]]
+id = "verify_current_email"
+method = "POST"
+path = "/users/me/email/verify-current"
+auth = "user"
+kind = "custom"
+handler = "verify_current_email"
+request = "EmailChangeCode"
+response = "Detail"
+status = 202
+rate_limit = { key = "user", max = 10, window = "10m" }
+summary = "Passo 2/3: verifica il codice della casella attuale e invia quello alla nuova"
+
+[[route]]
+id = "cancel_email_change"
+method = "DELETE"
+path = "/users/me/email/request"
+auth = "user"
+kind = "custom"
+handler = "cancel_email_change"
+status = 204
+summary = "Annulla il cambio email in corso, a qualunque passo"
+
+[[route]]
+id = "verify_new_email"
+method = "POST"
+path = "/users/me/email/verify-new"
+auth = "user"
+kind = "custom"
+handler = "verify_new_email"
+request = "EmailChangeCode"
+response = "MeProfileOut"
+rate_limit = { key = "user", max = 10, window = "10m" }
+summary = "Passo 3/3: verifica il codice della nuova casella e applica il cambio"
+
+[[route]]
+id = "list_user_blogs"
+method = "GET"
+path = "/users/{username}/blogs"
+auth = "public"
+kind = "custom"
+handler = "list_user_blogs"
+response = "UserBlog[]"
+summary = "Blog pubblici dell'utente; i blog con un alias diverso dallo username non compaiono"
+
+[[route]]
+id = "list_user_posts"
+method = "GET"
+path = "/users/{username}/posts"
+auth = "public"
+kind = "custom"
+handler = "list_user_posts"
+response = "UserPost[]"
+summary = "Post pubblicati dell'utente, solo quelli firmati con lo username (`limit` max 50, `offset`)"

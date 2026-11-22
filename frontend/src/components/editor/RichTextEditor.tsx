@@ -38,6 +38,7 @@ import {
 import { ImagePickerModal, type PickedImage } from "./ImagePickerModal";
 import { LinkPreviewCard } from "./LinkPreviewCard";
 import { CodeBlockNode, HeadingNode, ParagraphNode, TextAlignExtension, UnderlineMark } from "./markdownFormatting";
+import { LinkModal, type LinkModalValue } from "./LinkModal";
 import { NoteModal, type NoteModalValue } from "./NoteModal";
 import { sensitiveImageNodeView } from "./SensitiveImageNodeView";
 
@@ -52,7 +53,7 @@ export interface RichTextEditorProps {
   blogSlug?: string;
   authFetch: <T>(fn: (token: string) => Promise<T>) => Promise<T>;
   placeholder?: string;
-  /** Note a piè di pagina del post (todo/EDITOR.md). Assenti per contenuti
+  /** Note a piè di pagina del post. Assenti per contenuti
    * che non le prevedono (es. pagine statiche, CLAUDE.md #1): in quel caso
    * il pulsante "Nota" e l'elenco delle note non vengono mostrati. */
   notes?: PostNote[];
@@ -117,7 +118,7 @@ interface MentionCandidate {
 // caratteri del formato username (vedi app/domain/usernames.py).
 const MENTION_TRIGGER_RE = /(?:^|\s)@([a-z0-9_-]{0,32})$/;
 
-/** Autocomplete delle @menzioni nell'editor (todo/EDITOR.md): rileva la
+/** Autocomplete delle @menzioni nell'editor: rileva la
  * digitazione di `@parola`, propone gli utenti del blog e, alla selezione,
  * inserisce `@username ` come testo semplice (il Markdown resta pulito, il
  * link si forma al rendering — vedi src/lib/markdown.ts). Se il blog ha le
@@ -323,6 +324,7 @@ export function RichTextEditor({
   // "create": nuova nota inserita al cursore. "edit": modifica dei campi
   // bibliografici di una nota già presente nell'elenco sotto l'editor
   // (idx valorizzato, nessun nuovo marcatore da inserire nel testo).
+  const [linkModal, setLinkModal] = useState<{ initial: LinkModalValue; editing: boolean } | null>(null);
   const [noteModal, setNoteModal] = useState<{ mode: "create" | "edit"; idx?: number } | null>(null);
   // Seconda riga della toolbar (elenchi, tabella, nota): nascosta di default,
   // lascia spazio per aggiunte future senza dover scegliere subito quali
@@ -450,15 +452,32 @@ export function RichTextEditor({
 
   if (!editor) return null;
 
+  /** Apre il modal «Link». Su un link esistente lo seleziona per intero e ne precompila URL e testo; con una
+   * selezione di testo la usa come testo del link; a cursore vuoto il testo si sceglie nel modal. */
   function setLink() {
-    const previousUrl = editor!.getAttributes("link").href as string | undefined;
-    const url = window.prompt(t("linkPrompt"), previousUrl ?? "https://");
-    if (url === null) return;
-    if (url === "") {
-      editor!.chain().focus().extendMarkRange("link").unsetLink().run();
-      return;
-    }
-    editor!.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+    const ed = editor!;
+    const existing = (ed.getAttributes("link").href as string | undefined) ?? "";
+    if (existing) ed.chain().extendMarkRange("link").run();
+    const { from, to } = ed.state.selection;
+    const text = ed.state.doc.textBetween(from, to, " ");
+    setLinkModal({ initial: { url: existing, text: text === existing ? "" : text }, editing: Boolean(existing) });
+  }
+
+  function handleLinkSave({ url, text }: LinkModalValue) {
+    const ed = editor!;
+    ed.chain()
+      .focus()
+      .extendMarkRange("link")
+      .insertContent({ type: "text", text: text || url, marks: [{ type: "link", attrs: { href: url } }] })
+      .run();
+    // il mark link non deve «sbordare» sul testo che si scrive dopo
+    ed.chain().focus().unsetMark("link").run();
+    setLinkModal(null);
+  }
+
+  function handleLinkRemove() {
+    editor!.chain().focus().extendMarkRange("link").unsetLink().run();
+    setLinkModal(null);
   }
 
   /** Apre il modal "Nota" (mockup 1d), stesso stile di `ContentWarningModal`
@@ -785,6 +804,16 @@ export function RichTextEditor({
 
       <EditorContent editor={editor} />
       {mentionMenu}
+
+      {linkModal && (
+        <LinkModal
+          initial={linkModal.initial}
+          editing={linkModal.editing}
+          onSave={handleLinkSave}
+          onRemove={handleLinkRemove}
+          onClose={() => setLinkModal(null)}
+        />
+      )}
 
       {noteModal && onNotesChange && (
         <NoteModal

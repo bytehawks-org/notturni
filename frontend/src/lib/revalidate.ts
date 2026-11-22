@@ -7,7 +7,7 @@
  * pagine statiche): vedi la route handler `app/api/revalidate`.
  *
  * Le stringhe dei tag devono restare identiche a quelle usate dal backend in
- * `backend/app/core/revalidation.py` — cambiarle in un solo posto rompe
+ * `crates/noct-core/src/revalidate.rs` — cambiarle in un solo posto rompe
  * l'invalidazione senza errori visibili.
  */
 
@@ -29,7 +29,13 @@ export const revalidateTags = {
   platformPage: (slug: string): string => `platform-page:${slug}`,
   /** Una singola pagina statica di un blog (`/{blog}/pagina/{slug}`). */
   blogPage: (blogSlug: string, pageSlug: string): string => `blog-page:${blogSlug}:${pageSlug}`,
+  /** Pagina pubblica di un utente (`/u/{username}`): profilo, follower, blog, commenti. */
+  user: (username: string): string => `user:${username}`,
   /** Footer di piattaforma (colonne 1-3 + barra inferiore): un solo tag
    * condiviso, non per-blog — mostrato su ogni pagina pubblica. */
   platformFooter: (): string => "platform-footer",
+  /** Testi dell'interfaccia modificati dagli amministratori (`/admin/testi`). */
+  siteTexts: (): string => "site-texts",
+  /** Identità e meta tag del portale (`/admin/seo`). */
+  siteSeo: (): string => "site-seo",
 } as const;

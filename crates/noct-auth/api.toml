@@ -1,0 +1,197 @@
+# Contratto compatibile con /api/v1/auth, /api/v1/tokens e /api/v1/users/me/password della v1
+# (esclusi MFA e SSO, che arrivano come moduli opzionali).
+
+[type.RegisterRequest]
+username = { type = "string", max = 64 }
+email = { type = "string", max = 255 }
+password = { type = "string", max = 2048 }
+
+[type.LoginRequest]
+email = { type = "string", max = 255 }
+password = { type = "string", max = 2048 }
+
+[type.UserOut]
+id = "uuid"
+username = "string"
+email = "string"
+display_name = { type = "string", nullable = true }
+mfa_enabled = "bool"
+platform_role = "string"
+ui_locale = { type = "string", nullable = true }
+
+[type.SessionResponse]
+access_token = "string"
+token_type = "string"
+
+[type.UsernameAvailability]
+available = "bool"
+reason = { type = "string", nullable = true }
+
+[type.ForgotPasswordRequest]
+email = { type = "string", max = 255 }
+
+[type.ResetPasswordRequest]
+email = { type = "string", max = 255 }
+code = { type = "string", max = 32 }
+new_password = { type = "string", max = 2048 }
+
+[type.PasswordChangeRequest]
+current_password = { type = "string", max = 2048 }
+new_password = { type = "string", max = 2048 }
+
+[type.StatusOut]
+status = "string"
+
+[type.TokenCreateRequest]
+name = { type = "string", max = 255, non_blank = true, message = "Il nome del token non può essere vuoto (max 255 caratteri)." }
+
+[type.TokenCreated]
+id = "uuid"
+name = "string"
+token = "string"
+token_prefix = "string"
+
+[type.TokenOut]
+id = "uuid"
+name = "string"
+token_prefix = "string"
+owner_type = "string"
+created_at = "timestamp"
+last_used_at = { type = "timestamp", nullable = true }
+expires_at = { type = "timestamp", nullable = true }
+revoked_at = { type = "timestamp", nullable = true }
+
+[[route]]
+id = "register"
+method = "POST"
+path = "/auth/register"
+auth = "public"
+kind = "custom"
+handler = "register"
+request = "RegisterRequest"
+response = "UserOut"
+status = 201
+rate_limit = { key = "ip", max = 30, window = "10m" }
+summary = "Registra un utente"
+
+[[route]]
+id = "username_available"
+method = "GET"
+path = "/auth/username-available"
+auth = "public"
+kind = "custom"
+handler = "username_available"
+response = "UsernameAvailability"
+rate_limit = { key = "ip", max = 30, window = "1m" }
+summary = "Verifica la disponibilità di uno username (?username=)"
+
+# login, refresh e logout impostano/cancellano i cookie: l'handler costruisce la risposta
+[[route]]
+id = "login"
+method = "POST"
+path = "/auth/login"
+auth = "public"
+kind = "custom"
+raw = true
+handler = "login"
+request = "LoginRequest"
+response = "SessionResponse"
+summary = "Login con email e password; il refresh token viaggia in un cookie httpOnly"
+
+[[route]]
+id = "refresh"
+method = "POST"
+path = "/auth/refresh"
+auth = "public"
+kind = "custom"
+raw = true
+handler = "refresh"
+response = "SessionResponse"
+summary = "Rinnova la sessione dal cookie di refresh (rotation); richiede X-CSRF-Token"
+
+[[route]]
+id = "logout"
+method = "POST"
+path = "/auth/logout"
+auth = "public"
+kind = "custom"
+raw = true
+handler = "logout"
+status = 204
+summary = "Revoca la sessione corrente; richiede X-CSRF-Token"
+
+[[route]]
+id = "me"
+method = "GET"
+path = "/auth/me"
+auth = "user"
+kind = "custom"
+handler = "me"
+response = "UserOut"
+summary = "L'utente della sessione corrente"
+
+[[route]]
+id = "forgot_password"
+method = "POST"
+path = "/auth/password/forgot"
+auth = "public"
+kind = "custom"
+handler = "forgot_password"
+request = "ForgotPasswordRequest"
+status = 202
+summary = "Invia un codice di reset (risponde sempre 202, l'email non è enumerabile)"
+
+[[route]]
+id = "reset_password"
+method = "POST"
+path = "/auth/password/reset"
+auth = "public"
+kind = "custom"
+handler = "reset_password"
+request = "ResetPasswordRequest"
+status = 204
+summary = "Imposta una nuova password con il codice ricevuto"
+
+[[route]]
+id = "change_password"
+method = "POST"
+path = "/users/me/password"
+auth = "user"
+kind = "custom"
+handler = "change_password"
+request = "PasswordChangeRequest"
+response = "StatusOut"
+rate_limit = { key = "user", max = 10, window = "5m" }
+summary = "Cambia la password conoscendo quella attuale; revoca tutte le sessioni"
+
+[[route]]
+id = "create_token"
+method = "POST"
+path = "/tokens"
+auth = "user_or_token"
+kind = "custom"
+handler = "create_token"
+request = "TokenCreateRequest"
+response = "TokenCreated"
+status = 201
+summary = "Emette un API token (mostrato una sola volta)"
+
+[[route]]
+id = "list_tokens"
+method = "GET"
+path = "/tokens"
+auth = "user_or_token"
+kind = "custom"
+handler = "list_tokens"
+response = "TokenOut[]"
+summary = "I token dello stesso proprietario"
+
+[[route]]
+id = "revoke_token"
+method = "DELETE"
+path = "/tokens/{token_id}"
+auth = "user_or_token"
+kind = "custom"
+handler = "revoke_token"
+status = 204
+summary = "Revoca un token del proprio proprietario"

@@ -1,6 +1,6 @@
 import { FEED_HEADERS, buildAtom, postToFeedItem } from "@/lib/feed";
 import { getPublicFeed } from "@/lib/server-api";
-import { SITE_URL } from "@/lib/site";
+import { siteName, siteUrl } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
@@ -12,10 +12,10 @@ export async function GET() {
   const posts = await getPublicFeed({ limit: FEED_LIMIT }).catch(() => []);
   const xml = buildAtom(
     {
-      title: "Notturni",
-      description: "Ultimi post pubblicati su Notturni.",
-      link: SITE_URL,
-      feedUrl: `${SITE_URL}/atom.xml`,
+      title: siteName(),
+      description: `Ultimi post pubblicati su ${siteName()}.`,
+      link: siteUrl(),
+      feedUrl: `${siteUrl()}/atom.xml`,
       language: "it",
     },
     posts.map((post) => postToFeedItem(post))

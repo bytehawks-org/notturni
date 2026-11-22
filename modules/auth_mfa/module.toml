@@ -1,0 +1,24 @@
+[module]
+name = "auth_mfa"
+version = "0.1.0"
+kind = "optional"
+default_enabled = true
+requires = ["users", "audit", "auth"]
+description = "Autenticazione a due fattori: app TOTP o codice via email, sfida al login"
+
+# Spedisce il codice via email: il valore si rigenera dal job, non passa da outbox né bus.
+[jobs.send_mfa_email]
+subject = "auth_mfa.email.send"
+max_deliver = 5
+backoff = ["10s", "1m", "5m"]
+
+[config]
+# Chiave per cifrare a riposo i segreti TOTP (qualsiasi stringa lunga e casuale, es. `openssl rand -base64 32`).
+# Senza, si deriva dal segreto JWT: ruotarlo renderebbe illeggibili i segreti già salvati.
+secrets_key = { type = "string", env = "NOCT_SECRETS_KEY", optional = true, secret = true }
+# Per disattivare l'MFA serve un codice valido (TOTP o email). `false` = comportamento della v1.
+disable_requires_code = { type = "bool", env = "NOCT_MFA_DISABLE_REQUIRES_CODE", default = true }
+
+[lifecycle]
+personal_data = true
+login_gates = true

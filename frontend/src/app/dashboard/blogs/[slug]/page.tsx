@@ -9,10 +9,12 @@ import { VisibilityLabel } from "@/components/blog/VisibilityBand";
 import { AppearanceTab } from "@/components/dashboard/blog/AppearanceTab";
 import { CollaboratorsTab } from "@/components/dashboard/blog/CollaboratorsTab";
 import { CommentsTab } from "@/components/dashboard/blog/CommentsTab";
+import { GitSyncTab } from "@/components/dashboard/blog/GitSyncTab";
 import { MediaTab } from "@/components/dashboard/blog/MediaTab";
 import { NewsletterTab } from "@/components/dashboard/blog/NewsletterTab";
 import { NotesTab } from "@/components/dashboard/blog/NotesTab";
 import { MyMembershipCard } from "@/components/dashboard/blog/MyMembershipCard";
+import { OutlineTab } from "@/components/dashboard/blog/OutlineTab";
 import { OverviewTab } from "@/components/dashboard/blog/OverviewTab";
 import { PagesTab } from "@/components/dashboard/blog/PagesTab";
 import { PostsTab } from "@/components/dashboard/blog/PostsTab";
@@ -24,15 +26,14 @@ import { Button } from "@/components/ui/Button";
 import { SkeletonRows } from "@/components/ui/States";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { SITE_HOST } from "@/lib/site";
+import { siteHost } from "@/lib/site";
 import { type Blog, type BlogRole } from "@/lib/types";
 
-type Tab = "overview" | "posts" | "pages" | "publications" | "notes" | "media" | "newsletter" | "comments" | "appearance" | "collaborators" | "settings";
-const TABS: Tab[] = ["overview", "posts", "pages", "publications", "notes", "media", "newsletter", "comments", "appearance", "collaborators", "settings"];
+type Tab = "overview" | "posts" | "outline" | "pages" | "publications" | "notes" | "media" | "newsletter" | "comments" | "appearance" | "git" | "collaborators" | "settings";
+const TABS: Tab[] = ["overview", "posts", "outline", "pages", "publications", "notes", "media", "newsletter", "comments", "appearance", "git", "collaborators", "settings"];
 
-/** Tab visibili per ruolo (frontend-prototype/frontend-kit/ADMIN-IA.md,
- * todo/UX_REDESIGN.md "Gating per ruolo delle tab"): rispecchia le capacità
- * reali del backend (`backend/app/domain/authorization.py` —
+/** Tab visibili per ruolo: rispecchia le capacità
+ * reali del backend (`crates/noct-core/src/authz.rs` —
  * WRITE_ROLES/MODERATE_ROLES/REVIEW_ROLES), non solo proprietario/non
  * proprietario come prima. "Panoramica" è sempre visibile a chi ha una
  * membership (la pagina non viene raggiunta da chi non ne ha nessuna). */
@@ -42,7 +43,7 @@ function tabsForRole(isOwner: boolean, role: BlogRole | null): Tab[] {
   const isReviewer = role === "revisore";
   const isModerator = role === "mediatore";
   const tabs: Tab[] = ["overview"];
-  if (isWriter || isReviewer) tabs.push("posts");
+  if (isWriter || isReviewer) tabs.push("posts", "outline");
   if (isWriter) tabs.push("pages", "publications", "notes", "media", "newsletter");
   if (isModerator) tabs.push("comments");
   return tabs;
@@ -92,7 +93,8 @@ export default function BlogDetailPage() {
   if (!isOwner && !memberOfLoaded) return <SkeletonRows rows={5} />;
   const isWriter = isOwner || role === "autore" || role === "co_autore";
   const isModerator = isOwner || role === "mediatore";
-  const visibleTabs = tabsForRole(isOwner, role);
+  // l'indice esiste solo negli spazi wiki e docs
+  const visibleTabs = tabsForRole(isOwner, role).filter((id) => id !== "outline" || blog.kind !== "blog");
   const tab: Tab = visibleTabs.includes(tabParam as Tab) ? (tabParam as Tab) : "overview";
   const setTab = (next: Tab) => router.replace(`/dashboard/blogs/${slug}${next === "overview" ? "" : `?tab=${next}`}`);
 
@@ -106,7 +108,7 @@ export default function BlogDetailPage() {
           <h1 className="truncate font-serif text-[28px] font-medium leading-tight text-foreground">{blog.title}</h1>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-muted">
             <span className="font-mono">
-              {blog.slug}.{SITE_HOST}
+              {blog.slug}.{siteHost()}
             </span>
             <VisibilityLabel visibility={blog.visibility} />
             {blog.deleted_at && <span className="font-semibold text-danger">{ta("deleted")}</span>}
@@ -154,6 +156,7 @@ export default function BlogDetailPage() {
 
       {tab === "overview" && <OverviewTab blogSlug={blog.slug} />}
       {tab === "posts" && <PostsTab blogSlug={blog.slug} canWrite={isWriter} />}
+      {tab === "outline" && <OutlineTab blogSlug={blog.slug} canWrite={isWriter} />}
       {tab === "pages" && <PagesTab blog={blog} canWrite={isWriter} />}
       {tab === "publications" && <PublicationsTab blogSlug={blog.slug} canWrite={isWriter} />}
       {tab === "notes" && <NotesTab blogSlug={blog.slug} canWrite={isWriter} />}
@@ -171,6 +174,7 @@ export default function BlogDetailPage() {
       )}
       {tab === "comments" && <CommentsTab blog={blog} canModerate={isModerator} onBlogUpdated={setBlog} />}
       {tab === "appearance" && isOwner && <AppearanceTab blogSlug={blog.slug} canEdit={isOwner} />}
+      {tab === "git" && isOwner && <GitSyncTab blogSlug={blog.slug} />}
       {tab === "collaborators" && isOwner && <CollaboratorsTab blogSlug={blog.slug} />}
       {tab === "settings" && isOwner && <SettingsTab blog={blog} canEdit={isOwner} onUpdated={setBlog} />}
     </div>

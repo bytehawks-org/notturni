@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 
-import { getCrawlDirectives } from "@/lib/server-api";
-import { SITE_URL } from "@/lib/site";
+import { getCrawlDirectives, getSiteSeo } from "@/lib/server-api";
+import { siteUrl } from "@/lib/site";
 
 // Senza questo, Next prova a pre-renderizzare /robots.txt in fase di build
 // (route "cacheata di default" per le route speciali, vedi doc Next.js) e la
@@ -11,11 +11,13 @@ import { SITE_URL } from "@/lib/site";
 export const dynamic = "force-dynamic";
 
 /** Robots.txt generato dinamicamente (punto 6: opt-in per crawler a livello
- * di blog/post — vedi backend/app/domain/seo.py). Un gruppo user-agent
+ * di blog/post — vedi crates/noct-posts/src/seo.rs). Un gruppo user-agent
  * specifico sostituisce interamente `User-agent: *` per quel bot, non lo
  * integra: `ai_disallow` è quindi già un superset di `search_disallow` (vedi
  * commento in build_crawl_directives), non serve unirli qui. */
 export default async function robots(): Promise<MetadataRoute.Robots> {
+  // portale chiuso agli indici (`/admin/seo`): nessun crawler è ammesso e non c'è nulla da segnalare
+  if ((await getSiteSeo("it"))?.noindex) return { rules: [{ userAgent: "*", disallow: "/" }] };
   const { search_disallow, ai_disallow, ai_user_agents } = await getCrawlDirectives();
 
   const rules: MetadataRoute.Robots["rules"] = [
@@ -28,5 +30,5 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
     }
   }
 
-  return { rules, sitemap: `${SITE_URL}/sitemap.xml` };
+  return { rules, sitemap: `${siteUrl()}/sitemap.xml` };
 }

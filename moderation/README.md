@@ -1,47 +1,47 @@
-# Notturni — servizio di moderazione immagini
+# Notturni — image moderation service
 
-Classificatore NSFW self-hosted (nudità/contenuti sensibili), containerizzato
-separatamente dal backend principale: le dipendenze ML (torch/transformers,
-~2 GB di immagine) resterebbero fuori posto in un'immagine pensata per
-essere leggera e veloce da ricostruire ad ogni deploy. Nessuna immagine
-lascia mai l'infrastruttura — coerente con l'impostazione EU-centrica/GDPR
-del progetto (vedi [CLAUDE.md](../CLAUDE.md)).
+Self-hosted NSFW classifier (nudity and sensitive content), containerized
+separately from the main backend. The ML dependencies (torch/transformers,
+~2 GB image) do not belong in an image that must stay light and fast to
+rebuild on every deploy. No image ever leaves the infrastructure, in line
+with the EU-centric, GDPR-oriented design of the project (see
+[docs/ABSTRACT.md](../docs/ABSTRACT.md)).
 
-Modello: [Falconsai/nsfw_image_detection](https://huggingface.co/Falconsai/nsfw_image_detection)
-(ViT, Apache-2.0) — scaricato una volta in fase di build dell'immagine (vedi
-`Dockerfile`), non al primo avvio: il container non ha bisogno di accesso
-di rete a runtime.
+Model: [Falconsai/nsfw_image_detection](https://huggingface.co/Falconsai/nsfw_image_detection)
+(ViT, Apache-2.0). It is downloaded once, at image build time (see the
+`Dockerfile`), not at first start. The container needs no network access at
+runtime.
 
-Non è mai esposto pubblicamente: il backend lo chiama internamente via HTTP
-(`NOCT_MODERATION_SERVICE_URL`, impostato automaticamente da
-`compose.yaml`) — vedi `backend/app/domain/moderation.py` e
-[backend/API.md](../backend/API.md#moderazione-automatica-delle-immagini).
-Se il servizio non è raggiungibile o non risponde in tempo, il backend
-assume "non sensibile" e non blocca mai l'upload (fail open).
+The service is never exposed publicly. The backend calls it internally over
+HTTP (`NOCT_MODERATION_SERVICE_URL`, set automatically by `compose.yaml`).
+See `crates/noct-http` (client), `crates/noct-media` (called on every upload)
+and [docs/API.md](../docs/API.md#automatic-image-moderation).
+If the service is unreachable or does not answer in time, the backend
+treats the image as "not sensitive" and never blocks the upload (fail open).
 
-## Avvio
+## Start
 
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8100
 ```
 
-Health-check: `GET /health`.
+Health check: `GET /health`.
 
 ## API
 
-**`POST /classify`** — `multipart/form-data`, campo `file` (immagine).
+**`POST /classify`**: `multipart/form-data`, field `file` (the image).
 
 ```json
 {"is_sensitive": false, "label": "normal", "score": 0.999}
 ```
 
-`label`/`score` sono l'etichetta e la confidenza del modello (etichette
-possibili: `normal`, `nsfw`); `is_sensitive` è `true` solo se `label ==
-"nsfw"` e `score` supera la soglia configurata (`THRESHOLD` in
-`app/main.py`, 0.7 di default — non ancora tarata su un campione reale,
-solo una scelta prudente di partenza).
+`label` and `score` are the model label and confidence (possible labels:
+`normal`, `nsfw`). `is_sensitive` is `true` only when `label == "nsfw"` and
+`score` exceeds the configured threshold (`THRESHOLD` in `app/main.py`,
+default 0.7). The threshold is not yet calibrated on a real sample. It is
+only a cautious starting value.
 
-## Sviluppo locale
+## Local development
 
 ```bash
 python3 -m venv .venv
@@ -51,5 +51,5 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8100
 ```
 
-Il primo avvio scarica i pesi del modello (~350 MB) da Hugging Face se non
-già in cache locale (`~/.cache/huggingface`).
+The first start downloads the model weights (~350 MB) from Hugging Face,
+unless they are already in the local cache (`~/.cache/huggingface`).

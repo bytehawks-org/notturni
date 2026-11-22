@@ -1,3 +1,13 @@
+# Env comune ai servizi che parlano con lo storage S3 (rete interna di compose:
+# i servizi si raggiungono per nome, non per localhost). Sovrascrive i valori di
+# .env pensati per un backend avviato fuori da compose.
+x-s3-env: &s3-env
+  NOCT_S3_ENDPOINT_URL: http://garage:3900
+  NOCT_S3_REGION: garage
+  NOCT_S3_PUBLIC_ACCESS: website
+  # URL pubblico: il browser risolve solo la porta esposta da s3-public
+  NOCT_S3_PUBLIC_URL: http://localhost:9000
+
 services:
   postgres:
     image: docker.io/library/postgres:16-alpine
@@ -22,29 +32,23 @@ services:
     ports:
       - "6379:6379"
 
-  rabbitmq:
-    image: docker.io/library/rabbitmq:3-management-alpine
-    # su Podman rootless questa immagine a volte fallisce il primissimo avvio
-    # con un errore di permessi sul cookie Erlang (namespace utente) — auto-si
-    # risolve al restart, da qui la restart policy invece di un fix più fragile
-    restart: on-failure:5
-    environment:
-      RABBITMQ_DEFAULT_USER: ${NOCT_RABBITMQ_USER}
-      RABBITMQ_DEFAULT_PASS: ${NOCT_RABBITMQ_PASSWORD}
+  # Bus di messaggi (JetStream): eventi e job dei moduli, con consegna garantita e dead letter.
+  nats:
+    image: docker.io/library/nats:2-alpine
+    restart: on-failure
+    command: ["-js", "-sd", "/data", "-m", "8222"]
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "4222:4222"
+    volumes:
+      - nats_data:/data
     healthcheck:
-      # "service_started" (usato più sotto) non basta: il container parte
-      # molto prima che RabbitMQ accetti connessioni AMQP — senza questo
-      # healthcheck i worker si avviano troppo presto e vanno in crash
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8222/healthz"]
       interval: 5s
       timeout: 5s
       retries: 10
-      start_period: 10s
+      start_period: 5s
 
-  # Catcher SMTP per lo sviluppo locale (app/core/mail.py, MFA email OTP):
+  # Catcher SMTP per lo sviluppo locale (MFA via email, conferme newsletter, reset password):
   # nessuna email lascia la macchina, tutto è ispezionabile dalla UI web
   # su :8025 o dalla sua API (GET /api/v2/messages). Non usato in produzione,
   # dove NOCT_SMTP_HOST punta a un provider SMTP/transazionale reale.
@@ -61,7 +65,7 @@ services:
   # richiede comunque un dominio con SPF/DKIM/reverse DNS a posto per una
   # buona deliverability, cosa che il container da solo non risolve) sia per
   # l'inoltro verso uno smarthost esterno con autenticazione (un provider
-  # transazionale reale). Non è il default di worker-email-otp, che resta
+  # transazionale reale). Non è il default del servizio `worker`, che resta
   # puntato a mailhog per non richiedere credenziali reali in sviluppo — per
   # usarlo, impostare NOCT_SMTP_HOST=smtp-relay/NOCT_SMTP_PORT=587 lì sotto
   # (porta submission: l'immagine non espone la 25 di proposito).
@@ -76,24 +80,70 @@ services:
     ports:
       - "1587:587"
 
-  minio:
-    image: docker.io/minio/minio:latest
+  # Object storage S3-compatible (Garage, nodo singolo): config in
+  # garage/garage.toml, segreti da env. L'immagine è `scratch` (solo il
+  # binario /garage, niente shell). Appena avviato non è utilizzabile (nessun
+  # layout, nessuna chiave): ci pensa garage-bootstrap qui sotto.
+  garage:
+    image: docker.io/dxflrs/garage:v2.4.1
     restart: on-failure
-    command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${NOCT_S3_ACCESS_KEY_ID}
-      MINIO_ROOT_PASSWORD: ${NOCT_S3_SECRET_ACCESS_KEY}
+      GARAGE_RPC_SECRET: ${NOCT_GARAGE_RPC_SECRET}
+      GARAGE_ADMIN_TOKEN: ${NOCT_GARAGE_ADMIN_TOKEN}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      # API S3 (solo per strumenti/backend avviati fuori da compose); l'admin
+      # API (3903) resta nella rete interna, e le letture pubbliche passano
+      # da s3-public
+      - "3900:3900"
     volumes:
-      - minio_data:/data
+      - ./garage/garage.toml:/etc/garage.toml:ro,z
+      - garage_meta:/var/lib/garage/meta
+      - garage_data:/var/lib/garage/data
+
+  # Job one-shot idempotente (`noct-ctl garage-bootstrap`): layout del nodo, chiave applicativa
+  # (NOCT_S3_ACCESS_KEY_ID/_SECRET_ACCESS_KEY, formato Garage GK+24hex / 64hex) e bucket con
+  # alias globale. Va rieseguito solo se cambiano bucket/chiave:
+  # `podman compose up -d garage-bootstrap`.
+  garage-bootstrap:
+    build:
+      context: .
+    restart: "no"
+    env_file: .env
+    environment:
+      NOCT_GARAGE_ADMIN_URL: http://garage:3903
+      NOCT_S3_ENDPOINT_URL: http://garage:3900
+      NOCT_BACKUP_S3_ENDPOINT_URL: http://garage:3900
+      # stesso bucket del backup infrastrutturale (modulo `backup`): va creato qui con l'alias globale
+      NOCT_BACKUP_S3_BUCKET: notturni-backups
+    command: ["noct-ctl", "garage-bootstrap"]
+    depends_on:
+      garage:
+        condition: service_started
+
+  # Letture pubbliche (avatar, media dei post) davanti a Garage: traduce gli
+  # URL path-style `{NOCT_S3_PUBLIC_URL}/{bucket}/{key}` nel web endpoint di
+  # Garage ed espone solo i prefissi pubblici — vedi s3-public/default.conf.template.
+  s3-public:
+    image: docker.io/nginxinc/nginx-unprivileged:1.28-alpine
+    restart: on-failure
+    environment:
+      NGINX_ENVSUBST_FILTER: ^NOCT_
+      NOCT_S3_BUCKET_AVATARS: ${NOCT_S3_BUCKET_AVATARS:-avatars}
+      NOCT_S3_BUCKET_CONTENT: ${NOCT_S3_BUCKET_CONTENT:-notturni-content}
+      NOCT_GARAGE_WEB_UPSTREAM: garage:3902
+    ports:
+      - "9000:8080"
+    volumes:
+      - ./s3-public/default.conf.template:/etc/nginx/templates/default.conf.template:ro,z
+    depends_on:
+      garage:
+        condition: service_started
 
   # Moderazione automatica delle immagini (nudità/contenuti sensibili),
   # self-hosted — vedi moderation/. Container separato apposta: le
   # dipendenze ML (torch/transformers) resterebbero fuori posto in
   # un'immagine backend pensata per essere leggera. Mai un requisito rigido
-  # per il backend (fail open, vedi app/domain/moderation.py): un
+  # per il backend (fail open, vedi modules/image_moderation): un
   # depends_on con service_started basta, non service_healthy.
   moderation:
     build:
@@ -108,145 +158,73 @@ services:
       retries: 5
       start_period: 30s
 
+  # API HTTP (`noct-api`). Con NATS configurato i consumer girano nel servizio `worker`, non qui
+  # (NOCT_WORKER_INLINE si ricava dalla presenza di NOCT_NATS_URL).
   backend:
     build:
-      context: ./backend
+      context: .
     restart: on-failure
     env_file: .env
-    environment:
+    environment: &backend-env
       # in rete di compose i servizi si raggiungono per nome, non per localhost
       NOCT_POSTGRES_HOST: postgres
-      NOCT_RABBITMQ_HOST: rabbitmq
       NOCT_REDIS_HOST: redis
-      # endpoint interno (il backend gira nella rete di compose) diverso
-      # dall'URL pubblico (il browser risolve solo l'host esposto)
-      NOCT_S3_ENDPOINT_URL: http://minio:9000
-      NOCT_S3_PUBLIC_URL: http://localhost:9000
+      NOCT_NATS_URL: nats://nats:4222
+      <<: *s3-env
       NOCT_MODERATION_SERVICE_URL: http://moderation:8100
-      # invalidazione on-demand della cache del frontend dopo publish/update
-      # di contenuti pubblici (vedi backend/app/core/revalidation.py). Il
-      # frontend si raggiunge per nome servizio nella rete di compose.
+      # invalidazione on-demand della cache del frontend dopo publish/update di contenuti pubblici
+      # (il frontend si raggiunge per nome servizio nella rete di compose)
       NOCT_FRONTEND_REVALIDATE_URL: http://frontend:3000/api/revalidate
       NOCT_REVALIDATE_SECRET: ${NOCT_REVALIDATE_SECRET:-dev-revalidate-secret}
+      # MailHog in locale: nessuna autenticazione, nessun TLS. In produzione questi tre vengono
+      # sovrascritti da un provider SMTP/transazionale reale o dal servizio smtp-relay di questo
+      # stesso file (NOCT_SMTP_HOST=smtp-relay, NOCT_SMTP_PORT=587), non da .env.
+      NOCT_SMTP_HOST: mailhog
+      NOCT_SMTP_PORT: "1025"
+      NOCT_SMTP_USE_TLS: "false"
+      # destinazione del backup infrastrutturale: qui lo stesso Garage su un bucket dedicato, solo per
+      # avere qualcosa di verificabile in sviluppo. In produzione NOCT_BACKUP_S3_* punta a un
+      # provider S3 realmente esterno e separato.
+      NOCT_BACKUP_S3_ENDPOINT_URL: http://garage:3900
+      NOCT_BACKUP_S3_REGION: garage
+      NOCT_BACKUP_S3_ACCESS_KEY_ID: ${NOCT_S3_ACCESS_KEY_ID}
+      NOCT_BACKUP_S3_SECRET_ACCESS_KEY: ${NOCT_S3_SECRET_ACCESS_KEY}
+      NOCT_BACKUP_S3_BUCKET: notturni-backups
     ports:
       - "8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
-      rabbitmq:
+      nats:
         condition: service_healthy
       redis:
         condition: service_started
-      minio:
-        condition: service_started
+      garage-bootstrap:
+        condition: service_completed_successfully
       moderation:
         condition: service_started
 
-  worker-post-backup:
+  # Elaborazione in background (`noct-worker`): relay dell'outbox, pianificatore dei job periodici
+  # (campagne newsletter, manutenzione dell'audit, pulizia dei blog, backup) e consumer di eventi e
+  # job di tutti i moduli attivi. Sostituisce i cinque worker Python; se ne possono avviare più
+  # repliche (`--scale worker=3`): NATS distribuisce i job e lo scheduler è a elezione atomica.
+  worker:
     build:
-      context: ./backend
+      context: .
     restart: on-failure
     env_file: .env
-    environment:
-      NOCT_POSTGRES_HOST: postgres
-      NOCT_RABBITMQ_HOST: rabbitmq
-      NOCT_S3_ENDPOINT_URL: http://minio:9000
-      NOCT_S3_PUBLIC_URL: http://localhost:9000
-    command: ["python", "-m", "app.workers.post_backup_consumer"]
+    environment: *backend-env
+    command: ["noct-worker"]
     depends_on:
-      rabbitmq:
+      postgres:
         condition: service_healthy
-      minio:
+      nats:
+        condition: service_healthy
+      redis:
         condition: service_started
-
-  worker-email-otp:
-    build:
-      context: ./backend
-    restart: on-failure
-    env_file: .env
-    environment:
-      NOCT_RABBITMQ_HOST: rabbitmq
-      # MailHog in locale: nessuna autenticazione, nessun TLS (vedi servizio
-      # mailhog sopra). In produzione questi tre vengono sovrascritti da un
-      # provider SMTP/transazionale reale o dal servizio smtp-relay di questo
-      # stesso file (NOCT_SMTP_HOST=smtp-relay, NOCT_SMTP_PORT=587), non da .env.
-      NOCT_SMTP_HOST: mailhog
-      NOCT_SMTP_PORT: "1025"
-      NOCT_SMTP_USE_TLS: "false"
-    command: ["python", "-m", "app.workers.email_otp_consumer"]
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
+      garage-bootstrap:
+        condition: service_completed_successfully
       mailhog:
-        condition: service_started
-
-  # Consumer della coda newsletter_send (app/workers/newsletter_consumer.py):
-  # email di conferma iscrizione e invio delle campagne agli iscritti — a
-  # differenza di worker-email-otp/worker-post-backup accede anche al
-  # database (iscritti, post/blog, stato della campagna), quindi dipende
-  # anche da postgres.
-  worker-newsletter:
-    build:
-      context: ./backend
-    restart: on-failure
-    env_file: .env
-    environment:
-      NOCT_POSTGRES_HOST: postgres
-      NOCT_RABBITMQ_HOST: rabbitmq
-      NOCT_SMTP_HOST: mailhog
-      NOCT_SMTP_PORT: "1025"
-      NOCT_SMTP_USE_TLS: "false"
-    command: ["python", "-m", "app.workers.newsletter_consumer"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      mailhog:
-        condition: service_started
-
-  worker-audit-maintenance:
-    build:
-      context: ./backend
-    restart: on-failure
-    env_file: .env
-    environment:
-      NOCT_POSTGRES_HOST: postgres
-      NOCT_S3_ENDPOINT_URL: http://minio:9000
-      NOCT_S3_PUBLIC_URL: http://localhost:9000
-    # non è un consumer di coda: archivia su storage le settimane ISO chiuse
-    # di audit_log e cancella gli eventi oltre la retention, un giro al giorno
-    command: ["python", "-m", "app.workers.audit_maintenance", "--loop", "--interval", "86400"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-      minio:
-        condition: service_started
-
-  # Backup infrastrutturale di Postgres e MinIO verso uno storage S3
-  # "esterno" (app/workers/backup.py, ROADMAP.md §3) — qui la destinazione è
-  # lo stesso MinIO locale, su un bucket dedicato, solo per avere qualcosa di
-  # verificabile in sviluppo: in produzione NOCT_BACKUP_S3_ENDPOINT_URL/
-  # _ACCESS_KEY_ID/_SECRET_ACCESS_KEY vanno sovrascritti con un provider S3
-  # realmente esterno e separato.
-  worker-backup:
-    build:
-      context: ./backend
-    restart: on-failure
-    env_file: .env
-    environment:
-      NOCT_POSTGRES_HOST: postgres
-      NOCT_S3_ENDPOINT_URL: http://minio:9000
-      NOCT_S3_PUBLIC_URL: http://localhost:9000
-      NOCT_BACKUP_S3_ENDPOINT_URL: http://minio:9000
-      NOCT_BACKUP_S3_ACCESS_KEY_ID: ${NOCT_S3_ACCESS_KEY_ID}
-      NOCT_BACKUP_S3_SECRET_ACCESS_KEY: ${NOCT_S3_SECRET_ACCESS_KEY}
-      NOCT_BACKUP_S3_BUCKET: notturni-backups
-    command: ["python", "-m", "app.workers.backup", "--loop", "--interval", "86400"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-      minio:
         condition: service_started
 
   frontend:
@@ -266,6 +244,8 @@ services:
       # Variabile normale, non build-arg: letta a runtime, non inglobata nel
       # bundle — non richiede un rebuild dell'immagine per essere cambiata.
       NOCT_BACKEND_INTERNAL_URL: http://backend:8000
+      # origine degli oggetti su Garage (avatar, media): serve alla CSP `img-src` in sviluppo, dove è http
+      NOCT_S3_PUBLIC_URL: http://localhost:9000
       # secret condiviso con il backend per la route /api/revalidate: deve
       # coincidere con NOCT_REVALIDATE_SECRET del servizio backend. Se assente
       # da entrambi, la cache si affida solo alla rivalidazione a tempo.
@@ -278,4 +258,6 @@ services:
 
 volumes:
   postgres_data:
-  minio_data:
+  nats_data:
+  garage_meta:
+  garage_data:

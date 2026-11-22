@@ -1,0 +1,5 @@
+[module]
+name = "users"
+version = "0.1.0"
+kind = "core"
+description = "Utenti della piattaforma (entità minima della Fase 1: profilo, sessioni e MFA arrivano con il crate auth)"

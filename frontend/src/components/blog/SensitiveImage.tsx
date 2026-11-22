@@ -1,5 +1,4 @@
-import Image from "next/image";
-
+import { FillImage } from "@/components/FillImage";
 import { ExpandIcon } from "@/components/editor/icons";
 
 /**
@@ -20,6 +19,8 @@ export function SensitiveImage({
   revealLabel,
   sensitiveLabel,
   expandLabel = "Ingrandisci",
+  priority = false,
+  sizes = "(min-width: 768px) 1184px, 100vw",
 }: {
   src: string;
   alt?: string;
@@ -28,11 +29,15 @@ export function SensitiveImage({
   revealLabel: string;
   sensitiveLabel: string;
   expandLabel?: string;
+  /** Copertina nella prima schermata (LCP): caricamento immediato e priorità alta. */
+  priority?: boolean;
+  /** Larghezza di rendering per il browser, che sceglie la variante dal `srcset`. */
+  sizes?: string;
 }) {
   if (!sensitive) {
     return (
       <div className={`relative ${className}`}>
-        <Image
+        <FillImage
           src={src}
           alt={alt}
           data-lightbox="1"
@@ -43,9 +48,8 @@ export function SensitiveImage({
           // etichetta del pulsante di ingrandimento del ramo sensibile qui
           // sotto (bug segnalato dalla review Copilot).
           aria-label={alt || expandLabel}
-          fill
-          unoptimized
-          sizes="100vw"
+          sizes={sizes}
+          priority={priority}
           className="object-cover"
         />
       </div>
@@ -54,7 +58,7 @@ export function SensitiveImage({
   return (
     <label className={`sensitive-image-wrapper ${className}`}>
       <input type="checkbox" className="sensitive-image-toggle" aria-label={revealLabel} />
-      <Image src={src} alt={alt} fill unoptimized sizes="100vw" className="object-cover" />
+      <FillImage src={src} alt={alt} sizes={sizes} priority={priority} className="object-cover" />
       <span className="sensitive-image-overlay">{sensitiveLabel}</span>
       <button type="button" className="lightbox-expand-btn" data-lightbox-src={src} data-lightbox-alt={alt} aria-label={expandLabel}>
         <ExpandIcon />

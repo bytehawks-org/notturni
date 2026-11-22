@@ -1,0 +1,45 @@
+# Compatibile con POST|DELETE /api/v1/users/me/domain e POST /users/me/domain/verify della v1.
+# Lo stato del dominio in attesa compare in `GET /users/me` (campi `domain_pending_verification`,
+# `domain_status`, `domain_verification_instructions`).
+
+[type.DomainRequest]
+domain = { type = "string", max = 255, non_blank = true, message = "Indica il dominio da verificare." }
+
+[type.DomainOut]
+domain = "string"
+status = "enum:custom_domain_status"
+txt_record_name = "string"
+txt_record_value = "string"
+
+[[route]]
+id = "set_domain"
+method = "POST"
+path = "/users/me/domain"
+auth = "user"
+kind = "custom"
+handler = "set_domain"
+request = "DomainRequest"
+response = "DomainOut"
+rate_limit = { key = "user", max = 20, window = "1h" }
+summary = "Registra (o sostituisce) il dominio, in attesa di verifica, e restituisce il record TXT da pubblicare"
+
+[[route]]
+id = "verify_domain"
+method = "POST"
+path = "/users/me/domain/verify"
+auth = "user"
+kind = "custom"
+handler = "verify_domain"
+response = "DomainOut"
+rate_limit = { key = "user", max = 5, window = "10m" }
+summary = "Interroga il DNS: se il record TXT combacia verifica il dominio e assegna il sigillo bronzo"
+
+[[route]]
+id = "delete_domain"
+method = "DELETE"
+path = "/users/me/domain"
+auth = "user"
+kind = "custom"
+handler = "delete_domain"
+status = 204
+summary = "Rimuove il dominio (anche verificato)"

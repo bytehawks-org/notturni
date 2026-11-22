@@ -1,0 +1,5 @@
+[module]
+name = "events"
+version = "0.1.0"
+kind = "core"
+description = "Outbox transazionale: eventi e job scritti insieme al dato di dominio e pubblicati sul bus dal relay"

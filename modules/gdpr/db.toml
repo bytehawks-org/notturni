@@ -1,0 +1,30 @@
+[[enum]]
+name = "gdpr_request_type"
+values = ["export", "deletion"]
+
+[[enum]]
+name = "gdpr_request_status"
+values = ["open", "approved", "completed", "rejected"]
+
+# Coda delle richieste: le azioni fatte dall'utente (registrate già `completed`, per la traccia con
+# scadenza legale) e quelle arrivate fuori banda (email, PEC) inserite da un amministratore, che per
+# la cancellazione richiedono l'approvazione di un secondo amministratore.
+[[table]]
+name = "gdpr_requests"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "user_id", type = "uuid", ref = "users.id", on_delete = "cascade" },
+  # lo username al momento della richiesta: dopo la cancellazione l'account è anonimizzato
+  { name = "username", type = "varchar(32)" },
+  { name = "type", type = "enum:gdpr_request_type" },
+  { name = "status", type = "enum:gdpr_request_status", default = "'open'" },
+  # art. 12: risposta entro un mese dalla ricezione
+  { name = "deadline_at", type = "timestamptz" },
+  { name = "note", type = "text", null = true },
+  { name = "created_by_id", type = "uuid", null = true, ref = "users.id", on_delete = "set_null" },
+  { name = "approved_by_id", type = "uuid", null = true, ref = "users.id", on_delete = "set_null" },
+  { name = "approved_at", type = "timestamptz", null = true },
+  { name = "completed_at", type = "timestamptz", null = true },
+]
+indexes = [{ columns = ["user_id"] }, { columns = ["status", "deadline_at"] }]

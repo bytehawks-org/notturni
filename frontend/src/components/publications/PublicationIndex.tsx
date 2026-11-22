@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import type { Chapter } from "@/lib/types";
 
-/** Indice cronologico di una pubblicazione (mockup 2d, todo/PUBLICATIONS.md).
+/** Indice cronologico di una pubblicazione.
  * `resolvePermalink` adatta gli href assoluti dati dall'API (già prefissati
  * con lo slug del blog) al contesto path-based/sottodominio corrente — vedi
  * `src/lib/blog-path.ts::blogLinks`. */

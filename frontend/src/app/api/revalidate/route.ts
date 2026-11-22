@@ -5,7 +5,7 @@ import { revalidateTag } from "next/cache";
 /** Invalidazione on-demand della cache dei Server Component pubblici.
  *
  * Chiamata dal backend (fire-and-forget) dopo una modifica a contenuti
- * pubblici — vedi `backend/app/core/revalidation.py`. Protetta da un secret
+ * pubblici — vedi `crates/noct-core/src/revalidate.rs`. Protetta da un secret
  * condiviso (`NOCT_REVALIDATE_SECRET`, identico ai due servizi): se non è
  * configurato, l'endpoint non esiste e la cache si affida solo alla finestra
  * a tempo (`REVALIDATE_SECONDS` in `src/lib/revalidate.ts`).
@@ -59,10 +59,10 @@ export async function POST(request: Request): Promise<Response> {
   ).slice(0, MAX_TAGS);
 
   for (const tag of tags) {
-    // "max": semantica stale-while-revalidate (il visitatore successivo vede
-    // subito il contenuto ancora in cache mentre quello fresco si rigenera in
-    // background) — consigliata per contenuti tipo blog.
-    revalidateTag(tag, "max");
+    // `expire: 0`: scadenza immediata, la richiesta successiva rigenera (docs di Next per i webhook
+    // esterni). Con "max" (stale-while-revalidate) un post appena tolto dalla pubblicazione o
+    // eliminato restava visibile: il backend risponde 404 e il fetch non sostituiva la copia in cache.
+    revalidateTag(tag, { expire: 0 });
   }
 
   return Response.json({ revalidated: tags });

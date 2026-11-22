@@ -2,22 +2,28 @@ import "server-only";
 
 import { REVALIDATE_SECONDS, revalidateTags } from "./revalidate";
 import type {
+  Backlink,
   BibliographyEntry,
   Blog,
   BlogConfig,
   Category,
   Interest,
+  LegalLink,
   LinkBibliographyEntry,
   MediaBibliographyEntry,
+  OutlineNode,
   Page,
   Post,
   PostTranslationSummary,
   Profile,
+  Publication,
+  PublicationDetail,
   PublicBlog,
   PublicComment,
   PublicUser,
-  Publication,
-  PublicationDetail,
+  SeoSite,
+  SitemapPage,
+  SpaceSitemap,
   TrendingTag,
 } from "./types";
 
@@ -159,13 +165,14 @@ export async function getBlogLinksBibliography(slug: string): Promise<LinkBiblio
 
 /** Feed multi-blog per la homepage: post pubblicati di tutti i blog, dal più recente. */
 export async function getPublicFeed(
-  options: { locale?: string; tag?: string; category?: string; limit?: number } = {}
+  options: { locale?: string; tag?: string; category?: string; limit?: number; offset?: number } = {}
 ): Promise<Post[]> {
   const params = new URLSearchParams();
   if (options.locale) params.set("locale", options.locale);
   if (options.tag) params.set("tag", options.tag);
   if (options.category) params.set("category", options.category);
   if (options.limit) params.set("limit", String(options.limit));
+  if (options.offset) params.set("offset", String(options.offset));
   const qs = params.toString();
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/feed/posts${qs ? `?${qs}` : ""}`, {
     next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.feed()] },
@@ -176,7 +183,7 @@ export async function getPublicFeed(
 
 /** Directory pubblica dei blog indicizzabili (`GET /api/v1/blogs`, mockup
  * 4a/4c): ricerca `q`, filtro `locale`, ordinamento `active|new|followers`,
- * con i conteggi di post e follower. Nessun tag di rivalidazione dedicato:
+ * con i conteggi di post e follower. Tag `feed` (cambia con post, follow e blog):
  * si affida alla finestra a tempo `REVALIDATE_SECONDS`. */
 export async function getPublicBlogs(
   options: { limit?: number; offset?: number; q?: string; locale?: string; sort?: "active" | "new" | "followers" } = {}
@@ -189,7 +196,7 @@ export async function getPublicBlogs(
   if (options.sort) params.set("sort", options.sort);
   const qs = params.toString();
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs${qs ? `?${qs}` : ""}`, {
-    next: { revalidate: REVALIDATE_SECONDS },
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.feed()] },
   });
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero della directory dei blog.`);
   return (await res.json()) as PublicBlog[];
@@ -244,7 +251,7 @@ export async function searchBlogPosts(
 
 /** Lingue con almeno un post pubblico, con conteggio — per le pillole di
  * lingua della homepage (fino a 5, dalla più frequente: vedi
- * backend/app/api/v1/feed.py::list_feed_locales). */
+ * modules/discovery). */
 export async function getFeedLocales(): Promise<{ locale: string; count: number }[]> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/feed/locales`, {
     next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.feed()] },
@@ -275,11 +282,11 @@ export interface CrawlDirectives {
 }
 
 /** Percorsi da escludere in robots.txt (`app/robots.ts`), calcolati dal
- * backend (backend/app/domain/seo.py) a partire dagli opt-in per crawler di
+ * backend a partire dagli opt-in per crawler di
  * blog/post — vedi Blog.search_indexing_enabled/ai_crawling_enabled. */
 export async function getCrawlDirectives(): Promise<CrawlDirectives> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/seo/crawl-directives`, {
-    next: { revalidate: REVALIDATE_SECONDS },
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.feed()] },
   });
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero delle direttive crawler.`);
   return (await res.json()) as CrawlDirectives;
@@ -292,10 +299,10 @@ export interface SitemapEntries {
 
 /** Voci per `sitemap.xml` (`app/sitemap.ts`): solo blog/post effettivamente
  * indicizzabili — stesso criterio di `getCrawlDirectives` sopra (vedi
- * backend/app/domain/seo.py::build_sitemap_entries). */
+ * crates/noct-posts/src/seo.rs). */
 export async function getSitemapEntries(): Promise<SitemapEntries> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/seo/sitemap-entries`, {
-    next: { revalidate: REVALIDATE_SECONDS },
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.feed()] },
   });
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero delle voci della sitemap.`);
   return (await res.json()) as SitemapEntries;
@@ -309,6 +316,25 @@ export async function getPublicPostTranslations(postId: string): Promise<PostTra
   });
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero delle traduzioni del post.`);
   return (await res.json()) as PostTranslationSummary[];
+}
+
+/** Indice (albero) di uno Spazio wiki/docs nella lingua `locale`: solo le pagine pubblicate. */
+export async function getPublicOutline(blogSlug: string, locale?: string): Promise<OutlineNode[]> {
+  const query = locale ? `?locale=${encodeURIComponent(locale)}` : "";
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${blogSlug}/outline${query}`, {
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.blog(blogSlug)] },
+  });
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero dell'indice dello spazio.`);
+  return (await res.json()) as OutlineNode[];
+}
+
+/** Pagine dello stesso Spazio che rimandano al post con un `[[link]]` (Spazi wiki/docs). */
+export async function getPublicBacklinks(postId: string): Promise<Backlink[]> {
+  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/posts/${postId}/backlinks`, {
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.feed()] },
+  });
+  if (!res.ok) throw new Error(`Errore ${res.status} nel recupero dei backlink del post.`);
+  return (await res.json()) as Backlink[];
 }
 
 /** Palette/tipografia del blog (`GET /blogs/{slug}/config`, pubblico per i
@@ -345,7 +371,7 @@ export async function getPublicUsers(
   if (options.sort) params.set("sort", options.sort);
   const qs = params.toString();
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/users${qs ? `?${qs}` : ""}`, {
-    next: { revalidate: REVALIDATE_SECONDS },
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.feed()] },
   });
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero della directory degli utenti.`);
   return (await res.json()) as PublicUser[];
@@ -353,13 +379,12 @@ export async function getPublicUsers(
 
 /** Profilo pubblico (mockup 3e, `GET /users/{username}`, nessuna autenticazione
  * richiesta lato backend): renderizza sia i `<meta>` (layout.tsx) sia il
- * contenuto della pagina `/u/{username}` stessa. Nessun tag di
- * invalidazione: il backend non notifica ancora le modifiche al profilo,
- * resta la sola finestra a tempo (come senza `NOCT_REVALIDATE_SECRET`
- * configurato altrove). */
+ * contenuto della pagina `/u/{username}` stessa. Tag `user:{username}`:
+ * il backend lo invalida a modifica di profilo, avatar, link social, dominio
+ * personale, follow e commenti dell'utente. */
 export async function getPublicUserProfile(username: string): Promise<Profile | null> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/users/${username}`, {
-    next: { revalidate: REVALIDATE_SECONDS },
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.user(username)] },
   });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero del profilo.`);
@@ -368,11 +393,11 @@ export async function getPublicUserProfile(username: string): Promise<Profile | 
 
 /** Post/blog/commenti pubblici firmati con lo username, e follower — usati
  * dalla tab del profilo pubblico `/u/{username}` (mockup 3e). Come
- * `getPublicUserProfile`: nessuna autenticazione richiesta, nessun tag di
- * invalidazione dedicato (solo finestra a tempo). */
+ * `getPublicUserProfile`: nessuna autenticazione richiesta; i post e i blog
+ * portano anche il tag `feed`, perché cambiano a ogni modifica dei post. */
 export async function getPublicUserPosts(username: string): Promise<Post[]> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/users/${username}/posts`, {
-    next: { revalidate: REVALIDATE_SECONDS },
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.user(username), revalidateTags.feed()] },
   });
   if (!res.ok) return [];
   return (await res.json()) as Post[];
@@ -380,7 +405,7 @@ export async function getPublicUserPosts(username: string): Promise<Post[]> {
 
 export async function getPublicUserBlogs(username: string): Promise<Blog[]> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/users/${username}/blogs`, {
-    next: { revalidate: REVALIDATE_SECONDS },
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.user(username), revalidateTags.feed()] },
   });
   if (!res.ok) return [];
   return (await res.json()) as Blog[];
@@ -388,7 +413,7 @@ export async function getPublicUserBlogs(username: string): Promise<Blog[]> {
 
 export async function getPublicUserComments(username: string): Promise<PublicComment[]> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/users/${username}/comments`, {
-    next: { revalidate: REVALIDATE_SECONDS },
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.user(username)] },
   });
   if (!res.ok) return [];
   return (await res.json()) as PublicComment[];
@@ -396,7 +421,7 @@ export async function getPublicUserComments(username: string): Promise<PublicCom
 
 export async function getPublicUserFollowers(username: string): Promise<string[]> {
   const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/users/${username}/followers`, {
-    next: { revalidate: REVALIDATE_SECONDS },
+    next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.user(username)] },
   });
   if (!res.ok) return [];
   const rows = (await res.json()) as { username: string }[];
@@ -419,6 +444,83 @@ export async function getPlatformFooter(): Promise<PlatformFooter> {
   });
   if (!res.ok) return { column1: null, column2: null, column3: null, bottom_bar: null };
   return (await res.json()) as PlatformFooter;
+}
+
+/** Documenti legali pubblicati (privacy, cookie) nella lingua richiesta o nella migliore disponibile: link del
+ * footer. In caso di errore nessun link, mai un errore di pagina. */
+export async function getPublicLegalLinks(locale: string): Promise<LegalLink[]> {
+  try {
+    const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/legal/public?locale=${encodeURIComponent(locale)}`, {
+      next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.platformPages()] },
+    });
+    return res.ok ? ((await res.json()) as LegalLink[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Una pagina del sito nella prima lingua disponibile tra quelle indicate, poi tra le sue traduzioni pubblicate.
+ * Restituisce anche l'elenco delle lingue in cui esiste, per il selettore. */
+export async function getPublicPlatformPageForLocales(
+  slug: string,
+  preferred: string[]
+): Promise<{ page: Page; locales: string[] } | null> {
+  const tried = new Set<string>();
+  let found: Page | null = null;
+  for (const locale of preferred.filter(Boolean)) {
+    if (tried.has(locale)) continue;
+    tried.add(locale);
+    found = await getPublicPlatformPage(slug, locale);
+    if (found) break;
+  }
+  if (!found) return null;
+  let locales = [found.locale];
+  try {
+    const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/pages/${found.id}/translations`, {
+      next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.platformPage(slug), revalidateTags.platformPages()] },
+    });
+    if (res.ok) locales = ((await res.json()) as { locale: string }[]).map((t) => t.locale);
+  } catch {
+    // il selettore delle lingue è un di più
+  }
+  return { page: found, locales };
+}
+
+/** Identità e meta tag del portale (modulo `branding`). `null` se il modulo è spento o il backend non risponde: il
+ * layout usa i valori predefiniti, mai un errore di pagina. */
+export async function getSiteSeo(locale: string): Promise<SeoSite | null> {
+  try {
+    const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/seo/site?locale=${encodeURIComponent(locale)}`, {
+      next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.siteSeo()] },
+    });
+    return res.ok ? ((await res.json()) as SeoSite) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Una pagina della sitemap globale (`GET /seo/sitemap`). */
+export async function getSitemapPage(offset: number, limit: number): Promise<SitemapPage | null> {
+  try {
+    const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/seo/sitemap?offset=${offset}&limit=${limit}`, {
+      next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.feed(), revalidateTags.siteSeo(), revalidateTags.platformPages()] },
+    });
+    return res.ok ? ((await res.json()) as SitemapPage) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Sitemap di uno Spazio; `null` se non esiste o non è indicizzabile. */
+export async function getSpaceSitemap(slug: string): Promise<SpaceSitemap | null> {
+  try {
+    const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${encodeURIComponent(slug)}/sitemap`, {
+      next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.blog(slug), revalidateTags.feed()] },
+    });
+    return res.ok ? ((await res.json()) as SpaceSitemap) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Categorie del blog per i filtri della sua home pubblica (mockup 3f). */

@@ -1,0 +1,51 @@
+[[enum]]
+name = "api_token_owner"
+values = ["core", "user"]
+
+# Refresh token opaco di una sessione utente: solo l'hash sha256 è persistito.
+[[table]]
+name = "user_sessions"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "user_id", type = "uuid", ref = "users.id", on_delete = "cascade" },
+  { name = "refresh_token_hash", type = "varchar(64)" },
+  { name = "expires_at", type = "timestamptz" },
+  { name = "last_used_at", type = "timestamptz", null = true },
+  { name = "revoked_at", type = "timestamptz", null = true },
+]
+uniques = [{ name = "uq_user_sessions_refresh_hash", columns = ["refresh_token_hash"] }]
+indexes = [{ columns = ["user_id"] }, { columns = ["expires_at"] }]
+
+# Token API: `core` (motore, machine-to-machine, nessun utente) oppure `user`.
+# Coerenza owner_type/user_id verificata dal codice (il manifest non esprime CHECK).
+[[table]]
+name = "api_tokens"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "name", type = "varchar(255)" },
+  { name = "owner_type", type = "enum:api_token_owner" },
+  { name = "user_id", type = "uuid", null = true, ref = "users.id", on_delete = "cascade" },
+  # primi caratteri del token, per riconoscerlo nelle liste senza riesporlo
+  { name = "token_prefix", type = "varchar(16)" },
+  { name = "token_hash", type = "varchar(64)" },
+  { name = "expires_at", type = "timestamptz", null = true },
+  { name = "last_used_at", type = "timestamptz", null = true },
+  { name = "revoked_at", type = "timestamptz", null = true },
+]
+uniques = [{ name = "uq_api_tokens_hash", columns = ["token_hash"] }]
+indexes = [{ columns = ["user_id"] }]
+
+# Il codice del reset NON è memorizzato: si deriva da (chiave del server, id) — vedi
+# noct_security::otp. Qui restano solo scadenza e stato di consumo.
+[[table]]
+name = "password_reset_codes"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "user_id", type = "uuid", ref = "users.id", on_delete = "cascade" },
+  { name = "expires_at", type = "timestamptz" },
+  { name = "consumed_at", type = "timestamptz", null = true },
+]
+indexes = [{ columns = ["user_id", "created_at"] }]

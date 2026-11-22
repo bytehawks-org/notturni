@@ -2,7 +2,7 @@ import { getTranslations } from "next-intl/server";
 import Image from "next/image";
 import Link from "next/link";
 
-import { SITE_HOST } from "@/lib/site";
+import { siteHost } from "@/lib/site";
 import type { PublicBlog } from "@/lib/types";
 
 const hue = (s: string) => `oklch(0.55 0.06 ${[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % 360})`;
@@ -53,7 +53,7 @@ export async function BlogDirectoryList({ blogs, total }: { blogs: PublicBlog[];
                 {b.title}
               </Link>
               <span className="truncate text-xs text-muted">
-                {b.slug}.{SITE_HOST} · {b.default_locale.toUpperCase()} · {t("postsCount", { count: b.post_count })}
+                {b.slug}.{siteHost()} · {b.default_locale.toUpperCase()} · {t("postsCount", { count: b.post_count })}
               </span>
             </div>
             <Link href={`/${b.slug}`} className="text-[13px] font-medium no-underline hover:underline">
@@ -81,7 +81,7 @@ export async function BlogDirectoryGrid({ blogs }: { blogs: PublicBlog[] }) {
                 {b.title}
               </Link>
               <span className="font-mono text-xs text-muted">
-                {b.slug}.{SITE_HOST}
+                {b.slug}.{siteHost()}
               </span>
             </div>
           </div>

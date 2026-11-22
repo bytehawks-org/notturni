@@ -1,0 +1,26 @@
+[module]
+name = "backup"
+version = "0.1.0"
+kind = "optional"
+default_enabled = true
+requires = ["users", "blogs", "posts", "events"]
+description = "Copie di sicurezza: Markdown di ogni post pubblicato su storage e, ogni giorno, dump di Postgres più rispecchiamento dei bucket verso uno storage S3 esterno"
+
+[events]
+# copia del Markdown del post nel bucket dei contenuti (non servita pubblicamente)
+subscribes = ["posts.post.published"]
+
+[config]
+# Senza bucket il backup infrastrutturale è disattivato (resta la copia dei post)
+s3_bucket = { type = "string", env = "NOCT_BACKUP_S3_BUCKET", optional = true }
+s3_endpoint_url = { type = "string", env = "NOCT_BACKUP_S3_ENDPOINT_URL", optional = true }
+s3_region = { type = "string", env = "NOCT_BACKUP_S3_REGION", optional = true }
+s3_access_key_id = { type = "string", env = "NOCT_BACKUP_S3_ACCESS_KEY_ID", optional = true }
+s3_secret_access_key = { type = "string", env = "NOCT_BACKUP_S3_SECRET_ACCESS_KEY", optional = true, secret = true }
+
+# Un giro al giorno; richiede `pg_dump` nel PATH (incluso nell'immagine)
+[jobs.run]
+subject = "backup.run"
+schedule = "1d"
+max_deliver = 2
+backoff = ["30m"]
