@@ -1,0 +1,110 @@
+# Indice (albero), cronologia delle revisioni e backlink degli Spazi wiki/docs. I campi `parent_id`,
+# `position` e `revision_summary` di create/update dei post, e `parent_id`, `position`, `revisions`
+# delle risposte, sono dell'estensione di `posts`.
+
+# Elenco piatto in ordine di lettura (depth-first); `depth` parte da 0.
+[type.OutlineNode]
+id = "uuid"
+slug = "string"
+title = "string"
+locale = "string"
+status = "string"
+parent_id = { type = "uuid", nullable = true }
+position = "int"
+depth = "int"
+is_visible = "bool"
+
+# items: [{id, parent_id}] nell'ordine voluto, tutti i post dello Spazio una volta sola
+[type.OutlineUpdate]
+items = "json"
+
+[type.RevisionSummary]
+revision = "int"
+title = "string"
+editor = { type = "string", nullable = true }
+summary = { type = "string", nullable = true }
+size = "int"
+created_at = "timestamp"
+
+[type.RevisionOut]
+revision = "int"
+title = "string"
+content = "string"
+editor = { type = "string", nullable = true }
+summary = { type = "string", nullable = true }
+created_at = "timestamp"
+
+# hunks: [{op: "equal"|"insert"|"delete", text}] per righe
+[type.RevisionDiff]
+from = "int"
+to = "int"
+hunks = "json"
+
+[type.Backlink]
+id = "uuid"
+slug = "string"
+title = "string"
+locale = "string"
+
+[[route]]
+id = "get_outline"
+method = "GET"
+path = "/blogs/{slug}/outline"
+auth = "public"
+kind = "custom"
+handler = "get_outline"
+scope = { blog = "slug" }
+response = "OutlineNode[]"
+summary = "Indice dello Spazio (`?locale=`): i lettori vedono i post pubblicati, chi scrive tutti"
+
+[[route]]
+id = "put_outline"
+method = "PUT"
+path = "/blogs/{slug}/outline"
+auth = "blog_write"
+kind = "custom"
+handler = "put_outline"
+scope = { blog = "slug" }
+request = "OutlineUpdate"
+response = "OutlineNode[]"
+summary = "Riordina e sposta le pagine (solo Spazi wiki/docs); 409 se l'elenco non coincide con i post dello Spazio"
+
+[[route]]
+id = "list_revisions"
+method = "GET"
+path = "/posts/{post_id}/revisions"
+auth = "user"
+kind = "custom"
+handler = "list_revisions"
+response = "RevisionSummary[]"
+summary = "Cronologia delle revisioni, dalla più recente (chi può scrivere nello Spazio)"
+
+[[route]]
+id = "get_revision"
+method = "GET"
+path = "/posts/{post_id}/revisions/{revision}"
+auth = "user"
+kind = "custom"
+handler = "get_revision"
+response = "RevisionOut"
+summary = "Una revisione con il contenuto completo"
+
+[[route]]
+id = "diff_revision"
+method = "GET"
+path = "/posts/{post_id}/revisions/{revision}/diff"
+auth = "user"
+kind = "custom"
+handler = "diff_revision"
+response = "RevisionDiff"
+summary = "Differenze per righe tra la revisione e `?against=` (default: la precedente)"
+
+[[route]]
+id = "list_backlinks"
+method = "GET"
+path = "/posts/{post_id}/backlinks"
+auth = "public"
+kind = "custom"
+handler = "list_backlinks"
+response = "Backlink[]"
+summary = "Pagine dello stesso Spazio che rimandano a questa con [[link]] (solo quelle visibili al chiamante)"

@@ -54,6 +54,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     ...(isAdmin && deploymentMode !== "solo"
       ? [{ href: "/admin/utenti", label: t("users"), icon: "◯", mobile: true } as NavItem]
       : []),
+    ...(isAdmin ? [{ href: "/admin/seo", label: t("seo"), icon: "◈", mobile: false } as NavItem] : []),
+    ...(isAdmin ? [{ href: "/admin/legale", label: t("legal"), icon: "§", mobile: false } as NavItem] : []),
+    ...(isAdmin ? [{ href: "/admin/testi", label: t("texts"), icon: "¶", mobile: false } as NavItem] : []),
     ...(isAdmin ? [{ href: "/admin/blog", label: t("allBlogs"), icon: "✎", mobile: true } as NavItem] : []),
     ...(isAdmin ? [{ href: "/admin/moderazione", label: t("moderation"), icon: "◔", mobile: true } as NavItem] : []),
     ...(isAdmin ? [{ href: "/admin/newsletter", label: t("newsletter"), icon: "✉", mobile: true } as NavItem] : []),
@@ -62,6 +65,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       : []),
     ...(isAdmin ? [{ href: "/admin/registro", label: t("register"), icon: "≡", mobile: true } as NavItem] : []),
     ...(isAdmin ? [{ href: "/admin/gdpr", label: t("gdprRequests"), icon: "⚖", mobile: false } as NavItem] : []),
+    ...(user.platform_role === "super_admin"
+      ? [{ href: "/admin/git-sync", label: t("gitSync"), icon: "⑂", mobile: false } as NavItem]
+      : []),
     ...(user.platform_role === "super_admin"
       ? [{ href: "/admin/impostazioni", label: t("platformSettings"), icon: "⚙", mobile: false } as NavItem]
       : []),

@@ -99,6 +99,9 @@ export default function ProfilePage() {
   } | null>(null);
   const [totpCode, setTotpCode] = useState("");
   const [emailCode, setEmailCode] = useState("");
+  // disattivazione dell'MFA: serve un codice valido (app o email)
+  const [disableCodeNeeded, setDisableCodeNeeded] = useState<"totp" | "email" | null>(null);
+  const [disableCode, setDisableCode] = useState("");
   const [emailSetupSent, setEmailSetupSent] = useState(false);
 
   const [newEmail, setNewEmail] = useState("");
@@ -438,10 +441,17 @@ export default function ProfilePage() {
     }
   }
 
-  async function handleDisableMfa() {
+  async function handleDisableMfa(event?: FormEvent) {
+    event?.preventDefault();
     setMfaError(null);
     try {
-      await authFetch((token) => api.auth.disableMfa(token));
+      const res = await authFetch((token) => api.auth.disableMfa(token, disableCode.trim() || undefined));
+      if (res?.code_required) {
+        setDisableCodeNeeded(res.method);
+        return;
+      }
+      setDisableCodeNeeded(null);
+      setDisableCode("");
       setMfaMessage(t("mfaOff"));
     } catch (err) {
       setMfaError(errorMessage(err));
@@ -989,11 +999,33 @@ export default function ProfilePage() {
             {user.mfa_enabled ? (
               <div className="flex flex-col gap-3">
                 <Alert kind="success">{t("mfaActive")}</Alert>
-                <div>
-                  <Button variant="secondary" onClick={handleDisableMfa}>
-                    {t("disable")}
-                  </Button>
-                </div>
+                {disableCodeNeeded ? (
+                  <form onSubmit={handleDisableMfa} className="flex flex-col gap-3">
+                    <p className="text-sm text-muted">
+                      {disableCodeNeeded === "email" ? t("disableCodeEmail") : t("disableCodeTotp")}
+                    </p>
+                    <input
+                      value={disableCode}
+                      onChange={(e) => setDisableCode(e.target.value)}
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={16}
+                      aria-label={t("disableCodeLabel")}
+                      className="w-40 rounded-md border border-border bg-background px-3 py-2 text-sm"
+                    />
+                    <div>
+                      <Button type="submit" variant="secondary" disabled={!disableCode.trim()}>
+                        {t("disable")}
+                      </Button>
+                    </div>
+                  </form>
+                ) : (
+                  <div>
+                    <Button variant="secondary" onClick={() => handleDisableMfa()}>
+                      {t("disable")}
+                    </Button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex flex-col gap-6">

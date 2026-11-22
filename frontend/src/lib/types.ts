@@ -15,7 +15,7 @@ export interface CurrentUser {
   ui_locale: string | null;
 }
 
-/** todo/USERS.md #2: cosa mostrare come nome autore sui propri post quando il
+/** cosa mostrare come nome autore sui propri post quando il
  * blog non impone un alias. */
 export type PostAuthorNameStyle = "username" | "full_name" | "display_name" | "verified_domain";
 
@@ -33,7 +33,7 @@ export const PLATFORM_ADMIN_ROLES: PlatformRole[] = ["super_admin", "amministrat
 export const PLATFORM_MODERATION_ROLES: PlatformRole[] = ["super_admin", "amministratore", "moderatore"];
 
 /** Il refresh token non è più qui: viaggia solo in un cookie httpOnly
- * impostato dal backend (vedi backend/app/api/v1/auth.py), mai leggibile da
+ * impostato dal backend, mai leggibile da
  * JS/localStorage — ROADMAP.md "Sessione in localStorage". */
 export interface SessionResponse {
   access_token: string;
@@ -52,8 +52,14 @@ export function isMfaRequired(res: LoginResponse): res is MfaRequiredResponse {
   return (res as MfaRequiredResponse).mfa_required === true;
 }
 
-/** todo/BLOG.md #2. public: tutti; members: solo utenti autenticati; private: diario del solo proprietario. */
+/** public: tutti; members: solo utenti autenticati; private: diario del solo proprietario. */
 export type BlogVisibility = "public" | "members" | "private";
+
+/** Tipologia di Spazio: fissata alla creazione. */
+export type SpaceKind = "blog" | "wiki" | "docs";
+
+/** Struttura delle pagine pubbliche: feed cronologico, wiki (albero + backlink) o docs (sidebar + indice). */
+export type SpaceDisplayMode = "feed" | "wiki" | "docs";
 
 export const BLOG_VISIBILITY_LABELS: Record<BlogVisibility, string> = {
   public: "Pubblico",
@@ -64,7 +70,7 @@ export const BLOG_VISIBILITY_LABELS: Record<BlogVisibility, string> = {
 /** Ruolo utente specifico di un blog (CLAUDE.md #1). */
 export type BlogRole = "autore" | "co_autore" | "revisore" | "mediatore";
 
-/** Ruoli assegnabili invitando un collaboratore (todo/BLOG.md #3). */
+/** Ruoli assegnabili invitando un collaboratore. */
 export const INVITABLE_BLOG_ROLES: Extract<BlogRole, "co_autore" | "mediatore">[] = [
   "co_autore",
   "mediatore",
@@ -87,20 +93,22 @@ export interface Blog {
   subtitle: string | null;
   /** Descrizione breve del blog (max 256 caratteri). */
   description: string | null;
+  kind: SpaceKind;
+  display_mode: SpaceDisplayMode;
   visibility: BlogVisibility;
   custom_domain: string | null;
   comments_mode: CommentsMode;
-  /** todo/EDITOR.md: @menzioni nel contenuto trasformate in link (default: true). */
+  /** @menzioni nel contenuto trasformate in link (default: true). */
   mentions_enabled: boolean;
   /** Pagine statiche del blog: feature opt-in, disattiva di default. */
   static_pages_enabled: boolean;
-  /** Opt-in per crawler (backend/app/domain/seo.py), attivi di default.
+  /** Opt-in per crawler, attivi di default.
    * Escludere il blog esclude anche tutti i suoi post, indipendentemente da
    * un eventuale override di Post.search_indexing_enabled/ai_crawling_enabled. */
   search_indexing_enabled: boolean;
   ai_crawling_enabled: boolean;
   /** Invio automatico di una notifica newsletter ad ogni post pubblicato
-   * (backend/app/api/v1/newsletter.py), gestito da PATCH .../newsletter/settings. */
+   *, gestito da PATCH .../newsletter/settings. */
   newsletter_auto_notify_enabled: boolean;
   /** Come sopra, gestiti dallo stesso endpoint: nome mittente e banner
    * mostrati nelle email di campagna (app/workers/newsletter_consumer.py). */
@@ -155,7 +163,7 @@ export interface PublicUser {
   follower_count: number;
 }
 
-/** `GET /blogs/{slug}/overview` (todo/UX_REDESIGN.md B1): conteggi per la tab Panoramica. */
+/** `GET /blogs/{slug}/overview`: conteggi per la tab Panoramica. */
 export interface BlogOverview {
   posts_total: number;
   posts_published: number;
@@ -220,7 +228,7 @@ export interface BlogConfig {
   [key: string]: unknown;
 }
 
-/** Stessi elenchi curati di `backend/app/domain/blog_config.py` (CLAUDE.md
+/** Stessi elenchi curati di `crates/noct-blogs/src/rules.rs` (CLAUDE.md
  * §5 Estetica: titoli in serif, corpo/link in sans-serif) — tenerli in
  * sincronia se cambia uno dei due lati. */
 export const SERIF_FONTS = ["Lora", "Merriweather", "Playfair Display", "Source Serif 4", "Crimson Pro"];
@@ -262,7 +270,7 @@ export interface Post {
   permalink: string;
   /** Se il blog ha le @menzioni attive: il rendering le trasforma in link. */
   mentions_enabled: boolean;
-  /** Note a piè di pagina (todo/EDITOR.md), ordinate per `idx`. */
+  /** Note a piè di pagina, ordinate per `idx`. */
   notes: PostNote[];
   /** Solo i tag del campo dedicato (per ripresentarli in modifica). */
   manual_tags: string[];
@@ -273,12 +281,16 @@ export interface Post {
   /** B9: pubblicazione di appartenenza (al più una) e posizione esplicita del capitolo. */
   publication: { id: string; name: string; title: string } | null;
   chapter_order: number | null;
+  /** Modulo wiki (solo Spazi wiki/docs): pagina padre, posizione tra i fratelli, numero di revisioni. */
+  parent_id?: string | null;
+  position?: number;
+  revisions?: number;
   /** Override di Blog.comments_mode per questo post: `null` eredita dal blog. */
   comments_mode: CommentsMode | null;
   /** Sempre valorizzato: comments_mode se impostato, altrimenti quello del blog. */
   effective_comments_mode: CommentsMode;
   /** Override di Blog.search_indexing_enabled/ai_crawling_enabled per questo
-   * post: `null` eredita dal blog (backend/app/domain/seo.py). */
+   * post: `null` eredita dal blog. */
   search_indexing_enabled: boolean | null;
   ai_crawling_enabled: boolean | null;
   /** Sempre valorizzati: tengono già conto del blocco a cascata se il blog
@@ -740,7 +752,7 @@ export interface AdminComment extends BlogComment {
 
 export type AuditActorType = "user" | "core_token" | "user_token" | "system" | "anonymous";
 /** Canale da cui è partita l'azione, calcolato server-side da `actor_type`
- * (nessuna colonna dedicata, vedi `backend/app/api/v1/admin.py`). */
+ *. */
 export type AuditChannel = "web" | "api" | "system";
 
 /** `GET /api/v1/admin/audit-log` (admin/registro). Registro append-only
@@ -762,7 +774,7 @@ export interface AuditLogEntry {
   payload: Record<string, unknown>;
 }
 
-/** Azioni note del registro di audit (`backend/app/domain/audit.py` e
+/** Azioni note del registro di audit (`crates/noct-audit` e
  * chiamanti): solo gli identificativi, l'etichetta è in
  * `messages/{it,en}.json` → `AdminAuditLog.action.<entità>.<evento>`
  * (navigazione a percorso annidato sullo stesso punto dell'id). Un'azione
@@ -826,6 +838,8 @@ export interface InstanceConfig {
    * se l'istanza non ha il captcha configurato — in quel caso i commenti
    * aperti a tutti non sono selezionabili (vedi CommentsMode). */
   turnstile_site_key: string | null;
+  /** Funzioni sperimentali attive (`wiki`, `docs`): decidono quali tipi di Spazio si possono creare. */
+  experimental_features: string[];
   /** B6: valori pubblici di platform_config. */
   default_locale: string;
   registration_mode: "open" | "invite" | "closed";
@@ -925,7 +939,7 @@ export interface FragmentCollectionEntry {
   permalink: string;
 }
 
-/** Viste aggregate "tutti i miei blog" (backend/app/api/v1/fragments.py,
+/** Viste aggregate "tutti i miei blog" (modules/fragments,
  * sezione dedicata in fondo al file): stessa forma degli equivalenti
  * per-blog, con l'attribuzione del blog di appartenenza per riga (`blog_slug`/
  * `blog_title`). Vista autore, mai filtrata dalla visibilità pubblica. */
@@ -995,7 +1009,7 @@ export interface MyBibliographyEntry extends StructuredNoteFields {
   citations: MyBibliographyCitation[];
 }
 
-/** Newsletter/mailing-list (backend/app/api/v1/newsletter.py): iscrizione
+/** Newsletter/mailing-list: iscrizione
  * pubblica a doppio opt-in per un blog (`blog_id` valorizzato) o per il
  * digest di piattaforma (`blog_id` null). */
 export type NewsletterCampaignKind = "post_notification" | "manual";
@@ -1011,7 +1025,7 @@ export interface NewsletterStats {
   unsubscribed: number;
 }
 
-/** Configurazione delle campagne (backend/app/api/v1/newsletter.py): nome
+/** Configurazione delle campagne: nome
  * mittente e banner mostrati nell'email HTML, oltre all'avviso automatico
  * per blog. PATCH è tri-state: un campo omesso lascia il valore invariato,
  * `null` lo azzera esplicitamente. */
@@ -1066,4 +1080,224 @@ export interface NewsletterCampaign {
   recipient_count: number;
   failed_count: number;
   created_at: string;
+}
+
+/** Una pagina dell'indice di uno Spazio wiki/docs, in ordine di lettura (`depth` da 0). */
+export interface OutlineNode {
+  id: string;
+  slug: string;
+  title: string;
+  locale: string;
+  status: PostStatus;
+  parent_id: string | null;
+  position: number;
+  depth: number;
+  is_visible: boolean;
+}
+
+export interface RevisionSummary {
+  revision: number;
+  title: string;
+  editor: string | null;
+  summary: string | null;
+  size: number;
+  created_at: string;
+}
+
+export interface RevisionDetail {
+  revision: number;
+  title: string;
+  content: string;
+  editor: string | null;
+  summary: string | null;
+  created_at: string;
+}
+
+export interface DiffHunk {
+  op: "equal" | "insert" | "delete";
+  text: string;
+}
+
+export interface RevisionDiff {
+  from: number;
+  to: number;
+  hunks: DiffHunk[];
+}
+
+export interface Backlink {
+  id: string;
+  slug: string;
+  title: string;
+  locale: string;
+}
+
+/** Sincronizzazione Git di uno Spazio (`GET /blogs/{slug}/git-sync`). Il token non viene mai restituito. */
+export interface GitSyncStatus {
+  configured: boolean;
+  remote_url: string | null;
+  branch: string | null;
+  username: string | null;
+  auth_method: "https" | "ssh" | null;
+  has_secret: boolean;
+  /** Solo `ssh`: chiave di deploy da registrare presso il provider con permesso di scrittura. */
+  ssh_public_key: string | null;
+  /** Solo `ssh`: impronte SHA256 della chiave dell'host fissata alla configurazione. */
+  ssh_host_fingerprints: string[];
+  include_drafts: boolean;
+  enabled: boolean;
+  last_status: "running" | "ok" | "unchanged" | "error" | null;
+  last_run_at: string | null;
+  last_error: string | null;
+  last_commit: string | null;
+  last_pages: number | null;
+}
+
+/** Host SSH di cui la piattaforma conosce le impronte attese (`GET /admin/git-sync/known-hosts`). */
+export interface KnownHost {
+  host: string;
+  port: number;
+  fingerprints: string[];
+  note: string | null;
+  updated_at: string;
+}
+
+/** Nodo della mappa dei collegamenti (`GET /graph`). I campi extra dipendono dal tipo. */
+export interface GraphNode {
+  id: string;
+  type: "blog" | "post" | "tag" | "category";
+  label: string;
+  /** post */
+  blog?: string;
+  slug?: string;
+  locale?: string;
+  status?: string;
+  published_at?: string | null;
+  /** post: percorso pubblico `/{blog}/{slug}` */
+  path?: string;
+  /** blog */
+  kind?: "blog" | "wiki" | "docs";
+  /** tag */
+  tag?: string;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  /** `in`: post → Spazio · `tag` · `category` · `link`: post → post */
+  type: "in" | "tag" | "category" | "link";
+  /** solo `link`: `url` (link nel testo) o `wiki` (`[[pagina]]`) */
+  via?: "url" | "wiki";
+}
+
+export interface GraphData {
+  scope: "mine" | "platform";
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  truncated: boolean;
+}
+
+export type LegalDocKey = "privacy" | "cookie";
+
+/** Un documento legale in una lingua, come elencato da `GET /admin/legal`. */
+export interface LegalDocSummary {
+  doc: LegalDocKey;
+  locale: string;
+  title: string;
+  customized: boolean;
+  published: boolean;
+  /** testo, dati o funzioni attive cambiati dopo l'ultima pubblicazione */
+  stale: boolean;
+  /** variabili usate ma vuote: bloccano la pubblicazione */
+  missing: string[];
+  /** errori del modello (variabile o condizione inesistente, blocchi non chiusi) */
+  issues: string[];
+  has_template: boolean;
+  published_at: string | null;
+  updated_at: string;
+}
+
+export interface LegalDoc extends LegalDocSummary {
+  /** sorgente: Markdown con `{{variabili}}` e `{{#if funzione}}` */
+  content: string;
+  /** testo risolto, quello che si pubblica */
+  rendered: string;
+  default_content: string | null;
+}
+
+export interface LegalOverview {
+  /** dati del titolare già inseriti (i campi vuoti non compaiono; `minimum_age` è un numero in testo) */
+  settings: Record<string, string>;
+  /** valori dedotti dall'installazione */
+  values: Record<string, string>;
+  /** funzioni attive rilevate */
+  flags: Record<string, boolean>;
+  documents: LegalDocSummary[];
+  template_locales: string[];
+}
+
+export interface LegalLink {
+  doc: LegalDocKey;
+  slug: string;
+  locale: string;
+  title: string;
+}
+
+/** `GET /seo/site`: identità e meta tag del portale nella lingua richiesta (o nella migliore disponibile). */
+export interface SeoSite {
+  locale: string;
+  site_name: string;
+  title: string | null;
+  description: string | null;
+  keywords: string | null;
+  noindex: boolean;
+  google_verification: string | null;
+  bing_verification: string | null;
+  yandex_verification: string | null;
+  twitter_site: string | null;
+  theme_color: string | null;
+  extra_meta: { name: string; content: string }[];
+  icons: { url: string; sizes: string; type: string }[];
+  apple_touch_icon: string | null;
+  social_image_url: string | null;
+}
+
+export interface SeoLocaleText {
+  title: string | null;
+  description: string | null;
+  keywords: string | null;
+}
+
+/** `GET /admin/seo`. */
+export interface SeoAdmin {
+  branding: {
+    site_name: string | null;
+    noindex: boolean;
+    google_verification: string | null;
+    bing_verification: string | null;
+    yandex_verification: string | null;
+    twitter_site: string | null;
+    theme_color: string | null;
+    extra_meta: { name: string; content: string }[];
+    /** lato (px) → URL della PNG */
+    icons: Record<string, string>;
+    social_image_url: string | null;
+  };
+  locales: Record<string, SeoLocaleText>;
+}
+
+export interface SitemapEntry {
+  path: string;
+  updated_at: string | null;
+  alternates: { locale: string; path: string }[];
+}
+
+export interface SitemapPage {
+  total: number;
+  noindex: boolean;
+  entries: SitemapEntry[];
+}
+
+export interface SpaceSitemap {
+  slug: string;
+  entries: SitemapEntry[];
 }

@@ -1,0 +1,19 @@
+[module]
+name = "custom_domains"
+version = "0.1.0"
+kind = "optional"
+default_enabled = true
+requires = ["users", "profiles", "audit"]
+description = "Dominio personale dell'utente verificato con un record TXT sul DNS: dà il sigillo di verifica «bronzo» e rende il profilo raggiungibile anche dal dominio"
+
+[config]
+# Server DNS da interrogare (`ip` o `ip:porta`); vuoto = quelli del sistema. Serve a chi ha un
+# resolver interno e ai test.
+dns_server = { type = "string", env = "NOCT_DNS_SERVER", default = "" }
+# Tempo massimo per una verifica DNS, in millisecondi
+dns_timeout_ms = { type = "int", env = "NOCT_DNS_TIMEOUT_MS", default = 5000 }
+
+[lifecycle]
+personal_data = true
+# aggiunge lo stato del dominio in attesa al profilo privato (`GET /users/me`)
+extensions = true

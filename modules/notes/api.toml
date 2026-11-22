@@ -1,0 +1,174 @@
+# Compatibile con /api/v1/blogs/{slug}/notes, /blogs/{slug}/bibliography e /users/me/bibliography della v1.
+# Il campo `notes` di create/update/traduzione dei post (e `notes` delle risposte) è dell'estensione di `posts`.
+
+[type.BlogNoteCreate]
+content = "string"
+kind = "string?"
+url = "string?"
+title = "string?"
+author = "string?"
+source = "string?"
+issued = "string?"
+isbn = "string?"
+doi = "string?"
+page = "string?"
+
+# Campi assenti = invariati; stringa vuota = svuota il campo.
+[type.BlogNoteUpdate]
+content = "string?"
+kind = "string?"
+url = "string?"
+title = "string?"
+author = "string?"
+source = "string?"
+issued = "string?"
+isbn = "string?"
+doi = "string?"
+page = "string?"
+
+# il corpo reale è testo `application/x-bibtex`, non JSON
+[type.BibtexExport]
+bibtex = "string"
+
+[type.NoteMerge]
+into_id = "string"
+
+[type.NoteImport]
+bibtex = { type = "string", max = 200000, message = "Testo BibTeX troppo lungo (massimo 200000 caratteri)." }
+
+# usata_in: [{post_id, post_slug, post_title, idx}]
+[type.BlogNoteOut]
+id = "uuid"
+content = "string"
+kind = "string"
+url = { type = "string", nullable = true }
+title = { type = "string", nullable = true }
+author = { type = "string", nullable = true }
+source = { type = "string", nullable = true }
+issued = { type = "string", nullable = true }
+isbn = { type = "string", nullable = true }
+doi = { type = "string", nullable = true }
+page = { type = "string", nullable = true }
+created_at = "timestamp"
+updated_at = "timestamp"
+used_in = "json"
+possible_duplicates = "string[]"
+
+# citations: [{post_title, post_slug, permalink, locale, idx}] (+ blog_slug, blog_title nella vista personale)
+[type.BibliographyEntry]
+content = "string"
+kind = { type = "string", nullable = true }
+url = { type = "string", nullable = true }
+title = { type = "string", nullable = true }
+author = { type = "string", nullable = true }
+isbn = { type = "string", nullable = true }
+doi = { type = "string", nullable = true }
+page = { type = "string", nullable = true }
+source = { type = "string", nullable = true }
+issued = { type = "string", nullable = true }
+citations = "json"
+
+[[route]]
+id = "list_blog_notes"
+method = "GET"
+path = "/blogs/{slug}/notes"
+auth = "user"
+kind = "custom"
+handler = "list_blog_notes"
+scope = { blog = "slug" }
+response = "BlogNoteOut[]"
+summary = "Libreria note del blog con «citata in» e duplicati (`?q=` filtra sul testo); proprietario e collaboratori"
+
+[[route]]
+id = "create_blog_note"
+method = "POST"
+path = "/blogs/{slug}/notes"
+auth = "blog_write"
+kind = "custom"
+handler = "create_blog_note"
+scope = { blog = "slug" }
+request = "BlogNoteCreate"
+response = "BlogNoteOut"
+status = 201
+summary = "Crea una nota di libreria"
+
+[[route]]
+id = "export_blog_notes"
+method = "GET"
+path = "/blogs/{slug}/notes/export.bib"
+auth = "user"
+kind = "custom"
+handler = "export_blog_notes"
+scope = { blog = "slug" }
+raw = true
+response = "BibtexExport"
+summary = "Esporta la libreria in BibTeX"
+
+[[route]]
+id = "import_blog_notes"
+method = "POST"
+path = "/blogs/{slug}/notes/import"
+auth = "blog_write"
+kind = "custom"
+handler = "import_blog_notes"
+scope = { blog = "slug" }
+request = "NoteImport"
+response = "BlogNoteOut[]"
+status = 201
+summary = "Importa BibTeX (le voci già presenti si saltano)"
+
+[[route]]
+id = "update_blog_note"
+method = "PATCH"
+path = "/blogs/{slug}/notes/{note_id}"
+auth = "blog_write"
+kind = "custom"
+handler = "update_blog_note"
+scope = { blog = "slug" }
+request = "BlogNoteUpdate"
+response = "BlogNoteOut"
+summary = "Modifica una nota; il testo si aggiorna anche nei post che la citano"
+
+[[route]]
+id = "delete_blog_note"
+method = "DELETE"
+path = "/blogs/{slug}/notes/{note_id}"
+auth = "blog_write"
+kind = "custom"
+handler = "delete_blog_note"
+scope = { blog = "slug" }
+status = 204
+summary = "Elimina una nota non citata da alcun post (409 altrimenti)"
+
+[[route]]
+id = "merge_blog_note"
+method = "POST"
+path = "/blogs/{slug}/notes/{note_id}/merge"
+auth = "blog_write"
+kind = "custom"
+handler = "merge_blog_note"
+scope = { blog = "slug" }
+request = "NoteMerge"
+response = "BlogNoteOut"
+summary = "Unisce la nota in un'altra: le citazioni passano alla destinazione"
+
+[[route]]
+id = "get_blog_bibliography"
+method = "GET"
+path = "/blogs/{slug}/bibliography"
+auth = "public"
+kind = "custom"
+handler = "get_blog_bibliography"
+scope = { blog = "slug" }
+response = "BibliographyEntry[]"
+summary = "Bibliografia dei post pubblicati, raggruppata per testo identico"
+
+[[route]]
+id = "get_my_bibliography"
+method = "GET"
+path = "/users/me/bibliography"
+auth = "user"
+kind = "custom"
+handler = "get_my_bibliography"
+response = "BibliographyEntry[]"
+summary = "Note di tutti i post di tutti i miei blog (qualunque stato)"

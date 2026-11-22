@@ -1,0 +1,41 @@
+# Link social del profilo (al più 5 per utente, imposto dall'handler).
+[[table]]
+name = "social_links"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "user_id", type = "uuid", ref = "users.id", on_delete = "cascade" },
+  { name = "label", type = "varchar(100)" },
+  { name = "url", type = "varchar(2048)" },
+  { name = "position", type = "integer", default = "0" },
+]
+indexes = [{ columns = ["user_id"] }]
+
+# Cambio email in tre passi: codice alla casella attuale, poi alla nuova. I codici non sono
+# memorizzati: si derivano da id della richiesta e chiave del server (scopo diverso per passo).
+[[table]]
+name = "email_change_requests"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "user_id", type = "uuid", ref = "users.id", on_delete = "cascade" },
+  { name = "new_email", type = "varchar(255)" },
+  { name = "old_expires_at", type = "timestamptz" },
+  { name = "old_consumed_at", type = "timestamptz", null = true },
+  { name = "new_expires_at", type = "timestamptz", null = true },
+  { name = "new_consumed_at", type = "timestamptz", null = true },
+  { name = "completed_at", type = "timestamptz", null = true },
+]
+indexes = [{ columns = ["user_id"] }]
+
+# Liste per il sigillo di verifica del profilo; riga unica, create al bisogno. Si modificano dalle
+# rotte di amministrazione. Identificatori = email intere, username o domini email.
+[[table]]
+name = "verification_settings"
+primary_key = ["id"]
+columns = [
+  { name = "id", type = "integer", default = "1" },
+  { name = "gold_identifiers", type = "text[]", default = "'{}'" },
+  { name = "silver_identifiers", type = "text[]", default = "'{}'" },
+  { name = "blue_domains", type = "text[]", default = "'{}'" },
+]

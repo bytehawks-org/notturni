@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
+import { useSiteName } from "@/components/SiteConfigProvider";
 import { SearchModal } from "@/components/SearchModal";
 import { PlatformMark } from "@/components/shell/PlatformMark";
 import { UiLanguagePicker } from "@/components/shell/UiLanguagePicker";
@@ -17,6 +18,7 @@ export function SiteHeader() {
   const { user, loading } = useAuth();
   const path = usePathname();
   const t = useTranslations("Site");
+  const siteName = useSiteName();
   const [searchOpen, setSearchOpen] = useState(false);
   const items: [string, string][] = [
     ["/", t("latest")],
@@ -32,7 +34,7 @@ export function SiteHeader() {
           <div className="flex items-center gap-2.5">
             <PlatformMark />
             <Link href="/" className="font-serif text-[21px] font-semibold tracking-tight text-foreground no-underline">
-              Notturni
+              {siteName}
             </Link>
           </div>
           <nav className="hidden gap-[26px] text-sm text-muted md:flex">

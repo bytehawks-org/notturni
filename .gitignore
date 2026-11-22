@@ -4,6 +4,8 @@
 .env.local
 .env.*.local
 
+.development/
+
 # Segreti/certificati sciolti, ovunque si trovino
 *.pem
 *.key
@@ -53,3 +55,6 @@ desktop.ini
 
 # Podman/Docker volumes locali (se montati come bind mount)
 infra-data/
+
+# Rust
+/target/

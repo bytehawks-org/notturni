@@ -1,0 +1,11 @@
+[module]
+name = "wiki"
+version = "0.1.0"
+kind = "optional"
+default_enabled = true
+requires = ["users", "blogs", "posts", "audit"]
+description = "Spazi wiki e documentazione: albero delle pagine, link interni [[pagina]] con backlink, cronologia delle revisioni con diff"
+
+[lifecycle]
+extensions = true
+personal_data = true

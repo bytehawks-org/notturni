@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { isDaytime } from "./sun";
 
@@ -31,6 +31,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [resolved, setResolved] = useState<ResolvedTheme>("light");
   const [autoUsesLocation, setAutoUsesLocation] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const askPermissionRef = useRef(false);
 
   // idratazione da localStorage: non disponibile lato server, va per forza
   // letta qui e non con uno stato iniziale "lazy"
@@ -43,12 +44,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setHydrated(true);
   }, []);
 
-  const applyAuto = useCallback(() => {
-    if (!navigator.geolocation) {
-      setAutoUsesLocation(false);
-      setResolved(prefersDarkFallback());
-      return;
-    }
+  const followSystemTheme = useCallback(() => {
+    setAutoUsesLocation(false);
+    setResolved(prefersDarkFallback());
+  }, []);
+
+  const resolveFromLocation = useCallback(() => {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         // la posizione resta solo in memoria per questo calcolo: non viene
@@ -57,13 +58,38 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         setAutoUsesLocation(true);
         setResolved(isDaytime(new Date(), latitude, longitude) ? "light" : "dark");
       },
-      () => {
-        setAutoUsesLocation(false);
-        setResolved(prefersDarkFallback());
-      },
+      followSystemTheme,
       { timeout: 8000, maximumAge: RECHECK_INTERVAL_MS }
     );
-  }, []);
+  }, [followSystemTheme]);
+
+  /** "Automatico". Il permesso di posizione si chiede solo dopo un gesto
+   * esplicito (`askPermission`, il click sul selettore): a ogni caricamento
+   * di pagina un prompt sarebbe invadente per chi legge e sospetto per i
+   * browser (Lighthouse "geolocation-on-start"). Senza gesto la posizione si
+   * usa solo se il permesso è già stato concesso, altrimenti si segue il
+   * tema del sistema. */
+  const applyAuto = useCallback(
+    (askPermission = false) => {
+      if (!navigator.geolocation) {
+        followSystemTheme();
+        return;
+      }
+      if (askPermission) {
+        resolveFromLocation();
+        return;
+      }
+      if (!navigator.permissions?.query) {
+        followSystemTheme();
+        return;
+      }
+      navigator.permissions
+        .query({ name: "geolocation" })
+        .then((status) => (status.state === "granted" ? resolveFromLocation() : followSystemTheme()))
+        .catch(followSystemTheme);
+    },
+    [resolveFromLocation, followSystemTheme]
+  );
 
   useEffect(() => {
     if (!hydrated) return;
@@ -75,8 +101,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    applyAuto();
-    const interval = window.setInterval(applyAuto, RECHECK_INTERVAL_MS);
+    // il click su "Automatico" è il gesto che autorizza la richiesta di posizione
+    applyAuto(askPermissionRef.current);
+    askPermissionRef.current = false;
+    const interval = window.setInterval(() => applyAuto(), RECHECK_INTERVAL_MS);
     const onVisible = () => {
       if (document.visibilityState === "visible") applyAuto();
     };
@@ -91,10 +119,19 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     document.documentElement.setAttribute("data-theme", resolved);
   }, [resolved]);
 
-  const setMode = useCallback((next: ThemeMode) => {
-    setModeState(next);
-    window.localStorage.setItem(STORAGE_KEY, next);
-  }, []);
+  const setMode = useCallback(
+    (next: ThemeMode) => {
+      if (next === "auto" && mode === "auto") {
+        // già in automatico: l'effetto non riparte, il gesto va usato qui
+        applyAuto(true);
+      } else {
+        askPermissionRef.current = next === "auto";
+      }
+      setModeState(next);
+      window.localStorage.setItem(STORAGE_KEY, next);
+    },
+    [mode, applyAuto]
+  );
 
   const value = useMemo(
     () => ({ mode, resolved, setMode, autoUsesLocation }),

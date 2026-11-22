@@ -1,6 +1,6 @@
 import { FEED_HEADERS, buildRss, postToFeedItem } from "@/lib/feed";
 import { getPublicFeed } from "@/lib/server-api";
-import { SITE_URL } from "@/lib/site";
+import { siteName, siteUrl } from "@/lib/site";
 
 // Come sitemap.ts/robots.ts: senza questo Next prova a pre-renderizzare la
 // route in fase di build e fallisce se il backend non è raggiungibile.
@@ -15,10 +15,10 @@ export async function GET() {
   const posts = await getPublicFeed({ limit: FEED_LIMIT }).catch(() => []);
   const xml = buildRss(
     {
-      title: "Notturni",
-      description: "Ultimi post pubblicati su Notturni.",
-      link: SITE_URL,
-      feedUrl: `${SITE_URL}/feed.xml`,
+      title: siteName(),
+      description: `Ultimi post pubblicati su ${siteName()}.`,
+      link: siteUrl(),
+      feedUrl: `${siteUrl()}/feed.xml`,
       language: "it",
     },
     posts.map((post) => postToFeedItem(post))

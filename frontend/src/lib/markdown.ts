@@ -7,6 +7,7 @@ import MarkdownIt from "markdown-it";
 import { codeBlockMarkdownPlugin, textAlignMarkdownPlugin, underlineMarkdownPlugin } from "./markdown-format-extensions";
 import { REVALIDATE_SECONDS } from "./revalidate";
 import { ensureLanguagesLoaded, highlightCode } from "./shiki-highlighter";
+import { responsiveImage } from "./responsive-image";
 import type { PostNote } from "./types";
 
 // Stessa risoluzione di server-api.ts::BACKEND_INTERNAL_URL — endpoint
@@ -77,6 +78,14 @@ interface LinkPreviewData {
   title: string | null;
   description: string | null;
   image: string | null;
+}
+
+const stripUrl = (u: string): string => u.trim().replace(/\/+$/, "");
+
+/** Toglie `el` se è un paragrafo il cui unico contenuto è l'URL `href` (link o testo semplice). */
+function removePlainLinkParagraph(el: Element | null, href: string): void {
+  if (el?.tagName !== "P") return;
+  if (stripUrl(el.textContent ?? "") === stripUrl(href)) el.remove();
 }
 
 /** Un link salvato come card dall'editor (CLAUDE.md #1) viene inserito come
@@ -150,6 +159,9 @@ async function resolveLinkCards(document: Document): Promise<void> {
         body.append(description);
       }
       card.append(body);
+      // Con anteprima riuscita il link di testo incollato subito prima è ridondante: il paragrafo
+      // che contiene solo quell'URL viene tolto (nell'editor resta, è il testo dell'autore).
+      if (preview?.title) removePlainLinkParagraph(a.parentElement?.previousElementSibling ?? null, href);
       a.replaceWith(card);
     })
   );
@@ -160,7 +172,7 @@ async function resolveLinkCards(document: Document): Promise<void> {
 // `-`/`_` interni). Il gruppo 1 è l'eventuale carattere che precede la `@`.
 const MENTION_RE = /(^|[^\w@])@([a-z0-9]+(?:[-_][a-z0-9]+)*)/g;
 
-/** todo/USERS.md #1, todo/EDITOR.md: trasforma le @menzioni nel testo in link
+/** trasforma le @menzioni nel testo in link
  * al profilo pubblico dell'utente citato. Opera solo sui nodi di testo,
  * saltando quelli già dentro un link, `code` o `pre`.
  *
@@ -206,6 +218,114 @@ function linkifyMentions(document: Document): void {
       lastIndex = MENTION_RE.lastIndex;
     }
     if (lastIndex < text.length) frag.append(document.createTextNode(text.slice(lastIndex)));
+    node.replaceWith(frag);
+  }
+}
+
+// Link interni degli Spazi wiki/docs: `[[pagina]]` o `[[pagina|testo]]`. Stesso criterio del modulo
+// `wiki` del backend (modules/wiki/src/rules.rs): il bersaglio si normalizza come uno slug.
+const WIKILINK_RE = /\[\[([^[\]\n|]{1,200}?)(?:\|([^[\]\n]{0,200}?))?\]\]/g;
+
+/** Slug di un bersaglio `[[...]]`: minuscolo, senza accenti, solo `[a-z0-9]` separati da `-`. */
+export function wikiSlug(raw: string): string {
+  return raw
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 255);
+}
+
+/** Trasforma i `[[link]]` in collegamenti alle pagine dello Spazio. Come `linkifyMentions` agisce
+ * solo sui nodi di testo fuori da link e codice. Muta `document` in place. */
+function linkifyWikiLinks(document: Document, hrefFor: (slug: string) => string): void {
+  const view = document.defaultView;
+  if (!view) return;
+  const skip = new Set(["A", "CODE", "PRE"]);
+  const walker = document.createTreeWalker(document.body, view.NodeFilter.SHOW_TEXT);
+  const textNodes: Text[] = [];
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    let el: Element | null = (n as Text).parentElement;
+    let skipped = false;
+    while (el) {
+      if (skip.has(el.tagName)) {
+        skipped = true;
+        break;
+      }
+      el = el.parentElement;
+    }
+    WIKILINK_RE.lastIndex = 0;
+    if (!skipped && WIKILINK_RE.test((n as Text).data)) textNodes.push(n as Text);
+  }
+
+  for (const node of textNodes) {
+    const frag = document.createDocumentFragment();
+    const text = node.data;
+    let lastIndex = 0;
+    WIKILINK_RE.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = WIKILINK_RE.exec(text)) !== null) {
+      const slug = wikiSlug(match[1]);
+      if (!slug) continue;
+      if (match.index > lastIndex) frag.append(document.createTextNode(text.slice(lastIndex, match.index)));
+      const a = document.createElement("a");
+      a.setAttribute("href", hrefFor(slug));
+      a.className = "wikilink";
+      a.textContent = (match[2] ?? "").trim() || match[1].trim();
+      frag.append(a);
+      lastIndex = WIKILINK_RE.lastIndex;
+    }
+    if (lastIndex < text.length) frag.append(document.createTextNode(text.slice(lastIndex)));
+    node.replaceWith(frag);
+  }
+}
+
+// Come `extract_hashtags` del backend (crates/noct-posts/src/rules.rs): `#` non preceduto da un
+// carattere di parola, poi un tag di al massimo 30 caratteri. Il gruppo 1 è il carattere che precede.
+const HASHTAG_RE = /(^|[^\p{L}\p{N}_&])#([A-Za-z0-9][A-Za-z0-9_-]{0,29})/gu;
+const VALID_TAG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/** Trasforma in link alla pagina `/tag/{tag}` gli #hashtag del testo che sono davvero tag del post
+ * (`tags`: il backend ne tiene al massimo 5, gli altri non sono tag). Salta link, `code` e `pre`.
+ *
+ * Muta `document` in place (vedi `wrapSensitiveImages`). */
+function linkifyHashtags(document: Document, tags: string[]): void {
+  const view = document.defaultView;
+  if (!view || tags.length === 0) return;
+  const known = new Set(tags);
+  const skip = new Set(["A", "CODE", "PRE"]);
+  const walker = document.createTreeWalker(document.body, view.NodeFilter.SHOW_TEXT);
+  const textNodes: Text[] = [];
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    let el: Element | null = (n as Text).parentElement;
+    let skipped = false;
+    while (el) {
+      if (skip.has(el.tagName)) { skipped = true; break; }
+      el = el.parentElement;
+    }
+    if (!skipped && (n as Text).data.includes("#")) textNodes.push(n as Text);
+  }
+  for (const node of textNodes) {
+    const text = node.data;
+    const frag = document.createDocumentFragment();
+    let last = 0;
+    let changed = false;
+    for (const m of text.matchAll(HASHTAG_RE)) {
+      const tag = m[2].toLowerCase().replace(/_/g, "-");
+      if (!VALID_TAG_RE.test(tag) || !known.has(tag)) continue;
+      const start = (m.index ?? 0) + m[1].length;
+      if (start > last) frag.append(document.createTextNode(text.slice(last, start)));
+      const a = document.createElement("a");
+      a.setAttribute("href", `/tag/${encodeURIComponent(tag)}`);
+      a.className = "hashtag";
+      a.textContent = `#${m[2]}`;
+      frag.append(a);
+      last = start + 1 + m[2].length;
+      changed = true;
+    }
+    if (!changed) continue;
+    if (last < text.length) frag.append(document.createTextNode(text.slice(last)));
     node.replaceWith(frag);
   }
 }
@@ -303,7 +423,7 @@ function buildNoteCitationElement(
   return p;
 }
 
-/** todo/EDITOR.md: trasforma i marcatori di nota nel testo in riferimenti in
+/** trasforma i marcatori di nota nel testo in riferimenti in
  * apice (con il testo della nota come tooltip) e accoda l'elenco numerato a
  * piè di pagina. La sorgente è l'elenco strutturato `notes`, non il corpo.
  *
@@ -434,10 +554,14 @@ function anchorHeadings(document: Document): PostHeading[] {
 }
 
 export interface RenderOptions {
-  /** Se true, le @menzioni diventano link al profilo (todo/EDITOR.md: il
+  /** Se true, le @menzioni diventano link al profilo (il
    * proprietario del blog può disattivarle). Default: true. */
   mentions?: boolean;
-  /** Note a piè di pagina del post (todo/EDITOR.md). Se presenti, i marcatori
+  /** Spazi wiki/docs: se presente, i `[[pagina]]` diventano link; `hrefFor` costruisce l'href dallo slug. */
+  wikiLinks?: { hrefFor: (slug: string) => string };
+  /** Tag effettivi del post: gli #hashtag del testo che vi compaiono diventano link a `/tag/{tag}`. */
+  tags?: string[];
+  /** Note a piè di pagina del post. Se presenti, i marcatori
    * nel testo diventano riferimenti in apice e viene accodato l'elenco. */
   notes?: PostNote[];
   /** Etichette dell'elenco note nella lingua dell'interfaccia (next-intl). */
@@ -541,10 +665,20 @@ async function renderPipeline(markdown: string, options: RenderOptions, withHead
     // comunque disponibile senza JS aggiuntivo.
     img.setAttribute("loading", "lazy");
     img.setAttribute("decoding", "async");
+    // varianti WebP generate all'upload + dimensioni intrinseche (niente salti di layout)
+    const responsive = responsiveImage(img.getAttribute("src") ?? "");
+    if (responsive) {
+      img.setAttribute("width", String(responsive.width));
+      img.setAttribute("height", String(responsive.height));
+      img.setAttribute("srcset", responsive.srcSet);
+      img.setAttribute("sizes", "(min-width: 720px) 680px, calc(100vw - 40px)");
+    }
   });
   injectCopyButtons(document, options.copyCodeLabel ?? "Copia", options.copiedCodeLabel ?? "Copiato");
   await resolveLinkCards(document);
   if (options.mentions !== false) linkifyMentions(document);
+  if (options.wikiLinks) linkifyWikiLinks(document, options.wikiLinks.hrefFor);
+  linkifyHashtags(document, options.tags ?? []);
   const headings = withHeadings ? anchorHeadings(document) : [];
   if (options.notes && options.notes.length > 0) {
     renderFootnotes(document, options.notes, options.footnoteLabels ?? DEFAULT_FOOTNOTE_LABELS);

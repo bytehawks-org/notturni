@@ -1,0 +1,33 @@
+[[enum]]
+name = "mfa_method"
+values = ["totp", "email"]
+
+# Configurazione MFA dell'utente (riga creata alla prima configurazione). Il flag `mfa_enabled`
+# di `users` è la fonte per sapere se la sfida è attiva; qui c'è il metodo e il segreto.
+[[table]]
+name = "mfa_settings"
+timestamps = true
+primary_key = ["user_id"]
+columns = [
+  { name = "user_id", type = "uuid", ref = "users.id", on_delete = "cascade" },
+  # metodo attivo; nullo finché la configurazione non è confermata
+  { name = "method", type = "enum:mfa_method", null = true },
+  { name = "totp_secret", type = "text", null = true },
+  # segreto generato da /totp/setup, attivo solo dopo la conferma: rigenerarlo non interrompe
+  # l'accesso con quello in uso
+  { name = "pending_totp_secret", type = "text", null = true },
+  # ultimo intervallo TOTP accettato: lo stesso codice non si può riusare
+  { name = "totp_last_step", type = "bigint", null = true },
+]
+
+# Codici monouso per l'MFA via email. Il valore non è memorizzato: si deriva da id e chiave del server.
+[[table]]
+name = "mfa_email_codes"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "user_id", type = "uuid", ref = "users.id", on_delete = "cascade" },
+  { name = "expires_at", type = "timestamptz" },
+  { name = "consumed_at", type = "timestamptz", null = true },
+]
+indexes = [{ columns = ["user_id"] }]

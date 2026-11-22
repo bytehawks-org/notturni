@@ -1,0 +1,9 @@
+# Interessi di piattaforma: riga unica, creata al bisogno. `items` è
+# [{key, translations: {locale: etichetta}}]. Si modifica dalle rotte di amministrazione (Super Admin).
+[[table]]
+name = "interests_settings"
+primary_key = ["id"]
+columns = [
+  { name = "id", type = "integer", default = "1" },
+  { name = "items", type = "jsonb", default = "'[]'" },
+]

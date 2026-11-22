@@ -1,0 +1,78 @@
+# Compatibile con /api/v1/posts/{id}/fragments, /users/me/fragments e /fragments/{id} della v1.
+
+[type.FragmentCreate]
+text = "string"
+is_public = "bool?"
+
+[type.FragmentUpdate]
+is_public = "bool"
+
+[type.FragmentOut]
+id = "uuid"
+post_id = "uuid"
+text = "string"
+is_public = "bool"
+created_at = "timestamp"
+
+[type.FragmentCollectionOut]
+id = "uuid"
+text = "string"
+is_public = "bool"
+created_at = "timestamp"
+post_title = "string"
+author_display_name = "string"
+permalink = "string"
+
+# Solo su un post pubblicato e visibile all'utente. Salvare due volte lo stesso testo è idempotente.
+[[route]]
+id = "create_fragment"
+method = "POST"
+path = "/posts/{post_id}/fragments"
+auth = "user"
+kind = "custom"
+handler = "create_fragment"
+request = "FragmentCreate"
+response = "FragmentOut"
+status = 201
+summary = "Salva un frammento"
+
+[[route]]
+id = "list_post_fragments"
+method = "GET"
+path = "/posts/{post_id}/fragments"
+auth = "user"
+kind = "custom"
+handler = "list_post_fragments"
+response = "FragmentOut[]"
+summary = "Frammenti già salvati dall'utente su questo post"
+
+[[route]]
+id = "list_my_fragments"
+method = "GET"
+path = "/users/me/fragments"
+auth = "user"
+kind = "custom"
+handler = "list_my_fragments"
+response = "FragmentCollectionOut[]"
+summary = "Raccolta dei frammenti dell'utente, i più recenti per primi"
+
+[[route]]
+id = "update_fragment"
+method = "PATCH"
+path = "/fragments/{fragment_id}"
+auth = "user"
+kind = "custom"
+handler = "update_fragment"
+request = "FragmentUpdate"
+response = "FragmentOut"
+summary = "Cambia la visibilità di un frammento"
+
+[[route]]
+id = "delete_fragment"
+method = "DELETE"
+path = "/fragments/{fragment_id}"
+auth = "user"
+kind = "custom"
+handler = "delete_fragment"
+status = 204
+summary = "Elimina un frammento"

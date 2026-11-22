@@ -1,0 +1,105 @@
+{
+  "enums": [
+    {
+      "name": "custom_domain_status",
+      "values": [
+        "pending",
+        "verified",
+        "failed"
+      ]
+    }
+  ],
+  "tables": [
+    {
+      "name": "custom_domains",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "null": false,
+          "default": "gen_random_uuid()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "null": false,
+          "default": null,
+          "references": {
+            "table": "users",
+            "column": "id",
+            "on_delete": "cascade"
+          },
+          "renamed_from": null
+        },
+        {
+          "name": "domain",
+          "type": "varchar(255)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "verification_token",
+          "type": "varchar(64)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "status",
+          "type": "enum:custom_domain_status",
+          "null": false,
+          "default": "'pending'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "verified_at",
+          "type": "timestamptz",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [],
+      "uniques": [
+        {
+          "name": "uq_custom_domains_user",
+          "columns": [
+            "user_id"
+          ]
+        },
+        {
+          "name": "uq_custom_domains_domain",
+          "columns": [
+            "domain"
+          ]
+        }
+      ]
+    }
+  ]
+}

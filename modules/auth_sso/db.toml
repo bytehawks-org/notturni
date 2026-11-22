@@ -1,0 +1,29 @@
+[[enum]]
+name = "sso_provider"
+values = ["google", "microsoft", "github", "linkedin"]
+
+# Collegamento tra un utente e la sua identità presso un provider. I conflitti si risolvono per
+# email: l'identità si collega a un utente esistente (previa verifica MFA, se attiva) oppure si
+# crea un utente nuovo.
+[[table]]
+name = "sso_identities"
+timestamps = true
+columns = [
+  { name = "id", type = "uuid", pk = true, default = "gen_random_uuid()" },
+  { name = "user_id", type = "uuid", ref = "users.id", on_delete = "cascade" },
+  { name = "provider", type = "enum:sso_provider" },
+  { name = "provider_user_id", type = "varchar(255)" },
+  { name = "email", type = "varchar(255)" },
+]
+uniques = [{ name = "uq_sso_identity_provider_user", columns = ["provider", "provider_user_id"] }]
+indexes = [{ columns = ["user_id"] }]
+
+# Provider consentiti dall'amministratore (riga unica, creata al bisogno). Vuoto = tutti quelli
+# configurati. Si modifica dalle rotte di amministrazione (fase operazioni).
+[[table]]
+name = "sso_settings"
+primary_key = ["id"]
+columns = [
+  { name = "id", type = "integer", default = "1" },
+  { name = "enabled_providers", type = "text[]", default = "'{}'" },
+]

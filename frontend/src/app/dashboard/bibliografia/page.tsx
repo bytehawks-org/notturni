@@ -9,7 +9,7 @@ import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import type { MyBibliographyEntry } from "@/lib/types";
 
-/** Vista "tutti i miei blog" (todo/UX_REDESIGN.md), generalizza la
+/** Vista "tutti i miei blog", generalizza la
  * bibliografia automatica del singolo blog (/{blog}/bibliografia) a tutti i
  * blog dell'utente insieme, con l'attribuzione del blog per citazione. Il
  * contenuto della nota è mostrato come testo semplice: `renderNoteInline`

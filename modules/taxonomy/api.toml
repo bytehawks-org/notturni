@@ -1,0 +1,66 @@
+# Compatibile con GET/POST/PATCH/DELETE /api/v1/blogs/{slug}/categories della v1.
+
+[type.Category]
+id = "uuid"
+name = "string"
+slug = "string"
+
+[type.CategoryCreate]
+name = { type = "string", max = 50, non_blank = true, message = "Il nome della categoria deve essere non vuoto, max 50 caratteri." }
+slug = { type = "string", max = 60, pattern = "^[a-z0-9]+(-[a-z0-9]+)*$", message = "Lo slug della categoria deve contenere solo lettere minuscole, cifre e trattini singoli, max 60 caratteri." }
+
+[type.CategoryUpdate]
+name = { type = "string", max = 50, non_blank = true, optional = true, message = "Il nome della categoria deve essere non vuoto, max 50 caratteri." }
+slug = { type = "string", max = 60, pattern = "^[a-z0-9]+(-[a-z0-9]+)*$", optional = true, message = "Lo slug della categoria deve contenere solo lettere minuscole, cifre e trattini singoli, max 60 caratteri." }
+
+[[route]]
+id = "list_categories"
+method = "GET"
+path = "/blogs/{slug}/categories"
+auth = "public"
+kind = "list"
+table = "categories"
+scope = { blog = "slug" }
+order_by = ["name"]
+response = "Category[]"
+summary = "Categorie del blog"
+
+[[route]]
+id = "create_category"
+method = "POST"
+path = "/blogs/{slug}/categories"
+auth = "blog_write"
+kind = "create"
+table = "categories"
+scope = { blog = "slug" }
+request = "CategoryCreate"
+response = "Category"
+conflict = [{ constraint = "uq_category_blog_slug", status = 409, message = "Esiste già una categoria con questo slug." }]
+summary = "Crea una categoria"
+
+[[route]]
+id = "update_category"
+method = "PATCH"
+path = "/blogs/{slug}/categories/{category_id}"
+auth = "blog_write"
+kind = "update"
+table = "categories"
+scope = { blog = "slug" }
+key = { param = "category_id", column = "id" }
+request = "CategoryUpdate"
+response = "Category"
+not_found = "Categoria non trovata."
+conflict = [{ constraint = "uq_category_blog_slug", status = 409, message = "Esiste già una categoria con questo slug." }]
+summary = "Modifica nome o slug di una categoria"
+
+[[route]]
+id = "delete_category"
+method = "DELETE"
+path = "/blogs/{slug}/categories/{category_id}"
+auth = "blog_write"
+kind = "delete"
+table = "categories"
+scope = { blog = "slug" }
+key = { param = "category_id", column = "id" }
+not_found = "Categoria non trovata."
+summary = "Elimina una categoria"

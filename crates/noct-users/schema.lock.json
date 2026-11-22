@@ -1,0 +1,239 @@
+{
+  "enums": [
+    {
+      "name": "platform_role",
+      "values": [
+        "super_admin",
+        "amministratore",
+        "moderatore",
+        "utente"
+      ]
+    },
+    {
+      "name": "post_author_name_style",
+      "values": [
+        "username",
+        "full_name",
+        "display_name",
+        "verified_domain"
+      ]
+    }
+  ],
+  "tables": [
+    {
+      "name": "users",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "null": false,
+          "default": "gen_random_uuid()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "username",
+          "type": "varchar(32)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "email",
+          "type": "varchar(255)",
+          "null": false,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "platform_role",
+          "type": "enum:platform_role",
+          "null": false,
+          "default": "'utente'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "is_active",
+          "type": "boolean",
+          "null": false,
+          "default": "true",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "hashed_password",
+          "type": "varchar(255)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "credentials_changed_at",
+          "type": "timestamptz",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "mfa_enabled",
+          "type": "boolean",
+          "null": false,
+          "default": "false",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "display_name",
+          "type": "varchar(255)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "ui_locale",
+          "type": "varchar(2)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "first_name",
+          "type": "varchar(100)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "last_name",
+          "type": "varchar(100)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "avatar_object_key",
+          "type": "varchar(255)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "post_author_name_style",
+          "type": "enum:post_author_name_style",
+          "null": false,
+          "default": "'username'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "bio",
+          "type": "text",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "country",
+          "type": "varchar(2)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "native_language",
+          "type": "varchar(2)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "fallback_languages",
+          "type": "text[]",
+          "null": false,
+          "default": "'{}'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "interests",
+          "type": "text[]",
+          "null": false,
+          "default": "'{}'",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "directory_listed",
+          "type": "boolean",
+          "null": false,
+          "default": "true",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "username_changed_at",
+          "type": "timestamptz",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "verified_domain",
+          "type": "varchar(255)",
+          "null": true,
+          "default": null,
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "null": false,
+          "default": "now()",
+          "references": null,
+          "renamed_from": null
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [],
+      "uniques": [
+        {
+          "name": "uq_users_username",
+          "columns": [
+            "username"
+          ]
+        },
+        {
+          "name": "uq_users_email",
+          "columns": [
+            "email"
+          ]
+        }
+      ]
+    }
+  ]
+}

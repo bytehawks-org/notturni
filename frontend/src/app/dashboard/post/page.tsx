@@ -4,6 +4,7 @@ import { useLocale, useTranslations } from "next-intl";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { PostRowActions } from "@/components/dashboard/PostRowActions";
 import { StatusPill } from "@/components/blog/StatusPill";
 import { Alert } from "@/components/ui/Alert";
 import { FilterChip } from "@/components/ui/Pill";
@@ -16,7 +17,7 @@ import type { Post } from "@/lib/types";
 
 const FILTERS: ("all" | DisplayPostStatus)[] = ["all", "draft", "review", "scheduled", "published"];
 
-/** Vista "tutti i miei blog" (todo/UX_REDESIGN.md), generalizza il tab Post
+/** Vista "tutti i miei blog", generalizza il tab Post
  * del singolo blog (PostsTab.tsx) a tutti i blog dell'utente insieme, con
  * l'attribuzione del blog per riga. */
 export default function MyPostsPage() {
@@ -101,11 +102,12 @@ export default function MyPostsPage() {
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  {status === "published" && (
-                    <Link href={post.permalink} className="text-[13px] text-muted no-underline hover:text-foreground">
-                      {t("view")} ↗
-                    </Link>
-                  )}
+                  <PostRowActions
+                    post={post}
+                    status={status}
+                    onUpdated={(updated) => setPosts((prev) => prev?.map((p) => (p.id === updated.id ? updated : p)) ?? null)}
+                    onDeleted={(id) => setPosts((prev) => prev?.filter((p) => p.id !== id) ?? null)}
+                  />
                   <StatusPill status={status} />
                 </div>
               </li>

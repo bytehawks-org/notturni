@@ -2,103 +2,105 @@
 
 Next.js (App Router) + Tailwind CSS.
 
-Il pannello di amministrazione è parte di questa stessa app, non un
-progetto a sé: `dashboard/pagine`, `dashboard/utenti`, `dashboard/blog`
-(voci di menu visibili solo ad Amministratore/Super Admin — riusano
-`RichTextEditor` e gli altri componenti già usati per i post, nessuna
-duplicazione). Vedi [backend/API.md](../backend/API.md#amministrazione-di-piattaforma)
-per gli endpoint usati.
+The administration panel is part of this same app, not a separate project:
+`dashboard/pagine`, `dashboard/utenti`, `dashboard/blog` (menu entries
+visible only to Amministratore / Super Admin). They reuse `RichTextEditor`
+and the other components already used for posts, with no duplication. See
+[docs/API.md](../docs/API.md#platform-administration) for the endpoints used.
 
 ## Setup
 
 ```bash
 npm install
-cp .env.local.example .env.local  # opzionale: il default punta già a localhost:8000
+cp .env.local.example .env.local  # optional: the default already points to localhost:8000
 ```
 
-Serve il backend in esecuzione (vedi `../backend/README.md`) — questo frontend
-non funziona a sé stante, ogni pagina autenticata chiama l'API direttamente
-dal browser.
+The backend must be running (see `../docs/BACKEND.md`). This frontend does
+not work on its own: every authenticated page calls the API directly from
+the browser.
 
-## Avvio
+## Start
 
 ```bash
 npm run dev
 ```
 
-Apri [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000).
 
-## Struttura
+## Structure
 
 ```text
 src/
 ├── app/
-│   ├── login/, register/          # autenticazione (con step MFA)
-│   ├── dashboard/                  # area autore: blog, post, profilo
-│   │   ├── blogs/[slug]/            # dettaglio blog: tab post/commenti/aspetto/impostazioni
-│   │   ├── pagine/, utenti/, blog/, moderazione/  # amministrazione (solo Amministratore/Super Admin): pagine statiche, utenti, elenco blog di piattaforma, moderazione post
-│   └── u/[username]/                # profilo pubblico + follow
-├── i18n/                            # lingua dell'interfaccia (next-intl): config, risoluzione, cookie
-├── messages/{it,en}.json            # stringhe dell'interfaccia, per namespace
+│   ├── login/, register/          # authentication (with MFA step)
+│   ├── dashboard/                  # author area: blogs, posts, profile
+│   │   ├── blogs/[slug]/            # blog detail: tabs posts/comments/aspetto (appearance)/impostazioni (settings)
+│   │   ├── pagine/, utenti/, blog/, moderazione/  # administration (Amministratore/Super Admin only): static pages, users, platform blog list, post moderation
+│   └── u/[username]/                # public profile + follow
+├── i18n/                            # UI language (next-intl): config, resolution, cookie
+├── messages/{it,en}.json            # UI strings, per namespace
 ├── lib/
-│   ├── api.ts                       # client HTTP tipizzato verso il backend
-│   ├── auth-context.tsx             # sessione (access/refresh token, auto-refresh su 401)
-│   ├── theme-context.tsx            # tema chiaro/scuro/automatico
-│   └── sun.ts                       # calcolo alba/tramonto (locale, nessuna chiamata esterna)
+│   ├── api.ts                       # typed HTTP client for the backend
+│   ├── auth-context.tsx             # session (access/refresh token, auto-refresh on 401)
+│   ├── theme-context.tsx            # light/dark/automatic theme
+│   └── sun.ts                       # sunrise/sunset calculation (local, no external call)
 └── components/
     ├── ui/                          # Button, Input, Card, Pill, States (Empty/Skeleton/Error), Toast, ConfirmDialog, ...
     ├── shell/                       # DashboardShell, SiteHeader/SiteFooter, BlogHeader, UiLanguagePicker
-    ├── blog/                        # pezzi del blog pubblico: BlogPageShell (palette custom), FragmentMenu, PostActions, StatusPill, VisibilityBand
-    ├── SearchInput.tsx               # campo di ricerca con debounce, usato dalle sezioni di amministrazione
+    ├── blog/                        # public blog pieces: BlogPageShell (custom palette), FragmentMenu, PostActions, StatusPill, VisibilityBand
+    ├── SearchInput.tsx               # search field with debounce, used by the administration sections
     └── ThemeToggle.tsx
 ```
 
-## Autenticazione
+## Authentication
 
-`AuthProvider` (`src/lib/auth-context.tsx`) tiene l'access token **solo in
-memoria** (mai in `localStorage`): un reload completo lo perde, per cui
-all'avvio l'app tenta sempre un refresh silenzioso. Il refresh token vero e
-proprio non è mai visibile a JS — vive in un cookie `httpOnly` impostato dal
-backend (`backend/API.md`), inviato automaticamente dal browser con
-`credentials: "include"` sulle sole chiamate a `/auth/refresh`/`/auth/logout`
-(`src/lib/api.ts`). Refresh automatico su `401` come prima, via `authFetch`.
+`AuthProvider` (`src/lib/auth-context.tsx`) keeps the access token **in
+memory only** (never in `localStorage`). A full reload loses it, so on
+startup the app always tries a silent refresh. The refresh token itself is
+never visible to JS. It lives in an `httpOnly` cookie set by the backend
+(see `docs/API.md`). The browser sends it automatically with
+`credentials: "include"`, and only on the `/auth/refresh` and `/auth/logout`
+calls (`src/lib/api.ts`). Automatic refresh on `401` works as before, via
+`authFetch`.
 
-## Tema chiaro/scuro/automatico
+## Light / dark / automatic theme
 
-`ThemeProvider` (`src/lib/theme-context.tsx`) applica il tema tramite
-l'attributo `data-theme` su `<html>` (vedi `globals.css`), con uno script
-inline in `layout.tsx` che lo imposta prima dell'idratazione React per
-evitare un flash del tema sbagliato.
+`ThemeProvider` (`src/lib/theme-context.tsx`) applies the theme through the
+`data-theme` attribute on `<html>` (see `globals.css`). An inline script in
+`layout.tsx` sets it before React hydration, to avoid a flash of the wrong
+theme.
 
-In modalità **automatica** (default), usa la geolocalizzazione del browser
-per calcolare alba/tramonto reali della posizione dell'utente (formula
-astronomica standard in `lib/sun.ts`, calcolata interamente lato client — la
-posizione non viene mai salvata né inviata al backend, resta solo in memoria
-per il calcolo). Se la geolocalizzazione non è concessa o non è disponibile,
-ripiega sulle preferenze di sistema (`prefers-color-scheme`) invece di
-fallire. Ricalcola ogni 10 minuti e al ritorno in foreground della scheda.
+In **automatic** mode (default), the app uses the browser geolocation to
+compute the real sunrise and sunset for the user's position. The formula is
+the standard astronomical one in `lib/sun.ts`, and it runs entirely on the
+client. The position is never stored or sent to the backend. It stays in
+memory for the calculation only. If geolocation is denied or unavailable,
+the app falls back to the system preference (`prefers-color-scheme`)
+instead of failing. It recalculates every 10 minutes and when the tab
+returns to the foreground.
 
-## Lingua dell'interfaccia (next-intl)
+## UI language (next-intl)
 
-Etichette, pulsanti e messaggi vivono in `src/messages/{it,en}.json`, per
-namespace (`Nav`, `Auth`, `PostPage`, …). La lingua è risolta in
-`src/i18n/request.ts`: cookie `notturni_ui_locale` (impostato dal selettore
-nell'header o dal profilo via server action `setUiLocale`) → `Accept-Language`
-→ `it`. Nessun segmento di lingua nell'URL: la lingua dei **contenuti** (post,
-pagine) ha già il proprio modello locale+slug lato backend e resta separata.
-Server Component: `getTranslations()`; Client Component: `useTranslations()`.
-Nuova lingua = nuovo file JSON + voce in `LOCALES` (`src/i18n/config.ts`).
-Le stringhe non ancora migrate (editor, alcune tab e pagine admin) sono in
-italiano hardcoded: vedi `todo/UX_REDESIGN.md` A0.
+Labels, buttons and messages live in `src/messages/{it,en}.json`, per
+namespace (`Nav`, `Auth`, `PostPage`, ...). The language is resolved in
+`src/i18n/request.ts`: cookie `notturni_ui_locale` (set by the picker in the
+header or by the profile, via the `setUiLocale` server action) →
+`Accept-Language` → `it`. The URL has no language segment. The **content**
+language (posts, pages) already has its own locale+slug model on the
+backend and stays separate. Server Components use `getTranslations()`;
+Client Components use `useTranslations()`. To add a language, add a new
+JSON file and an entry in `LOCALES` (`src/i18n/config.ts`). Strings not yet
+migrated (editor, some tabs and admin pages) are hardcoded in Italian.
 
-## Tipografia e palette
+## Typography and palette
 
-Definite in `src/app/globals.css` secondo le linee guida estetiche del
-progetto (vedi [ROADMAP.md](../ROADMAP.md#2-estetica)):
-titoli in serif (Lora), corpo e link in sans-serif (Source Sans 3), palette di 5 colori
-(`background`, `foreground`, `primary`, `muted`, `border`) — questa è la
-palette *di piattaforma* (dashboard, admin); ogni blog può personalizzare la
-propria (vedi `blogs.getConfig`/`updateConfig` in `lib/api.ts` e la tab
-"Aspetto" nella dashboard); la palette del blog è applicata alle sue pagine
-pubbliche da `components/blog/BlogPageShell.tsx` come variabili CSS (solo tema
-chiaro: in tema scuro vale la palette scura di piattaforma).
+Defined in `src/app/globals.css` following the project aesthetic guidelines
+(see [ROADMAP.md](../ROADMAP.md#2-aesthetics)): serif headings (Lora),
+sans-serif body and links (Source Sans 3), and a 5-color palette
+(`background`, `foreground`, `primary`, `muted`, `border`). This is the
+*platform* palette (dashboard, admin). Each blog can customize its own
+palette (see `blogs.getConfig`/`updateConfig` in `lib/api.ts` and the
+"Aspetto" (Appearance) tab in the dashboard). The blog palette is applied to
+its public pages by `components/blog/BlogPageShell.tsx` as CSS variables.
+It applies to the light theme only. In dark theme, the dark platform
+palette applies.

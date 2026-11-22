@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { BlogCard } from "@/components/blog/VisibilityBand";
+import { PostRowActions } from "@/components/dashboard/PostRowActions";
 import { StatusPill } from "@/components/blog/StatusPill";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -14,12 +15,14 @@ import { FilterChip } from "@/components/ui/Pill";
 import { EmptyState, SkeletonCards, SkeletonRows } from "@/components/ui/States";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { useExperimentalFeatures } from "@/lib/experimental";
 import { formatDate } from "@/lib/format";
 import { displayPostStatus, type DisplayPostStatus } from "@/lib/post-status";
-import type { Blog, BlogComment, BlogInvitation, BlogVisibility, MembershipBlog, Post } from "@/lib/types";
+import type { Blog, BlogComment, BlogInvitation, BlogVisibility, MembershipBlog, Post, SpaceKind } from "@/lib/types";
 
 const MAX_BLOGS = 5;
 const VISIBILITIES: BlogVisibility[] = ["public", "members", "private"];
+const SPACE_KINDS: SpaceKind[] = ["blog", "wiki", "docs"];
 const POST_FILTERS: ("all" | DisplayPostStatus)[] = ["all", "draft", "review", "scheduled", "published"];
 
 /** Dashboard utente (mockup 1e desktop / 1f mobile): saluto e riepilogo,
@@ -47,6 +50,10 @@ export default function DashboardHomePage() {
   const [slug, setSlug] = useState("");
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
+  const [kind, setKind] = useState<SpaceKind>("blog");
+  // wiki e docs sono sperimentali: compaiono solo se l'istanza li ha attivati
+  const experimental = useExperimentalFeatures();
+  const spaceKinds = SPACE_KINDS.filter((k) => k === "blog" || experimental.includes(k));
   const [visibility, setVisibility] = useState<BlogVisibility>("public");
   // Alias di default del blog: se lasciato vuoto il backend ricade sullo
   // username (vedi _resolve_author_display_name), il suggerimento lo esplicita.
@@ -101,6 +108,7 @@ export default function DashboardHomePage() {
           slug,
           title,
           subtitle: subtitle || null,
+          kind,
           visibility,
           default_author_display_name: defaultAuthorName || null,
         })
@@ -251,6 +259,23 @@ export default function DashboardHomePage() {
               <Input id="default-author-name" value={defaultAuthorName} onChange={(e) => setDefaultAuthorNameInput(e.target.value)} />
             </FieldGroup>
             <FieldGroup>
+              <Label htmlFor="kind" hint={t("kindHint")}>
+                {t("kind")}
+              </Label>
+              <select
+                id="kind"
+                value={kind}
+                onChange={(e) => setKind(e.target.value as SpaceKind)}
+                className="w-full max-w-xs rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-[3px] focus:ring-primary/20"
+              >
+                {spaceKinds.map((k) => (
+                  <option key={k} value={k}>
+                    {t(`kinds.${k}`)}
+                  </option>
+                ))}
+              </select>
+            </FieldGroup>
+            <FieldGroup>
               <Label htmlFor="visibility">{t("visibility")}</Label>
               <select
                 id="visibility"
@@ -348,7 +373,15 @@ export default function DashboardHomePage() {
                       {formatDate(post.published_at ?? post.created_at, locale, { day: "numeric", month: "short", year: "numeric" })}
                     </span>
                   </div>
-                  <StatusPill status={displayPostStatus(post)} />
+                  <div className="flex items-center gap-3">
+                    <PostRowActions
+                      post={post}
+                      status={displayPostStatus(post)}
+                      onUpdated={(updated) => setPosts((prev) => prev?.map((p) => (p.id === updated.id ? updated : p)) ?? null)}
+                      onDeleted={(id) => setPosts((prev) => prev?.filter((p) => p.id !== id) ?? null)}
+                    />
+                    <StatusPill status={displayPostStatus(post)} />
+                  </div>
                 </li>
               ))}
             </ul>

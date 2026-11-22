@@ -1,0 +1,30 @@
+[package]
+name = "noct-backup"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+build = "build.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+noct-core.workspace = true
+noct-storage.workspace = true
+async-trait.workspace = true
+axum.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+regex.workspace = true
+bytes.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+url.workspace = true
+percent-encoding.workspace = true
+
+[build-dependencies]
+noct-codegen.workspace = true

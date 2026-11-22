@@ -1,5 +1,7 @@
 "use client";
 import Link from "next/link";
+
+import { useSiteName } from "@/components/SiteConfigProvider";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
@@ -56,6 +58,7 @@ export function DashboardShell({
   footer?: ReactNode | ((collapsed: boolean) => ReactNode);
   children: ReactNode;
 }) {
+  const siteName = useSiteName();
   const path = usePathname();
   const active = (href: string) => (href === "/dashboard" || href === "/admin" ? path === href : path.startsWith(href));
   const tabs = items.filter((i) => i.mobile).slice(0, 5);
@@ -84,7 +87,7 @@ export function DashboardShell({
     >
       <aside className="hidden overflow-y-auto border-r border-border bg-surface px-3.5 py-5 text-sm lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:gap-1 lg:self-start">
         <Link href={homeHref} className="flex flex-col px-3 pb-4 pt-1 leading-tight">
-          <span className="font-serif text-xl font-semibold text-foreground">{collapsed ? "N" : "Notturni"}</span>
+          <span className="font-serif text-xl font-semibold text-foreground">{collapsed ? siteName.charAt(0).toUpperCase() : siteName}</span>
           {!collapsed && eyebrow && <span className="font-mono text-xs tracking-[.06em] text-muted">{eyebrow}</span>}
         </Link>
         {(platformLink || blogLink) && (

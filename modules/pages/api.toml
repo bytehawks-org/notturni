@@ -1,0 +1,206 @@
+# Compatibile con /api/v1/pages (sito) e /api/v1/blogs/{slug}/pages (blog) della v1.
+
+[type.PageCreate]
+slug = { type = "string", max = 80, pattern = "^[a-z0-9]+(-[a-z0-9]+)*$", message = "Lo slug della pagina deve contenere solo lettere minuscole, cifre e trattini singoli, max 80 caratteri." }
+locale = { type = "string", pattern = "^[a-z]{2}$", message = "Il codice lingua deve essere ISO 639-1 di 2 lettere minuscole (es. it, en, de)." }
+title = { type = "string", max = 255, non_blank = true, message = "Il titolo non può essere vuoto (max 255 caratteri)." }
+content = { type = "string", max = 500000, message = "Il contenuto supera la lunghezza massima consentita." }
+is_published = "bool?"
+
+[type.PageTranslation]
+slug = { type = "string", max = 80, pattern = "^[a-z0-9]+(-[a-z0-9]+)*$", message = "Lo slug della pagina deve contenere solo lettere minuscole, cifre e trattini singoli, max 80 caratteri." }
+locale = { type = "string", pattern = "^[a-z]{2}$", message = "Il codice lingua deve essere ISO 639-1 di 2 lettere minuscole (es. it, en, de)." }
+title = { type = "string", max = 255, non_blank = true, message = "Il titolo non può essere vuoto (max 255 caratteri)." }
+content = { type = "string", max = 500000, message = "Il contenuto supera la lunghezza massima consentita." }
+is_published = "bool?"
+
+[type.PageUpdate]
+slug = { type = "string", max = 80, pattern = "^[a-z0-9]+(-[a-z0-9]+)*$", message = "Lo slug della pagina deve contenere solo lettere minuscole, cifre e trattini singoli, max 80 caratteri.", optional = true }
+title = { type = "string", max = 255, non_blank = true, message = "Il titolo non può essere vuoto (max 255 caratteri).", optional = true }
+content = { type = "string", max = 500000, message = "Il contenuto supera la lunghezza massima consentita.", optional = true }
+is_published = "bool?"
+
+[type.PageOut]
+id = "uuid"
+blog_id = { type = "uuid", nullable = true }
+slug = "string"
+locale = "string"
+translation_group_id = "uuid"
+title = "string"
+content = "string"
+is_published = "bool"
+created_at = "timestamp"
+# `/p/{slug}` per il sito, `/{blog}/pagina/{slug}` per i blog
+permalink = "string"
+mentions_enabled = "bool"
+
+[type.PageTranslationSummary]
+id = "uuid"
+locale = "string"
+slug = "string"
+is_published = "bool"
+
+# ---- pagine dei blog ----
+# Lettura: `?locale=` obbligatorio; ai lettori solo le pubblicate, a chi scrive anche le bozze.
+
+[[route]]
+id = "list_blog_pages"
+method = "GET"
+path = "/blogs/{slug}/pages"
+auth = "public"
+kind = "custom"
+handler = "list_blog_pages"
+scope = { blog = "slug" }
+response = "PageOut[]"
+summary = "Pagine del blog in una lingua"
+
+[[route]]
+id = "get_blog_page_by_id"
+method = "GET"
+path = "/blogs/{slug}/pages/by-id/{page_id}"
+auth = "blog_write"
+kind = "custom"
+handler = "get_blog_page_by_id"
+scope = { blog = "slug" }
+response = "PageOut"
+summary = "Pagina per id (editor, bozze incluse)"
+
+[[route]]
+id = "get_blog_page"
+method = "GET"
+path = "/blogs/{slug}/pages/{key}"
+auth = "public"
+kind = "custom"
+handler = "get_blog_page"
+scope = { blog = "slug" }
+response = "PageOut"
+summary = "Pagina per slug e lingua"
+
+# La creazione di pagine e traduzioni richiede `static_pages_enabled`; modifica e rimozione restano sempre possibili.
+
+[[route]]
+id = "create_blog_page"
+method = "POST"
+path = "/blogs/{slug}/pages"
+auth = "blog_write"
+kind = "custom"
+handler = "create_blog_page"
+scope = { blog = "slug" }
+request = "PageCreate"
+response = "PageOut"
+status = 201
+summary = "Crea una pagina"
+
+[[route]]
+id = "add_blog_page_translation"
+method = "POST"
+path = "/blogs/{slug}/pages/{key}/translations"
+auth = "blog_write"
+kind = "custom"
+handler = "add_blog_page_translation"
+scope = { blog = "slug" }
+request = "PageTranslation"
+response = "PageOut"
+status = 201
+summary = "Aggiunge una traduzione"
+
+[[route]]
+id = "list_blog_page_translations"
+method = "GET"
+path = "/blogs/{slug}/pages/{key}/translations"
+auth = "public"
+kind = "custom"
+handler = "list_blog_page_translations"
+scope = { blog = "slug" }
+response = "PageTranslationSummary[]"
+summary = "Traduzioni pubblicate di una pagina"
+
+[[route]]
+id = "update_blog_page"
+method = "PATCH"
+path = "/blogs/{slug}/pages/{key}"
+auth = "blog_write"
+kind = "custom"
+handler = "update_blog_page"
+scope = { blog = "slug" }
+request = "PageUpdate"
+response = "PageOut"
+summary = "Modifica una pagina"
+
+[[route]]
+id = "delete_blog_page"
+method = "DELETE"
+path = "/blogs/{slug}/pages/{key}"
+auth = "blog_write"
+kind = "custom"
+handler = "delete_blog_page"
+scope = { blog = "slug" }
+status = 204
+summary = "Elimina una pagina"
+
+# ---- pagine del sito (gestione riservata agli amministratori) ----
+
+[[route]]
+id = "list_platform_pages"
+method = "GET"
+path = "/pages"
+auth = "public"
+kind = "custom"
+handler = "list_platform_pages"
+response = "PageOut[]"
+summary = "Pagine del sito in una lingua (`?locale=`, `?q=` cerca in titolo e slug)"
+
+[[route]]
+id = "get_platform_page"
+method = "GET"
+path = "/pages/{key}"
+auth = "public"
+kind = "custom"
+handler = "get_platform_page"
+response = "PageOut"
+summary = "Pagina del sito per slug e lingua"
+
+[[route]]
+id = "create_platform_page"
+method = "POST"
+path = "/pages"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "create_platform_page"
+request = "PageCreate"
+response = "PageOut"
+status = 201
+summary = "Crea una pagina del sito"
+
+[[route]]
+id = "add_platform_page_translation"
+method = "POST"
+path = "/pages/{key}/translations"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "add_platform_page_translation"
+request = "PageTranslation"
+response = "PageOut"
+status = 201
+summary = "Aggiunge una traduzione"
+
+[[route]]
+id = "list_platform_page_translations"
+method = "GET"
+path = "/pages/{key}/translations"
+auth = "public"
+kind = "custom"
+handler = "list_platform_page_translations"
+response = "PageTranslationSummary[]"
+summary = "Traduzioni pubblicate di una pagina del sito"
+
+[[route]]
+id = "update_platform_page"
+method = "PATCH"
+path = "/pages/{key}"
+auth = "platform_role:super_admin,amministratore"
+kind = "custom"
+handler = "update_platform_page"
+request = "PageUpdate"
+response = "PageOut"
+summary = "Modifica una pagina del sito"

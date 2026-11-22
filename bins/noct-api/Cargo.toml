@@ -1,0 +1,49 @@
+[package]
+name = "noct-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+# moduli di sviluppo/riferimento compilati nel binario
+sandbox = ["noct-bundle/sandbox"]
+
+[lints]
+workspace = true
+
+[dependencies]
+noct-core.workspace = true
+noct-bundle.workspace = true
+anyhow.workspace = true
+axum.workspace = true
+tokio.workspace = true
+sqlx.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tower-http.workspace = true
+regex.workspace = true
+tower.workspace = true
+
+[dev-dependencies]
+noct-bundle = { workspace = true, features = ["sandbox"] }
+noct-manifest.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+futures.workspace = true
+noct-security.workspace = true
+noct-auth-mfa.workspace = true
+noct-newsletter.workspace = true
+noct-git-sync.workspace = true
+noct-graph.workspace = true
+image.workspace = true
+noct-legal.workspace = true
+noct-branding.workspace = true
+noct-audit.workspace = true
+noct-blogs.workspace = true
+noct-backup.workspace = true
+noct-storage.workspace = true
+zip.workspace = true
+http-body-util = "0.1"
+sha2.workspace = true

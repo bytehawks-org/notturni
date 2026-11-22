@@ -50,7 +50,7 @@ function ReadsChart({ data, ariaLabel }: { data: { day: string; reads: number }[
   );
 }
 
-/** Tab Panoramica (mockup 5a, todo/UX_REDESIGN.md B1/B2): KPI, "richiede la
+/** Tab Panoramica: KPI, "richiede la
  * tua attenzione", letture aggregate degli ultimi 30 giorni e spazio
  * occupato, da `GET /blogs/{slug}/overview`. */
 export function OverviewTab({ blogSlug }: { blogSlug: string }) {

@@ -24,7 +24,7 @@ const FONT_OPTIONS: Record<string, string[]> = {
 
 /** Preset di palette calme (saturazione < 90%, vincolo del backend). */
 const PRESETS: { id: string; palette: Record<string, string> }[] = [
-  { id: "notturni", palette: { background: "#faf8f4", foreground: "#232220", primary: "#3d6b5e", muted: "#857e74", border: "#e5dfd5" } },
+  { id: "notturni", palette: { background: "#faf8f4", foreground: "#232220", primary: "#3d6b5e", muted: "#6e675e", border: "#e5dfd5" } },
   { id: "carta", palette: { background: "#f6f1e7", foreground: "#2d2a25", primary: "#8a5a2b", muted: "#8c8273", border: "#e3d9c8" } },
   { id: "ardesia", palette: { background: "#f3f4f6", foreground: "#1f2429", primary: "#3d5a80", muted: "#7b838d", border: "#dfe3e8" } },
   { id: "lavanda", palette: { background: "#f8f6fb", foreground: "#262330", primary: "#6b5b95", muted: "#8a8497", border: "#e6e1ee" } },
@@ -89,7 +89,7 @@ export function AppearanceTab({ blogSlug, canEdit }: { blogSlug: string; canEdit
   const bg = shown.background ?? (previewDark ? "#18191b" : "#faf8f4");
   const fg = shown.foreground ?? (previewDark ? "#ebe6de" : "#232220");
   const primary = shown.primary ?? (previewDark ? "#83b8a5" : "#3d6b5e");
-  const muted = shown.muted ?? (previewDark ? "#968e82" : "#857e74");
+  const muted = shown.muted ?? (previewDark ? "#968e82" : "#6e675e");
   const textRatio = contrastRatio(fg, bg);
   const primaryRatio = contrastRatio(primary, bg);
   const mutedRatio = contrastRatio(muted, bg);
