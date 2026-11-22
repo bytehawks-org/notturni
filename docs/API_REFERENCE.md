@@ -1,473 +1,473 @@
-# Riferimento API — endpoint per modulo
+# API reference — endpoints by module
 
-Elenco di tutti gli endpoint esposti dal backend, ricavato dai manifest `api.toml` di ogni modulo (236 rotte in 27 moduli).
-Complementa [API.md](API.md), che descrive payload, regole di dominio ed esempi dei flussi principali; qui l'obiettivo è
-sapere **quali rotte esistono, con quale verbo, a chi sono aperte e perché esistono**. Lo schema machine-readable completo
-(tipi di richiesta/risposta) è servito da `GET /api/v1/openapi.json` del backend in esecuzione.
+List of all endpoints exposed by the backend, derived from the `api.toml` manifests of each module (236 routes in 27 modules).
+This page complements [API.md](API.md), which describes payloads, domain rules and examples of the main flows. Here the goal is to
+know **which routes exist, with which verb, who can access them, and why they exist**. The complete machine-readable schema
+(request/response types) is served by `GET /api/v1/openapi.json` of the running backend.
 
-## Convenzioni
+## Conventions
 
-- **Prefisso**: tutti i percorsi sono relativi a `/api/v1` (es. `POST /auth/login` → `POST /api/v1/auth/login`), salvo `/storage` nella sezione «Piattaforma».
-- **Alias**: `/spaces/…` equivale a `/blogs/…` (un «blog» del contratto è uno *Spazio*: `blog`, `wiki` o `docs`).
-- **Formato**: JSON; gli errori hanno corpo `{"detail": "…"}` con lo status HTTP appropriato.
-- **Autenticazione**: header `Authorization: Bearer <access token>` (login) o `Bearer noct_…` (token API, solo dove indicato).
-  Il refresh token è un cookie `HttpOnly`.
-- **Verbi**: `GET` legge (idempotente, senza effetti); `POST` crea o avvia un'azione/un job; `PUT` sostituisce una risorsa o un insieme
-  per intero; `PATCH` modifica parzialmente (campi assenti = invariati, `null`/`""` azzerano dove documentato); `DELETE` rimuove.
-- **Status**: se non indicato, `200` per `GET`/`PUT`/`PATCH`, `201` per creazioni, `204` senza corpo; `202` = accodato (l'esito arriva in modo asincrono).
+- **Prefix**: all paths are relative to `/api/v1` (e.g. `POST /auth/login` → `POST /api/v1/auth/login`), except `/storage` in the "Platform" section.
+- **Alias**: `/spaces/…` is equivalent to `/blogs/…` (a "blog" in the contract is a *Space*: `blog`, `wiki` or `docs`).
+- **Format**: JSON; errors have a `{"detail": "…"}` body with the appropriate HTTP status.
+- **Authentication**: header `Authorization: Bearer <access token>` (login) or `Bearer noct_…` (API token, only where indicated).
+  The refresh token is an `HttpOnly` cookie.
+- **Verbs**: `GET` reads (idempotent, no side effects); `POST` creates or starts an action/job; `PUT` replaces a resource or a whole collection;
+  `PATCH` partially modifies (absent fields = unchanged, `null`/`""` clear the value where documented); `DELETE` removes.
+- **Status**: if not indicated, `200` for `GET`/`PUT`/`PATCH`, `201` for creations, `204` with no body; `202` = queued (the outcome arrives asynchronously).
 
-### Colonna «Accesso»
+### "Access" column
 
-| Valore | Significato |
+| Value | Meaning |
 |---|---|
-| pubblica | Nessuna autenticazione. Le risorse di uno Spazio rispettano comunque la sua visibilità (`public` · `members` · `private`). |
-| utente | Qualunque utente autenticato. |
-| utente o token API | Utente autenticato oppure token API con lo scope adatto. |
-| scrittura sullo Spazio | Utente con permesso di scrittura sullo Spazio indicato nel percorso (proprietario, co-autore, ecc.); la rotta dichiara `scope = blog`. |
-| ruolo: … | Ruolo di piattaforma richiesto (super admin, amministratore, moderatore). |
+| public | No authentication. Space resources still respect the Space visibility (`public` · `members` · `private`). |
+| user | Any authenticated user. |
+| user or API token | Authenticated user, or API token with the appropriate scope. |
+| write on the Space | User with write permission on the Space named in the path (owner, co-author, etc.); the route declares `scope = blog`. |
+| role: … | Required platform role (super admin, administrator, moderator). |
 
-La colonna **Note** riporta lo status diverso dal predefinito, il **rate limit** (`massimo / finestra`, per `ip` o per `user`)
-e gli eventuali flag: *raw* = handler che gestisce direttamente la risposta (cookie, download, stream); *upload* = multipart.
+The **Notes** column reports the status when it differs from the default, the **rate limit** (`maximum / window`, per `ip` or per `user`),
+and any flags: *raw* = handler that manages the response directly (cookie, download, stream); *upload* = multipart.
 
-## Piattaforma (rotte del server, non di un modulo)
+## Platform (server routes, not a module)
 
-| Verbo | Percorso | Accesso | Descrizione |
+| Verb | Path | Access | Description |
 |---|---|---|---|
-| GET | `/health` | pubblica | Liveness: il processo risponde. Usata dalle probe. |
-| GET | `/health/ready` | pubblica | Readiness: verifica database e servizi di infrastruttura prima di ricevere traffico. |
-| GET | `/openapi.json` | pubblica | Documento OpenAPI generato dai manifest dei moduli attivi. |
-| GET | `/storage/{bucket}/…` (fuori da `/api/v1`) | pubblica | Solo con `NOCT_STORAGE_BACKEND=localstorage`: serve i bucket pubblici dal filesystem. |
+| GET | `/health` | public | Liveness: the process responds. Used by probes. |
+| GET | `/health/ready` | public | Readiness: checks the database and infrastructure services before receiving traffic. |
+| GET | `/openapi.json` | public | OpenAPI document generated from the manifests of the active modules. |
+| GET | `/storage/{bucket}/…` (outside `/api/v1`) | public | Only with `NOCT_STORAGE_BACKEND=localstorage`: serves public buckets from the filesystem. |
 
 
 ## admin  (core)
 
-Amministrazione di piattaforma: panoramica, utenti, blog, post, registro di audit e impostazioni. I moduli opzionali vi aggiungono contatori e impostazioni con `AdminSection`.
+Platform administration: overview, users, blogs, posts, audit log and settings. Optional modules add counters and settings to it with `AdminSection`.
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| GET | `/admin/overview` | ruolo: super admin, amministratore, moderatore | KPI, code aperte, audit di oggi e salute dei servizi |  |
-| GET | `/admin/users` | ruolo: super admin, amministratore | Utenti con numero di blog e ultimo accesso (`q` su username/email) |  |
-| PATCH | `/admin/users/{user_id}` | ruolo: super admin, amministratore | Ruolo e attivazione (nota obbligatoria; i ruoli di amministrazione solo dal Super Admin) |  |
-| POST | `/admin/users/{user_id}/reset-password` | ruolo: super admin, amministratore | Avvia per l'utente lo stesso ciclo email della password dimenticata | 202; rate limit 20/5 min per user |
-| GET | `/admin/blogs` | ruolo: super admin, amministratore | Tutti i blog con contatori; filtri `q`, `visibility`, `state` (active\|suspended\|paused\|deleted\|reported) |  |
-| PATCH | `/admin/blogs/{blog_id}` | ruolo: super admin, amministratore | Sospende o riattiva un blog (nota obbligatoria se cambia) |  |
-| GET | `/admin/posts` | ruolo: super admin, amministratore | Tutti i post con segnalazioni aperte (`q`) |  |
-| PATCH | `/admin/posts/{post_id}` | ruolo: super admin, amministratore | Nasconde o mostra un post (nota obbligatoria se cambia) |  |
-| GET | `/admin/audit-log` | ruolo: super admin, amministratore | Registro di audit, dal più recente; filtri action, actor_id, target_id, blog_id, channel, since, until, limit (max 500), offset |  |
-| GET | `/admin/config` | ruolo: super admin | Impostazioni di piattaforma, comprese quelle dei moduli attivi |  |
-| PATCH | `/admin/config` | ruolo: super admin | Aggiorna le impostazioni; ogni modifica va nel registro di audit con i valori precedenti |  |
-| GET | `/admin/modules` | ruolo: super admin | Moduli compilati nel binario con stato voluto e in esecuzione |  |
-| POST | `/admin/modules/{name}/enable` | ruolo: super admin | Attiva un modulo opzionale (a caldo: migra lo schema, monta le rotte, avvia i consumer) |  |
-| POST | `/admin/modules/{name}/disable` | ruolo: super admin | Disattiva un modulo opzionale (rotte smontate, dati e tabelle intatti; rifiutato se un altro modulo attivo lo richiede) |  |
-| PUT | `/admin/site-texts/{locale}` | ruolo: super admin, amministratore | Modifica in blocco i testi dell'interfaccia di una lingua (atomico, in audit); solo chiavi dei gruppi ammessi, testo semplice senza graffe né tag |  |
+| GET | `/admin/overview` | role: super admin, administrator, moderator | KPIs, open queues, today's audit and service health |  |
+| GET | `/admin/users` | role: super admin, administrator | Users with blog count and last login (`q` on username/email) |  |
+| PATCH | `/admin/users/{user_id}` | role: super admin, administrator | Role and activation (note required; administration roles only by the Super Admin) |  |
+| POST | `/admin/users/{user_id}/reset-password` | role: super admin, administrator | Starts for the user the same email cycle as forgotten password | 202; rate limit 20/5 min per user |
+| GET | `/admin/blogs` | role: super admin, administrator | All blogs with counters; filters `q`, `visibility`, `state` (active\|suspended\|paused\|deleted\|reported) |  |
+| PATCH | `/admin/blogs/{blog_id}` | role: super admin, administrator | Suspends or reactivates a blog (note required if it changes) |  |
+| GET | `/admin/posts` | role: super admin, administrator | All posts with open reports (`q`) |  |
+| PATCH | `/admin/posts/{post_id}` | role: super admin, administrator | Hides or shows a post (note required if it changes) |  |
+| GET | `/admin/audit-log` | role: super admin, administrator | Audit log, newest first; filters action, actor_id, target_id, blog_id, channel, since, until, limit (max 500), offset |  |
+| GET | `/admin/config` | role: super admin | Platform settings, including those of the active modules |  |
+| PATCH | `/admin/config` | role: super admin | Updates the settings; every change goes to the audit log with the previous values |  |
+| GET | `/admin/modules` | role: super admin | Modules compiled into the binary, with desired and running state |  |
+| POST | `/admin/modules/{name}/enable` | role: super admin | Enables an optional module (hot: migrates the schema, mounts the routes, starts the consumers) |  |
+| POST | `/admin/modules/{name}/disable` | role: super admin | Disables an optional module (routes unmounted, data and tables intact; rejected if another active module requires it) |  |
+| PUT | `/admin/site-texts/{locale}` | role: super admin, administrator | Bulk-edits the UI texts of one language (atomic, audited); only keys of the allowed groups, plain text without braces or tags |  |
 
 ## auth  (core)
 
-Registrazione, login con sessione (access JWT + refresh con rotation), password dimenticata, cambio password, API token.
+Registration, session login (access JWT + refresh with rotation), forgotten password, password change, API tokens.
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| POST | `/auth/register` | pubblica | Registra un utente | 201; rate limit 30/10 min per ip |
-| GET | `/auth/username-available` | pubblica | Verifica la disponibilità di uno username (?username=) | rate limit 30/1 min per ip |
-| POST | `/auth/login` | pubblica | Login con email e password; il refresh token viaggia in un cookie httpOnly | raw |
-| POST | `/auth/refresh` | pubblica | Rinnova la sessione dal cookie di refresh (rotation); richiede X-CSRF-Token | raw |
-| POST | `/auth/logout` | pubblica | Revoca la sessione corrente; richiede X-CSRF-Token | 204; raw |
-| GET | `/auth/me` | utente | L'utente della sessione corrente |  |
-| POST | `/auth/password/forgot` | pubblica | Invia un codice di reset (risponde sempre 202, l'email non è enumerabile) | 202 |
-| POST | `/auth/password/reset` | pubblica | Imposta una nuova password con il codice ricevuto | 204 |
-| POST | `/users/me/password` | utente | Cambia la password conoscendo quella attuale; revoca tutte le sessioni | rate limit 10/5 min per user |
-| POST | `/tokens` | utente o token API | Emette un API token (mostrato una sola volta) | 201 |
-| GET | `/tokens` | utente o token API | I token dello stesso proprietario |  |
-| DELETE | `/tokens/{token_id}` | utente o token API | Revoca un token del proprio proprietario | 204 |
+| POST | `/auth/register` | public | Registers a user | 201; rate limit 30/10 min per ip |
+| GET | `/auth/username-available` | public | Checks whether a username is available (?username=) | rate limit 30/1 min per ip |
+| POST | `/auth/login` | public | Login with email and password; the refresh token travels in an httpOnly cookie | raw |
+| POST | `/auth/refresh` | public | Renews the session from the refresh cookie (rotation); requires X-CSRF-Token | raw |
+| POST | `/auth/logout` | public | Revokes the current session; requires X-CSRF-Token | 204; raw |
+| GET | `/auth/me` | user | The user of the current session |  |
+| POST | `/auth/password/forgot` | public | Sends a reset code (always responds 202, so the email cannot be enumerated) | 202 |
+| POST | `/auth/password/reset` | public | Sets a new password with the received code | 204 |
+| POST | `/users/me/password` | user | Changes the password by providing the current one; revokes all sessions | rate limit 10/5 min per user |
+| POST | `/tokens` | user or API token | Issues an API token (shown only once) | 201 |
+| GET | `/tokens` | user or API token | The tokens of the same owner |  |
+| DELETE | `/tokens/{token_id}` | user or API token | Revokes a token of one's own owner | 204 |
 
 ## blogs  (core)
 
-Blog, collaboratori e inviti, ciclo di vita (pausa, cancellazione con tolleranza, trasferimento), configurazione di presentazione.
+Blogs, collaborators and invitations, lifecycle (pause, deletion with grace period, transfer), presentation configuration.
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| POST | `/blogs` | utente | Crea uno Spazio (`kind` = blog\|wiki\|docs; slug di almeno 4 caratteri, non riservato; limite per utente su tutti gli Spazi) | 201 |
-| GET | `/blogs/mine` | utente | Blog di proprietà dell'utente |  |
-| GET | `/blogs/member-of` | utente | Blog altrui su cui l'utente ha una membership |  |
-| GET | `/blogs/received-invitations` | utente | Inviti a collaborare in attesa di risposta |  |
-| POST | `/blogs/received-invitations/{invitation_id}/accept` | utente | Accetta un invito (crea la membership) |  |
-| POST | `/blogs/received-invitations/{invitation_id}/decline` | utente | Rifiuta un invito |  |
-| GET | `/blogs/{slug}` | pubblica | Dettaglio del blog (404 se la visibilità non lo consente) |  |
-| PATCH | `/blogs/{slug}` | utente | Modifica il blog (solo il proprietario) |  |
-| DELETE | `/blogs/{slug}` | utente | Cancellazione con tolleranza (richiede di ridigitare lo slug) |  |
-| POST | `/blogs/{slug}/restore` | utente | Annulla la cancellazione entro il periodo di tolleranza |  |
-| POST | `/blogs/{slug}/transfer` | utente | Trasferisce la proprietà a un coautore |  |
-| GET | `/blogs/{slug}/members` | utente | Collaboratori del blog (solo il proprietario) |  |
-| PATCH | `/blogs/{slug}/members/{user_id}` | utente | Cambia il ruolo di un collaboratore (co_autore o mediatore) |  |
-| DELETE | `/blogs/{slug}/members/{user_id}` | utente | Rimuove un collaboratore (idempotente) | 204 |
-| PATCH | `/blogs/{slug}/my-membership` | utente | Il collaboratore sceglie l'alias con cui firma i post su questo blog |  |
-| GET | `/blogs/{slug}/invitations` | utente | Inviti emessi dal blog (solo il proprietario) |  |
-| POST | `/blogs/{slug}/invitations` | utente | Invita un utente come co_autore o mediatore | 201 |
-| DELETE | `/blogs/{slug}/invitations/{invitation_id}` | utente | Revoca un invito in attesa | 204 |
-| GET | `/blogs/{slug}/config` | pubblica | Configurazione di presentazione (segue la visibilità del blog) |  |
-| PUT | `/blogs/{slug}/config` | utente | Sostituisce l'intera configurazione (solo il proprietario) |  |
+| POST | `/blogs` | user | Creates a Space (`kind` = blog\|wiki\|docs; slug of at least 4 characters, not reserved; per-user limit across all Spaces) | 201 |
+| GET | `/blogs/mine` | user | Blogs owned by the user |  |
+| GET | `/blogs/member-of` | user | Blogs of other owners on which the user has a membership |  |
+| GET | `/blogs/received-invitations` | user | Collaboration invitations awaiting a response |  |
+| POST | `/blogs/received-invitations/{invitation_id}/accept` | user | Accepts an invitation (creates the membership) |  |
+| POST | `/blogs/received-invitations/{invitation_id}/decline` | user | Declines an invitation |  |
+| GET | `/blogs/{slug}` | public | Blog details (404 if the visibility does not allow access) |  |
+| PATCH | `/blogs/{slug}` | user | Edits the blog (owner only) |  |
+| DELETE | `/blogs/{slug}` | user | Deletion with grace period (requires retyping the slug) |  |
+| POST | `/blogs/{slug}/restore` | user | Cancels the deletion within the grace period |  |
+| POST | `/blogs/{slug}/transfer` | user | Transfers ownership to a co-author |  |
+| GET | `/blogs/{slug}/members` | user | Blog collaborators (owner only) |  |
+| PATCH | `/blogs/{slug}/members/{user_id}` | user | Changes the role of a collaborator (co_autore or mediatore) |  |
+| DELETE | `/blogs/{slug}/members/{user_id}` | user | Removes a collaborator (idempotent) | 204 |
+| PATCH | `/blogs/{slug}/my-membership` | user | The collaborator chooses the alias they sign posts with on this blog |  |
+| GET | `/blogs/{slug}/invitations` | user | Invitations issued by the blog (owner only) |  |
+| POST | `/blogs/{slug}/invitations` | user | Invites a user as co_autore or mediatore | 201 |
+| DELETE | `/blogs/{slug}/invitations/{invitation_id}` | user | Revokes a pending invitation | 204 |
+| GET | `/blogs/{slug}/config` | public | Presentation configuration (follows the blog visibility) |  |
+| PUT | `/blogs/{slug}/config` | user | Replaces the whole configuration (owner only) |  |
 
 ## media  (core)
 
-Immagini dei blog: upload per l'editor con libreria media, copertina e favicon del blog, limite di spazio per blog, moderazione automatica (fail open).
+Blog images: upload for the editor with media library, blog cover and favicon, storage limit per blog, automatic moderation (fail open).
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| POST | `/blogs/{slug}/media` | scrittura sullo Spazio | Immagine da incorporare nel Markdown (PNG, JPEG, WEBP, GIF; max 10 MiB) | 201; upload |
-| GET | `/blogs/{slug}/media` | utente | Libreria media del blog (proprietario e collaboratori) |  |
-| POST | `/blogs/{slug}/media/sync` | scrittura sullo Spazio | Importa nella libreria le immagini citate nei post che non hanno ancora una riga |  |
-| PATCH | `/blogs/{slug}/media/{media_id}` | scrittura sullo Spazio | Testo alternativo, didascalia e avviso sui contenuti |  |
-| DELETE | `/blogs/{slug}/media/{media_id}` | scrittura sullo Spazio | Cancella un'immagine non più usata (409 se è in un post o è la copertina) | 204 |
-| POST | `/blogs/{slug}/cover-image` | utente | Copertina del blog (solo il proprietario) | 201; upload |
-| PATCH | `/blogs/{slug}/cover-image` | utente | Avviso sui contenuti e testo alternativo della copertina già caricata |  |
-| DELETE | `/blogs/{slug}/cover-image` | utente | Rimuove la copertina (l'oggetto su storage resta) |  |
-| POST | `/blogs/{slug}/favicon` | utente | Favicon del blog (PNG, JPEG, WEBP; max 512 KiB; nessuna moderazione) | 201; upload |
-| DELETE | `/blogs/{slug}/favicon` | utente | Rimuove la favicon e cancella l'oggetto su storage |  |
-| GET | `/users/me/media` | utente | Librerie media di tutti i miei blog (proprietario o collaboratore), con il blog di appartenenza |  |
+| POST | `/blogs/{slug}/media` | write on the Space | Image to embed in the Markdown (PNG, JPEG, WEBP, GIF; max 10 MiB) | 201; upload |
+| GET | `/blogs/{slug}/media` | user | Blog media library (owner and collaborators) |  |
+| POST | `/blogs/{slug}/media/sync` | write on the Space | Imports into the library the images cited in posts that do not yet have a row |  |
+| PATCH | `/blogs/{slug}/media/{media_id}` | write on the Space | Alt text, caption and content warning |  |
+| DELETE | `/blogs/{slug}/media/{media_id}` | write on the Space | Deletes an image no longer in use (409 if it is in a post or is the cover) | 204 |
+| POST | `/blogs/{slug}/cover-image` | user | Blog cover (owner only) | 201; upload |
+| PATCH | `/blogs/{slug}/cover-image` | user | Content warning and alt text of the already uploaded cover |  |
+| DELETE | `/blogs/{slug}/cover-image` | user | Removes the cover (the object in storage remains) |  |
+| POST | `/blogs/{slug}/favicon` | user | Blog favicon (PNG, JPEG, WEBP; max 512 KiB; no moderation) | 201; upload |
+| DELETE | `/blogs/{slug}/favicon` | user | Removes the favicon and deletes the object from storage |  |
+| GET | `/users/me/media` | user | Media libraries of all my blogs (owner or collaborator), with the blog each belongs to |  |
 
 ## platform  (core)
 
-Impostazioni di piattaforma (riga unica): limiti, nomi riservati, soglia di moderazione, footer. Si modificano da `/admin/config` (modulo core `admin`).
+Platform settings (single row): limits, reserved names, moderation threshold, footer. They are edited from `/admin/config` (core module `admin`).
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| GET | `/config` | pubblica | Configurazione pubblica dell'istanza: lingua, registrazioni, captcha, provider di accesso |  |
-| GET | `/footer` | pubblica | Footer di piattaforma in Markdown grezzo (le colonne 1-2 sono sovrascrivibili per blog) |  |
-| GET | `/site-texts` | pubblica | Testi dell'interfaccia sovrascritti dagli amministratori per la lingua `?locale=` (vuoto se nessuno); il frontend li fonde ai predefiniti |  |
+| GET | `/config` | public | Public instance configuration: language, registrations, captcha, access providers |  |
+| GET | `/footer` | public | Platform footer in raw Markdown (columns 1-2 can be overridden per blog) |  |
+| GET | `/site-texts` | public | UI texts overridden by administrators for the language `?locale=` (empty if none); the frontend merges them with the defaults |  |
 
 ## posts  (core)
 
-Post: bozze, revisione, pubblicazione e pianificazione, traduzioni, tag, media e link citati, permalink.
+Posts: drafts, review, publishing and scheduling, translations, tags, cited media and links, permalinks.
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| POST | `/blogs/{slug}/posts` | scrittura sullo Spazio | Crea un post (bozza) | 201 |
-| GET | `/blogs/{slug}/posts` | pubblica | Post del blog: i pubblicati a tutti, anche bozze e pianificati a chi può scrivere (`?locale=`) |  |
-| GET | `/blogs/{slug}/search` | pubblica | Ricerca nei post pubblicati del blog (`?q=&limit=&offset=`) |  |
-| GET | `/blogs/{slug}/posts/{post_slug}` | pubblica | Risolve il permalink pubblico /{blog}/{post} |  |
-| GET | `/blogs/{slug}/media-bibliography` | pubblica | Immagini citate nei post pubblicati, raggruppate per URL |  |
-| GET | `/blogs/{slug}/links-bibliography` | pubblica | Link citati nei post pubblicati, raggruppati per URL |  |
-| GET | `/posts/{post_id}` | pubblica | Dettaglio di un post per id (404 se non visibile) |  |
-| PATCH | `/posts/{post_id}` | utente | Modifica un post |  |
-| POST | `/posts/{post_id}/translations` | utente | Aggiunge la traduzione di un post | 201 |
-| GET | `/posts/{post_id}/translations` | pubblica | Traduzioni pubblicate di un post (per il selettore di lingua) |  |
-| POST | `/posts/{post_id}/submit-for-review` | utente | Manda una bozza in revisione |  |
-| POST | `/posts/{post_id}/return-to-draft` | utente | Il revisore o il proprietario rimanda in bozza un post in revisione |  |
-| POST | `/posts/{post_id}/publish` | utente | Pubblica (subito o pianificato) |  |
-| POST | `/posts/{post_id}/unpublish` | utente | Toglie dalla pubblicazione un post pubblicato (o pianificato): torna in bozza |  |
-| DELETE | `/posts/{post_id}` | utente | Elimina definitivamente un post (con commenti, note, frammenti e traduzioni solo di quel post) | 204 |
-| GET | `/users/me/posts` | utente | Tutti i miei post (qualunque stato) di tutti i miei blog, dal più recente |  |
-| GET | `/users/me/links` | utente | Link citati nei post (qualunque stato) di tutti i miei blog, raggruppati per URL |  |
-| GET | `/seo/crawl-directives` | pubblica | Percorsi da escludere in robots.txt (opt-out per blog e per post, motori di ricerca e IA separati) |  |
-| GET | `/seo/sitemap-entries` | pubblica | Blog e post indicizzabili per sitemap.xml |  |
-| GET | `/seo/sitemap` | pubblica | Pagina (`offset`, `limit` max 5000) delle URL indicizzabili del portale: home, pagine del sito, Spazi e post, con le traduzioni come alternative hreflang |  |
-| GET | `/blogs/{slug}/sitemap` | pubblica | URL indicizzabili di uno Spazio pubblico: home, post (traduzioni come alternative hreflang), pagine statiche e pubblicazioni; 404 se lo Spazio non è pubblico o ha escluso i motori di ricerca |  |
-| GET | `/blogs/{slug}/export` | utente | ZIP con tutto il contenuto del blog in formati aperti (solo il proprietario); i binari delle immagini restano sullo storage | raw |
+| POST | `/blogs/{slug}/posts` | write on the Space | Creates a post (draft) | 201 |
+| GET | `/blogs/{slug}/posts` | public | Blog posts: published ones for everyone, drafts and scheduled ones for users who can write (`?locale=`) |  |
+| GET | `/blogs/{slug}/search` | public | Searches the blog's published posts (`?q=&limit=&offset=`) |  |
+| GET | `/blogs/{slug}/posts/{post_slug}` | public | Resolves the public permalink /{blog}/{post} |  |
+| GET | `/blogs/{slug}/media-bibliography` | public | Images cited in published posts, grouped by URL |  |
+| GET | `/blogs/{slug}/links-bibliography` | public | Links cited in published posts, grouped by URL |  |
+| GET | `/posts/{post_id}` | public | Post details by id (404 if not visible) |  |
+| PATCH | `/posts/{post_id}` | user | Edits a post |  |
+| POST | `/posts/{post_id}/translations` | user | Adds a translation of a post | 201 |
+| GET | `/posts/{post_id}/translations` | public | Published translations of a post (for the language selector) |  |
+| POST | `/posts/{post_id}/submit-for-review` | user | Sends a draft for review |  |
+| POST | `/posts/{post_id}/return-to-draft` | user | The reviewer or the owner returns a post under review to draft |  |
+| POST | `/posts/{post_id}/publish` | user | Publishes (immediately or scheduled) |  |
+| POST | `/posts/{post_id}/unpublish` | user | Takes a published (or scheduled) post out of publication: it returns to draft |  |
+| DELETE | `/posts/{post_id}` | user | Permanently deletes a post (with its comments, notes, fragments and translations of that post only) | 204 |
+| GET | `/users/me/posts` | user | All my posts (any status) across all my blogs, newest first |  |
+| GET | `/users/me/links` | user | Links cited in posts (any status) across all my blogs, grouped by URL |  |
+| GET | `/seo/crawl-directives` | public | Paths to exclude in robots.txt (opt-out per blog and per post; search engines and AI crawlers set separately) |  |
+| GET | `/seo/sitemap-entries` | public | Blogs and posts that can be indexed, for sitemap.xml |  |
+| GET | `/seo/sitemap` | public | Page (`offset`, `limit` max 5000) of the portal's indexable URLs: home, site pages, Spaces and posts, with translations as hreflang alternatives |  |
+| GET | `/blogs/{slug}/sitemap` | public | Indexable URLs of a public Space: home, posts (translations as hreflang alternatives), static pages and publications; 404 if the Space is not public or has excluded search engines |  |
+| GET | `/blogs/{slug}/export` | user | ZIP with all the blog content in open formats (owner only); image binaries stay in storage | raw |
 
 ## profiles  (core)
 
-Profilo utente: anagrafica pubblica e privata, avatar, link social, cambio email in tre passi, directory degli utenti, blog e post pubblici di un utente.
+User profile: public and private personal details, avatar, social links, three-step email change, user directory, a user's public blogs and posts.
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| GET | `/users` | pubblica | Directory pubblica degli utenti (`q`, `locale`, `interest`, `sort` = new\|followers, `limit` max 100, `offset`) |  |
-| GET | `/users/me` | utente | Profilo privato del proprietario (con l'email) |  |
-| PATCH | `/users/me` | utente | Aggiorna il profilo; i campi assenti restano invariati, "" azzera i campi testuali |  |
-| GET | `/users/{username}` | pubblica | Profilo pubblico, per username o per dominio personale verificato |  |
-| POST | `/users/me/avatar` | utente | Avatar (PNG, JPEG, WEBP; max 2 MiB) | rate limit 20/10 min per user; upload |
-| DELETE | `/users/me/avatar` | utente | Rimuove l'avatar | 204 |
-| POST | `/users/me/social-links` | utente | Aggiunge un link social (max 5) | 201 |
-| DELETE | `/users/me/social-links/{link_id}` | utente | Rimuove un link social | 204 |
-| POST | `/users/me/email/request` | utente | Passo 1/3 del cambio email: codice alla casella attuale | 202; rate limit 5/10 min per user |
-| POST | `/users/me/email/verify-current` | utente | Passo 2/3: verifica il codice della casella attuale e invia quello alla nuova | 202; rate limit 10/10 min per user |
-| DELETE | `/users/me/email/request` | utente | Annulla il cambio email in corso, a qualunque passo | 204 |
-| POST | `/users/me/email/verify-new` | utente | Passo 3/3: verifica il codice della nuova casella e applica il cambio | rate limit 10/10 min per user |
-| GET | `/users/{username}/blogs` | pubblica | Blog pubblici dell'utente; i blog con un alias diverso dallo username non compaiono |  |
-| GET | `/users/{username}/posts` | pubblica | Post pubblicati dell'utente, solo quelli firmati con lo username (`limit` max 50, `offset`) |  |
+| GET | `/users` | public | Public user directory (`q`, `locale`, `interest`, `sort` = new\|followers, `limit` max 100, `offset`) |  |
+| GET | `/users/me` | user | Private profile of the owner (with the email) |  |
+| PATCH | `/users/me` | user | Updates the profile; absent fields stay unchanged, "" clears text fields |  |
+| GET | `/users/{username}` | public | Public profile, by username or by verified personal domain |  |
+| POST | `/users/me/avatar` | user | Avatar (PNG, JPEG, WEBP; max 2 MiB) | rate limit 20/10 min per user; upload |
+| DELETE | `/users/me/avatar` | user | Removes the avatar | 204 |
+| POST | `/users/me/social-links` | user | Adds a social link (max 5) | 201 |
+| DELETE | `/users/me/social-links/{link_id}` | user | Removes a social link | 204 |
+| POST | `/users/me/email/request` | user | Step 1/3 of the email change: code sent to the current mailbox | 202; rate limit 5/10 min per user |
+| POST | `/users/me/email/verify-current` | user | Step 2/3: verifies the code from the current mailbox and sends one to the new mailbox | 202; rate limit 10/10 min per user |
+| DELETE | `/users/me/email/request` | user | Cancels the ongoing email change, at any step | 204 |
+| POST | `/users/me/email/verify-new` | user | Step 3/3: verifies the code from the new mailbox and applies the change | rate limit 10/10 min per user |
+| GET | `/users/{username}/blogs` | public | The user's public blogs; blogs with an alias different from the username are not listed |  |
+| GET | `/users/{username}/posts` | public | The user's published posts, only those signed with the username (`limit` max 50, `offset`) |  |
 
-## auth_mfa  (opzionale)
+## auth_mfa  (optional)
 
-Autenticazione a due fattori: app TOTP o codice via email, sfida al login.
+Two-factor authentication: TOTP app or email code, challenge at login.
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| POST | `/auth/mfa/verify` | pubblica | Completa il login con il codice MFA; il refresh token viaggia in un cookie httpOnly | rate limit 20/5 min per ip; raw |
-| POST | `/auth/mfa/totp/setup` | utente | Genera un nuovo segreto TOTP (attivo solo dopo la conferma) |  |
-| POST | `/auth/mfa/totp/confirm` | utente | Conferma il segreto con un codice e attiva l'MFA via app | 204; rate limit 20/5 min per ip |
-| POST | `/auth/mfa/email/setup` | utente | Invia un codice alla tua email per confermare l'MFA via email | 202; rate limit 5/5 min per user |
-| POST | `/auth/mfa/email/confirm` | utente | Conferma il codice ricevuto e attiva l'MFA via email | 204; rate limit 20/5 min per ip |
-| POST | `/auth/mfa/disable` | utente | Disattiva l'MFA: senza `code` 202 (con il metodo email spedisce il codice), con `code` valido 204 | rate limit 20/5 min per ip; raw |
+| POST | `/auth/mfa/verify` | public | Completes the login with the MFA code; the refresh token travels in an httpOnly cookie | rate limit 20/5 min per ip; raw |
+| POST | `/auth/mfa/totp/setup` | user | Generates a new TOTP secret (active only after confirmation) |  |
+| POST | `/auth/mfa/totp/confirm` | user | Confirms the secret with a code and enables app-based MFA | 204; rate limit 20/5 min per ip |
+| POST | `/auth/mfa/email/setup` | user | Sends a code to your email to confirm email-based MFA | 202; rate limit 5/5 min per user |
+| POST | `/auth/mfa/email/confirm` | user | Confirms the received code and enables email-based MFA | 204; rate limit 20/5 min per ip |
+| POST | `/auth/mfa/disable` | user | Disables MFA: without `code` 202 (with the email method it sends the code); with a valid `code` 204 | rate limit 20/5 min per ip; raw |
 
-## auth_sso  (opzionale)
+## auth_sso  (optional)
 
-Accesso con provider esterni (Google, Microsoft, GitHub, LinkedIn) e collegamento degli account per email.
+Sign-in with external providers (Google, Microsoft, GitHub, LinkedIn) and account linking by email.
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| GET | `/auth/sso/{provider}/login` | pubblica | Avvia l'accesso con un provider: redirect all'autorizzazione (state e PKCE in un cookie httpOnly) | rate limit 30/5 min per ip; raw |
-| GET | `/auth/sso/{provider}/callback` | pubblica | Chiude l'accesso: sessione e redirect al frontend, oppure la sfida MFA per collegare un account esistente | rate limit 30/5 min per ip; raw |
+| GET | `/auth/sso/{provider}/login` | public | Starts sign-in with a provider: redirect to the authorization (state and PKCE in an httpOnly cookie) | rate limit 30/5 min per ip; raw |
+| GET | `/auth/sso/{provider}/callback` | public | Completes sign-in: session and redirect to the frontend, or the MFA challenge to link an existing account | rate limit 30/5 min per ip; raw |
 
-## branding  (opzionale)
+## branding  (optional)
 
-Identità e SEO del portale: icona e favicon (da un'unica immagine), immagine per le condivisioni, titolo e descrizione per lingua, verifica dei motori di ricerca, meta tag aggiuntivi e blocco dell'indicizzazione.
+Portal identity and SEO: icon and favicon (from a single image), share image, title and description per language, search engine verification, additional meta tags and indexing block.
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| GET | `/seo/site` | pubblica | Identità e meta tag del portale nella lingua richiesta (`?locale=`) o nella migliore disponibile: icone, immagine di condivisione, titolo, descrizione, verifiche, blocco dell'indicizzazione |  |
-| GET | `/admin/seo` | ruolo: super admin, amministratore | Impostazioni di identità e SEO del portale, con le immagini caricate |  |
-| PUT | `/admin/seo` | ruolo: super admin, amministratore | Imposta nome del sito, testi per lingua, verifiche dei motori di ricerca, meta tag aggiuntivi e blocco dell'indicizzazione (sostituisce l'insieme; i campi assenti si azzerano) |  |
-| POST | `/admin/branding/icon` | ruolo: super admin, amministratore | Icona e favicon del portale da un'unica immagine quadrata (PNG, JPEG, WEBP; max 2 MiB; almeno 128 px): se ne ricavano 16, 32, 48, 180, 192 e 512 px compatibilmente con la dimensione di partenza | 201; upload |
-| DELETE | `/admin/branding/icon` | ruolo: super admin, amministratore | Rimuove l'icona del portale (tornano quelle predefinite) e cancella i file su storage |  |
-| POST | `/admin/branding/social` | ruolo: super admin, amministratore | Immagine per le anteprime nelle condivisioni (PNG, JPEG, WEBP; max 2 MiB; almeno 600 px di larghezza; consigliata 1200×630) | 201; upload |
-| DELETE | `/admin/branding/social` | ruolo: super admin, amministratore | Rimuove l'immagine per le condivisioni e cancella il file su storage |  |
+| GET | `/seo/site` | public | Portal identity and meta tags in the requested language (`?locale=`) or in the best available one: icons, share image, title, description, verifications, indexing block |  |
+| GET | `/admin/seo` | role: super admin, administrator | Portal identity and SEO settings, with the uploaded images |  |
+| PUT | `/admin/seo` | role: super admin, administrator | Sets the site name, texts per language, search engine verifications, additional meta tags and indexing block (replaces the whole set; absent fields are cleared) |  |
+| POST | `/admin/branding/icon` | role: super admin, administrator | Portal icon and favicon from a single square image (PNG, JPEG, WEBP; max 2 MiB; at least 128 px): 16, 32, 48, 180, 192 and 512 px versions are derived, as far as the source size allows | 201; upload |
+| DELETE | `/admin/branding/icon` | role: super admin, administrator | Removes the portal icon (defaults are restored) and deletes the files from storage |  |
+| POST | `/admin/branding/social` | role: super admin, administrator | Image for share previews (PNG, JPEG, WEBP; max 2 MiB; at least 600 px wide; recommended 1200×630) | 201; upload |
+| DELETE | `/admin/branding/social` | role: super admin, administrator | Removes the share image and deletes the file from storage |  |
 
-## comments  (opzionale)
+## comments  (optional)
 
-Commenti ai post: registrati senza moderazione, anonimi (captcha) moderati, risposte, segnalazione, autori bloccati; modalità per blog e per post.
+Post comments: registered users without moderation, anonymous users (captcha) with moderation, replies, reports, blocked authors; mode set per blog and per post.
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| POST | `/posts/{post_id}/comments` | pubblica | Commenta un post (registrati: subito pubblicato; anonimi: captcha e moderazione) | 201; rate limit 30/1 min per ip |
-| GET | `/users/{username}/comments` | pubblica | Commenti approvati dell'utente su post pubblici, solo quelli firmati con lo username (`limit` max 50, `offset`) |  |
-| GET | `/posts/{post_id}/comments` | pubblica | Commenti approvati di un post |  |
-| GET | `/posts/{post_id}/comments/pending` | utente | Commenti in attesa di moderazione di un post (proprietario, mediatore, moderatori di piattaforma) |  |
-| GET | `/blogs/{slug}/comments` | utente | Commenti di tutti i post del blog (`?status=` default pending, `?reported=true`) |  |
-| POST | `/comments/{comment_id}/approve` | utente | Approva un commento |  |
-| POST | `/comments/{comment_id}/reject` | utente | Rifiuta un commento |  |
-| POST | `/comments/{comment_id}/report` | utente | Segnala il commento ai moderatori di piattaforma, con una nota |  |
-| POST | `/comments/{comment_id}/block-author` | utente | Blocca l'autore del commento nel blog e rifiuta il commento |  |
-| GET | `/blogs/{slug}/blocked` | utente | Autori bloccati del blog |  |
-| DELETE | `/blogs/{slug}/blocked/{block_id}` | utente | Sblocca un autore | 204 |
-| GET | `/admin/comments` | ruolo: super admin, amministratore, moderatore | Commenti di tutti i blog (`status`, default pending; `reported=true` per i segnalati; `q`) |  |
+| POST | `/posts/{post_id}/comments` | public | Comments on a post (registered users: published immediately; anonymous: captcha and moderation) | 201; rate limit 30/1 min per ip |
+| GET | `/users/{username}/comments` | public | The user's approved comments on public posts, only those signed with the username (`limit` max 50, `offset`) |  |
+| GET | `/posts/{post_id}/comments` | public | Approved comments on a post |  |
+| GET | `/posts/{post_id}/comments/pending` | user | Comments of a post awaiting moderation (owner, moderator, platform moderators) |  |
+| GET | `/blogs/{slug}/comments` | user | Comments on all the blog's posts (`?status=` default pending, `?reported=true`) |  |
+| POST | `/comments/{comment_id}/approve` | user | Approves a comment |  |
+| POST | `/comments/{comment_id}/reject` | user | Rejects a comment |  |
+| POST | `/comments/{comment_id}/report` | user | Reports the comment to the platform moderators, with a note |  |
+| POST | `/comments/{comment_id}/block-author` | user | Blocks the comment's author in the blog and rejects the comment |  |
+| GET | `/blogs/{slug}/blocked` | user | Authors blocked by the blog |  |
+| DELETE | `/blogs/{slug}/blocked/{block_id}` | user | Unblocks an author | 204 |
+| GET | `/admin/comments` | role: super admin, administrator, moderator | Comments on all blogs (`status`, default pending; `reported=true` for reported ones; `q`) |  |
 
-## custom_domains  (opzionale)
+## custom_domains  (optional)
 
-Dominio personale dell'utente verificato con un record TXT sul DNS: dà il sigillo di verifica «bronzo» e rende il profilo raggiungibile anche dal dominio.
+The user's personal domain, verified with a TXT record in DNS: grants the "bronze" verification badge and makes the profile reachable from the domain too.
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| POST | `/users/me/domain` | utente | Registra (o sostituisce) il dominio, in attesa di verifica, e restituisce il record TXT da pubblicare | rate limit 20/1 h per user |
-| POST | `/users/me/domain/verify` | utente | Interroga il DNS: se il record TXT combacia verifica il dominio e assegna il sigillo bronzo | rate limit 5/10 min per user |
-| DELETE | `/users/me/domain` | utente | Rimuove il dominio (anche verificato) | 204 |
+| POST | `/users/me/domain` | user | Registers (or replaces) the domain, pending verification, and returns the TXT record to publish | rate limit 20/1 h per user |
+| POST | `/users/me/domain/verify` | user | Queries DNS: if the TXT record matches, verifies the domain and grants the bronze badge | rate limit 5/10 min per user |
+| DELETE | `/users/me/domain` | user | Removes the domain (also if verified) | 204 |
 
-## discovery  (opzionale)
+## discovery  (optional)
 
-Scoperta: feed del portale, tendenze, ricerca globale, directory dei blog, follow di blog e utenti, panoramica del blog, letture, menzioni.
+Discovery: portal feed, trends, global search, Space directory, following blogs and users, blog overview, reads, mentions.
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| GET | `/feed/posts` | pubblica | Feed del portale, dal più recente; per default solo articoli di Spazi `blog` (`kind` = blog\|wiki\|docs, `locale`, `tag`, `category`, `following=true`, `limit` max 50, `offset`) |  |
-| GET | `/feed/locales` | pubblica | Le prime 5 lingue per numero di post nel feed |  |
-| GET | `/feed/trending` | pubblica | Tag più usati negli ultimi `days` giorni (max 90) |  |
-| GET | `/search/posts` | pubblica | Ricerca globale in titolo e contenuto (`q`, `limit` max 50, `offset`) |  |
-| GET | `/blogs` | pubblica | Directory pubblica degli Spazi (`kind` = blog\|wiki\|docs, `q`, `locale`, `sort` = active\|new\|followers, `limit` max 100, `offset`) |  |
-| POST | `/blogs/{slug}/follow` | utente | Segue un blog (idempotente) | 204 |
-| DELETE | `/blogs/{slug}/follow` | utente | Smette di seguire un blog, anche se nel frattempo non è più visibile | 204 |
-| GET | `/blogs/{slug}/followers` | pubblica | Username dei follower del blog |  |
-| POST | `/users/{username}/follow` | utente | Segue un utente (idempotente) | 204 |
-| DELETE | `/users/{username}/follow` | utente | Smette di seguire un utente | 204 |
-| GET | `/users/{username}/followers` | pubblica | Chi segue l'utente |  |
-| GET | `/users/{username}/following` | pubblica | Chi l'utente segue |  |
-| GET | `/users/me/follow-stats` | utente | Quante persone mi seguono in tutto: utenti e follower dei miei blog |  |
-| GET | `/blogs/{slug}/overview` | utente | Panoramica (conteggi, letture degli ultimi 30 giorni, spazio): proprietario e membri |  |
-| GET | `/blogs/{slug}/mentionable-users` | scrittura sullo Spazio | Suggerimenti per le @menzioni: proprietario, collaboratori e follower (`q`, `limit` max 25) |  |
-| POST | `/posts/{post_id}/read` | pubblica | Conta una lettura (aggregata per giorno, nessun dato del lettore) | 204 |
+| GET | `/feed/posts` | public | Portal feed, newest first; by default only articles from `blog` Spaces (`kind` = blog\|wiki\|docs, `locale`, `tag`, `category`, `following=true`, `limit` max 50, `offset`) |  |
+| GET | `/feed/locales` | public | The top 5 languages by number of posts in the feed |  |
+| GET | `/feed/trending` | public | Most used tags in the last `days` days (max 90) |  |
+| GET | `/search/posts` | public | Global search in title and content (`q`, `limit` max 50, `offset`) |  |
+| GET | `/blogs` | public | Public Space directory (`kind` = blog\|wiki\|docs, `q`, `locale`, `sort` = active\|new\|followers, `limit` max 100, `offset`) |  |
+| POST | `/blogs/{slug}/follow` | user | Follows a blog (idempotent) | 204 |
+| DELETE | `/blogs/{slug}/follow` | user | Stops following a blog, even if it is no longer visible | 204 |
+| GET | `/blogs/{slug}/followers` | public | Usernames of the blog's followers |  |
+| POST | `/users/{username}/follow` | user | Follows a user (idempotent) | 204 |
+| DELETE | `/users/{username}/follow` | user | Stops following a user | 204 |
+| GET | `/users/{username}/followers` | public | Who follows the user |  |
+| GET | `/users/{username}/following` | public | Who the user follows |  |
+| GET | `/users/me/follow-stats` | user | How many people follow me in total: users and followers of my blogs |  |
+| GET | `/blogs/{slug}/overview` | user | Overview (counts, reads over the last 30 days, storage): owner and members |  |
+| GET | `/blogs/{slug}/mentionable-users` | write on the Space | Suggestions for @mentions: owner, collaborators and followers (`q`, `limit` max 25) |  |
+| POST | `/posts/{post_id}/read` | public | Counts a read (aggregated per day, no reader data) | 204 |
 
-## fragments  (opzionale)
+## fragments  (optional)
 
-Frammenti: porzioni di testo evidenziate e salvate dai lettori su un post pubblicato, raccolta personale.
+Fragments: portions of text highlighted and saved by readers on a published post, as a personal collection.
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| POST | `/posts/{post_id}/fragments` | utente | Salva un frammento | 201 |
-| GET | `/posts/{post_id}/fragments` | utente | Frammenti già salvati dall'utente su questo post |  |
-| GET | `/users/me/fragments` | utente | Raccolta dei frammenti dell'utente, i più recenti per primi |  |
-| PATCH | `/fragments/{fragment_id}` | utente | Cambia la visibilità di un frammento |  |
-| DELETE | `/fragments/{fragment_id}` | utente | Elimina un frammento | 204 |
+| POST | `/posts/{post_id}/fragments` | user | Saves a fragment | 201 |
+| GET | `/posts/{post_id}/fragments` | user | Fragments the user has already saved on this post |  |
+| GET | `/users/me/fragments` | user | The user's fragment collection, newest first |  |
+| PATCH | `/fragments/{fragment_id}` | user | Changes the visibility of a fragment |  |
+| DELETE | `/fragments/{fragment_id}` | user | Deletes a fragment | 204 |
 
-## gdpr  (opzionale)
+## gdpr  (optional)
 
-Diritti GDPR: esportazione dei propri dati (art. 20), cancellazione dell'account per anonimizzazione (art. 17) e coda delle richieste con scadenza legale.
+GDPR rights: export of your own data (art. 20), account deletion by anonymization (art. 17), and a queue of requests with legal deadlines.
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| GET | `/users/me/export-data` | utente | Copia dei propri dati in un unico JSON (GDPR art. 20) | rate limit 5/1 h per user |
-| DELETE | `/users/me` | utente | Cancella l'account (GDPR art. 17): dati personali eliminati, contenuti condivisi anonimizzati | 204; rate limit 5/10 min per user |
-| GET | `/admin/gdpr` | ruolo: super admin, amministratore | Registro delle richieste (`status`): aperte e approvate prima, per scadenza |  |
-| POST | `/admin/gdpr` | ruolo: super admin, amministratore | Inserisce una richiesta arrivata fuori banda a nome di un utente | 201 |
-| POST | `/admin/gdpr/{request_id}/approve` | ruolo: super admin, amministratore | Approva; una cancellazione la approva un amministratore diverso da chi l'ha inserita |  |
-| POST | `/admin/gdpr/{request_id}/reject` | ruolo: super admin, amministratore | Rifiuto motivato |  |
-| POST | `/admin/gdpr/{request_id}/execute` | ruolo: super admin, amministratore | Esegue: un export restituisce il JSON dei dati; una cancellazione approvata anonimizza l'account |  |
+| GET | `/users/me/export-data` | user | Copy of your data in a single JSON file (GDPR art. 20) | rate limit 5/1 h per user |
+| DELETE | `/users/me` | user | Deletes the account (GDPR art. 17): personal data deleted, shared content anonymized | 204; rate limit 5/10 min per user |
+| GET | `/admin/gdpr` | role: super admin, administrator | Request register (`status`): open and approved requests first, by deadline |  |
+| POST | `/admin/gdpr` | role: super admin, administrator | Enters a request received outside the platform on behalf of a user | 201 |
+| POST | `/admin/gdpr/{request_id}/approve` | role: super admin, administrator | Approves; a deletion must be approved by an administrator other than the one who entered it |  |
+| POST | `/admin/gdpr/{request_id}/reject` | role: super admin, administrator | Reasoned rejection |  |
+| POST | `/admin/gdpr/{request_id}/execute` | role: super admin, administrator | Executes: an export returns the data JSON; an approved deletion anonymizes the account |  |
 
-## git_sync  (opzionale)
+## git_sync  (optional)
 
-Sincronizzazione dei testi di uno Spazio verso un branch di un repository Git remoto (GitHub, GitLab, Forgejo...): solo esportazione, via HTTPS con token personale o via SSH con chiave di deploy.
+Sync of a Space's texts to a branch of a remote Git repository (GitHub, GitLab, Forgejo...): export only, via HTTPS with a personal token or via SSH with a deploy key.
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| GET | `/blogs/{slug}/git-sync` | utente | Configurazione e ultimo esito della sincronizzazione Git (solo proprietario; il token non viene mai restituito) |  |
-| PUT | `/blogs/{slug}/git-sync` | utente | Imposta repository, branch e accesso: token personale via HTTPS oppure chiave di deploy SSH generata dalla piattaforma con host key pinnata (branch diverso da quello predefinito del repository) |  |
-| DELETE | `/blogs/{slug}/git-sync` | utente | Rimuove la sincronizzazione e cancella il token salvato (il repository remoto non viene toccato) | 204 |
-| POST | `/blogs/{slug}/git-sync/run` | utente | Accoda una sincronizzazione subito; l'esito compare in `last_status` (polling su GET) | 202 |
-| GET | `/admin/git-sync/known-hosts` | ruolo: super admin | Host SSH di cui la piattaforma conosce le impronte attese (GitHub, GitLab...): le chiavi rilevate si fissano solo se coincidono |  |
-| PUT | `/admin/git-sync/known-hosts` | ruolo: super admin | Aggiunge o aggiorna le impronte attese di un host (es. quando il provider ruota le chiavi); le configurazioni già fissate non cambiano finché l'utente non le risalva |  |
-| DELETE | `/admin/git-sync/known-hosts/{host}/{port}` | ruolo: super admin | Toglie un host dall'elenco: tornano la fiducia al primo uso e l'impronta facoltativa dell'utente | 204 |
+| GET | `/blogs/{slug}/git-sync` | user | Configuration and last outcome of the Git sync (owner only; the token is never returned) |  |
+| PUT | `/blogs/{slug}/git-sync` | user | Sets repository, branch and access: personal token via HTTPS, or SSH deploy key generated by the platform with a pinned host key (branch other than the repository's default branch) |  |
+| DELETE | `/blogs/{slug}/git-sync` | user | Removes the sync and deletes the saved token (the remote repository is not touched) | 204 |
+| POST | `/blogs/{slug}/git-sync/run` | user | Queues a sync now; the outcome appears in `last_status` (poll with GET) | 202 |
+| GET | `/admin/git-sync/known-hosts` | role: super admin | SSH hosts whose expected fingerprints the platform knows (GitHub, GitLab...): detected keys are pinned only if they match |  |
+| PUT | `/admin/git-sync/known-hosts` | role: super admin | Adds or updates the expected fingerprints of a host (e.g. when the provider rotates its keys); configurations already pinned do not change until the user saves them again |  |
+| DELETE | `/admin/git-sync/known-hosts/{host}/{port}` | role: super admin | Removes a host from the list: trust on first use applies again, and so does the user's optional fingerprint | 204 |
 
-## graph  (opzionale)
+## graph  (optional)
 
-Mappa dei collegamenti: grafo di post, Spazi, tag, categorie e link tra post, calcolato da Postgres per i soli Spazi dell'utente (o per tutta la piattaforma, agli amministratori).
+Link map: graph of posts, Spaces, tags, categories and links between posts, computed by Postgres for the user's own Spaces only (or for the whole platform, for administrators).
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| GET | `/graph` | utente | Grafo dei collegamenti tra post, Spazi, tag, categorie e link: dei propri Spazi (`scope=mine`, anche con bozze se `drafts=true`) o, agli amministratori, di tutto ciò che è pubblico (`scope=platform`); filtri `blog`, `kind`, `limit` (max 800) |  |
+| GET | `/graph` | user | Graph of links between posts, Spaces, tags, categories and links: of your own Spaces (`scope=mine`, including drafts if `drafts=true`) or, for administrators, of everything public (`scope=platform`); filters `blog`, `kind`, `limit` (max 800) |  |
 
-## interests  (opzionale)
+## interests  (optional)
 
-Elenco pubblico degli interessi di piattaforma, scelti dagli utenti nel profilo e usati per filtrare la directory utenti.
+Public list of platform interests, chosen by users in their profile and used to filter the user directory.
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| GET | `/interests` | pubblica | Interessi di piattaforma selezionabili nel profilo |  |
+| GET | `/interests` | public | Platform interests selectable in the profile |  |
 
-## legal  (opzionale)
+## legal  (optional)
 
-Informativa privacy e cookie policy: modelli multilingua che si adattano alle funzioni attive dell'istanza, dati del titolare, modifica e pubblicazione come pagine del sito (/p/privacy, /p/cookie-policy).
+Privacy notice and cookie policy: multilingual templates that adapt to the active features of the instance, controller details, editing and publication as site pages (/p/privacy, /p/cookie-policy).
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| GET | `/admin/legal` | ruolo: super admin, amministratore | Documenti legali: dati del titolare, funzioni attive rilevate e stato di ogni documento per lingua (completezza, pubblicazione, da ripubblicare) |  |
-| PUT | `/admin/legal/settings` | ruolo: super admin, amministratore | Imposta i dati del titolare; i documenti già pubblicati vengono riscritti con i nuovi valori (rifiutato se lascerebbe vuoto un campo che usano) |  |
-| GET | `/admin/legal/{doc}/{locale}` | ruolo: super admin, amministratore | Un documento (`privacy` o `cookie`) in una lingua: sorgente, modello, testo risolto e cosa manca per pubblicarlo |  |
-| PUT | `/admin/legal/{doc}/{locale}` | ruolo: super admin, amministratore | Salva titolo e testo di un documento (crea la lingua se manca); non pubblica |  |
-| POST | `/admin/legal/{doc}/{locale}/reset` | ruolo: super admin, amministratore | Ripristina il modello fornito (it/en) o ricopia il testo di un'altra lingua per iniziare una traduzione |  |
-| POST | `/admin/legal/{doc}/{locale}/publish` | ruolo: super admin, amministratore | Pubblica il testo risolto come pagina del sito (/p/privacy, /p/cookie-policy); rifiutato se mancano dati o il modello ha errori |  |
-| POST | `/admin/legal/{doc}/{locale}/unpublish` | ruolo: super admin, amministratore | Ritira la pagina pubblicata (il testo sorgente resta) |  |
-| DELETE | `/admin/legal/{doc}/{locale}` | ruolo: super admin, amministratore | Elimina una lingua aggiunta dall'amministratore (le lingue del modello, it ed en, si ripristinano ma non si eliminano) | 204 |
-| GET | `/legal/public` | pubblica | Documenti legali pubblicati, nella lingua richiesta (`?locale=`) o nella migliore disponibile: serve ai link nel footer del sito |  |
+| GET | `/admin/legal` | role: super admin, administrator | Legal documents: controller details, detected active features, and the status of each document per language (completeness, publication, to be republished) |  |
+| PUT | `/admin/legal/settings` | role: super admin, administrator | Sets the controller details; documents already published are rewritten with the new values (rejected if it would leave empty a field they use) |  |
+| GET | `/admin/legal/{doc}/{locale}` | role: super admin, administrator | One document (`privacy` or `cookie`) in one language: source, template, resolved text, and what is missing to publish it |  |
+| PUT | `/admin/legal/{doc}/{locale}` | role: super admin, administrator | Saves the title and text of a document (creates the language if missing); does not publish |  |
+| POST | `/admin/legal/{doc}/{locale}/reset` | role: super admin, administrator | Restores the supplied template (it/en) or copies the text of another language to start a translation |  |
+| POST | `/admin/legal/{doc}/{locale}/publish` | role: super admin, administrator | Publishes the resolved text as a site page (/p/privacy, /p/cookie-policy); rejected if data is missing or the template has errors |  |
+| POST | `/admin/legal/{doc}/{locale}/unpublish` | role: super admin, administrator | Withdraws the published page (the source text remains) |  |
+| DELETE | `/admin/legal/{doc}/{locale}` | role: super admin, administrator | Deletes a language added by the administrator (the template languages, it and en, are restored but not deleted) | 204 |
+| GET | `/legal/public` | public | Published legal documents, in the requested language (`?locale=`) or in the best available one: used by the links in the site footer |  |
 
-## link_preview  (opzionale)
+## link_preview  (optional)
 
-Anteprima Open Graph dei link incollati nell'editor e delle card nei post (fetch lato server, protetto da SSRF).
+Open Graph preview of links pasted into the editor and of cards in posts (server-side fetch, protected against SSRF).
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| GET | `/link-preview` | pubblica | Anteprima Open Graph di un URL (`?url=`) | rate limit 30/1 min per ip |
+| GET | `/link-preview` | public | Open Graph preview of a URL (`?url=`) | rate limit 30/1 min per ip |
 
-## newsletter  (opzionale)
+## newsletter  (optional)
 
-Newsletter per blog e digest di piattaforma: iscrizione con doppio consenso, disiscrizione e cancellazione senza login, notifica automatica dei nuovi post e campagne manuali.
+Newsletters per blog and platform digest: double opt-in subscription, unsubscription and deletion without login, automatic notification of new posts, and manual campaigns.
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| POST | `/newsletter/subscribe` | pubblica | Iscrizione con doppio consenso; risposta sempre uguale (nessuna enumerazione delle email) | 202; rate limit 5/1 h per ip |
-| GET | `/newsletter/confirm` | pubblica | Conferma l'iscrizione (`?token=`); idempotente | rate limit 30/5 min per ip |
-| POST | `/newsletter/unsubscribe` | pubblica | Disiscrizione con il link firmato ricevuto per email, senza login | rate limit 30/5 min per ip |
-| POST | `/newsletter/unsubscribe/delete` | pubblica | Cancellazione dei propri dati dalla lista (GDPR art. 17), senza login | rate limit 30/5 min per ip |
-| GET | `/blogs/{slug}/newsletter/stats` | scrittura sullo Spazio | Iscritti per stato |  |
-| GET | `/blogs/{slug}/newsletter/campaigns` | scrittura sullo Spazio | Campagne del blog, dalla più recente |  |
-| POST | `/blogs/{slug}/newsletter/campaigns` | scrittura sullo Spazio | Crea una campagna manuale (immediata o pianificata) | 201; rate limit 20/1 h per user |
-| PATCH | `/blogs/{slug}/newsletter/campaigns/{campaign_id}` | scrittura sullo Spazio | Modifica una campagna ancora pianificata |  |
-| DELETE | `/blogs/{slug}/newsletter/campaigns/{campaign_id}` | scrittura sullo Spazio | Annulla una campagna ancora pianificata |  |
-| GET | `/blogs/{slug}/newsletter/settings` | scrittura sullo Spazio | Invio automatico, nome del mittente e banner delle email |  |
-| PATCH | `/blogs/{slug}/newsletter/settings` | scrittura sullo Spazio | Aggiorna le impostazioni (campo assente = invariato, `null` = azzera) |  |
-| GET | `/admin/newsletter/stats` | ruolo: super admin, amministratore | Iscritti al digest per stato |  |
-| GET | `/admin/newsletter/settings` | ruolo: super admin, amministratore | Nome del mittente e banner del digest |  |
-| PATCH | `/admin/newsletter/settings` | ruolo: super admin, amministratore | Aggiorna le impostazioni del digest |  |
-| GET | `/admin/newsletter/campaigns` | ruolo: super admin, amministratore | Campagne del digest |  |
-| POST | `/admin/newsletter/campaigns` | ruolo: super admin, amministratore | Crea una campagna del digest | 201 |
-| PATCH | `/admin/newsletter/campaigns/{campaign_id}` | ruolo: super admin, amministratore | Modifica una campagna del digest ancora pianificata |  |
-| DELETE | `/admin/newsletter/campaigns/{campaign_id}` | ruolo: super admin, amministratore | Annulla una campagna del digest ancora pianificata |  |
+| POST | `/newsletter/subscribe` | public | Subscription with double opt-in; the response is always the same (no email enumeration) | 202; rate limit 5/1 h per ip |
+| GET | `/newsletter/confirm` | public | Confirms the subscription (`?token=`); idempotent | rate limit 30/5 min per ip |
+| POST | `/newsletter/unsubscribe` | public | Unsubscribes with the signed link received by email, without login | rate limit 30/5 min per ip |
+| POST | `/newsletter/unsubscribe/delete` | public | Deletes your data from the list (GDPR art. 17), without login | rate limit 30/5 min per ip |
+| GET | `/blogs/{slug}/newsletter/stats` | write on the Space | Subscribers by status |  |
+| GET | `/blogs/{slug}/newsletter/campaigns` | write on the Space | The blog's campaigns, newest first |  |
+| POST | `/blogs/{slug}/newsletter/campaigns` | write on the Space | Creates a manual campaign (immediate or scheduled) | 201; rate limit 20/1 h per user |
+| PATCH | `/blogs/{slug}/newsletter/campaigns/{campaign_id}` | write on the Space | Edits a campaign that is still scheduled |  |
+| DELETE | `/blogs/{slug}/newsletter/campaigns/{campaign_id}` | write on the Space | Cancels a campaign that is still scheduled |  |
+| GET | `/blogs/{slug}/newsletter/settings` | write on the Space | Automatic sending, sender name and email banner |  |
+| PATCH | `/blogs/{slug}/newsletter/settings` | write on the Space | Updates the settings (absent field = unchanged, `null` = cleared) |  |
+| GET | `/admin/newsletter/stats` | role: super admin, administrator | Digest subscribers by status |  |
+| GET | `/admin/newsletter/settings` | role: super admin, administrator | Digest sender name and banner |  |
+| PATCH | `/admin/newsletter/settings` | role: super admin, administrator | Updates the digest settings |  |
+| GET | `/admin/newsletter/campaigns` | role: super admin, administrator | Digest campaigns |  |
+| POST | `/admin/newsletter/campaigns` | role: super admin, administrator | Creates a digest campaign | 201 |
+| PATCH | `/admin/newsletter/campaigns/{campaign_id}` | role: super admin, administrator | Edits a digest campaign that is still scheduled |  |
+| DELETE | `/admin/newsletter/campaigns/{campaign_id}` | role: super admin, administrator | Cancels a digest campaign that is still scheduled |  |
 
-## notes  (opzionale)
+## notes  (optional)
 
-Note a piè di pagina dei post, libreria note del blog (duplicati, merge, BibTeX) e bibliografie (campo notes di post).
+Footnotes of posts, the blog's notes library (duplicates, merge, BibTeX) and bibliographies (notes field of posts).
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| GET | `/blogs/{slug}/notes` | utente | Libreria note del blog con «citata in» e duplicati (`?q=` filtra sul testo); proprietario e collaboratori |  |
-| POST | `/blogs/{slug}/notes` | scrittura sullo Spazio | Crea una nota di libreria | 201 |
-| GET | `/blogs/{slug}/notes/export.bib` | utente | Esporta la libreria in BibTeX | raw |
-| POST | `/blogs/{slug}/notes/import` | scrittura sullo Spazio | Importa BibTeX (le voci già presenti si saltano) | 201 |
-| PATCH | `/blogs/{slug}/notes/{note_id}` | scrittura sullo Spazio | Modifica una nota; il testo si aggiorna anche nei post che la citano |  |
-| DELETE | `/blogs/{slug}/notes/{note_id}` | scrittura sullo Spazio | Elimina una nota non citata da alcun post (409 altrimenti) | 204 |
-| POST | `/blogs/{slug}/notes/{note_id}/merge` | scrittura sullo Spazio | Unisce la nota in un'altra: le citazioni passano alla destinazione |  |
-| GET | `/blogs/{slug}/bibliography` | pubblica | Bibliografia dei post pubblicati, raggruppata per testo identico |  |
-| GET | `/users/me/bibliography` | utente | Note di tutti i post di tutti i miei blog (qualunque stato) |  |
+| GET | `/blogs/{slug}/notes` | user | The blog's notes library with "cited in" and duplicates (`?q=` filters on the text); owner and collaborators |  |
+| POST | `/blogs/{slug}/notes` | write on the Space | Creates a library note | 201 |
+| GET | `/blogs/{slug}/notes/export.bib` | user | Exports the library to BibTeX | raw |
+| POST | `/blogs/{slug}/notes/import` | write on the Space | Imports BibTeX (entries already present are skipped) | 201 |
+| PATCH | `/blogs/{slug}/notes/{note_id}` | write on the Space | Edits a note; the text is also updated in the posts that cite it |  |
+| DELETE | `/blogs/{slug}/notes/{note_id}` | write on the Space | Deletes a note not cited by any post (409 otherwise) | 204 |
+| POST | `/blogs/{slug}/notes/{note_id}/merge` | write on the Space | Merges the note into another: citations move to the target |  |
+| GET | `/blogs/{slug}/bibliography` | public | Bibliography of published posts, grouped by identical text |  |
+| GET | `/users/me/bibliography` | user | Notes of all posts (any status) across all my blogs |  |
 
-## pages  (opzionale)
+## pages  (optional)
 
-Pagine statiche: del sito (solo amministratori) e dei blog che le attivano (campo static_pages_enabled del blog).
+Static pages: site pages (administrators only) and the pages of blogs that enable them (`static_pages_enabled` field of the blog).
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| GET | `/blogs/{slug}/pages` | pubblica | Pagine del blog in una lingua |  |
-| GET | `/blogs/{slug}/pages/by-id/{page_id}` | scrittura sullo Spazio | Pagina per id (editor, bozze incluse) |  |
-| GET | `/blogs/{slug}/pages/{key}` | pubblica | Pagina per slug e lingua |  |
-| POST | `/blogs/{slug}/pages` | scrittura sullo Spazio | Crea una pagina | 201 |
-| POST | `/blogs/{slug}/pages/{key}/translations` | scrittura sullo Spazio | Aggiunge una traduzione | 201 |
-| GET | `/blogs/{slug}/pages/{key}/translations` | pubblica | Traduzioni pubblicate di una pagina |  |
-| PATCH | `/blogs/{slug}/pages/{key}` | scrittura sullo Spazio | Modifica una pagina |  |
-| DELETE | `/blogs/{slug}/pages/{key}` | scrittura sullo Spazio | Elimina una pagina | 204 |
-| GET | `/pages` | pubblica | Pagine del sito in una lingua (`?locale=`, `?q=` cerca in titolo e slug) |  |
-| GET | `/pages/{key}` | pubblica | Pagina del sito per slug e lingua |  |
-| POST | `/pages` | ruolo: super admin, amministratore | Crea una pagina del sito | 201 |
-| POST | `/pages/{key}/translations` | ruolo: super admin, amministratore | Aggiunge una traduzione | 201 |
-| GET | `/pages/{key}/translations` | pubblica | Traduzioni pubblicate di una pagina del sito |  |
-| PATCH | `/pages/{key}` | ruolo: super admin, amministratore | Modifica una pagina del sito |  |
+| GET | `/blogs/{slug}/pages` | public | Blog pages in one language |  |
+| GET | `/blogs/{slug}/pages/by-id/{page_id}` | write on the Space | Page by id (editor, drafts included) |  |
+| GET | `/blogs/{slug}/pages/{key}` | public | Page by slug and language |  |
+| POST | `/blogs/{slug}/pages` | write on the Space | Creates a page | 201 |
+| POST | `/blogs/{slug}/pages/{key}/translations` | write on the Space | Adds a translation | 201 |
+| GET | `/blogs/{slug}/pages/{key}/translations` | public | Published translations of a page |  |
+| PATCH | `/blogs/{slug}/pages/{key}` | write on the Space | Edits a page |  |
+| DELETE | `/blogs/{slug}/pages/{key}` | write on the Space | Deletes a page | 204 |
+| GET | `/pages` | public | Site pages in one language (`?locale=`; `?q=` searches title and slug) |  |
+| GET | `/pages/{key}` | public | Site page by slug and language |  |
+| POST | `/pages` | role: super admin, administrator | Creates a site page | 201 |
+| POST | `/pages/{key}/translations` | role: super admin, administrator | Adds a translation | 201 |
+| GET | `/pages/{key}/translations` | public | Published translations of a site page |  |
+| PATCH | `/pages/{key}` | role: super admin, administrator | Edits a site page |  |
 
-## publications  (opzionale)
+## publications  (optional)
 
-Pubblicazioni: raccolte di post come capitoli, indice pubblico e ordine esplicito (campi publication_id/publication/chapter_order di post).
+Publications: collections of posts as chapters, public index and explicit order (`publication_id`/`publication`/`chapter_order` fields of posts).
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| GET | `/blogs/{slug}/publications` | pubblica | Pubblicazioni del blog con i conteggi dei capitoli |  |
-| POST | `/blogs/{slug}/publications` | scrittura sullo Spazio | Crea una pubblicazione | 201 |
-| GET | `/blogs/{slug}/publications/{ref}` | pubblica | Indice dei capitoli di una pubblicazione |  |
-| PATCH | `/blogs/{slug}/publications/{ref}` | scrittura sullo Spazio | Modifica nome, titolo o descrizione |  |
-| PUT | `/blogs/{slug}/publications/{ref}/order` | scrittura sullo Spazio | Imposta l'ordine dei capitoli |  |
-| DELETE | `/blogs/{slug}/publications/{ref}` | scrittura sullo Spazio | Elimina la pubblicazione (i post restano, senza pubblicazione) | 204 |
-| GET | `/users/me/publications` | utente | Pubblicazioni di tutti i miei blog (proprietario o collaboratore), con i conteggi dei capitoli |  |
+| GET | `/blogs/{slug}/publications` | public | Blog publications with chapter counts |  |
+| POST | `/blogs/{slug}/publications` | write on the Space | Creates a publication | 201 |
+| GET | `/blogs/{slug}/publications/{ref}` | public | Chapter index of a publication |  |
+| PATCH | `/blogs/{slug}/publications/{ref}` | write on the Space | Edits name, title or description |  |
+| PUT | `/blogs/{slug}/publications/{ref}/order` | write on the Space | Sets the chapter order |  |
+| DELETE | `/blogs/{slug}/publications/{ref}` | write on the Space | Deletes the publication (posts remain, without a publication) | 204 |
+| GET | `/users/me/publications` | user | Publications of all my blogs (owner or collaborator), with chapter counts |  |
 
-## reports  (opzionale)
+## reports  (optional)
 
-Segnalazioni di blog e post da parte dei lettori registrati, una per bersaglio, da chiudere dalle rotte di amministrazione.
+Reports of blogs and posts by registered readers, one per target, to be closed from the administration routes.
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| POST | `/blogs/{slug}/report` | utente | Segnala un blog (una sola volta; non il proprio) | 201; rate limit 10/1 h per user |
-| POST | `/posts/{post_id}/report` | utente | Segnala un post pubblicato (una sola volta; non un contenuto proprio) | 201; rate limit 10/1 h per user |
-| GET | `/admin/blogs/{blog_id}/reports` | ruolo: super admin, amministratore | Segnalazioni aperte su un blog e sui suoi post, con motivo, nota e chi ha segnalato |  |
-| POST | `/admin/blogs/{blog_id}/action` | ruolo: super admin, amministratore | Azione dal pannello segnalazioni (nota obbligatoria): chiude le segnalazioni aperte del blog |  |
+| POST | `/blogs/{slug}/report` | user | Reports a blog (once only; not your own) | 201; rate limit 10/1 h per user |
+| POST | `/posts/{post_id}/report` | user | Reports a published post (once only; not your own content) | 201; rate limit 10/1 h per user |
+| GET | `/admin/blogs/{blog_id}/reports` | role: super admin, administrator | Open reports on a blog and its posts, with reason, note and reporter |  |
+| POST | `/admin/blogs/{blog_id}/action` | role: super admin, administrator | Action from the reports panel (note required): closes the blog's open reports |  |
 
-## taxonomy  (opzionale)
+## taxonomy  (optional)
 
-Categorie per-blog dei post (campi category_id/category in create/update/risposta di post).
+Per-blog post categories (`category_id`/`category` fields in post create, update and response).
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| GET | `/blogs/{slug}/categories` | pubblica | Categorie del blog |  |
-| POST | `/blogs/{slug}/categories` | scrittura sullo Spazio | Crea una categoria |  |
-| PATCH | `/blogs/{slug}/categories/{category_id}` | scrittura sullo Spazio | Modifica nome o slug di una categoria |  |
-| DELETE | `/blogs/{slug}/categories/{category_id}` | scrittura sullo Spazio | Elimina una categoria |  |
+| GET | `/blogs/{slug}/categories` | public | Blog categories |  |
+| POST | `/blogs/{slug}/categories` | write on the Space | Creates a category |  |
+| PATCH | `/blogs/{slug}/categories/{category_id}` | write on the Space | Edits the name or slug of a category |  |
+| DELETE | `/blogs/{slug}/categories/{category_id}` | write on the Space | Deletes a category |  |
 
-## wiki  (opzionale)
+## wiki  (optional)
 
-Spazi wiki e documentazione: albero delle pagine, link interni [[pagina]] con backlink, cronologia delle revisioni con diff.
+Wiki and documentation Spaces: page tree, internal links [[page]] with backlinks, revision history with diffs.
 
-| Verbo | Percorso | Accesso | Descrizione | Note |
+| Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| GET | `/blogs/{slug}/outline` | pubblica | Indice dello Spazio (`?locale=`): i lettori vedono i post pubblicati, chi scrive tutti |  |
-| PUT | `/blogs/{slug}/outline` | scrittura sullo Spazio | Riordina e sposta le pagine (solo Spazi wiki/docs); 409 se l'elenco non coincide con i post dello Spazio |  |
-| GET | `/posts/{post_id}/revisions` | utente | Cronologia delle revisioni, dalla più recente (chi può scrivere nello Spazio) |  |
-| GET | `/posts/{post_id}/revisions/{revision}` | utente | Una revisione con il contenuto completo |  |
-| GET | `/posts/{post_id}/revisions/{revision}/diff` | utente | Differenze per righe tra la revisione e `?against=` (default: la precedente) |  |
-| GET | `/posts/{post_id}/backlinks` | pubblica | Pagine dello stesso Spazio che rimandano a questa con [[link]] (solo quelle visibili al chiamante) |  |
+| GET | `/blogs/{slug}/outline` | public | Space outline (`?locale=`): readers see published posts, writers see all of them |  |
+| PUT | `/blogs/{slug}/outline` | write on the Space | Reorders and moves pages (wiki/docs Spaces only); 409 if the list does not match the Space's posts |  |
+| GET | `/posts/{post_id}/revisions` | user | Revision history, newest first (users who can write in the Space) |  |
+| GET | `/posts/{post_id}/revisions/{revision}` | user | One revision with its full content |  |
+| GET | `/posts/{post_id}/revisions/{revision}/diff` | user | Line-by-line differences between the revision and `?against=` (default: the previous one) |  |
+| GET | `/posts/{post_id}/backlinks` | public | Pages of the same Space that link to this one with [[link]] (only those visible to the caller) |  |
 
-## Come si mantiene questo file
+## How this file is maintained
 
-Le tabelle sono generate dai file `api.toml` (campo `summary` di ogni rotta). Aggiungendo o modificando una rotta, scrivere un
-`summary` che spieghi **perché la rotta esiste**, non solo cosa fa, e rigenerare questo documento. Le rotte senza `summary`
-compaiono con il solo identificativo.
+The tables are generated from the `api.toml` files (`summary` field of each route). When you add or change a route, write a
+`summary` that explains **why the route exists**, not only what it does, and regenerate this document. Routes without a `summary`
+appear with the identifier only.
 
-Il modulo di prova `sandbox` (usato nei test) non è incluso.
+The test module `sandbox` (used in tests) is not included.

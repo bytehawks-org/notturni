@@ -1,177 +1,176 @@
-# Configurazione: variabili d'ambiente
+# Configuration: environment variables
 
-Riferimento di tutte le variabili `NOCT_*` (più le due `NEXT_PUBLIC_*` del frontend). Il modello è `.env.example`; con
-`podman compose up` molti valori sono sovrascritti da `compose.yaml` con i nomi dei servizi interni, in Kubernetes vivono
-in `k8s/configmap.yaml` (valori non sensibili) e `k8s/secret.yaml` (segreti).
+Reference for all `NOCT_*` variables (plus the two `NEXT_PUBLIC_*` variables of the frontend). The template is `.env.example`. With
+`podman compose up`, `compose.yaml` overrides many values with the internal service names. In Kubernetes, they live in
+`k8s/configmap.yaml` (non-sensitive values) and `k8s/secret.yaml` (secrets).
 
-- La colonna **Ambito** indica chi legge la variabile: `core` (piattaforma, `crates/noct-core/src/config.rs`) o il modulo che la
-  dichiara nella sezione `[config]` del suo `module.toml`. Un nome appartiene a un solo modulo.
-- **Segreto**: non committare, non loggare; in Kubernetes va nel `Secret`. `scripts/gen-env.sh` genera i valori casuali.
-- Un valore vuoto equivale a variabile assente.
-- `cargo run -p noct-ctl -- modules` elenca i moduli compilati; `noct-ctl validate` verifica manifest e schema.
-- Il backend rifiuta all'avvio i segnaposto di `.env.example` (`NOCT_JWT_SECRET`, password del Super Admin).
-- Il modulo di prova `sandbox` (`NOCT_SANDBOX_*`) esiste solo nei test e non è documentato qui.
+- The **Scope** column shows who reads the variable: `core` (platform, `crates/noct-core/src/config.rs`) or the module that declares it in the `[config]` section of its `module.toml`. A name belongs to one module only.
+- **Secret**: do not commit it, do not log it. In Kubernetes, it goes in the `Secret`. `scripts/gen-env.sh` generates random values.
+- An empty value is the same as an unset variable.
+- `cargo run -p noct-ctl -- modules` lists the compiled modules. `noct-ctl validate` checks manifests and schema.
+- At startup, the backend rejects the placeholders of `.env.example` (`NOCT_JWT_SECRET`, the Super Admin password).
+- The test module `sandbox` (`NOCT_SANDBOX_*`) exists only in tests and is not documented here.
 
 
-## Identità dell'istanza
+## Instance identity
 
-| Variabile | Ambito | Default | Obbligatoria | Descrizione | Esempio |
+| Variable | Scope | Default | Required | Description | Example |
 |---|---|---|---|---|---|
-| `NOCT_INSTANCE_FQDN` | core | `notturni.eu` | no | Dominio pubblico: base dei link nelle email e degli identificatori di federazione, dominio email del sigillo di verifica, e dominio con cui la mappa dei collegamenti riconosce i link interni tra post (deve coincidere con `NOCT_SITE_URL`). | `notturni.example.com` |
-| `NOCT_SITE_SLUG` | core | `notturni` | no | Namespace dei path su S3: evita collisioni tra più installazioni sullo stesso bucket. Solo minuscole, cifre, `-`. | `staging` |
-| `NOCT_DEPLOYMENT_MODE` | auth | `platform` | no | `platform` = multiutente; `solo` = un solo proprietario, il primo utente diventa Super Admin e la registrazione si chiude. | `solo` |
-| `NOCT_REGISTRATION_MODE` | auth | `open` | no | Valore **iniziale** (prima installazione) di `platform_config`: `open` · `invite` · `closed`. Poi si cambia da `/admin/config`. | `invite` |
-| `NOCT_DEFAULT_LOCALE` | auth | `it` | no | Lingua iniziale dell'interfaccia (`it` · `en`); poi da `/admin/config`. | `en` |
-| `NOCT_DEFAULT_INTERESTS` | interests | elenco di 16 voci | no | JSON con l'elenco iniziale degli interessi; vuoto = predefinito. | `[{"key":"music","translations":{"it":"Musica","en":"Music"}}]` |
-| `NOCT_EXPERIMENTAL_FEATURES` | core | vuota (tutte spente) | no | **Sperimentale, opt-in.** Elenco (virgola) di `wiki` e/o `docs`: abilita la creazione di Spazi di quel tipo e la relativa modalità di visualizzazione. Spente, la piattaforma offre solo blog (l'API risponde `400` e l'interfaccia non propone i tipi). Spegnerle dopo non cancella né nasconde gli Spazi già creati. Un nome sconosciuto impedisce l'avvio. In Kubernetes vive nel ConfigMap `notturni-config`; serve il riavvio di backend e worker. | `wiki,docs` |
-| `NOCT_MODULES` | core | moduli di default | no | Moduli opzionali attivi alla **prima** installazione (virgola); poi vale lo stato nel database, modificabile da `/admin/modules`. | `wiki,git_sync,newsletter` |
-| `NOCT_BIND_ADDR` | core | `0.0.0.0:8000` | no | Indirizzo di ascolto dell'API. | `127.0.0.1:8000` |
-| `NOCT_TRUSTED_PROXIES` | core | `1` | no | Quanti proxy fidati stanno davanti all'API (IP reale in rate limit e audit). | `2` |
-| `NOCT_APP_ENV` | k8s | — | no | Etichetta d'ambiente presente nel ConfigMap (`production`); non risulta letta dal codice. | `production` |
+| `NOCT_INSTANCE_FQDN` | core | `notturni.eu` | no | Public domain: base of the links in emails and of the federation identifiers, email domain of the verification seal, and the domain that the link map uses to recognize internal links between posts (must match `NOCT_SITE_URL`). | `notturni.example.com` |
+| `NOCT_SITE_SLUG` | core | `notturni` | no | Namespace of the paths on S3: prevents collisions between several installations on the same bucket. Lowercase letters, digits and `-` only. | `staging` |
+| `NOCT_DEPLOYMENT_MODE` | auth | `platform` | no | `platform` = multi-user. `solo` = one owner: the first user becomes Super Admin, and registration closes. | `solo` |
+| `NOCT_REGISTRATION_MODE` | auth | `open` | no | **Initial** value (first installation) of `platform_config`: `open` · `invite` · `closed`. Change it later in `/admin/config`. | `invite` |
+| `NOCT_DEFAULT_LOCALE` | auth | `it` | no | Initial interface language (`it` · `en`). Change it later in `/admin/config`. | `en` |
+| `NOCT_DEFAULT_INTERESTS` | interests | list of 16 entries | no | JSON with the initial list of interests. Empty = default. | `[{"key":"music","translations":{"it":"Musica","en":"Music"}}]` |
+| `NOCT_EXPERIMENTAL_FEATURES` | core | empty (all off) | no | **Experimental, opt-in.** Comma-separated list of `wiki` and/or `docs`: enables the creation of Spaces of that type and their display mode. When off, the platform offers only blogs (the API answers `400` and the interface does not offer the types). Turning a feature off later does not delete or hide the Spaces already created. An unknown name prevents startup. In Kubernetes, it lives in the ConfigMap `notturni-config`; backend and worker must be restarted. | `wiki,docs` |
+| `NOCT_MODULES` | core | default modules | no | Optional modules active at the **first** installation (comma-separated). After that, the state in the database applies. Change it in `/admin/modules`. | `wiki,git_sync,newsletter` |
+| `NOCT_BIND_ADDR` | core | `0.0.0.0:8000` | no | API listen address. | `127.0.0.1:8000` |
+| `NOCT_TRUSTED_PROXIES` | core | `1` | no | Number of trusted proxies in front of the API (real IP in rate limiting and audit). | `2` |
+| `NOCT_APP_ENV` | k8s | — | no | Environment label present in the ConfigMap (`production`). The code does not appear to read it. | `production` |
 
-## Primo Super Admin
+## First Super Admin
 
-| Variabile | Ambito | Default | Obbligatoria | Descrizione | Esempio |
+| Variable | Scope | Default | Required | Description | Example |
 |---|---|---|---|---|---|
-| `NOCT_SUPER_ADMIN_USERNAME` | auth | — | no | Creato all'avvio se non esiste (idempotente). Se una delle tre variabili manca, la creazione è disattivata. | `superadmin` |
-| `NOCT_SUPER_ADMIN_EMAIL` | auth | — | no | Email del Super Admin (il login avviene per email). | `admin@example.com` |
-| `NOCT_SUPER_ADMIN_PASSWORD` | auth | — | no | **Segreto.** Il backend rifiuta il segnaposto di `.env.example`. | `<password lunga e casuale>` |
+| `NOCT_SUPER_ADMIN_USERNAME` | auth | — | no | Created at startup if it does not exist (idempotent). If one of the three variables is missing, the creation is disabled. | `superadmin` |
+| `NOCT_SUPER_ADMIN_EMAIL` | auth | — | no | Email of the Super Admin (login is by email). | `admin@example.com` |
+| `NOCT_SUPER_ADMIN_PASSWORD` | auth | — | no | **Secret.** The backend rejects the placeholder of `.env.example`. | `<long random password>` |
 
-## Segreti e sessioni
+## Secrets and sessions
 
-| Variabile | Ambito | Default | Obbligatoria | Descrizione | Esempio |
+| Variable | Scope | Default | Required | Description | Example |
 |---|---|---|---|---|---|
-| `NOCT_JWT_SECRET` | core | — | **sì** | **Segreto.** Firma di JWT, OTP derivati e link firmati: almeno 32 byte casuali. Il backend rifiuta valori corti o il segnaposto. | `openssl rand -base64 48` |
-| `NOCT_JWT_ACCESS_TOKEN_TTL_MINUTES` | core | `15` | no | Durata dell'access token. | `15` |
-| `NOCT_JWT_REFRESH_TOKEN_TTL_DAYS` | auth | `30` | no | Durata del refresh token (cookie di sessione). | `30` |
-| `NOCT_SECRETS_KEY` | auth_mfa | derivata da `NOCT_JWT_SECRET` | consigliata | **Segreto.** Chiave dedicata per cifrare a riposo i segreti TOTP **e le credenziali della sincronizzazione Git (token HTTPS e chiavi SSH di deploy)**. Se vuota si deriva dal JWT: ruotare il JWT renderebbe illeggibili i valori già salvati. In produzione impostarla. | `openssl rand -base64 32` |
-| `NOCT_MFA_DISABLE_REQUIRES_CODE` | auth_mfa | `true` | no | Per disattivare l'MFA serve un codice valido. `false` = comportamento della v1. | `true` |
-| `NOCT_SESSION_COOKIE_SECURE` | auth | `true` | no | Attributo `Secure` del cookie di refresh. `false` solo in sviluppo su http. | `false` |
-| `NOCT_SESSION_COOKIE_SAMESITE` | auth | `lax` | no | Attributo `SameSite` del cookie. | `lax` |
-| `NOCT_SESSION_COOKIE_DOMAIN` | auth | — | no | Solo se frontend e backend condividono un dominio genitore. | `.notturni.example.com` |
+| `NOCT_JWT_SECRET` | core | — | **yes** | **Secret.** Signs JWTs, derived OTPs and signed links: at least 32 random bytes. The backend rejects short values or the placeholder. | `openssl rand -base64 48` |
+| `NOCT_JWT_ACCESS_TOKEN_TTL_MINUTES` | core | `15` | no | Lifetime of the access token. | `15` |
+| `NOCT_JWT_REFRESH_TOKEN_TTL_DAYS` | auth | `30` | no | Lifetime of the refresh token (session cookie). | `30` |
+| `NOCT_SECRETS_KEY` | auth_mfa | derived from `NOCT_JWT_SECRET` | recommended | **Secret.** Dedicated key that encrypts at rest the TOTP secrets **and the Git sync credentials (HTTPS tokens and SSH deploy keys)**. If empty, it is derived from the JWT secret: rotating the JWT secret would make the already stored values unreadable. Set it in production. | `openssl rand -base64 32` |
+| `NOCT_MFA_DISABLE_REQUIRES_CODE` | auth_mfa | `true` | no | Disabling MFA requires a valid code. `false` = the v1 behavior. | `true` |
+| `NOCT_SESSION_COOKIE_SECURE` | auth | `true` | no | `Secure` attribute of the refresh cookie. Use `false` only in development over http. | `false` |
+| `NOCT_SESSION_COOKIE_SAMESITE` | auth | `lax` | no | `SameSite` attribute of the cookie. | `lax` |
+| `NOCT_SESSION_COOKIE_DOMAIN` | auth | — | no | Set only if the frontend and the backend share a parent domain. | `.notturni.example.com` |
 
-## Browser: CORS e frontend
+## Browser: CORS and frontend
 
-| Variabile | Ambito | Default | Obbligatoria | Descrizione | Esempio |
+| Variable | Scope | Default | Required | Description | Example |
 |---|---|---|---|---|---|
-| `NOCT_CORS_ORIGINS` | core | `http://localhost:3000` | no | Origini ammesse (virgola) per le chiamate dal browser; deve includere ogni origine da cui il frontend è servito. Un'origine assente non riceve né invia il cookie. | `https://notturni.example.com` |
-| `NOCT_CORS_ORIGIN_REGEX` | core | — | no | Wildcard aggiuntiva per i sottodomini per-blog; il match è sull'intera origine. | `https://([a-z0-9-]+\.)?notturni\.example\.com` |
-| `NOCT_FRONTEND_REVALIDATE_URL` | core | — | no | Invalidazione on-demand della cache SSR dopo una modifica a contenuti pubblici. Vuoto = solo cache a tempo. | `http://frontend:3000/api/revalidate` |
-| `NOCT_REVALIDATE_SECRET` | core + frontend | — | no | **Segreto.** Deve coincidere tra backend e frontend. | `openssl rand -base64 32` |
-| `NOCT_BACKEND_INTERNAL_URL` | frontend | `NEXT_PUBLIC_API_URL`, poi `http://localhost:8000` | consigliata | URL interno del backend usato dal rendering lato server (evita di uscire dalla rete del cluster). | `http://backend:8000` |
-| `NOCT_SITE_NAME` | frontend | `Notturni` | no | Nome della piattaforma in header, login, dashboard, titoli, feed, manifest e testi dell'interfaccia. Il nome impostato in `/admin/seo` ha la precedenza. Letto a runtime. | `Blue Inks` |
-| `NOCT_SITE_URL` | frontend | `https://$NOCT_INSTANCE_FQDN` se `NOCT_APP_ENV=production`, poi `NEXT_PUBLIC_SITE_URL`, poi `http://localhost:3000` | no | URL pubblico del sito (canonical, sitemap, sottodomini dei blog, CSP). Letto a runtime. | `https://notturni.example.com` |
-| `NOCT_API_PUBLIC_URL` | frontend | `NEXT_PUBLIC_API_URL`, poi l'URL del sito | no | URL dell'API usato dal browser. Vuoto = stessa origine del sito (l'Ingress instrada `/api` al backend). Letto a runtime. | `https://api.example.com` |
-| `NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_SITE_URL` | frontend | vuoti | no | Solo fallback per lo sviluppo locale (build-arg, incorporati nel bundle; `compose.yaml` li imposta). In produzione usare le `NOCT_*` sopra: non servono rebuild per cambiare dominio. | `http://localhost:8000` |
+| `NOCT_CORS_ORIGINS` | core | `http://localhost:3000` | no | Allowed origins (comma-separated) for browser calls. Must include every origin the frontend is served from. An origin that is missing neither receives nor sends the cookie. | `https://notturni.example.com` |
+| `NOCT_CORS_ORIGIN_REGEX` | core | — | no | Additional wildcard for the per-blog subdomains. The match is on the whole origin. | `https://([a-z0-9-]+\.)?notturni\.example\.com` |
+| `NOCT_FRONTEND_REVALIDATE_URL` | core | — | no | On-demand invalidation of the SSR cache after a change to public content. Empty = time-based cache only. | `http://frontend:3000/api/revalidate` |
+| `NOCT_REVALIDATE_SECRET` | core + frontend | — | no | **Secret.** Must match between backend and frontend. | `openssl rand -base64 32` |
+| `NOCT_BACKEND_INTERNAL_URL` | frontend | `NEXT_PUBLIC_API_URL`, then `http://localhost:8000` | recommended | Internal backend URL used by server-side rendering (avoids leaving the cluster network). | `http://backend:8000` |
+| `NOCT_SITE_NAME` | frontend | `Notturni` | no | Platform name in the header, login, dashboard, titles, feed, manifest and interface texts. The name set in `/admin/seo` takes precedence. Read at runtime. | `Blue Inks` |
+| `NOCT_SITE_URL` | frontend | `https://$NOCT_INSTANCE_FQDN` if `NOCT_APP_ENV=production`, then `NEXT_PUBLIC_SITE_URL`, then `http://localhost:3000` | no | Public site URL (canonical, sitemap, blog subdomains, CSP). Read at runtime. | `https://notturni.example.com` |
+| `NOCT_API_PUBLIC_URL` | frontend | `NEXT_PUBLIC_API_URL`, then the site URL | no | API URL used by the browser. Empty = same origin as the site (the Ingress routes `/api` to the backend). Read at runtime. | `https://api.example.com` |
+| `NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_SITE_URL` | frontend | empty | no | Local development fallback only (build args, embedded in the bundle; `compose.yaml` sets them). In production, use the `NOCT_*` variables above: no rebuild is needed to change the domain. | `http://localhost:8000` |
 
 ## Database
 
-| Variabile | Ambito | Default | Obbligatoria | Descrizione | Esempio |
+| Variable | Scope | Default | Required | Description | Example |
 |---|---|---|---|---|---|
-| `NOCT_DATABASE_URL` | core | — | sì (o le `NOCT_POSTGRES_*`) | URL unico; ha la precedenza sulle variabili separate. | `postgres://utente:password@postgres:5432/notturni` |
-| `NOCT_POSTGRES_USER` | core | — | sì (se manca l'URL) | Utente. | `admin` |
-| `NOCT_POSTGRES_PASSWORD` | core | vuota | no | **Segreto.** | `<password>` |
-| `NOCT_POSTGRES_DB` | core | — | sì (se manca l'URL) | Nome del database. | `notturni` |
+| `NOCT_DATABASE_URL` | core | — | yes (or the `NOCT_POSTGRES_*` variables) | Single URL. Takes precedence over the separate variables. | `postgres://utente:password@postgres:5432/notturni` |
+| `NOCT_POSTGRES_USER` | core | — | yes (if the URL is missing) | User. | `admin` |
+| `NOCT_POSTGRES_PASSWORD` | core | empty | no | **Secret.** | `<password>` |
+| `NOCT_POSTGRES_DB` | core | — | yes (if the URL is missing) | Database name. | `notturni` |
 | `NOCT_POSTGRES_HOST` | core | `localhost` | no | Host. | `postgres` |
-| `NOCT_POSTGRES_PORT` | core | `5432` | no | Porta. | `5432` |
-| `NOCT_AUTO_MIGRATE` | api / worker | `true` | no | Applica le migrazioni dei moduli attivi all'avvio (advisory lock, sicuro con più repliche). `false` = le applica altro (`noct-ctl migrate apply`); sul worker è `false` nei manifest. | `false` |
+| `NOCT_POSTGRES_PORT` | core | `5432` | no | Port. | `5432` |
+| `NOCT_AUTO_MIGRATE` | api / worker | `true` | no | Applies the migrations of the active modules at startup (advisory lock, safe with several replicas). `false` = they are applied elsewhere (`noct-ctl migrate apply`). On the worker it is `false` in the manifests. | `false` |
 
-## Bus di messaggi e cache
+## Message bus and cache
 
-| Variabile | Ambito | Default | Obbligatoria | Descrizione | Esempio |
+| Variable | Scope | Default | Required | Description | Example |
 |---|---|---|---|---|---|
-| `NOCT_NATS_URL` | core | — (bus in memoria) | no | NATS JetStream per eventi e job. Vuoto = in memoria (solo sviluppo, un processo). Con NATS i consumer girano in `noct-worker`. | `nats://nats:4222` |
-| `NOCT_NATS_PREFIX` | core | `noct` | no | Prefisso di stream e subject. | `noct` |
-| `NOCT_WORKER_INLINE` | core | `true` senza NATS, altrimenti `false` | no | Esegue i consumer dentro il processo API. | `false` |
-| `NOCT_REDIS_URL` | core | — | no | URL unico di Redis (rate limit, cache, lock). Ha la precedenza su host/porta. | `redis://redis:6379/0` |
-| `NOCT_REDIS_HOST` | core | — (cache in memoria) | no | Host Redis; vuoto = in memoria. | `redis` |
-| `NOCT_REDIS_PORT` | core | `6379` | no | Porta. | `6379` |
-| `NOCT_REDIS_DB` | core | `0` | no | Numero del database. | `0` |
+| `NOCT_NATS_URL` | core | — (in-memory bus) | no | NATS JetStream for events and jobs. Empty = in memory (development only, one process). With NATS, the consumers run in `noct-worker`. | `nats://nats:4222` |
+| `NOCT_NATS_PREFIX` | core | `noct` | no | Prefix for streams and subjects. | `noct` |
+| `NOCT_WORKER_INLINE` | core | `true` without NATS, otherwise `false` | no | Runs the consumers inside the API process. | `false` |
+| `NOCT_REDIS_URL` | core | — | no | Single Redis URL (rate limiting, cache, locks). Takes precedence over host and port. | `redis://redis:6379/0` |
+| `NOCT_REDIS_HOST` | core | — (in-memory cache) | no | Redis host. Empty = in memory. | `redis` |
+| `NOCT_REDIS_PORT` | core | `6379` | no | Port. | `6379` |
+| `NOCT_REDIS_DB` | core | `0` | no | Database number. | `0` |
 
-## Storage a oggetti
+## Object storage
 
-| Variabile | Ambito | Default | Obbligatoria | Descrizione | Esempio |
+| Variable | Scope | Default | Required | Description | Example |
 |---|---|---|---|---|---|
-| `NOCT_STORAGE_BACKEND` | core | `localstorage` | no | `s3` (Garage, AWS S3, R2…) oppure `localstorage` (filesystem, servito dal backend su `/storage`, per installazioni `solo`). | `s3` |
-| `NOCT_S3_ENDPOINT_URL` | core | — | con `s3` | Endpoint dell'API S3, mai fisso nel codice. | `http://garage:3900` |
-| `NOCT_S3_PUBLIC_URL` | core | — | con `s3` | URL pubblico degli oggetti (avatar, media), servito dal proxy `s3-public`. Su AWS S3 vero non coincide con l'endpoint. | `https://media.example.com` |
-| `NOCT_S3_REGION` | core | — | no | Garage valida la regione: deve coincidere con `s3_region` di `garage.toml`. | `garage` |
-| `NOCT_S3_ACCESS_KEY_ID` | core | — (ruolo AWS) | no | Con Garage: `GK` + 24 hex. Entrambe vuote = default credential chain dell'SDK. | `GK0123456789abcdef01234567` |
-| `NOCT_S3_SECRET_ACCESS_KEY` | core | — | no | **Segreto.** 64 hex con Garage. | `openssl rand -hex 32` |
-| `NOCT_S3_BUCKET_AVATARS` | core | `avatars` | no | Bucket degli avatar (pubblico). | `avatars` |
-| `NOCT_S3_BUCKET_CONTENT` | core | `notturni-content` | no | Media incorporati nei post e copia del Markdown dei post. | `notturni-content` |
-| `NOCT_S3_BUCKET_AUDIT` | core | `notturni-audit` | no | Archivi del registro di audit (privato). | `notturni-audit` |
-| `NOCT_S3_PUBLIC_ACCESS` | compose | `website` | no | Modalità di esposizione pubblica dei bucket di Garage (solo `compose.yaml`). | `website` |
-| `NOCT_LOCAL_STORAGE_BASE_PATH` | core | `./data/storage` | no | Directory dello storage locale (nell'immagine: `/data/storage`). | `/data/storage` |
-| `NOCT_LOCAL_STORAGE_PUBLIC_URL` | core | `http://localhost:8000/storage` | no | URL pubblico dello storage locale. | `https://api.example.com/storage` |
-| `NOCT_GARAGE_RPC_SECRET` | garage | — | sì (con Garage) | **Segreto.** 64 hex, RPC del daemon. | `openssl rand -hex 32` |
-| `NOCT_GARAGE_ADMIN_TOKEN` | garage | — | sì (con Garage) | **Segreto.** Token dell'admin API (porta 3903, non pubblicata). | `openssl rand -base64 32` |
-| `NOCT_GARAGE_ADMIN_URL` | `noct-ctl` | `http://garage:3903` | no | Endpoint admin usato da `garage-bootstrap`. | `http://garage:3903` |
-| `NOCT_GARAGE_NODE_CAPACITY_BYTES` | `noct-ctl` | `1073741824` | no | Capacità assegnata al nodo Garage al bootstrap. | `10737418240` |
-| `NOCT_GARAGE_WEB_UPSTREAM` | s3-public | `garage:3902` | no | Upstream web di Garage per il proxy `s3-public`. | `garage:3902` |
+| `NOCT_STORAGE_BACKEND` | core | `localstorage` | no | `s3` (Garage, AWS S3, R2…) or `localstorage` (filesystem, served by the backend on `/storage`, for `solo` installations). | `s3` |
+| `NOCT_S3_ENDPOINT_URL` | core | — | with `s3` | S3 API endpoint. Never hard-coded in the code. | `http://garage:3900` |
+| `NOCT_S3_PUBLIC_URL` | core | — | with `s3` | Public URL of the objects (avatars, media), served by the `s3-public` proxy. On real AWS S3, it does not match the endpoint. | `https://media.example.com` |
+| `NOCT_S3_REGION` | core | — | no | Garage validates the region: it must match `s3_region` in `garage.toml`. | `garage` |
+| `NOCT_S3_ACCESS_KEY_ID` | core | — (AWS role) | no | With Garage: `GK` + 24 hex characters. If both this and the secret key are empty, the SDK default credential chain applies. | `GK0123456789abcdef01234567` |
+| `NOCT_S3_SECRET_ACCESS_KEY` | core | — | no | **Secret.** 64 hex characters with Garage. | `openssl rand -hex 32` |
+| `NOCT_S3_BUCKET_AVATARS` | core | `avatars` | no | Avatar bucket (public). | `avatars` |
+| `NOCT_S3_BUCKET_CONTENT` | core | `notturni-content` | no | Media embedded in posts, and copy of the posts' Markdown. | `notturni-content` |
+| `NOCT_S3_BUCKET_AUDIT` | core | `notturni-audit` | no | Audit log archives (private). | `notturni-audit` |
+| `NOCT_S3_PUBLIC_ACCESS` | compose | `website` | no | Public exposure mode of the Garage buckets (`compose.yaml` only). | `website` |
+| `NOCT_LOCAL_STORAGE_BASE_PATH` | core | `./data/storage` | no | Local storage directory (in the image: `/data/storage`). | `/data/storage` |
+| `NOCT_LOCAL_STORAGE_PUBLIC_URL` | core | `http://localhost:8000/storage` | no | Public URL of the local storage. | `https://api.example.com/storage` |
+| `NOCT_GARAGE_RPC_SECRET` | garage | — | yes (with Garage) | **Secret.** 64 hex characters, daemon RPC. | `openssl rand -hex 32` |
+| `NOCT_GARAGE_ADMIN_TOKEN` | garage | — | yes (with Garage) | **Secret.** Admin API token (port 3903, not published). | `openssl rand -base64 32` |
+| `NOCT_GARAGE_ADMIN_URL` | `noct-ctl` | `http://garage:3903` | no | Admin endpoint used by `garage-bootstrap`. | `http://garage:3903` |
+| `NOCT_GARAGE_NODE_CAPACITY_BYTES` | `noct-ctl` | `1073741824` | no | Capacity assigned to the Garage node at bootstrap. | `10737418240` |
+| `NOCT_GARAGE_WEB_UPSTREAM` | s3-public | `garage:3902` | no | Garage web upstream for the `s3-public` proxy. | `garage:3902` |
 
-## Backup e audit
+## Backup and audit
 
-| Variabile | Ambito | Default | Obbligatoria | Descrizione | Esempio |
+| Variable | Scope | Default | Required | Description | Example |
 |---|---|---|---|---|---|
-| `NOCT_BACKUP_S3_BUCKET` | backup | — (backup disattivato) | no | Bucket dello storage **esterno**. Senza, resta solo la copia Markdown dei post. | `notturni-backup` |
-| `NOCT_BACKUP_S3_ENDPOINT_URL` | backup | — | no | Endpoint S3 esterno. | `https://s3.example.com` |
-| `NOCT_BACKUP_S3_REGION` | backup | — | no | Regione. | `eu-central-1` |
+| `NOCT_BACKUP_S3_BUCKET` | backup | — (backup disabled) | no | Bucket of the **external** storage. Without it, only the Markdown copy of the posts remains. | `notturni-backup` |
+| `NOCT_BACKUP_S3_ENDPOINT_URL` | backup | — | no | External S3 endpoint. | `https://s3.example.com` |
+| `NOCT_BACKUP_S3_REGION` | backup | — | no | Region. | `eu-central-1` |
 | `NOCT_BACKUP_S3_ACCESS_KEY_ID` | backup | — | no | Access key. | `<key id>` |
-| `NOCT_BACKUP_S3_SECRET_ACCESS_KEY` | backup | — | no | **Segreto.** | `<secret>` |
-| `NOCT_AUDIT_ARCHIVE_ENABLED` | audit | `true` | no | Archivia su storage le settimane ISO concluse del registro prima di cancellarle (la conservazione in giorni è in `/admin/config`). | `true` |
+| `NOCT_BACKUP_S3_SECRET_ACCESS_KEY` | backup | — | no | **Secret.** | `<secret>` |
+| `NOCT_AUDIT_ARCHIVE_ENABLED` | audit | `true` | no | Archives the completed ISO weeks of the log to storage before deleting them (the retention in days is set in `/admin/config`). | `true` |
 
-## Email, moderazione, captcha
+## Email, moderation, captcha
 
-| Variabile | Ambito | Default | Obbligatoria | Descrizione | Esempio |
+| Variable | Scope | Default | Required | Description | Example |
 |---|---|---|---|---|---|
-| `NOCT_SMTP_HOST` | core | — (email non inviate) | no | Server SMTP per MFA, reset password, newsletter. Vuoto = le email non partono. | `smtp.example.com` |
-| `NOCT_SMTP_PORT` | core | `587` | no | Porta SMTP. | `587` |
-| `NOCT_SMTP_USER` | core | — | no | Utente SMTP. | `no-reply@example.com` |
-| `NOCT_SMTP_PASSWORD` | core | — | no | **Segreto.** | `<password>` |
-| `NOCT_SMTP_USE_TLS` | core | `true` | no | TLS verso l'SMTP. | `true` |
-| `NOCT_SMTP_FROM_EMAIL` | core | `no-reply@notturni.eu` | no | Mittente. | `no-reply@example.com` |
-| `NOCT_SMTP_RELAY_HOST` | smtp-relay | — (invio diretto) | no | Smarthost del servizio `smtp-relay` containerizzato; vuoto = invio diretto (servono SPF/DKIM/rDNS). | `smtp.example.com` |
-| `NOCT_SMTP_RELAY_USERNAME` | smtp-relay | — | no | Credenziali dello smarthost. | `relay-user` |
-| `NOCT_SMTP_RELAY_PASSWORD` | smtp-relay | — | no | **Segreto.** | `<password>` |
-| `NOCT_MODERATION_SERVICE_URL` | core | — (nessuna classificazione) | no | Servizio di moderazione immagini. | `http://moderation:8100` |
-| `NOCT_TURNSTILE_SITE_KEY` | core | — | no | Site key pubblica di Cloudflare Turnstile (letta dal frontend da `GET /api/v1/config`). | `0x4AAAA…` |
-| `NOCT_TURNSTILE_SECRET_KEY` | comments | — | no | **Segreto.** Senza chiavi, la modalità «commenti aperti a tutti» non è selezionabile. | `0x4AAAA…` |
-| `NOCT_TURNSTILE_VERIFY_URL` | comments | endpoint Cloudflare | no | Cambia solo nei test. | — |
+| `NOCT_SMTP_HOST` | core | — (emails not sent) | no | SMTP server for MFA, password reset and newsletters. Empty = no emails are sent. | `smtp.example.com` |
+| `NOCT_SMTP_PORT` | core | `587` | no | SMTP port. | `587` |
+| `NOCT_SMTP_USER` | core | — | no | SMTP user. | `no-reply@example.com` |
+| `NOCT_SMTP_PASSWORD` | core | — | no | **Secret.** | `<password>` |
+| `NOCT_SMTP_USE_TLS` | core | `true` | no | TLS to the SMTP server. | `true` |
+| `NOCT_SMTP_FROM_EMAIL` | core | `no-reply@notturni.eu` | no | Sender address. | `no-reply@example.com` |
+| `NOCT_SMTP_RELAY_HOST` | smtp-relay | — (direct sending) | no | Smarthost of the containerized `smtp-relay` service. Empty = direct sending (requires SPF/DKIM/rDNS). | `smtp.example.com` |
+| `NOCT_SMTP_RELAY_USERNAME` | smtp-relay | — | no | Smarthost credentials (user). | `relay-user` |
+| `NOCT_SMTP_RELAY_PASSWORD` | smtp-relay | — | no | **Secret.** | `<password>` |
+| `NOCT_MODERATION_SERVICE_URL` | core | — (no classification) | no | Image moderation service. | `http://moderation:8100` |
+| `NOCT_TURNSTILE_SITE_KEY` | core | — | no | Public site key of Cloudflare Turnstile (read by the frontend from `GET /api/v1/config`). | `0x4AAAA…` |
+| `NOCT_TURNSTILE_SECRET_KEY` | comments | — | no | **Secret.** Without keys, the mode «commenti aperti a tutti» (comments open to everyone) cannot be selected. | `0x4AAAA…` |
+| `NOCT_TURNSTILE_VERIFY_URL` | comments | Cloudflare endpoint | no | Changes only in tests. | — |
 
-## Accesso con provider esterni (auth_sso)
+## External identity providers (auth_sso)
 
-| Variabile | Ambito | Default | Obbligatoria | Descrizione | Esempio |
+| Variable | Scope | Default | Required | Description | Example |
 |---|---|---|---|---|---|
-| `NOCT_OAUTH_REDIRECT_BASE_URL` | auth_sso | `http://localhost:8000` | no | Origine pubblica del backend, base del `redirect_uri` registrato presso i provider. | `https://api.example.com` |
-| `NOCT_FRONTEND_URL` | auth_sso | `http://localhost:3000` | no | Origine del frontend, dove l'utente torna dopo il login. | `https://notturni.example.com` |
-| `NOCT_OAUTH_GOOGLE_CLIENT_ID / _CLIENT_SECRET` | auth_sso | vuote | no | Abilita Google se valorizzate (secret: **segreto**). | `<client id>` |
-| `NOCT_OAUTH_MICROSOFT_CLIENT_ID / _CLIENT_SECRET` | auth_sso | vuote | no | Abilita Microsoft. | `<client id>` |
-| `NOCT_OAUTH_GITHUB_CLIENT_ID / _CLIENT_SECRET` | auth_sso | vuote | no | Abilita GitHub. | `<client id>` |
-| `NOCT_OAUTH_LINKEDIN_CLIENT_ID / _CLIENT_SECRET` | auth_sso | vuote | no | Abilita LinkedIn. | `<client id>` |
-| `NOCT_OAUTH_ENDPOINT_BASE` | auth_sso | vuota | no | Solo prove e test: gli endpoint di ogni provider diventano `<base>/<provider>/…`. | — |
+| `NOCT_OAUTH_REDIRECT_BASE_URL` | auth_sso | `http://localhost:8000` | no | Public origin of the backend. Base of the `redirect_uri` registered with the providers. | `https://api.example.com` |
+| `NOCT_FRONTEND_URL` | auth_sso | `http://localhost:3000` | no | Frontend origin, where the user returns after login. | `https://notturni.example.com` |
+| `NOCT_OAUTH_GOOGLE_CLIENT_ID / _CLIENT_SECRET` | auth_sso | empty | no | Enables Google when set (the secret is **secret**). | `<client id>` |
+| `NOCT_OAUTH_MICROSOFT_CLIENT_ID / _CLIENT_SECRET` | auth_sso | empty | no | Enables Microsoft. | `<client id>` |
+| `NOCT_OAUTH_GITHUB_CLIENT_ID / _CLIENT_SECRET` | auth_sso | empty | no | Enables GitHub. | `<client id>` |
+| `NOCT_OAUTH_LINKEDIN_CLIENT_ID / _CLIENT_SECRET` | auth_sso | empty | no | Enables LinkedIn. | `<client id>` |
+| `NOCT_OAUTH_ENDPOINT_BASE` | auth_sso | empty | no | Tests and local trials only: each provider's endpoints become `<base>/<provider>/…`. | — |
 
-## Altri moduli
+## Other modules
 
-| Variabile | Ambito | Default | Obbligatoria | Descrizione | Esempio |
+| Variable | Scope | Default | Required | Description | Example |
 |---|---|---|---|---|---|
-| `NOCT_DNS_SERVER` | custom_domains | — (resolver di sistema) | no | Server DNS per la verifica TXT dei domini personali. | `1.1.1.1:53` |
-| `NOCT_DNS_TIMEOUT_MS` | custom_domains | `5000` | no | Timeout della verifica DNS. | `5000` |
-| `NOCT_LINK_PREVIEW_ALLOW_PRIVATE` | link_preview | `false` | no | Consente anteprime verso reti private. **Disattiva la difesa SSRF**: solo sviluppo. | `false` |
-| `NOCT_GIT_SYNC_ALLOW_PRIVATE` | git_sync | `false` | no | Consente repository su host privati (HTTPS e SSH) e `file://`. **Disattiva la difesa SSRF**: solo sviluppo e test. | `false` |
-| `NOCT_GIT_SYNC_GIT_BIN` | git_sync | `git` | no | Eseguibile `git` (presente nell'immagine). | `/usr/bin/git` |
-| `NOCT_GIT_SYNC_SSH_BIN` | git_sync | `ssh` | no | Client SSH usato da `git` (pacchetto `openssh-client`, presente nell'immagine). Cambia solo per percorsi non standard e nei test. | `/usr/bin/ssh` |
-| `NOCT_GIT_SYNC_KEYSCAN_BIN` | git_sync | `ssh-keyscan` | no | Scanner che rileva la host key SSH alla configurazione, per fissarla. Cambia solo per percorsi non standard e nei test. | `/usr/bin/ssh-keyscan` |
+| `NOCT_DNS_SERVER` | custom_domains | — (system resolver) | no | DNS server for the TXT verification of personal domains. | `1.1.1.1:53` |
+| `NOCT_DNS_TIMEOUT_MS` | custom_domains | `5000` | no | DNS verification timeout. | `5000` |
+| `NOCT_LINK_PREVIEW_ALLOW_PRIVATE` | link_preview | `false` | no | Allows previews to private networks. **Disables the SSRF protection**: development only. | `false` |
+| `NOCT_GIT_SYNC_ALLOW_PRIVATE` | git_sync | `false` | no | Allows repositories on private hosts (HTTPS and SSH) and `file://`. **Disables the SSRF protection**: development and tests only. | `false` |
+| `NOCT_GIT_SYNC_GIT_BIN` | git_sync | `git` | no | `git` executable (present in the image). | `/usr/bin/git` |
+| `NOCT_GIT_SYNC_SSH_BIN` | git_sync | `ssh` | no | SSH client used by `git` (package `openssh-client`, present in the image). Change it only for non-standard paths and in tests. | `/usr/bin/ssh` |
+| `NOCT_GIT_SYNC_KEYSCAN_BIN` | git_sync | `ssh-keyscan` | no | Scanner that detects the SSH host key during configuration, to pin it. Change it only for non-standard paths and in tests. | `/usr/bin/ssh-keyscan` |
 
-## Configurazione a caldo (non è ambiente)
+## Hot configuration (not environment)
 
-Alcuni valori nascono dall'ambiente solo alla prima installazione e poi vivono nel database, modificabili senza riavvio:
-modalità di registrazione, lingua predefinita, conservazione dell'audit (`/admin/config`) e moduli attivi (`/admin/modules`,
-solo Super Admin). Cambiare la variabile dopo la prima installazione **non** ha effetto su questi.
+Some values come from the environment only at the first installation. After that, they live in the database and can be changed without a restart:
+registration mode, default language, audit retention (`/admin/config`), and active modules (`/admin/modules`,
+Super Admin only). Changing the variable after the first installation has **no** effect on these.
 
-## Esempi minimi
+## Minimal examples
 
-**Sviluppo locale, tutto in memoria** (nessun servizio esterno):
+**Local development, all in memory** (no external services):
 
 ```dotenv
 NOCT_POSTGRES_USER=admin
@@ -182,15 +181,14 @@ NOCT_STORAGE_BACKEND=localstorage
 NOCT_SESSION_COOKIE_SECURE=false
 ```
 
-**Produzione (K3s)**: oltre ai segreti, impostare almeno `NOCT_INSTANCE_FQDN`, `NOCT_CORS_ORIGINS`/`NOCT_CORS_ORIGIN_REGEX`,
-`NOCT_SECRETS_KEY`, `NOCT_NATS_URL`, `NOCT_REDIS_URL`, le variabili `NOCT_S3_*`, SMTP e `NOCT_BACKUP_S3_*` verso un provider
-realmente esterno.
+**Production (K3s)**: in addition to the secrets, set at least `NOCT_INSTANCE_FQDN`, `NOCT_CORS_ORIGINS`/`NOCT_CORS_ORIGIN_REGEX`,
+`NOCT_SECRETS_KEY`, `NOCT_NATS_URL`, `NOCT_REDIS_URL`, the `NOCT_S3_*` variables, SMTP, and `NOCT_BACKUP_S3_*` pointing to a
+truly external provider.
 
-## Sicurezza e GDPR/NIS2
+## Security and GDPR/NIS2
 
-- `NOCT_SECRETS_KEY`: custodirla fuori dal cluster (è la chiave dei segreti TOTP e delle credenziali Git: token e chiavi SSH); perderla rende illeggibili
-  quei valori.
-- `NOCT_EXPERIMENTAL_FEATURES`: wiki e docs non hanno ancora la maturità del resto della piattaforma; attivarle è una scelta consapevole di chi installa.
-- `NOCT_LINK_PREVIEW_ALLOW_PRIVATE` e `NOCT_GIT_SYNC_ALLOW_PRIVATE` sono interruttori di sviluppo: in produzione devono restare `false`.
-- `NOCT_BACKUP_S3_*`: il backup contiene dati personali; il provider esterno va nel registro dei trattamenti (preferibilmente UE).
-- Il refresh token viaggia in un cookie: in https lasciare `NOCT_SESSION_COOKIE_SECURE=true`.
+- `NOCT_SECRETS_KEY`: keep it outside the cluster. It is the key for the TOTP secrets and the Git credentials (tokens and SSH keys). Losing it makes those values unreadable.
+- `NOCT_EXPERIMENTAL_FEATURES`: wiki and docs do not yet have the maturity of the rest of the platform. Enabling them is a deliberate choice of whoever installs the platform.
+- `NOCT_LINK_PREVIEW_ALLOW_PRIVATE` and `NOCT_GIT_SYNC_ALLOW_PRIVATE` are development switches: in production they must stay `false`.
+- `NOCT_BACKUP_S3_*`: the backup contains personal data. The external provider must be recorded in the register of processing activities (preferably in the EU).
+- The refresh token travels in a cookie. Over https, keep `NOCT_SESSION_COOKIE_SECURE=true`.

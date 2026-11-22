@@ -1,182 +1,182 @@
-# Installazione di Notturni
+# Installing Notturni
 
-Guide passo passo per ogni modo di installare la piattaforma. Per un primo giro di prova in locale, con il
-percorso di test dalla registrazione alla pubblicazione di un post, vedi [GETTING_STARTED.md](../GETTING_STARTED.md);
-per la configurazione di ogni variabile, [`.env.example`](../.env.example); per le operazioni quotidiane,
-[BACKEND.md](BACKEND.md).
+Step-by-step guides for each way to install the platform. For a first trial run locally, with the test path from
+registration to publishing a post, see [GETTING_STARTED.md](../GETTING_STARTED.md); for the configuration of each
+variable, see [`.env.example`](../.env.example); for day-to-day operations, see [BACKEND.md](BACKEND.md).
 
-| Scenario | Quando sceglierlo | Sezione |
+| Scenario | When to choose it | Section |
 | --- | --- | --- |
-| Podman / Docker Compose | prova, sviluppo, piccola istanza su un solo host | [2](#2-podman-e-docker-compose) |
-| K3s (Kubernetes) | produzione su un nodo, espandibile a cluster | [3](#3-k3s) |
-| VM Debian / Ubuntu | produzione senza container, servizi di sistema | [4](#4-vm-senza-container-debian-e-ubuntu) |
-| VM Rocky / AlmaLinux | come sopra, famiglia RHEL con SELinux e firewalld | [5](#5-vm-senza-container-rocky-e-almalinux) |
+| Podman / Docker Compose | trial, development, small instance on a single host | [2](#2-podman-and-docker-compose) |
+| K3s (Kubernetes) | production on one node, expandable to a cluster | [3](#3-k3s) |
+| VM Debian / Ubuntu | production without containers, system services | [4](#4-vm-without-containers-debian-and-ubuntu) |
+| VM Rocky / AlmaLinux | as above, RHEL family with SELinux and firewalld | [5](#5-vm-without-containers-rocky-and-almalinux) |
 
-Gli esempi usano `example.com` (dominio) e `192.168.x.x` (reti): sostituirli con i propri.
+The examples use `example.com` (domain) and `192.168.x.x` (networks): replace them with your own values.
 
-## 1. Prima di cominciare (comune a tutte le soluzioni)
+## 1. Before you start (common to all solutions)
 
-### 1.1 Architettura in breve
+### 1.1 Architecture in brief
 
 ```text
 browser ──► reverse proxy (TLS) ──┬─ /api/*      ──► noct-api    :8000 ──┬─► PostgreSQL 16+
                                   ├─ /storage/*  ──► noct-api            ├─► Redis 7+
-                                  └─ tutto il resto ► frontend :3000     ├─► NATS JetStream
-                                                                         └─► storage (S3/Garage o filesystem)
-                                                  noct-worker (nessuna porta): outbox, job periodici, consumer
+                                  └─ everything else ► frontend :3000    ├─► NATS JetStream
+                                                                         └─► storage (S3/Garage or filesystem)
+                                                  noct-worker (no port): outbox, periodic jobs, consumers
 ```
 
-`noct-api`, `noct-worker` e `noct-ctl` sono tre binari della stessa immagine/build. Il **worker è obbligatorio**
-quando c'è NATS: senza, email (reset password, MFA), newsletter, backup e manutenzioni non partono.
-Il servizio `moderation/` (Python, classificazione delle immagini) è **opzionale**: senza,
-`NOCT_MODERATION_SERVICE_URL` resta vuoto e le immagini non vengono classificate.
+`noct-api`, `noct-worker` and `noct-ctl` are three binaries from the same image/build. The **worker is required**
+when NATS is used: without it, email (password reset, MFA), newsletters, backups and maintenance do not run.
+The `moderation/` service (Python, image classification) is **optional**: without it,
+`NOCT_MODERATION_SERVICE_URL` stays empty and images are not classified.
 
-### 1.2 Requisiti
+### 1.2 Requirements
 
-| Risorsa | Minimo (prova / `solo`) | Consigliato (piattaforma) |
+| Resource | Minimum (trial / `solo`) | Recommended (platform) |
 | --- | --- | --- |
-| CPU / RAM | 2 vCPU / 2 GB | 4 vCPU / 4 GB (8 GB se si compila sulla VM) |
-| Disco | 20 GB | 50 GB + volume dati dedicato |
-| Architettura | x86_64 o ARM64 | uguale |
-| Rete in ingresso | 80, 443 | 80, 443 (22 solo da rete di gestione) |
+| CPU / RAM | 2 vCPU / 2 GB | 4 vCPU / 4 GB (8 GB if you build on the VM) |
+| Disk | 20 GB | 50 GB + dedicated data volume |
+| Architecture | x86_64 or ARM64 | same |
+| Inbound network | 80, 443 | 80, 443 (22 only from the management network) |
 
-Servono in ogni caso: un dominio con record DNS `A`/`AAAA` verso il server (per i blog su sottodominio,
-`nomeutente.example.com`, anche un record wildcard `*.example.com`), un server SMTP raggiungibile per le email
-(reset password, codici MFA, newsletter) e, per i certificati wildcard, un DNS con API per la sfida DNS-01.
+In every case you need: a domain with `A`/`AAAA` DNS records pointing to the server (for blogs on subdomains,
+`username.example.com`, also a wildcard record `*.example.com`), a reachable SMTP server for email
+(password reset, MFA codes, newsletters) and, for wildcard certificates, a DNS provider with an API for the
+DNS-01 challenge.
 
-### 1.3 Segreti: `scripts/gen-env.sh`
+### 1.3 Secrets: `scripts/gen-env.sh`
 
-Il backend **rifiuta di partire** con i segnaposto di `.env.example` (`NOCT_JWT_SECRET`) e non crea il Super Admin
-con la password d'esempio. Il file `.env` si crea con segreti casuali:
+The backend **refuses to start** with the placeholders from `.env.example` (`NOCT_JWT_SECRET`), and it does not
+create the Super Admin with the example password. Create the `.env` file with random secrets:
 
 ```bash
 git clone https://github.com/bytehawks-org/notturni.git && cd notturni
-scripts/gen-env.sh            # crea .env (permessi 600) e stampa la password del Super Admin
+scripts/gen-env.sh            # creates .env (mode 600) and prints the Super Admin password
 ```
 
-Poi si modificano a mano le variabili che dipendono dall'installazione:
+Then edit by hand the variables that depend on the installation:
 
-| Variabile | Valore tipico in produzione |
+| Variable | Typical value in production |
 | --- | --- |
 | `NOCT_INSTANCE_FQDN` | `example.com` |
-| `NOCT_SUPER_ADMIN_EMAIL` | l'email dell'amministratore |
-| `NOCT_DEPLOYMENT_MODE` | `platform` (multiutente) o `solo` (un proprietario, registrazione chiusa dopo il primo utente) |
+| `NOCT_SUPER_ADMIN_EMAIL` | the administrator's email |
+| `NOCT_DEPLOYMENT_MODE` | `platform` (multi-user) or `solo` (one owner, registration closed after the first user) |
 | `NOCT_CORS_ORIGINS` | `https://example.com` |
-| `NOCT_CORS_ORIGIN_REGEX` | `https://([a-z0-9-]+[.])?example[.]com` per i blog su sottodominio (`[.]` e non `\.`: funziona anche in `EnvironmentFile` di systemd) |
-| `NOCT_SESSION_COOKIE_SECURE` | `true` (con https; `false` solo in prova su http) |
-| `NOCT_SMTP_HOST` / `_PORT` / `_USER` / `_PASSWORD` / `_FROM_EMAIL` | il proprio provider SMTP |
-| `NOCT_TRUSTED_PROXIES` | numero di proxy davanti all'API (1 con un solo reverse proxy). **`0` se l'API è esposta direttamente**: altrimenti un client può falsificare `X-Forwarded-For` e aggirare i limiti per IP |
-| `NOCT_FRONTEND_REVALIDATE_URL` | URL interno del frontend + `/api/revalidate` |
-| `NOCT_BACKUP_S3_*` | storage S3 **esterno** per il backup giornaliero (vuoto = backup disattivato) |
+| `NOCT_CORS_ORIGIN_REGEX` | `https://([a-z0-9-]+[.])?example[.]com` for blogs on subdomains (`[.]` and not `\.`: this also works in a systemd `EnvironmentFile`) |
+| `NOCT_SESSION_COOKIE_SECURE` | `true` (with https; `false` only for trials over http) |
+| `NOCT_SMTP_HOST` / `_PORT` / `_USER` / `_PASSWORD` / `_FROM_EMAIL` | your own SMTP provider |
+| `NOCT_TRUSTED_PROXIES` | number of proxies in front of the API (1 with a single reverse proxy). **`0` if the API is exposed directly**: otherwise a client can forge `X-Forwarded-For` and bypass the per-IP limits |
+| `NOCT_FRONTEND_REVALIDATE_URL` | internal URL of the frontend + `/api/revalidate` |
+| `NOCT_BACKUP_S3_*` | **external** S3 storage for the daily backup (empty = backup disabled) |
 
-Conservare `.env` fuori da git e in un luogo sicuro: **`NOCT_SECRETS_KEY` non va perso né ruotato** (cifra i
-segreti TOTP; senza, gli utenti con MFA non entrano più). Dopo la prima installazione cambiare la password del
-Super Admin dall'interfaccia.
+Keep `.env` out of git and in a safe place: **`NOCT_SECRETS_KEY` must not be lost or rotated** (it encrypts the
+TOTP secrets; without it, users with MFA can no longer sign in). After the first installation, change the Super
+Admin password from the interface.
 
-### 1.4 Verifica comune a fine installazione
+### 1.4 Common check at the end of the installation
 
 ```bash
 curl -s https://example.com/api/v1/health/ready
 # {"services":{"bus":{...},"cache":{...},"database":{...},"storage":{...}},"status":"ok"}
 ```
 
-Poi login su `https://example.com` con `superadmin` e la password stampata da `gen-env.sh`
-(**il login è per email**: `POST /api/v1/auth/login` con `{"email": …}`).
+Then sign in at `https://example.com` with `superadmin` and the password printed by `gen-env.sh`
+(**sign-in is by email**: `POST /api/v1/auth/login` with `{"email": …}`).
 
 ---
 
-## 2. Podman e Docker Compose
+## 2. Podman and Docker Compose
 
-Lo stack completo (Postgres, Redis, NATS, Garage + bootstrap, proxy delle letture pubbliche, moderazione,
-MailHog, backend, worker, frontend) è in [`compose.yaml`](../compose.yaml). È pensato per **sviluppo e prova**:
-pubblica le porte dei servizi sull'host e usa MailHog al posto di un SMTP reale.
+The full stack (Postgres, Redis, NATS, Garage + bootstrap, public-read proxy for storage, moderation,
+MailHog, backend, worker, frontend) is defined in [`compose.yaml`](../compose.yaml). It is meant for **development
+and trials**: it publishes the service ports on the host and uses MailHog instead of a real SMTP server.
 
-### 2.1 Prerequisiti
+### 2.1 Prerequisites
 
 | | Podman | Docker |
 | --- | --- | --- |
-| Debian / Ubuntu | `sudo apt install podman podman-compose` | [docs.docker.com/engine/install](https://docs.docker.com/engine/install/) (plugin `docker compose`) |
-| Fedora / Rocky / Alma | `sudo dnf install podman podman-compose` | idem, repository Docker CE |
-| Verifica | `podman compose version` | `docker compose version` |
+| Debian / Ubuntu | `sudo apt install podman podman-compose` | [docs.docker.com/engine/install](https://docs.docker.com/engine/install/) (`docker compose` plugin) |
+| Fedora / Rocky / Alma | `sudo dnf install podman podman-compose` | same, Docker CE repository |
+| Check | `podman compose version` | `docker compose version` |
 
-Se `podman compose` non è disponibile, usare `podman-compose` (stessa sintassi). Con Docker sostituire
-`podman compose` con `docker compose`: il file è identico. Git serve per clonare il repository.
+If `podman compose` is not available, use `podman-compose` (same syntax). With Docker, replace
+`podman compose` with `docker compose`: the file is the same. Git is needed to clone the repository.
 
-### 2.2 Quickstart (5 comandi)
+### 2.2 Quickstart (5 commands)
 
 ```bash
 git clone https://github.com/bytehawks-org/notturni.git && cd notturni
-scripts/gen-env.sh                      # segreti casuali; annotare la password del Super Admin
+scripts/gen-env.sh                      # random secrets; note the Super Admin password
 podman compose up -d --build            # (docker compose up -d --build)
-podman compose ps                       # garage-bootstrap termina da solo con exit 0: è normale
+podman compose ps                       # garage-bootstrap exits by itself with exit 0: this is normal
 curl -s http://localhost:8000/api/v1/health/ready
 ```
 
-La prima volta il build del backend Rust richiede diversi minuti. Servizi raggiungibili:
+The first build of the Rust backend takes several minutes. Reachable services:
 
-| Servizio | URL |
+| Service | URL |
 | --- | --- |
-| Frontend (dashboard e amministrazione) | <http://localhost:3000> |
+| Frontend (dashboard and administration) | <http://localhost:3000> |
 | API / OpenAPI | <http://localhost:8000/api/v1/openapi.json> |
-| Email di sviluppo (MailHog) | <http://localhost:8025> |
-| Letture pubbliche dello storage (avatar, media) | <http://localhost:9000> |
+| Development email (MailHog) | <http://localhost:8025> |
+| Public storage reads (avatars, media) | <http://localhost:9000> |
 
-Login con `superadmin` e la password stampata da `gen-env.sh`. Il resto del percorso di prova è in
+Sign in with `superadmin` and the password printed by `gen-env.sh`. The rest of the trial path is in
 [GETTING_STARTED.md](../GETTING_STARTED.md).
 
-### 2.3 Operazioni
+### 2.3 Operations
 
 ```bash
-podman compose logs -f backend worker          # log
+podman compose logs -f backend worker          # logs
 podman compose exec backend noct-ctl migrate status
-podman compose exec backend noct-ctl token create --name core-engine   # token API machine-to-machine
-podman compose up -d --build backend worker    # aggiornamento dopo un git pull
-podman compose down                            # ferma (i dati restano nei volumi)
-podman compose down -v                         # ferma e CANCELLA i dati
+podman compose exec backend noct-ctl token create --name core-engine   # machine-to-machine API token
+podman compose up -d --build backend worker    # update after a git pull
+podman compose down                            # stop (data stays in the volumes)
+podman compose down -v                         # stop and DELETE the data
 ```
 
-### 2.4 Da prova a istanza su un solo host
+### 2.4 From trial to a single-host instance
 
-`compose.yaml` si può usare anche per una piccola istanza pubblica, a patto di:
+`compose.yaml` can also be used for a small public instance, provided that you:
 
-1. **Reverse proxy con TLS** sull'host (Caddy, nginx o Traefik; vedi l'esempio Caddy in [4.9](#49-reverse-proxy-e-tls)),
-   che inoltra `/api/*` a `localhost:8000`, `/storage/*` (solo con `localstorage`) a `localhost:8000` e il resto a
-   `localhost:3000`; al servizio `frontend` in `compose.yaml` si passano, come variabili d'ambiente (lette a runtime),
-   `NOCT_SITE_URL=https://example.com` e, per cambiare il nome, `NOCT_SITE_NAME`. Vanno tolti i build-arg
-   `NEXT_PUBLIC_*` pensati per `localhost`.
-2. **Chiudere le porte inutili**: togliere (o legare a `127.0.0.1:`) i `ports:` di `postgres`, `redis`, `nats`,
-   `garage`, `mailhog`, `smtp-relay`, `moderation`; lasciare raggiungibili dall'esterno solo il reverse proxy.
-   Il firewall dell'host deve bloccare tutto il resto.
-3. **SMTP reale**: in `.env` e nel blocco `environment` del servizio `backend` sostituire MailHog
-   (`NOCT_SMTP_HOST`, `_PORT`, `_USE_TLS`, credenziali), o usare il servizio `smtp-relay`.
-4. **Impostare** `NOCT_SESSION_COOKIE_SECURE=true`, `NOCT_CORS_ORIGINS`, `NOCT_OAUTH_REDIRECT_BASE_URL`,
-   `NOCT_S3_PUBLIC_URL` (URL pubblico del proxy delle letture, es. `https://s3.example.com`) e
-   `NOCT_FRONTEND_URL` ai valori https reali; togliere i valori `localhost` dagli `environment:` del compose.
-5. **Backup** verso uno storage S3 realmente esterno (`NOCT_BACKUP_S3_*`, rimuovendo i default che puntano a
-   Garage locale).
-6. Avvio automatico al boot: con Podman rootless, `loginctl enable-linger $USER` e
+1. **Put a reverse proxy with TLS** on the host (Caddy, nginx or Traefik; see the Caddy example in [4.9](#49-reverse-proxy-and-tls)),
+   which forwards `/api/*` to `localhost:8000`, `/storage/*` (only with `localstorage`) to `localhost:8000`, and
+   everything else to `localhost:3000`. Pass to the `frontend` service in `compose.yaml`, as environment variables
+   (read at runtime), `NOCT_SITE_URL=https://example.com` and, to change the name, `NOCT_SITE_NAME`. Remove the
+   `NEXT_PUBLIC_*` build arguments, which are meant for `localhost`.
+2. **Close the unneeded ports**: remove (or bind to `127.0.0.1:`) the `ports:` entries of `postgres`, `redis`, `nats`,
+   `garage`, `mailhog`, `smtp-relay` and `moderation`; only the reverse proxy should be reachable from outside.
+   The host firewall must block everything else.
+3. **Real SMTP**: in `.env` and in the `environment` block of the `backend` service, replace MailHog
+   (`NOCT_SMTP_HOST`, `_PORT`, `_USE_TLS`, credentials), or use the `smtp-relay` service.
+4. **Set** `NOCT_SESSION_COOKIE_SECURE=true`, `NOCT_CORS_ORIGINS`, `NOCT_OAUTH_REDIRECT_BASE_URL`,
+   `NOCT_S3_PUBLIC_URL` (public URL of the read proxy, for example `https://s3.example.com`) and
+   `NOCT_FRONTEND_URL` to the real https values; remove the `localhost` values from the `environment:` blocks of the compose file.
+5. **Backup** to a truly external S3 storage (`NOCT_BACKUP_S3_*`, removing the defaults that point to the local
+   Garage).
+6. Automatic start at boot: with rootless Podman, `loginctl enable-linger $USER` and
    `podman generate systemd` / [Quadlet](https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html);
-   con Docker, `restart: unless-stopped` e `systemctl enable docker`.
+   with Docker, `restart: unless-stopped` and `systemctl enable docker`.
 
-Per un'installazione di produzione strutturata si consigliano K3s ([3](#3-k3s)) o le VM ([4](#4-vm-senza-container-debian-e-ubuntu), [5](#5-vm-senza-container-rocky-e-almalinux)).
+For a structured production installation, K3s ([3](#3-k3s)) or VMs ([4](#4-vm-without-containers-debian-and-ubuntu), [5](#5-vm-without-containers-rocky-and-almalinux)) are recommended.
 
 ---
 
 ## 3. K3s
 
-I manifest sono in [`k8s/`](../k8s/README.md) (Kustomize). Un nodo singolo è sufficiente all'inizio; i `Deployment`
-di backend e worker sono già replicabili. Usano Traefik (incluso in K3s), il provisioner `local-path` per i volumi
-(sostituibile con Longhorn) e cert-manager per i certificati.
+The manifests are in [`k8s/`](../k8s/README.md) (Kustomize). A single node is enough to start with; the backend and
+worker `Deployment`s can already be replicated. They use Traefik (bundled with K3s), the `local-path` provisioner for
+volumes (replaceable with Longhorn) and cert-manager for certificates.
 
-### 3.1 Prerequisiti
+### 3.1 Prerequisites
 
-* VM o server con 4 vCPU / 4 GB RAM, Debian/Ubuntu/Rocky/Alma, accesso root, porte 80/443 (e 6443 solo da rete di gestione).
-* Dominio con record `example.com` e `*.example.com` verso l'IP del nodo.
-* Per il wildcard: DNS gestito da Cloudflare (la sfida DNS-01 dei manifest è configurata per Cloudflare; per altri
-  provider adattare `k8s/cert-manager-issuer.yaml`).
-* Un registro dove pubblicare le immagini (GHCR via CI, vedi 3.4) **oppure** buildarle sul nodo.
+* VM or server with 4 vCPU / 4 GB RAM, Debian/Ubuntu/Rocky/Alma, root access, ports 80/443 (and 6443 only from the management network).
+* Domain with `example.com` and `*.example.com` records pointing to the node's IP.
+* For the wildcard: DNS managed by Cloudflare (the manifests' DNS-01 challenge is configured for Cloudflare; for other
+  providers, adapt `k8s/cert-manager-issuer.yaml`).
+* A registry where the images are published (GHCR via CI, see 3.4) **or** build them on the node.
 
-### 3.2 Installare K3s
+### 3.2 Install K3s
 
 ```bash
 curl -sfL https://get.k3s.io | sh -
@@ -184,8 +184,8 @@ sudo kubectl get nodes                       # Ready
 mkdir -p ~/.kube && sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config && sudo chown $USER ~/.kube/config
 ```
 
-Su **Rocky/Alma** con SELinux attivo installare prima il pacchetto di policy se `get.k3s.io` lo segnala
-(`k3s-selinux`, lo script lo propone da sé) e aprire il firewall:
+On **Rocky/Alma** with SELinux enabled, first install the policy package if `get.k3s.io` reports it
+(`k3s-selinux`; the script offers it by itself), and open the firewall:
 
 ```bash
 sudo firewall-cmd --permanent --add-service={http,https} --add-port=6443/tcp
@@ -193,7 +193,7 @@ sudo firewall-cmd --permanent --zone=trusted --add-source=10.42.0.0/16 --add-sou
 sudo firewall-cmd --reload
 ```
 
-Su **Ubuntu** con `ufw`: `sudo ufw allow 80,443/tcp && sudo ufw allow 6443/tcp`.
+On **Ubuntu** with `ufw`: `sudo ufw allow 80,443/tcp && sudo ufw allow 6443/tcp`.
 
 ### 3.3 cert-manager
 
@@ -202,108 +202,108 @@ kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/
 kubectl -n cert-manager rollout status deploy/cert-manager-webhook
 ```
 
-### 3.4 Immagini
+### 3.4 Images
 
-I manifest puntano a `ghcr.io/bytehawks-org/notturni-{backend,frontend,moderation}` con il tag `0.2.0-rust`
-(`images:` in `k8s/kustomization.yaml`), pubblicato dal workflow `publish-images` a ogni push sul branch
-`migration/rust`. Le immagini precedenti (tag `sha-…`) sono quelle Python e non vanno usate.
+The manifests point to `ghcr.io/bytehawks-org/notturni-{backend,frontend,moderation}` with the tag `0.2.0-rust`
+(`images:` in `k8s/kustomization.yaml`), published by the `publish-images` workflow on every push to the
+`migration/rust` branch. The earlier images (tags `sha-…`) are the Python ones and must not be used.
 
-**A. CI su GitHub** (consigliato): l'immagine frontend è agnostica rispetto al dominio (URL e nome si
-configurano a runtime nel ConfigMap: `NOCT_INSTANCE_FQDN`/`NOCT_SITE_URL`, `NOCT_SITE_NAME`). Lanciare il workflow (push sul branch o *Run workflow*
-su `migration/rust`) e attendere le tre build (backend e moderazione arm64 sotto QEMU sono lente). Il pacchetto
-GHCR deve essere leggibile dal cluster: pubblico, oppure `imagePullSecrets` con un token `read:packages`.
-Per release successive il workflow pubblica anche `sha-<commit>` e, sui tag `vX.Y.Z`, la versione semver:
-aggiornare i tre `newTag`.
+**A. GitHub CI** (recommended): the frontend image does not depend on the domain (URL and name are set at runtime
+in the ConfigMap: `NOCT_INSTANCE_FQDN`/`NOCT_SITE_URL`, `NOCT_SITE_NAME`). Start the workflow (push to the branch, or *Run workflow*
+on `migration/rust`) and wait for the three builds (the backend and moderation arm64 builds under QEMU are slow). The GHCR
+package must be readable by the cluster: public, or `imagePullSecrets` with a `read:packages` token.
+For later releases the workflow also publishes `sha-<commit>` and, on `vX.Y.Z` tags, the semver version:
+update the three `newTag` values.
 
-**B. Build locale sul nodo** (senza registro):
+**B. Local build on the node** (no registry):
 
 ```bash
-sudo dnf install -y podman || sudo apt install -y podman      # una delle due
+sudo dnf install -y podman || sudo apt install -y podman      # one of the two
 TAG=local-1
 podman build -t ghcr.io/bytehawks-org/notturni-backend:$TAG .
 podman build -t ghcr.io/bytehawks-org/notturni-frontend:$TAG ./frontend
-podman build -t ghcr.io/bytehawks-org/notturni-moderation:$TAG ./moderation       # opzionale
+podman build -t ghcr.io/bytehawks-org/notturni-moderation:$TAG ./moderation       # optional
 for i in backend frontend moderation; do
   podman save ghcr.io/bytehawks-org/notturni-$i:$TAG | sudo k3s ctr images import -
 done
 ```
 
-poi `newTag: local-1` per le tre immagini in `k8s/kustomization.yaml`. Senza moderazione, togliere `moderation.yaml`
-da `resources:` e svuotare `NOCT_MODERATION_SERVICE_URL` in `configmap.yaml`.
+Then set `newTag: local-1` for the three images in `k8s/kustomization.yaml`. Without moderation, remove `moderation.yaml`
+from `resources:` and empty `NOCT_MODERATION_SERVICE_URL` in `configmap.yaml`.
 
-### 3.5 Configurazione
+### 3.5 Configuration
 
 ```bash
 cd k8s
-cp secret.example.yaml secret.yaml       # già in .gitignore: non committarlo
+cp secret.example.yaml secret.yaml       # already in .gitignore: do not commit it
 ```
 
-1. **`secret.yaml`**: sostituire **tutti** i valori d'esempio (`foo`, `changeme…`, `000…`). Generarli con
+1. **`secret.yaml`**: replace **all** the example values (`foo`, `changeme…`, `000…`). Generate them with
    `openssl rand -base64 48` (`NOCT_JWT_SECRET`), `openssl rand -base64 32` (`NOCT_SECRETS_KEY`,
    `NOCT_GARAGE_ADMIN_TOKEN`), `openssl rand -hex 32` (`NOCT_GARAGE_RPC_SECRET`,
-   `NOCT_S3_SECRET_ACCESS_KEY`), `echo GK$(openssl rand -hex 12)` (`NOCT_S3_ACCESS_KEY_ID`, da replicare anche in
-   `configmap.yaml`). Con i segnaposto il backend non parte.
+   `NOCT_S3_SECRET_ACCESS_KEY`), `echo GK$(openssl rand -hex 12)` (`NOCT_S3_ACCESS_KEY_ID`, to be replicated also in
+   `configmap.yaml`). With the placeholders, the backend does not start.
 2. **`configmap.yaml`**: `NOCT_INSTANCE_FQDN`, `NOCT_CORS_ORIGINS`, `NOCT_CORS_ORIGIN_REGEX`,
    `NOCT_OAUTH_REDIRECT_BASE_URL`, `NOCT_S3_PUBLIC_URL`, `NOCT_SMTP_*`, `NOCT_SMTP_FROM_EMAIL`,
-   `NOCT_TURNSTILE_SITE_KEY` (**sostituire con la propria chiave**), `NOCT_BACKUP_S3_*`.
-3. **Dominio**: sostituire `notturni.eu` con `example.com` in `ingress.yaml`, `ingressroute.yaml`,
-   `ingressroute-s3.yaml`, `certificate.yaml` e `cert-manager-issuer.yaml` (email di Let's Encrypt e zona).
-   `grep -rn notturni.eu k8s/` elenca tutti i punti.
-4. **Cloudflare**: token API con permesso `Zone:DNS:Edit` sulla sola zona, nella chiave
-   `NOCT_CLOUDFLARE_API_TOKEN` di `secret.yaml`.
+   `NOCT_TURNSTILE_SITE_KEY` (**replace with your own key**), `NOCT_BACKUP_S3_*`.
+3. **Domain**: replace `notturni.eu` with `example.com` in `ingress.yaml`, `ingressroute.yaml`,
+   `ingressroute-s3.yaml`, `certificate.yaml` and `cert-manager-issuer.yaml` (Let's Encrypt email and zone).
+   `grep -rn notturni.eu k8s/` lists all the places.
+4. **Cloudflare**: API token with the `Zone:DNS:Edit` permission on the zone only, in the
+   `NOCT_CLOUDFLARE_API_TOKEN` key of `secret.yaml`.
 
-### 3.6 Applicare e verificare
+### 3.6 Apply and verify
 
 ```bash
 kubectl apply -k .
-kubectl -n notturni get pods -w                  # tutti Running; il backend attende Garage via initContainer
-kubectl -n notturni get certificate              # READY=True dopo qualche minuto (DNS-01)
+kubectl -n notturni get pods -w                  # all Running; the backend waits for Garage via an initContainer
+kubectl -n notturni get certificate              # READY=True after a few minutes (DNS-01)
 curl -s https://example.com/api/v1/health/ready
 ```
 
-Il Super Admin viene creato al primo avvio da `NOCT_SUPER_ADMIN_*` (nel `secret.yaml`). I `Deployment` usano
-`runAsNonRoot` e una `NetworkPolicy` chiude tutto l'ingresso tranne frontend, backend e `s3-public` dal solo
-Traefik (`kube-system`).
+The Super Admin is created on first start from `NOCT_SUPER_ADMIN_*` (in `secret.yaml`). The `Deployment`s use
+`runAsNonRoot`, and a `NetworkPolicy` closes all inbound traffic except to frontend, backend and `s3-public`, and only
+from Traefik (`kube-system`).
 
-### 3.7 Operazioni
+### 3.7 Operations
 
-| Cosa | Comando |
+| What | Command |
 | --- | --- |
-| Log | `kubectl -n notturni logs deploy/backend -f` · `deploy/worker` |
-| Stato migrazioni | `kubectl -n notturni exec deploy/backend -- noct-ctl migrate status` |
-| Token machine-to-machine | `kubectl -n notturni exec deploy/backend -- noct-ctl token create --name core-engine` |
-| Aggiornare | nuovo `newTag` in `kustomization.yaml`, poi `kubectl apply -k .` (le migrazioni partono da sole) |
-| Più repliche | `kubectl -n notturni scale deploy/backend --replicas=3` (idem `worker`: lo scheduler è a elezione atomica) |
-| Rimuovere tutto | `kubectl delete -k .` (i PVC restano finché non si cancellano) |
+| Logs | `kubectl -n notturni logs deploy/backend -f` · `deploy/worker` |
+| Migration status | `kubectl -n notturni exec deploy/backend -- noct-ctl migrate status` |
+| Machine-to-machine token | `kubectl -n notturni exec deploy/backend -- noct-ctl token create --name core-engine` |
+| Update | new `newTag` in `kustomization.yaml`, then `kubectl apply -k .` (migrations run automatically) |
+| More replicas | `kubectl -n notturni scale deploy/backend --replicas=3` (same for `worker`: the scheduler uses atomic leader election) |
+| Remove everything | `kubectl delete -k .` (PVCs remain until you delete them) |
 
 ---
 
-## 4. VM senza container: Debian e Ubuntu
+## 4. VM without containers: Debian and Ubuntu
 
-Installazione nativa su una VM Debian 12/13 o Ubuntu 22.04/24.04: servizi di sistema (`systemd`), nessun
-container. Tutti i comandi come utente con `sudo`.
+Native installation on a Debian 12/13 or Ubuntu 22.04/24.04 VM: system services (`systemd`), no
+containers. Run all commands as a user with `sudo`.
 
-### 4.1 Pacchetti di base
+### 4.1 Base packages
 
 ```bash
 sudo apt update && sudo apt install -y ca-certificates curl git openssl build-essential cmake pkg-config \
   postgresql postgresql-client redis-server ufw
-psql --version     # 16 o superiore; su Debian 12 (15) installare da apt.postgresql.org (PGDG) il pacchetto postgresql-16
+psql --version     # 16 or later; on Debian 12 (15), install the postgresql-16 package from apt.postgresql.org (PGDG)
 ```
 
-Opzionale, per il frontend: Node.js 22 (vedi 4.7). Il client `postgresql-client` fornisce `pg_dump`, usato dal modulo
-`backup`.
+Optional, for the frontend: Node.js 22 (see 4.7). The `postgresql-client` package provides `pg_dump`, which the
+`backup` module uses.
 
 ### 4.2 PostgreSQL
 
 ```bash
-DBPASS=$(openssl rand -hex 16); echo "$DBPASS"        # annotarla: va in NOCT_POSTGRES_PASSWORD
+DBPASS=$(openssl rand -hex 16); echo "$DBPASS"        # note it: it goes into NOCT_POSTGRES_PASSWORD
 sudo -u postgres psql -c "CREATE ROLE notturni LOGIN PASSWORD '$DBPASS'"
 sudo -u postgres psql -c "CREATE DATABASE notturni OWNER notturni"
 ```
 
-Postgres resta in ascolto solo su `localhost` (default): non aprire la 5432 sul firewall. Nessuna estensione
-da installare e nessun superuser richiesto dall'applicazione.
+Postgres listens only on `localhost` (default): do not open port 5432 on the firewall. The application requires
+no extension to install and no superuser.
 
 ### 4.3 Redis
 
@@ -340,7 +340,7 @@ EOF
 sudo systemctl daemon-reload && sudo systemctl enable --now nats
 ```
 
-### 4.5 Utente di servizio e directory
+### 4.5 Service user and directories
 
 ```bash
 sudo useradd --system --home /opt/notturni --create-home --shell /usr/sbin/nologin notturni
@@ -348,12 +348,12 @@ sudo install -d -o notturni -g notturni -m750 /var/lib/notturni /var/lib/notturn
 sudo install -d -m750 -g notturni /etc/notturni
 ```
 
-### 4.6 Backend: binari
+### 4.6 Backend: binaries
 
-Due strade; la seconda evita di compilare sulla VM (la compilazione release richiede ~4 GB di RAM, 10 GB di disco e
-diversi minuti).
+There are two options. The second avoids compiling on the VM (a release build needs about 4 GB of RAM, 10 GB of disk and
+several minutes).
 
-**A. Compilare dal sorgente**
+**A. Build from source**
 
 ```bash
 curl -fsSL https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.97 && . ~/.cargo/env
@@ -362,23 +362,23 @@ cargo build --release --locked -p noct-api -p noct-worker -p noct-ctl
 sudo install -m755 target/release/{noct-api,noct-worker,noct-ctl} /usr/local/bin/
 ```
 
-**B. Estrarre i binari dall'immagine** (stessa architettura e libc dell'immagine: Debian 13 «trixie» o successiva)
+**B. Extract the binaries from the image** (same architecture and libc as the image: Debian 13 "trixie" or later)
 
 ```bash
 sudo apt install -y podman
-ID=$(podman create ghcr.io/bytehawks-org/notturni-backend:TAG)         # TAG: vedi 3.4
+ID=$(podman create ghcr.io/bytehawks-org/notturni-backend:TAG)         # TAG: see 3.4
 sudo podman cp $ID:/usr/local/bin/. /usr/local/bin/ && podman rm $ID
 ```
 
-### 4.7 Configurazione e frontend
+### 4.7 Configuration and frontend
 
-Generare `.env` come in [1.3](#13-segreti-scriptsgen-envsh) (dalla copia del repository), poi adattarlo alla VM:
+Generate `.env` as in [1.3](#13-secrets-scriptsgen-envsh) (from the repository copy), then adapt it to the VM:
 
 ```bash
 cd ~/notturni && scripts/gen-env.sh /tmp/notturni.env
 ```
 
-Valori da impostare/sostituire in `/tmp/notturni.env` (poi spostato in `/etc/notturni/notturni.env`):
+Values to set or replace in `/tmp/notturni.env` (then moved to `/etc/notturni/notturni.env`):
 
 ```ini
 NOCT_INSTANCE_FQDN=example.com
@@ -390,7 +390,7 @@ NOCT_POSTGRES_PASSWORD=<DBPASS di 4.2>
 NOCT_POSTGRES_DB=notturni
 NOCT_REDIS_HOST=127.0.0.1
 NOCT_NATS_URL=nats://127.0.0.1:4222
-# storage su filesystem (consigliato su una VM singola); per Garage/S3 vedi 4.10
+# storage on filesystem (recommended on a single VM); for Garage/S3 see 4.10
 NOCT_STORAGE_BACKEND=localstorage
 NOCT_LOCAL_STORAGE_BASE_PATH=/var/lib/notturni/storage
 NOCT_LOCAL_STORAGE_PUBLIC_URL=https://example.com/storage
@@ -407,7 +407,7 @@ NOCT_SMTP_FROM_EMAIL=no-reply@example.com
 NOCT_MODERATION_SERVICE_URL=
 ```
 
-Le variabili `NOCT_S3_*`, `NOCT_GARAGE_*` e `NOCT_S3_PUBLIC_URL` possono restare: con `localstorage` sono ignorate.
+The `NOCT_S3_*`, `NOCT_GARAGE_*` and `NOCT_S3_PUBLIC_URL` variables can stay: with `localstorage` they are ignored.
 
 ```bash
 sudo install -m640 -o root -g notturni /tmp/notturni.env /etc/notturni/notturni.env && shred -u /tmp/notturni.env
@@ -425,9 +425,9 @@ sudo cp -r .next/static /opt/notturni/frontend/.next/static && sudo cp -r public
 sudo chown -R notturni:notturni /opt/notturni/frontend
 ```
 
-URL del sito, dell'API e nome si leggono a runtime dalle env del processo (`NOCT_SITE_URL`, `NOCT_API_PUBLIC_URL`, `NOCT_SITE_NAME`): cambiare dominio non richiede un nuovo build.
+The site URL, the API URL and the name are read at runtime from the process environment (`NOCT_SITE_URL`, `NOCT_API_PUBLIC_URL`, `NOCT_SITE_NAME`): changing the domain does not require a new build.
 
-### 4.8 Servizi systemd
+### 4.8 systemd services
 
 ```bash
 sudo tee /etc/systemd/system/noct-api.service >/dev/null <<'EOF'
@@ -481,16 +481,16 @@ EOF
 
 sudo systemctl daemon-reload
 sudo systemctl enable --now noct-api noct-worker notturni-frontend
-journalctl -u noct-api -n 30 --no-pager        # "in ascolto … 127.0.0.1:8000"
+journalctl -u noct-api -n 30 --no-pager        # look for the startup line "in ascolto … 127.0.0.1:8000" (listening on)
 curl -s http://127.0.0.1:8000/api/v1/health/ready
 ```
 
-Le migrazioni e la creazione del Super Admin avvengono al primo avvio dell'API. Il worker legge lo stesso file
-e **deve** condividere lo stesso `NOCT_JWT_SECRET`, `NOCT_SECRETS_KEY` e database.
+Migrations and the Super Admin creation run on the first API start. The worker reads the same file
+and **must** share the same `NOCT_JWT_SECRET`, `NOCT_SECRETS_KEY` and database.
 
-### 4.9 Reverse proxy e TLS
+### 4.9 Reverse proxy and TLS
 
-Esempio con **Caddy** (TLS automatico con Let's Encrypt):
+Example with **Caddy** (automatic TLS with Let's Encrypt):
 
 ```bash
 sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https
@@ -521,51 +521,51 @@ example.com {
 }
 ```
 
-Per i **blog su sottodominio** (`nomeutente.example.com`) serve un certificato wildcard, quindi la sfida DNS-01:
-usare un Caddy con il plugin del proprio DNS (build da [caddyserver.com/download](https://caddyserver.com/download),
-es. `caddy-dns/cloudflare`) e dichiarare `example.com, *.example.com { tls { dns cloudflare {env.CF_API_TOKEN} } … }`
-con lo stesso corpo. Senza wildcard l'installazione funziona sul solo dominio principale (adatta a `solo`).
+For **subdomain blogs** (`username.example.com`) a wildcard certificate is needed, so the DNS-01 challenge:
+use a Caddy build with the plugin for your DNS provider (build from [caddyserver.com/download](https://caddyserver.com/download),
+for example `caddy-dns/cloudflare`) and declare `example.com, *.example.com { tls { dns cloudflare {env.CF_API_TOKEN} } … }`
+with the same body. Without a wildcard the installation works on the main domain only (suitable for `solo`).
 
 ```bash
 sudo systemctl reload caddy
 ```
 
-### 4.10 Garage / S3 invece del filesystem (opzionale)
+### 4.10 Garage / S3 instead of the filesystem (optional)
 
-Con `NOCT_STORAGE_BACKEND=s3` servono un endpoint S3-compatible (Garage in locale, oppure AWS S3 / Cloudflare R2 /
-altro) e `NOCT_S3_ENDPOINT_URL`, `NOCT_S3_REGION`, `NOCT_S3_ACCESS_KEY_ID`, `NOCT_S3_SECRET_ACCESS_KEY`,
-`NOCT_S3_PUBLIC_URL`. Per Garage sulla VM: installare il binario ([garagehq.deuxfleurs.fr](https://garagehq.deuxfleurs.fr/)),
-usare come modello [`garage/garage.toml`](../garage/garage.toml), poi `noct-ctl garage-bootstrap`
-(con `NOCT_GARAGE_ADMIN_URL=http://127.0.0.1:3903`) crea layout, chiave e bucket. Le letture pubbliche richiedono il
-proxy che espone solo i prefissi pubblici (vedi [`s3-public/default.conf.template`](../s3-public/default.conf.template)).
+With `NOCT_STORAGE_BACKEND=s3` you need an S3-compatible endpoint (Garage locally, or AWS S3 / Cloudflare R2 /
+another provider) and `NOCT_S3_ENDPOINT_URL`, `NOCT_S3_REGION`, `NOCT_S3_ACCESS_KEY_ID`, `NOCT_S3_SECRET_ACCESS_KEY`,
+`NOCT_S3_PUBLIC_URL`. For Garage on the VM: install the binary ([garagehq.deuxfleurs.fr](https://garagehq.deuxfleurs.fr/)),
+use [`garage/garage.toml`](../garage/garage.toml) as a template, then `noct-ctl garage-bootstrap`
+(with `NOCT_GARAGE_ADMIN_URL=http://127.0.0.1:3903`) creates the layout, key and buckets. Public reads require the
+proxy that exposes only the public prefixes (see [`s3-public/default.conf.template`](../s3-public/default.conf.template)).
 
-### 4.11 Firewall e hardening
+### 4.11 Firewall and hardening
 
 ```bash
 sudo ufw default deny incoming && sudo ufw allow OpenSSH && sudo ufw allow 80,443/tcp && sudo ufw enable
-sudo ss -ltnp | grep -E ':(5432|6379|4222|8000|3000)\b'     # tutti su 127.0.0.1, mai su 0.0.0.0
+sudo ss -ltnp | grep -E ':(5432|6379|4222|8000|3000)\b'     # all on 127.0.0.1, never on 0.0.0.0
 ```
 
-### 4.12 Backup, aggiornamento, diagnosi
+### 4.12 Backup, update, diagnostics
 
-| Cosa | Come |
+| What | How |
 | --- | --- |
-| Backup giornaliero | imposta `NOCT_BACKUP_S3_*` (storage S3 **esterno**): il job `backup.run` fa `pg_dump` e rispecchia i bucket. Con `localstorage` copiare anche `/var/lib/notturni/storage` (es. `restic`/`rsync`) |
-| Dump manuale | `sudo -u postgres pg_dump -Fc notturni > notturni-$(date +%F).dump` |
-| Aggiornare | `cd ~/notturni && git pull && cargo build --release --locked -p noct-api -p noct-worker -p noct-ctl && sudo install -m755 target/release/{noct-api,noct-worker,noct-ctl} /usr/local/bin/ && sudo systemctl restart noct-api noct-worker` (frontend: rifare `npm run build` e ricopiare come in 4.7) |
-| Log | `journalctl -u noct-api -u noct-worker -u notturni-frontend -f` |
-| `noct-ctl` (migrazioni, messaggi falliti, token API) | `sudo systemd-run --pty --collect -p User=notturni -p EnvironmentFile=/etc/notturni/notturni.env /usr/local/bin/noct-ctl migrate status` (idem `dead-letters`, `token create --name core-engine`): usa lo stesso parser di variabili dei servizi |
+| Daily backup | set `NOCT_BACKUP_S3_*` (**external** S3 storage): the `backup.run` job runs `pg_dump` and mirrors the buckets. With `localstorage`, also copy `/var/lib/notturni/storage` (for example with `restic`/`rsync`) |
+| Manual dump | `sudo -u postgres pg_dump -Fc notturni > notturni-$(date +%F).dump` |
+| Update | `cd ~/notturni && git pull && cargo build --release --locked -p noct-api -p noct-worker -p noct-ctl && sudo install -m755 target/release/{noct-api,noct-worker,noct-ctl} /usr/local/bin/ && sudo systemctl restart noct-api noct-worker` (frontend: run `npm run build` again and copy as in 4.7) |
+| Logs | `journalctl -u noct-api -u noct-worker -u notturni-frontend -f` |
+| `noct-ctl` (migrations, failed messages, API tokens) | `sudo systemd-run --pty --collect -p User=notturni -p EnvironmentFile=/etc/notturni/notturni.env /usr/local/bin/noct-ctl migrate status` (same for `dead-letters`, `token create --name core-engine`): it uses the same variable parser as the services |
 
 ---
 
-## 5. VM senza container: Rocky e AlmaLinux
+## 5. VM without containers: Rocky and AlmaLinux
 
-Rocky Linux / AlmaLinux 9 (e 10): stesso schema della sezione 4, con `dnf`, `firewalld` e **SELinux in modalità
-enforcing** (lasciarlo attivo). Seguire i passi sotto al posto di 4.1–4.4, 4.9 e 4.11; **4.2 (ruolo e database),
-4.5–4.8 e 4.10 sono identici**, con queste differenze: i servizi si chiamano `postgresql` e `redis`
-(non `redis-server`), e nelle unit `After=` va usato `postgresql.service redis.service`.
+Rocky Linux / AlmaLinux 9 (and 10): same layout as section 4, with `dnf`, `firewalld` and **SELinux in
+enforcing mode** (keep it enabled). Follow the steps below instead of 4.1–4.4, 4.9 and 4.11; **4.2 (role and database),
+4.5–4.8 and 4.10 are identical**, with these differences: the services are named `postgresql` and `redis`
+(not `redis-server`), and the `After=` lines in the units must use `postgresql.service redis.service`.
 
-### 5.1 Pacchetti
+### 5.1 Packages
 
 ```bash
 sudo dnf install -y epel-release
@@ -578,90 +578,90 @@ sudo sed -i 's/^# *bind .*/bind 127.0.0.1 ::1/; s/^protected-mode .*/protected-m
 sudo systemctl enable --now redis && redis-cli ping
 ```
 
-Se il modulo `redis:7` non è disponibile (Rocky/Alma 10), `sudo dnf install -y redis` (o `valkey`, compatibile).
-`pg_dump` è nel pacchetto `postgresql`. Poi creare ruolo e database come in 4.2.
+If the `redis:7` module is not available (Rocky/Alma 10), run `sudo dnf install -y redis` (or `valkey`, compatible).
+`pg_dump` is in the `postgresql` package. Then create the role and database as in 4.2.
 
 ### 5.2 NATS
 
-Come 4.4, con `ARCH=amd64` (x86_64) oppure `arm64` (aarch64) al posto di `dpkg --print-architecture`, e dopo aver
-installato il binario assegnare il contesto SELinux corretto:
+As in 4.4, with `ARCH=amd64` (x86_64) or `arm64` (aarch64) instead of `dpkg --print-architecture`. After
+installing the binary, assign the correct SELinux context:
 
 ```bash
 sudo restorecon -v /usr/local/bin/nats-server /usr/local/bin/noct-*
 ```
 
-### 5.3 Binari, frontend, servizi
+### 5.3 Binaries, frontend, services
 
-* Build: `curl -fsSL https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.97` e `cargo build --release --locked …`
-  come in 4.6-A (i pacchetti di compilazione sono già in 5.1). I binari presi dall'immagine (4.6-B) sono
-  costruiti su Debian: funzionano solo se la glibc della VM è sufficientemente recente (Rocky/Alma 9 ha 2.34:
-  **compilare dal sorgente**).
-* Node.js 22: `sudo dnf module enable -y nodejs:22 && sudo dnf install -y nodejs`, poi come in 4.7.
-* Unit systemd: identiche a 4.8; `/usr/bin/node` è lo stesso percorso.
+* Build: `curl -fsSL https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.97` and `cargo build --release --locked …`
+  as in 4.6-A (the build packages are already installed in 5.1). The binaries taken from the image (4.6-B) are
+  built on Debian: they work only if the VM's glibc is recent enough (Rocky/Alma 9 has 2.34:
+  **build from source**).
+* Node.js 22: `sudo dnf module enable -y nodejs:22 && sudo dnf install -y nodejs`, then as in 4.7.
+* systemd units: identical to 4.8; `/usr/bin/node` is the same path.
 
 ### 5.4 SELinux
 
-Il percorso `/opt/notturni/frontend` e `/var/lib/notturni` sono accessibili ai servizi `systemd` con il contesto
-predefinito; il solo permesso aggiuntivo serve al **reverse proxy** per contattare i backend locali:
+The paths `/opt/notturni/frontend` and `/var/lib/notturni` are accessible to the `systemd` services with the
+default context. The only extra permission needed is for the **reverse proxy** to reach the local backends:
 
 ```bash
-sudo setsebool -P httpd_can_network_connect 1          # nginx/Apache; Caddy installato da pacchetto, se confinato
+sudo setsebool -P httpd_can_network_connect 1          # nginx/Apache; Caddy installed from a package, if confined
 sudo semanage fcontext -a -t var_lib_t "/var/lib/notturni(/.*)?" && sudo restorecon -Rv /var/lib/notturni
-sudo ausearch -m avc -ts recent | audit2why             # se un servizio non parte: cosa nega SELinux
+sudo ausearch -m avc -ts recent | audit2why             # if a service does not start: what SELinux denies
 ```
 
-Non usare `setenforce 0` per «far funzionare» l'installazione: leggere l'AVC con `audit2why` e correggere il contesto.
+Do not use `setenforce 0` to "make the installation work": read the AVC with `audit2why` and fix the context.
 
 ### 5.5 Reverse proxy
 
-Caddy ha un repository COPR: `sudo dnf install -y 'dnf-command(copr)' && sudo dnf copr enable -y @caddy/caddy && sudo dnf install -y caddy`,
-poi lo stesso `Caddyfile` di 4.9 e `sudo systemctl enable --now caddy`. In alternativa nginx
-(`sudo dnf install -y nginx`) con `proxy_pass http://127.0.0.1:8000` per `/api/` e `/storage/`, e
-`proxy_pass http://127.0.0.1:3000` per `/`, impostando `proxy_set_header X-Forwarded-For $remote_addr;`
-(il backend si fida dell'ultimo valore: con `NOCT_TRUSTED_PROXIES=1`) e `proxy_set_header Host $host;`.
-I certificati con `certbot --nginx` (dominio principale) o `certbot` con plugin DNS (wildcard).
+Caddy is available from a COPR repository: `sudo dnf install -y 'dnf-command(copr)' && sudo dnf copr enable -y @caddy/caddy && sudo dnf install -y caddy`,
+then the same `Caddyfile` as in 4.9 and `sudo systemctl enable --now caddy`. Alternatively, nginx
+(`sudo dnf install -y nginx`) with `proxy_pass http://127.0.0.1:8000` for `/api/` and `/storage/`, and
+`proxy_pass http://127.0.0.1:3000` for `/`, setting `proxy_set_header X-Forwarded-For $remote_addr;`
+(the backend trusts the last value: with `NOCT_TRUSTED_PROXIES=1`) and `proxy_set_header Host $host;`.
+Certificates with `certbot --nginx` (main domain) or `certbot` with a DNS plugin (wildcard).
 
 ### 5.6 Firewall
 
 ```bash
 sudo firewall-cmd --permanent --add-service={http,https} && sudo firewall-cmd --reload
-sudo firewall-cmd --list-all                                  # solo ssh, http, https
-sudo ss -ltnp | grep -E ':(5432|6379|4222|8000|3000)\b'       # tutti su 127.0.0.1
+sudo firewall-cmd --list-all                                  # only ssh, http, https
+sudo ss -ltnp | grep -E ':(5432|6379|4222|8000|3000)\b'       # all on 127.0.0.1
 ```
 
-### 5.7 Aggiornamento, backup, diagnosi
+### 5.7 Update, backup, diagnostics
 
-Come 4.12, con `journalctl`/`systemctl` identici. Per il dump: `sudo -u postgres pg_dump -Fc notturni > …`.
+As in 4.12, with identical `journalctl`/`systemctl` commands. For the dump: `sudo -u postgres pg_dump -Fc notturni > …`.
 
 ---
 
-## 6. Verifica funzionale dopo l'installazione
+## 6. Functional verification after installation
 
 ```bash
 B=https://example.com/api/v1
 curl -s $B/health/ready                                                         # status ok
 curl -s -c /tmp/c -H 'content-type: application/json' \
-  -d '{"email":"admin@example.com","password":"<password Super Admin>"}' $B/auth/login
-curl -s $B/config                                                               # configurazione pubblica
+  -d '{"email":"admin@example.com","password":"<Super Admin password>"}' $B/auth/login
+curl -s $B/config                                                               # public configuration
 ```
 
-Poi da browser: login, creazione di un blog, pubblicazione di un post, apertura della pagina pubblica; da
-`/dashboard` (amministrazione) controllare **Panoramica**: i servizi `postgres`, `cache`, `bus`, `storage` devono
-essere `ok`. Verificare che un'email di prova (reset password) arrivi: se no, `journalctl -u noct-worker`.
+Then, in the browser: sign in, create a blog, publish a post, and open the public page. From
+`/dashboard` (administration), check **Panoramica** (Overview): the `postgres`, `cache`, `bus` and `storage` services must
+be `ok`. Verify that a test email (password reset) arrives. If it does not, run `journalctl -u noct-worker`.
 
-## 7. Problemi comuni
+## 7. Common problems
 
-| Sintomo | Causa probabile | Rimedio |
+| Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| Il backend esce subito con «`NOCT_JWT_SECRET` è il valore d'esempio» | `.env` copiato da `.env.example` | `scripts/gen-env.sh` o `openssl rand -base64 48` |
-| Il Super Admin non esiste (log: «creazione del Super Admin non riuscita») | password d'esempio o troppo corta | impostare `NOCT_SUPER_ADMIN_PASSWORD` e riavviare |
-| Login non riuscito con `username` | l'autenticazione è per **email** | usare l'email |
-| 429 sul login dopo pochi tentativi | limite per email/IP (anti brute-force) | attendere la finestra; dietro un proxy controllare `NOCT_TRUSTED_PROXIES` |
-| Tutti gli utenti appaiono con lo stesso IP | `NOCT_TRUSTED_PROXIES` troppo basso/alto per la catena di proxy | impostare il numero di proxy fidati reale |
-| Email, newsletter, backup non partono | `noct-worker` non in esecuzione, o SMTP/`NOCT_BACKUP_S3_*` non impostati | avviare il worker; `noct-ctl dead-letters` |
-| Il browser non resta autenticato | cookie `Secure` su http, o origine non in `NOCT_CORS_ORIGINS` | https + `NOCT_SESSION_COOKIE_SECURE=true`, oppure `false` in prova su http |
-| Immagini/avatar non si vedono | `NOCT_S3_PUBLIC_URL` / `NOCT_LOCAL_STORAGE_PUBLIC_URL` errati, o `/storage` non inoltrato | correggere l'URL pubblico e il reverse proxy |
-| Il browser chiama il dominio sbagliato | `NOCT_SITE_URL`/`NOCT_INSTANCE_FQDN` (o `NOCT_API_PUBLIC_URL`) non impostati o errati nel ConfigMap | correggerli e riavviare il Deployment `frontend` (nessun rebuild) |
-| `ImagePullBackOff` su K3s | il tag non è stato pubblicato (workflow non concluso), pacchetto GHCR privato o immagine non importata | vedi 3.4 |
-| Pod non partono su K3s con NetworkPolicy | CNI senza supporto alle policy | usare il CNI di K3s (default) o rimuovere `networkpolicy.yaml` |
-| Utenti con MFA non entrano più dopo un cambio di segreto | `NOCT_SECRETS_KEY` perso/ruotato | ripristinare la chiave originale |
+| The backend exits immediately with "`NOCT_JWT_SECRET` è il valore d'esempio" (`NOCT_JWT_SECRET` is the example value) | `.env` copied from `.env.example` | `scripts/gen-env.sh` or `openssl rand -base64 48` |
+| The Super Admin does not exist (log: "creazione del Super Admin non riuscita", Super Admin creation failed) | example or too short password | set `NOCT_SUPER_ADMIN_PASSWORD` and restart |
+| Sign-in fails with `username` | sign-in uses **email** | use the email address |
+| 429 on sign-in after a few attempts | per-email/IP limit (anti brute-force) | wait for the window to reset; behind a proxy, check `NOCT_TRUSTED_PROXIES` |
+| All users appear with the same IP | `NOCT_TRUSTED_PROXIES` too low/high for the proxy chain | set the real number of trusted proxies |
+| Email, newsletters, backups do not run | `noct-worker` not running, or SMTP/`NOCT_BACKUP_S3_*` not set | start the worker; `noct-ctl dead-letters` |
+| The browser does not stay signed in | `Secure` cookie over http, or origin not in `NOCT_CORS_ORIGINS` | https + `NOCT_SESSION_COOKIE_SECURE=true`, or `false` for a trial over http |
+| Images/avatars do not show | wrong `NOCT_S3_PUBLIC_URL` / `NOCT_LOCAL_STORAGE_PUBLIC_URL`, or `/storage` not forwarded | fix the public URL and the reverse proxy |
+| The browser calls the wrong domain | `NOCT_SITE_URL`/`NOCT_INSTANCE_FQDN` (or `NOCT_API_PUBLIC_URL`) not set or wrong in the ConfigMap | fix them and restart the `frontend` Deployment (no rebuild needed) |
+| `ImagePullBackOff` on K3s | the tag was not published (workflow not finished), the GHCR package is private, or the image was not imported | see 3.4 |
+| Pods do not start on K3s with NetworkPolicy | CNI without network policy support | use the K3s CNI (default) or remove `networkpolicy.yaml` |
+| Users with MFA cannot sign in after a secret change | `NOCT_SECRETS_KEY` lost or rotated | restore the original key |
