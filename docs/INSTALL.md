@@ -308,7 +308,7 @@ helm install notturni helm/notturni -n notturni --create-namespace -f my-solo.ya
 kubectl -n notturni get pods,pvc,ingress
 ```
 
-Create the Secret first (keys and a ready-made command in the [chart README](../helm/notturni/README.md#secrets)), or leave `secrets.existingSecret` empty and let the chart generate the mandatory keys. Upgrades use `helm upgrade`. `helm uninstall` does not delete the PVCs (`persistence.keepOnUninstall: true`). The chart has not yet been installed on a real cluster: the manual checklist is in the [chart README](../helm/notturni/README.md#smoke-test-checklist-manual).
+Create the Secret first (keys and a ready-made command in the [chart README](../helm/notturni/README.md#secrets)), or leave `secrets.existingSecret` empty and let the chart generate the mandatory keys. Upgrades use `helm upgrade`. `helm uninstall` does not delete the PVCs (`persistence.keepOnUninstall: true`). The chart has not yet been installed on a real cluster: the manual checklist is in the [chart README](../helm/notturni/README.md#smoke-test-checklist-manual). The full deployment guide (profiles, values reference, secrets, backup, operations, troubleshooting) is [HELM.md](HELM.md).
 
 ---
 

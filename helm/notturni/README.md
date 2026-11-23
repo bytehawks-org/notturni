@@ -4,7 +4,7 @@ Installs Notturni on Kubernetes. The default profile is the lean **solo** stack:
 
 The chart lives next to the Kustomize manifests in [`k8s/`](../../k8s/README.md), which stay the reference for the full platform deployment. Pick one of the two for an installation; do not apply both to the same namespace. Chart `version` is `0.1.0`, `appVersion` is `0.2.0-rust`, `kubeVersion` is `>=1.27.0-0`. The chart was checked with Helm 3.19.0 (`helm lint`, `helm template`, the `helm_chart.rs` tests and the CI job `helm`); it has **not** been installed on a real cluster yet. The manual checklist is at the end of this file.
 
-For what each profile means and the operating caveats (MemoryBus, moderation, collaborators, password recovery), see [docs/CONFIGURATION.md](../../docs/CONFIGURATION.md#deployment-profiles-solo-and-platform).
+The full deployment guide (values reference, secrets, backup and restore, operations, troubleshooting) is [docs/HELM.md](../../docs/HELM.md). For what each profile means and the operating caveats (MemoryBus, moderation, collaborators, password recovery), see [docs/CONFIGURATION.md](../../docs/CONFIGURATION.md#deployment-profiles-solo-and-platform).
 
 ## Prerequisites
 
@@ -40,7 +40,7 @@ helm install notturni helm/notturni -n notturni -f my-solo.yaml
 kubectl -n notturni get pods,pvc,ingress
 ```
 
-The first registered user becomes the Super Admin (solo closes registration after that). To create the Super Admin from values instead, set `admin.email`; its password is then generated in the chart Secret, or taken from the key `NOCT_SUPER_ADMIN_PASSWORD` of `existingSecret`. With a chart-generated Secret `NOTES.txt` prints the command that reads it; passwords are never printed.
+The first registered user becomes the Super Admin (solo closes registration after that). To create the Super Admin from values instead, set `admin.email`; its password is then generated in the chart Secret, or taken from the key `NOCT_SUPER_ADMIN_PASSWORD` of `existingSecret`. If `existingSecret` lacks that key, the backend starts without creating the Super Admin (it logs a warning). With a chart-generated Secret `NOTES.txt` prints the command that reads it; passwords are never printed.
 
 Platform, with the bundled components (this is `ci/platform-values.yaml`, trimmed):
 
@@ -150,7 +150,7 @@ With `storage.type=local` the backend serves `/storage` from its volume, and the
 
 ## Persistence, backup and limits
 
-- Single backend replica with local storage: the PVC is ReadWriteOnce, and the backend and PostgreSQL Deployments use `strategy: Recreate`: an upgrade stops the old pod before starting the new one (a short downtime). To scale out, use `storage.type=s3` and `nats.enabled=true`.
+- Single backend replica with local storage: the PVC is ReadWriteOnce, and PostgreSQL always uses `strategy: Recreate`, and the backend and worker use it when storage is local: an upgrade stops the old pod before starting the new one (a short downtime). To scale out, use `storage.type=s3` and `nats.enabled=true`.
 - Back up the PostgreSQL PVC and, in solo, the storage PVC: both hold personal data (GDPR). The module `backup` can copy a dump and the buckets to an external S3 (`backup.s3.*`).
 - Without NATS, jobs handed to the in-memory bus but not yet consumed are lost on restart; jobs still in the outbox survive ([details](../../docs/CONFIGURATION.md#no-nats-memorybus-limits)).
 - Without SMTP, no email is sent. Recover a password with `kubectl -n notturni exec -i deploy/notturni-backend -- noct-ctl user reset-password --email ...` (password on stdin; [details](../../docs/CONFIGURATION.md#password-recovery-without-smtp)).
@@ -173,6 +173,6 @@ Run this on a **throwaway** cluster (K3s with Traefik and a StorageClass), never
 | 9 | Platform render, **in a separate namespace** and ideally a separate release: `helm template notturni-p helm/notturni -n notturni-p -f helm/notturni/ci/platform-values.yaml`, then the dry run as in step 1. Only install it if the cluster has room (Garage, NATS, moderation need resources and the wildcard needs DNS-01) | Renders without error; with an install, the worker, NATS, Redis, Garage, `s3-public` and moderation pods become Ready and the backend log shows storage s3, cache redis, bus nats |
 | 10 | **DESTRUCTIVE.** `helm uninstall notturni -n notturni`, then `kubectl -n notturni get pvc` | Pods, Services and the Ingress are gone; the PVCs remain (expected). Delete the PVCs or the namespace (`kubectl delete namespace notturni`) only after confirming no data is needed |
 
-Note on step 4: solo serves blogs at `/blog/<slug>` only (`NOCT_SUBDOMAINS_ENABLED=false`). Create the blog from the dashboard and open the address the interface shows.
+Note on step 4: solo serves blogs at `/<slug>` only (`NOCT_SUBDOMAINS_ENABLED=false`). Create the blog from the dashboard and open the address the interface shows. The public URL is `scheme://host` without a port: a non-standard port (for example a port-forward on 8443) is not supported, because the browser would call the API on the default port. Use the standard HTTPS port behind the Ingress, or a `--resolve`/hosts mapping to port 443.
 
 Record the results (date, chart version, cluster, pass or fail per step, deviations) in the Work log of the task file for the smoke test, and open an issue for anything that fails.

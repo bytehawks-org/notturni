@@ -18,7 +18,7 @@ For the product roadmap and status of each feature, see [ROADMAP.md](ROADMAP.md)
 - `noct-ctl user create` and `POST /api/v1/admin/users` (Super Admin only), plus an admin form (`/admin/utenti/nuovo`): collaborator accounts in solo mode, where registration is closed. Generated passwords are shown once.
 - `noct-ctl user reset-password`: password recovery without SMTP; revokes sessions and writes an audit event.
 - Admin infrastructure panel (read-only) in `/admin/impostazioni` and a first-run wizard at `/admin/setup` that only prints `.env` and Helm values.
-- Helm chart `helm/notturni` (solo by default, platform through values), a `helm` job in CI (`helm lint`, `helm template`, Helm 3.19.0) and chart tests. See [helm/notturni/README.md](helm/notturni/README.md), which also holds the manual smoke-test checklist.
+- Helm chart `helm/notturni` (solo by default, platform through values), a `helm` job in CI (`helm lint`, `helm template`, Helm 3.19.0) and chart tests. See [helm/notturni/README.md](helm/notturni/README.md), which also holds the manual smoke-test checklist. Deployment guide: [docs/HELM.md](docs/HELM.md).
 - Files served from `/storage/` (local storage) now carry `X-Content-Type-Options: nosniff` and `Cache-Control: public, max-age=3600`; the former `no_store_sensitive` middleware is now `response_hardening`.
 - Vitest and Testing Library for the frontend, with a CI job; tests for the in-memory bus across a restart (`solo_membus.rs`).
 

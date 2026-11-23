@@ -19,7 +19,7 @@ Reference for all `NOCT_*` variables (plus the two `NEXT_PUBLIC_*` variables of 
 | `NOCT_INSTANCE_FQDN` | core | `notturni.eu` | no | Public domain: base of the links in emails and of the federation identifiers, email domain of the verification seal, and the domain that the link map uses to recognize internal links between posts (must match `NOCT_SITE_URL`). | `notturni.example.com` |
 | `NOCT_SITE_SLUG` | core | `notturni` | no | Namespace of the paths on S3: prevents collisions between several installations on the same bucket. Lowercase letters, digits and `-` only. | `staging` |
 | `NOCT_DEPLOYMENT_MODE` | auth | `platform` | no | `platform` = multi-user. `solo` = one owner: the first user becomes Super Admin, and registration closes (further accounts: see [Collaborators in solo mode](#collaborators-in-solo-mode)). The frontend reads it at runtime too. `.env.example` and the Helm chart default to `solo`. See [Deployment profiles](#deployment-profiles-solo-and-platform). | `solo` |
-| `NOCT_SUBDOMAINS_ENABLED` | core + frontend | `true` | no | `true` = blogs are also served on `<slug>.<domain>` (platform behavior). `false` = path addresses only (`/blog/<slug>`): the frontend drops the wildcard CSP origin and the subdomain rewrite, and shows path addresses. The backend only reports the flag (public config and admin infrastructure block); it does not enforce path-only routing. `.env.example` sets `false`; `k8s/configmap.yaml` sets `true`. | `false` |
+| `NOCT_SUBDOMAINS_ENABLED` | core + frontend | `true` | no | `true` = blogs are also served on `<slug>.<domain>` (platform behavior). `false` = path addresses only (`/<slug>`): the frontend drops the wildcard CSP origin and the subdomain rewrite, and shows path addresses. The backend only reports the flag (public config and admin infrastructure block); it does not enforce path-only routing. `.env.example` sets `false`; `k8s/configmap.yaml` sets `true`. | `false` |
 | `NOCT_REGISTRATION_MODE` | auth | `open` | no | **Initial** value (first installation) of `platform_config`: `open` · `invite` · `closed`. Change it later in `/admin/config`. | `invite` |
 | `NOCT_DEFAULT_LOCALE` | auth | `it` | no | Initial interface language (`it` · `en`). Change it later in `/admin/config`. | `en` |
 | `NOCT_DEFAULT_INTERESTS` | interests | list of 16 entries | no | JSON with the initial list of interests. Empty = default. | `[{"key":"music","translations":{"it":"Musica","en":"Music"}}]` |
@@ -174,7 +174,7 @@ One code base, two ways to run it. Nothing is removed from the code: the profile
 | Object storage | `localstorage`: a volume mounted in the backend, served on `/storage` | S3-compatible (Garage, AWS S3, R2) |
 | Cache and rate limits | In memory, per process | Redis |
 | Message bus | In memory (`MemoryBus`) | NATS JetStream, at-least-once |
-| Blog addresses | `/blog/<slug>` only (`NOCT_SUBDOMAINS_ENABLED=false`) | `<slug>.<domain>` and paths |
+| Blog addresses | `/<slug>` only (`NOCT_SUBDOMAINS_ENABLED=false`) | `<slug>.<domain>` and paths |
 | Verification seal and role labels | Hidden in the UI (the API still returns `verification_tier` and roles; permissions are unchanged) | Shown |
 | Email | An existing SMTP server, optionally through the `smtp-relay` container; none if unset | Same |
 | Image moderation | Off; sensitive images are marked by hand | On |

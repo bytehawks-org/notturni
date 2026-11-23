@@ -42,7 +42,7 @@ export const PLATFORM_DEFAULTS: SetupAnswers = {
 /** Modules enabled without the optional `image_moderation` (same list as `.env.example`). */
 export const BASE_MODULES = [
   "link_preview", "gdpr", "auth_mfa", "auth_sso", "pages", "backup", "comments", "discovery", "fragments",
-  "git_sync", "graph", "legal", "newsletter", "notes", "publications", "reports", "taxonomy", "wiki",
+  "git_sync", "graph", "interests", "legal", "newsletter", "notes", "publications", "reports", "taxonomy", "wiki",
   "branding", "custom_domains",
 ];
 

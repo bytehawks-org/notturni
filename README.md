@@ -279,6 +279,8 @@ modules, is at `/api/v1/openapi.json`.
 A per-module list of all routes (verb, access, purpose) is in
 [docs/API_REFERENCE.md](docs/API_REFERENCE.md). All environment variables, with
 defaults and examples, are in [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+Deploying with the Helm chart (profiles, values, secrets, operations):
+[docs/HELM.md](docs/HELM.md).
 
 ## Tests
 
