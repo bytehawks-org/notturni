@@ -18,12 +18,13 @@ Reference for all `NOCT_*` variables (plus the two `NEXT_PUBLIC_*` variables of 
 |---|---|---|---|---|---|
 | `NOCT_INSTANCE_FQDN` | core | `notturni.eu` | no | Public domain: base of the links in emails and of the federation identifiers, email domain of the verification seal, and the domain that the link map uses to recognize internal links between posts (must match `NOCT_SITE_URL`). | `notturni.example.com` |
 | `NOCT_SITE_SLUG` | core | `notturni` | no | Namespace of the paths on S3: prevents collisions between several installations on the same bucket. Lowercase letters, digits and `-` only. | `staging` |
-| `NOCT_DEPLOYMENT_MODE` | auth | `platform` | no | `platform` = multi-user. `solo` = one owner: the first user becomes Super Admin, and registration closes. | `solo` |
+| `NOCT_DEPLOYMENT_MODE` | auth | `platform` | no | `platform` = multi-user. `solo` = one owner: the first user becomes Super Admin, and registration closes (further accounts: see [Collaborators in solo mode](#collaborators-in-solo-mode)). The frontend reads it at runtime too. `.env.example` and the Helm chart default to `solo`. See [Deployment profiles](#deployment-profiles-solo-and-platform). | `solo` |
+| `NOCT_SUBDOMAINS_ENABLED` | core + frontend | `true` | no | `true` = blogs are also served on `<slug>.<domain>` (platform behavior). `false` = path addresses only (`/blog/<slug>`): the frontend drops the wildcard CSP origin and the subdomain rewrite, and shows path addresses. The backend only reports the flag (public config and admin infrastructure block); it does not enforce path-only routing. `.env.example` sets `false`; `k8s/configmap.yaml` sets `true`. | `false` |
 | `NOCT_REGISTRATION_MODE` | auth | `open` | no | **Initial** value (first installation) of `platform_config`: `open` · `invite` · `closed`. Change it later in `/admin/config`. | `invite` |
 | `NOCT_DEFAULT_LOCALE` | auth | `it` | no | Initial interface language (`it` · `en`). Change it later in `/admin/config`. | `en` |
 | `NOCT_DEFAULT_INTERESTS` | interests | list of 16 entries | no | JSON with the initial list of interests. Empty = default. | `[{"key":"music","translations":{"it":"Musica","en":"Music"}}]` |
 | `NOCT_EXPERIMENTAL_FEATURES` | core | empty (all off) | no | **Experimental, opt-in.** Comma-separated list of `wiki` and/or `docs`: enables the creation of Spaces of that type and their display mode. When off, the platform offers only blogs (the API answers `400` and the interface does not offer the types). Turning a feature off later does not delete or hide the Spaces already created. An unknown name prevents startup. In Kubernetes, it lives in the ConfigMap `notturni-config`; backend and worker must be restarted. | `wiki,docs` |
-| `NOCT_MODULES` | core | default modules | no | Optional modules active at the **first** installation (comma-separated). After that, the state in the database applies. Change it in `/admin/modules`. | `wiki,git_sync,newsletter` |
+| `NOCT_MODULES` | core | default modules | no | Optional modules active at the **first** installation (comma-separated). After that, the state in the database applies: see the [caveat](#existing-database-moved-to-solo). Change it in `/admin/modules`. The solo list in `.env.example` is the default set without `image_moderation`. | `wiki,git_sync,newsletter` |
 | `NOCT_BIND_ADDR` | core | `0.0.0.0:8000` | no | API listen address. | `127.0.0.1:8000` |
 | `NOCT_TRUSTED_PROXIES` | core | `1` | no | Number of trusted proxies in front of the API (real IP in rate limiting and audit). | `2` |
 | `NOCT_APP_ENV` | k8s | — | no | Environment label present in the ConfigMap (`production`). The code does not appear to read it. | `production` |
@@ -81,7 +82,7 @@ Reference for all `NOCT_*` variables (plus the two `NEXT_PUBLIC_*` variables of 
 |---|---|---|---|---|---|
 | `NOCT_NATS_URL` | core | — (in-memory bus) | no | NATS JetStream for events and jobs. Empty = in memory (development only, one process). With NATS, the consumers run in `noct-worker`. | `nats://nats:4222` |
 | `NOCT_NATS_PREFIX` | core | `noct` | no | Prefix for streams and subjects. | `noct` |
-| `NOCT_WORKER_INLINE` | core | `true` without NATS, otherwise `false` | no | Runs the consumers inside the API process. | `false` |
+| `NOCT_WORKER_INLINE` | core | `true` without NATS, otherwise `false` | no | Runs the consumers inside the API process (needed with the in-memory bus: see [limits](#no-nats-memorybus-limits)). | `false` |
 | `NOCT_REDIS_URL` | core | — | no | Single Redis URL (rate limiting, cache, locks). Takes precedence over host and port. | `redis://redis:6379/0` |
 | `NOCT_REDIS_HOST` | core | — (in-memory cache) | no | Redis host. Empty = in memory. | `redis` |
 | `NOCT_REDIS_PORT` | core | `6379` | no | Port. | `6379` |
@@ -102,7 +103,7 @@ Reference for all `NOCT_*` variables (plus the two `NEXT_PUBLIC_*` variables of 
 | `NOCT_S3_BUCKET_AUDIT` | core | `notturni-audit` | no | Audit log archives (private). | `notturni-audit` |
 | `NOCT_S3_PUBLIC_ACCESS` | compose | `website` | no | Public exposure mode of the Garage buckets (`compose.yaml` only). | `website` |
 | `NOCT_LOCAL_STORAGE_BASE_PATH` | core | `./data/storage` | no | Local storage directory (in the image: `/data/storage`). | `/data/storage` |
-| `NOCT_LOCAL_STORAGE_PUBLIC_URL` | core | `http://localhost:8000/storage` | no | Public URL of the local storage. | `https://api.example.com/storage` |
+| `NOCT_LOCAL_STORAGE_PUBLIC_URL` | core | `http://localhost:8000/storage` | no | Public URL of the local storage, as the **browser** reaches it. Behind an Ingress it must be a real URL that routes `/storage` to the backend, for example `https://example.com/storage`; the default only works on a developer machine. The Helm chart derives it from `ingress.host`. The frontend reads it too, to allow the origin in the CSP `img-src`. Only the `avatars` and `content` buckets are served; the audit archive never is. Responses carry `X-Content-Type-Options: nosniff` and `Cache-Control: public, max-age=3600`. In the local compose stack the default URL points at the backend port (8000), not at the frontend (3000). | `https://example.com/storage` |
 | `NOCT_GARAGE_RPC_SECRET` | garage | — | yes (with Garage) | **Secret.** 64 hex characters, daemon RPC. | `openssl rand -hex 32` |
 | `NOCT_GARAGE_ADMIN_TOKEN` | garage | — | yes (with Garage) | **Secret.** Admin API token (port 3903, not published). | `openssl rand -base64 32` |
 | `NOCT_GARAGE_ADMIN_URL` | `noct-ctl` | `http://garage:3903` | no | Admin endpoint used by `garage-bootstrap`. | `http://garage:3903` |
@@ -124,7 +125,7 @@ Reference for all `NOCT_*` variables (plus the two `NEXT_PUBLIC_*` variables of 
 
 | Variable | Scope | Default | Required | Description | Example |
 |---|---|---|---|---|---|
-| `NOCT_SMTP_HOST` | core | — (emails not sent) | no | SMTP server for MFA, password reset and newsletters. Empty = no emails are sent. | `smtp.example.com` |
+| `NOCT_SMTP_HOST` | core | — (emails not sent) | no | SMTP server for MFA, password reset and newsletters. Empty = no emails are sent: no MFA or reset codes, no newsletter; password recovery then uses `noct-ctl` (see [below](#password-recovery-without-smtp)). | `smtp.example.com` |
 | `NOCT_SMTP_PORT` | core | `587` | no | SMTP port. | `587` |
 | `NOCT_SMTP_USER` | core | — | no | SMTP user. | `no-reply@example.com` |
 | `NOCT_SMTP_PASSWORD` | core | — | no | **Secret.** | `<password>` |
@@ -133,7 +134,7 @@ Reference for all `NOCT_*` variables (plus the two `NEXT_PUBLIC_*` variables of 
 | `NOCT_SMTP_RELAY_HOST` | smtp-relay | — (direct sending) | no | Smarthost of the containerized `smtp-relay` service. Empty = direct sending (requires SPF/DKIM/rDNS). | `smtp.example.com` |
 | `NOCT_SMTP_RELAY_USERNAME` | smtp-relay | — | no | Smarthost credentials (user). | `relay-user` |
 | `NOCT_SMTP_RELAY_PASSWORD` | smtp-relay | — | no | **Secret.** | `<password>` |
-| `NOCT_MODERATION_SERVICE_URL` | core | — (no classification) | no | Image moderation service. | `http://moderation:8100` |
+| `NOCT_MODERATION_SERVICE_URL` | core | — (no classification) | no | Image moderation service. Empty, or the `image_moderation` module off, means uploads are never classified: see [Image moderation off](#image-moderation-off). | `http://moderation:8100` |
 | `NOCT_TURNSTILE_SITE_KEY` | core | — | no | Public site key of Cloudflare Turnstile (read by the frontend from `GET /api/v1/config`). | `0x4AAAA…` |
 | `NOCT_TURNSTILE_SECRET_KEY` | comments | — | no | **Secret.** Without keys, the mode «commenti aperti a tutti» (comments open to everyone) cannot be selected. | `0x4AAAA…` |
 | `NOCT_TURNSTILE_VERIFY_URL` | comments | Cloudflare endpoint | no | Changes only in tests. | — |
@@ -162,6 +163,84 @@ Reference for all `NOCT_*` variables (plus the two `NEXT_PUBLIC_*` variables of 
 | `NOCT_GIT_SYNC_SSH_BIN` | git_sync | `ssh` | no | SSH client used by `git` (package `openssh-client`, present in the image). Change it only for non-standard paths and in tests. | `/usr/bin/ssh` |
 | `NOCT_GIT_SYNC_KEYSCAN_BIN` | git_sync | `ssh-keyscan` | no | Scanner that detects the SSH host key during configuration, to pin it. Change it only for non-standard paths and in tests. | `/usr/bin/ssh-keyscan` |
 
+## Deployment profiles: solo and platform
+
+One code base, two ways to run it. Nothing is removed from the code: the profile only decides which components run and which defaults apply.
+
+| | `solo` (default of `.env.example` and the Helm chart) | `platform` (reference: `k8s/`, `compose.platform.yaml`) |
+|---|---|---|
+| Who | One owner, plus collaborators created by the Super Admin | Multi-user, open or invite-only registration |
+| Services | PostgreSQL, backend (inline worker), frontend | Adds Redis, NATS JetStream and a separate worker, Garage with `s3-public`, image moderation, optional SMTP relay |
+| Object storage | `localstorage`: a volume mounted in the backend, served on `/storage` | S3-compatible (Garage, AWS S3, R2) |
+| Cache and rate limits | In memory, per process | Redis |
+| Message bus | In memory (`MemoryBus`) | NATS JetStream, at-least-once |
+| Blog addresses | `/blog/<slug>` only (`NOCT_SUBDOMAINS_ENABLED=false`) | `<slug>.<domain>` and paths |
+| Verification seal and role labels | Hidden in the UI (the API still returns `verification_tier` and roles; permissions are unchanged) | Shown |
+| Email | An existing SMTP server, optionally through the `smtp-relay` container; none if unset | Same |
+| Image moderation | Off; sensitive images are marked by hand | On |
+| Scaling | One backend replica (RWO volume, in-process bus) | Several replicas |
+
+### Switching a component on
+
+| Component | Env (`.env`, `k8s/configmap.yaml`) | Compose | Helm values |
+|---|---|---|---|
+| Redis | `NOCT_REDIS_URL` or `NOCT_REDIS_HOST` | `--profile platform` | `redis.enabled=true` |
+| NATS and separate worker | `NOCT_NATS_URL`, `NOCT_WORKER_INLINE=false` on the API | `--profile platform` | `nats.enabled=true` (deploys the `worker`) |
+| S3 storage | `NOCT_STORAGE_BACKEND=s3`, `NOCT_S3_*` | `--profile platform` (Garage) | `storage.type=s3`, `storage.s3.*` or `storage.s3.garage.enabled=true` |
+| Subdomains | `NOCT_SUBDOMAINS_ENABLED=true`, `NOCT_CORS_ORIGIN_REGEX`, wildcard DNS and certificate | `.env` only | `subdomains.enabled=true` (needs `mode=platform`) |
+| Image moderation | `NOCT_MODERATION_SERVICE_URL` and `image_moderation` in `NOCT_MODULES` | `--profile platform` | `moderation.enabled=true` |
+| SMTP | `NOCT_SMTP_HOST` and related | `.env`; `--profile mail-relay` for `smtp-relay`; `--profile dev-mail` for MailHog | `smtp.host`, or `smtp.relay.enabled=true` |
+
+With compose, `--profile platform` alone starts the services but does not wire the backend to them: use `podman compose -f compose.yaml -f compose.platform.yaml --profile platform up -d --build` (see [INSTALL.md](INSTALL.md#2-podman-and-docker-compose)). The Helm chart refuses inconsistent combinations at render time (for example more than one backend replica with local storage or without NATS).
+
+### Existing database moved to solo
+
+`NOCT_MODULES` applies only at the first installation. After that, the module table in the database wins. If you point a solo install at a database that already ran as `platform`, `image_moderation` stays active until you turn it off in `/admin/modules`, whatever `NOCT_MODULES` says.
+
+### No NATS: MemoryBus limits
+
+In solo mode the message bus is in-memory. Jobs still waiting in the outbox survive a restart and are processed on the next start. A job already handed to the in-memory bus but not yet consumed is lost if the process stops, and is not redelivered. Such jobs are best-effort (emails, notifications); run NATS for at-least-once delivery. The window is small, and lost jobs are not retried. Behavior is covered by `bins/noct-api/tests/solo_membus.rs`. The inline worker and the in-process bus also mean the backend must run as a single replica.
+
+### Image moderation off
+
+With `image_moderation` inactive (the solo default), uploads are not classified and `is_sensitive` stays `false`. Authors mark images by hand: category chips in the media library, the content-warning dialog on the cover image (`cover_image_is_sensitive`, honored only in the same PATCH that sets a new `cover_image_url`) and on inline images (the `sensitive:<category>` image title). The public pages blur an image when it is flagged or has categories.
+
+Operator responsibility: automatic filtering is absent. Under GDPR and NIS2 the operator decides whether that is acceptable for the content hosted, and should state in the terms of use that authors must mark sensitive images. The `moderation_threshold` setting is hidden in the admin panel while the module is off. Post and comment moderation (reports, hide/show) are unaffected.
+
+### Collaborators in solo mode
+
+Registration stays closed after the first user, and invitations need an existing account. The Super Admin therefore creates the account, then invites it by username.
+
+1. Create the account, active at once (no email verification exists):
+   - Admin form: `/admin/utenti/nuovo` (nav entry "Collaboratori" in solo), or `POST /api/v1/admin/users` (Super Admin only, `201`, rate limit 20 per 5 minutes). The password is optional; when omitted the server generates one and returns it **once** in `generated_password`. The form keeps it in component state only. The response carries no `Cache-Control: no-store`.
+   - Shell: `printf '%s\n' "$PW" | noct-ctl user create --email bob@example.com --username bob`. It prints the id. With an empty stdin it generates a password and prints `generated_password=...` once.
+   - Hand the password over through a secure channel. There is no forced change at first login.
+2. Invite the user by username from the blog's collaborators tab, as `co_autore` or `mediatore`. The user accepts from the dashboard.
+3. SSO does not bypass the restriction: it never auto-provisions in solo. The only other account sources are the `NOCT_SUPER_ADMIN_*` bootstrap and the paths above.
+
+| Role | Can | Cannot |
+|---|---|---|
+| `co_autore` | Create, edit, submit, publish, unpublish and delete posts; media, pages, categories, notes, publications, newsletter, wiki outline | Change blog settings, manage members or invitations (owner only); moderate comments |
+| `mediatore` | Moderate comments (list pending, approve, reject, block authors, blocked list); see members-only blogs | Write to the blog |
+
+The table comes from reading `authz.rs` and the call sites of `can_write_blog`; only the invite and accept flow was run end to end. Roles are not displayed in the solo UI (the invitation sentence in the dashboard still names the role).
+
+### Password recovery without SMTP
+
+Without `NOCT_SMTP_HOST` no reset email leaves the server. The recovery path needs shell access to the deployment:
+
+```bash
+printf '%s\n' "$NEW_PASSWORD" | podman compose exec -T backend noct-ctl user reset-password --email admin@example.com
+printf '%s\n' "$NEW_PASSWORD" | kubectl -n notturni exec -i deploy/notturni-backend -- noct-ctl user reset-password --email admin@example.com
+```
+
+The command sets the password, deletes every session, bumps the credentials timestamp and writes the audit event `admin.user_password_reset` (actor `system`, no password in the payload). Unknown or inactive users get a generic error; SSO-only accounts are refused. Caveat: an access token issued in the same second as the reset stays valid until it expires (default 15 minutes, `NOCT_JWT_ACCESS_TOKEN_TTL_MINUTES`), because the comparison is in seconds.
+
+### Admin wizard and infrastructure panel
+
+- `/admin/impostazioni` shows a read-only infrastructure block (mode, subdomains, modules, bus `memory|nats`, cache `memory|redis`, inline worker, local storage public URL). The GUI never changes infrastructure.
+- `/admin/setup` (a banner for the Super Admin in solo points to it) is a first-run wizard. It asks for mode, storage, cache, SMTP, subdomains, moderation and NATS, and only **prints** a `.env` snippet and a Helm `values.yaml`, with placeholders instead of secrets. Nothing is applied. The dismissal of the banner is stored per browser.
+
 ## Hot configuration (not environment)
 
 Some values come from the environment only at the first installation. After that, they live in the database and can be changed without a restart:
@@ -169,6 +248,8 @@ registration mode, default language, audit retention (`/admin/config`), and acti
 Super Admin only). Changing the variable after the first installation has **no** effect on these.
 
 ## Minimal examples
+
+**Solo, lean** (the defaults of `.env.example`): `NOCT_DEPLOYMENT_MODE=solo`, `NOCT_SUBDOMAINS_ENABLED=false`, `NOCT_STORAGE_BACKEND=localstorage`, `NOCT_LOCAL_STORAGE_PUBLIC_URL=https://example.com/storage`, no Redis, NATS or moderation variables, `NOCT_MODULES` without `image_moderation`.
 
 **Local development, all in memory** (no external services):
 
@@ -190,5 +271,7 @@ truly external provider.
 - `NOCT_SECRETS_KEY`: keep it outside the cluster. It is the key for the TOTP secrets and the Git credentials (tokens and SSH keys). Losing it makes those values unreadable.
 - `NOCT_EXPERIMENTAL_FEATURES`: wiki and docs do not yet have the maturity of the rest of the platform. Enabling them is a deliberate choice of whoever installs the platform.
 - `NOCT_LINK_PREVIEW_ALLOW_PRIVATE` and `NOCT_GIT_SYNC_ALLOW_PRIVATE` are development switches: in production they must stay `false`.
+- Solo without SMTP: no email verification or reset codes exist; recovery is `noct-ctl user reset-password`, which is audited. Initial passwords of collaborators pass through the admin or the shell: treat them as secrets.
+- Solo without moderation: sensitive images are not filtered automatically (see [Image moderation off](#image-moderation-off)). Local storage and the database volume hold personal data: back them up and record the retention in the register of processing activities.
 - `NOCT_BACKUP_S3_*`: the backup contains personal data. The external provider must be recorded in the register of processing activities (preferably in the EU).
 - The refresh token travels in a cookie. Over https, keep `NOCT_SESSION_COOKIE_SECURE=true`.

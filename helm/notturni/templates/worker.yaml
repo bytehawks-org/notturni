@@ -1,0 +1,65 @@
+{{- /* Separate worker only with NATS; without it the API runs the consumers inline. */ -}}
+{{- if .Values.nats.enabled }}
+{{- $name := include "notturni.cname" (list . "worker") }}
+{{- $local := include "notturni.isLocal" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "notturni.componentLabels" (list . "worker") | nindent 4 }}
+spec:
+  replicas: {{ .Values.worker.replicaCount }}
+  {{- if $local }}
+  strategy:
+    type: Recreate
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "notturni.componentSelector" (list . "worker") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "notturni.componentLabels" (list . "worker") | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+        {{- if $local }}
+        fsGroup: 10001
+        {{- end }}
+      {{- include "notturni.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: worker
+          image: {{ include "notturni.image" (list . .Values.image.backend) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          command: ["noct-worker"]
+          envFrom:
+            - configMapRef: {name: {{ include "notturni.cname" (list . "config") }}}
+            - secretRef: {name: {{ include "notturni.secretName" . }}}
+          # migrations are applied by the API at start (advisory lock)
+          env:
+            - name: NOCT_AUTO_MIGRATE
+              value: "false"
+          {{- with .Values.worker.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if $local }}
+          volumeMounts:
+            - name: storage
+              mountPath: {{ .Values.storage.local.basePath }}
+          {{- end }}
+      {{- if $local }}
+      # same ReadWriteOnce volume as the backend: both pods must run on the same node
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: {{ default (include "notturni.cname" (list . "storage")) .Values.persistence.storage.existingClaim }}
+      {{- end }}
+{{- end }}

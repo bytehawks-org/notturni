@@ -1,0 +1,80 @@
+{{- if include "notturni.garage" . }}
+{{- $name := include "notturni.cname" (list . "s3-public") }}
+{{- $cfg := include "notturni.cname" (list . "config") }}
+{{- /* Read-only public proxy in front of Garage (public prefixes only). Template = k8s/s3-public.conf.template. */ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-config
+  labels:
+    {{- include "notturni.componentLabels" (list . "s3-public") | nindent 4 }}
+data:
+  default.conf.template: |
+    {{- .Files.Get "files/s3-public.conf.template" | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "notturni.componentLabels" (list . "s3-public") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "notturni.componentSelector" (list . "s3-public") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "notturni.componentLabels" (list . "s3-public") | nindent 8 }}
+      annotations:
+        checksum/s3-public-config: {{ .Files.Get "files/s3-public.conf.template" | sha256sum }}
+    spec:
+      {{- include "notturni.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: nginx
+          image: {{ include "notturni.image" (list . .Values.image.s3Public) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8080
+          env:
+            - name: NGINX_ENVSUBST_FILTER
+              value: "^NOCT_"
+            - name: NOCT_S3_BUCKET_AVATARS
+              valueFrom:
+                configMapKeyRef: {name: {{ $cfg }}, key: NOCT_S3_BUCKET_AVATARS}
+            - name: NOCT_S3_BUCKET_CONTENT
+              valueFrom:
+                configMapKeyRef: {name: {{ $cfg }}, key: NOCT_S3_BUCKET_CONTENT}
+            - name: NOCT_GARAGE_WEB_UPSTREAM
+              value: {{ printf "%s:3902" (include "notturni.cname" (list . "garage")) | quote }}
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8080}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8080}
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nginx/templates/default.conf.template
+              subPath: default.conf.template
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $name }}-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "notturni.componentLabels" (list . "s3-public") | nindent 4 }}
+spec:
+  selector:
+    {{- include "notturni.componentSelector" (list . "s3-public") | nindent 4 }}
+  ports:
+    - port: 8080
+      targetPort: 8080
+{{- end }}

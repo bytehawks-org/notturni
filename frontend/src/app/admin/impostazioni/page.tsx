@@ -3,6 +3,7 @@
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
+import { InfrastructurePanel } from "@/components/admin/InfrastructurePanel";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card, CardTitle, SectionLabel } from "@/components/ui/Card";
@@ -169,7 +170,7 @@ export default function PlatformSettingsPage() {
     authFetch((token) => api.admin.getConfig(token))
       .then((c) => {
         setConfig(c);
-        setDraft(c);
+        setDraft({ ...c, interests: c.interests ?? [] });
       })
       .catch((err) => setError(err instanceof ApiClientError ? err.message : tc("unexpectedError")));
   }, [user, authFetch, tc]);
@@ -209,7 +210,7 @@ export default function PlatformSettingsPage() {
         })
       );
       setConfig(updated);
-      setDraft(updated);
+      setDraft({ ...updated, interests: updated.interests ?? [] });
       notify(t("savedToast"));
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : tc("unexpectedError"));
@@ -330,20 +331,22 @@ export default function PlatformSettingsPage() {
           <span className="text-[13px] text-muted">{t("reservedHint")}</span>
         </div>
         <div className="grid gap-5 md:grid-cols-2">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="threshold">{t("threshold")}</Label>
-            <input
-              id="threshold"
-              type="range"
-              min={0.5}
-              max={0.99}
-              step={0.01}
-              value={draft.moderation_threshold}
-              onChange={(e) => patch({ moderation_threshold: Number(e.target.value) })}
-            />
-            <span className="font-mono text-xs text-muted">{draft.moderation_threshold.toFixed(2)}</span>
-            <span className="text-[13px] text-muted">{t("thresholdNote")}</span>
-          </div>
+          {config.infrastructure.modules.includes("image_moderation") && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="threshold">{t("threshold")}</Label>
+              <input
+                id="threshold"
+                type="range"
+                min={0.5}
+                max={0.99}
+                step={0.01}
+                value={draft.moderation_threshold}
+                onChange={(e) => patch({ moderation_threshold: Number(e.target.value) })}
+              />
+              <span className="font-mono text-xs text-muted">{draft.moderation_threshold.toFixed(2)}</span>
+              <span className="text-[13px] text-muted">{t("thresholdNote")}</span>
+            </div>
+          )}
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="max-blogs">{t("maxBlogs")}</Label>
             <Input id="max-blogs" type="number" min={1} max={100} value={draft.max_blogs_per_user} onChange={(e) => patch({ max_blogs_per_user: Number(e.target.value) })} className="w-24" />
@@ -543,18 +546,7 @@ export default function PlatformSettingsPage() {
         </div>
       </Card>
 
-      <Card className="flex flex-col gap-3">
-        <CardTitle>{t("infra")}</CardTitle>
-        <p className="text-[13px] text-muted">{t("infraNote")}</p>
-        <dl className="grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
-          {Object.entries(config.infrastructure).map(([k, v]) => (
-            <div key={k} className="flex items-center justify-between gap-3 border-b border-border py-1">
-              <dt className="font-mono text-xs text-muted">{k}</dt>
-              <dd className="text-foreground">{v === null ? "—" : typeof v === "boolean" ? (v ? "✓" : "✗") : String(v)}</dd>
-            </div>
-          ))}
-        </dl>
-      </Card>
+      <InfrastructurePanel infrastructure={config.infrastructure} />
     </div>
   );
 }

@@ -62,7 +62,9 @@
     "texts": "Testi del sito",
     "map": "Mappa",
     "legal": "Privacy e cookie",
-    "seo": "Identità e SEO"
+    "seo": "Identità e SEO",
+    "collaborators": "Collaboratori",
+    "setup": "Configurazione guidata"
   },
   "BlogNav": {
     "posts": "Post",
@@ -619,7 +621,7 @@
     "footerMarkdownPlaceholder": "Markdown libero…",
     "anonComments": "Commenti anonimi (consentiti a livello di piattaforma)",
     "infra": "Infrastruttura",
-    "infraNote": "Sola lettura: i valori vengono dall'ambiente NOCT_*.",
+    "infraNote": "L'infrastruttura si imposta con variabili d'ambiente NOCT_* o valori Helm, mai da questa pagina. Qui è mostrata in sola lettura. La procedura guidata genera i valori da usare.",
     "reg": {
       "open": "Aperta",
       "invite": "Su invito",
@@ -641,7 +643,24 @@
     "interestKeyPlaceholder": "chiave",
     "interestLocalePlaceholder": "lingua (it, en, de…)",
     "interestLabelPlaceholder": "etichetta",
-    "interestAdd": "Aggiungi interesse"
+    "interestAdd": "Aggiungi interesse",
+    "setupLink": "Apri la configurazione guidata",
+    "infraKeys": {
+      "deployment_mode": "Modalità di installazione",
+      "instance_fqdn": "FQDN dell'istanza",
+      "storage_backend": "Backend di storage",
+      "s3_endpoint_url": "Endpoint S3",
+      "moderation_service": "Servizio di moderazione",
+      "smtp": "SMTP",
+      "nats": "NATS",
+      "redis": "Redis",
+      "subdomains_enabled": "Sottodomini",
+      "worker_inline": "Worker integrato",
+      "local_storage_public_url": "URL pubblico dello storage locale",
+      "modules": "Moduli attivi",
+      "bus": "Bus di messaggi",
+      "cache": "Cache"
+    }
   },
   "Theme": {
     "light": "Chiaro",
@@ -1379,7 +1398,8 @@
     "noteTitle": "Modifica di @{username}",
     "resetPassword": "Reset password",
     "confirmResetPassword": "Inviare il codice di reset?",
-    "resetPasswordSent": "Email inviata"
+    "resetPasswordSent": "Email inviata",
+    "newUser": "Nuovo account"
   },
   "Tokens": {
     "title": "Token API",
@@ -1592,6 +1612,7 @@
     "warning": "Avviso sui contenuti",
     "none": "Nessuno",
     "autoModeration": "Moderazione automatica",
+    "manualMarking": "Le immagini sensibili sono segnalate manualmente dall'autore.",
     "flagged": "segnalata",
     "clean": "ok",
     "neverLeaves": "l'immagine non lascia mai il server",
@@ -2199,5 +2220,54 @@
     "sitemapSubdomain": "Singolo spazio (sottodominio)",
     "saved": "Impostazioni salvate",
     "saveHint": "Salva testi, verifiche e meta tag. Le immagini si caricano subito."
+  },
+  "AdminSetup": {
+    "title": "Configurazione guidata",
+    "subtitle": "Rispondi a poche domande e copia la configurazione generata.",
+    "notice": "Questa pagina genera solo testo. Nulla cambia finché non modifichi il deployment (.env o values Helm) e riavvii i servizi.",
+    "questions": "Domande",
+    "mode": "Modalità di installazione",
+    "storage": "Storage",
+    "host": "Host pubblico (ingress.host)",
+    "relayHost": "Host SMTP upstream (opzionale)",
+    "storageLocal": "Filesystem locale",
+    "cache": "Cache",
+    "cacheNone": "Nessuna (in memoria)",
+    "smtp": "Email (SMTP)",
+    "smtpNone": "Nessuna",
+    "smtpHost": "Host SMTP",
+    "smtpRelay": "Servizio relay",
+    "subdomains": "Blog su sottodomini",
+    "moderation": "Servizio di moderazione immagini",
+    "nats": "Bus di messaggi NATS",
+    "secretsNote": "Non vengono mai richiesti segreti: sostituisci ogni segnaposto <generate> con un tuo valore, oppure tienilo in un Secret esistente.",
+    "envTitle": ".env",
+    "helmTitle": "Helm values.yaml",
+    "copy": "Copia",
+    "copied": "Copiato",
+    "superAdminOnly": "Solo un Super Admin può aprire la configurazione guidata.",
+    "bannerText": "Primo avvio? La configurazione guidata genera .env e values Helm per la tua installazione.",
+    "bannerOpen": "Apri la procedura",
+    "bannerDismiss": "Nascondi"
+  },
+  "AdminUserCreate": {
+    "title": "Nuovo account collaboratore",
+    "subtitle": "Crea un account attivo senza registrazione e senza inviare email.",
+    "username": "Nome utente",
+    "email": "Email",
+    "password": "Password",
+    "passwordHint": "lascia vuoto per generarla",
+    "submit": "Crea account",
+    "createdTitle": "Account @{username} creato",
+    "passwordWarning": "Copia ora questa password: viene mostrata una sola volta e non è più recuperabile. Consegnala tramite un canale sicuro.",
+    "customPasswordSet": "L'account usa la password che hai inserito.",
+    "copy": "Copia",
+    "copied": "Copiato",
+    "createAnother": "Creane un altro",
+    "backToUsers": "Torna agli utenti",
+    "duplicate": "Nome utente o email già in uso.",
+    "invalid": "Dati non validi: {message}",
+    "inviteHelp": "Per dare all'account accesso a un blog: Dashboard > blog > Collaboratori, poi invitalo per nome utente.",
+    "superAdminOnly": "Solo un Super Admin può creare account."
   }
 }

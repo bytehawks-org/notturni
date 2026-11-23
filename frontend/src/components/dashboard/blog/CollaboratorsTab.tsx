@@ -8,6 +8,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Input, Label } from "@/components/ui/Field";
+import { useSiteFlags } from "@/components/SiteConfigProvider";
 import { Pill } from "@/components/ui/Pill";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -27,6 +28,8 @@ export function CollaboratorsTab({ blogSlug }: { blogSlug: string }) {
   const t = useTranslations("CollaboratorsTab");
   const ta = useTranslations("BlogAdmin");
   const tc = useTranslations("Common");
+  // In solo mode the role pills/labels are hidden; the role selectors stay (both roles assignable).
+  const { isSolo } = useSiteFlags();
   const [members, setMembers] = useState<BlogMember[] | null>(null);
   const [invitations, setInvitations] = useState<BlogInvitation[]>([]);
   const [username, setUsername] = useState("");
@@ -128,7 +131,7 @@ export function CollaboratorsTab({ blogSlug }: { blogSlug: string }) {
                   </div>
                 </div>
                 <span className="flex items-center gap-2.5">
-                  <Pill tone="primary">{ta(`roles.${roleMessageKey(m.role)}`)}</Pill>
+                  {!isSolo && <Pill tone="primary">{ta(`roles.${roleMessageKey(m.role)}`)}</Pill>}
                   <select
                     value={m.role}
                     onChange={(e) => handleChangeRole(m.user_id, e.target.value as BlogRole)}
@@ -192,7 +195,7 @@ export function CollaboratorsTab({ blogSlug }: { blogSlug: string }) {
             {pending.map((inv) => (
               <div key={inv.id} className="flex items-center justify-between border-b border-border px-4 py-2.5 text-sm last:border-0">
                 <span className="text-foreground">
-                  @{inv.invited_username} — {ta(`roles.${roleMessageKey(inv.role)}`)}{" "}
+                  @{inv.invited_username}{isSolo ? "" : ` — ${ta(`roles.${roleMessageKey(inv.role)}`)}`}{" "}
                   <span className="text-muted">{t("pending")}</span>
                 </span>
                 <button

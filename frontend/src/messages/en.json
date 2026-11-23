@@ -62,7 +62,9 @@
     "texts": "Site texts",
     "map": "Map",
     "legal": "Privacy and cookies",
-    "seo": "Identity and SEO"
+    "seo": "Identity and SEO",
+    "collaborators": "Collaborators",
+    "setup": "Setup wizard"
   },
   "BlogNav": {
     "posts": "Posts",
@@ -619,7 +621,7 @@
     "footerMarkdownPlaceholder": "Free Markdown…",
     "anonComments": "Anonymous comments (platform-wide allow)",
     "infra": "Infrastructure",
-    "infraNote": "Read-only here: values come from NOCT_* environment.",
+    "infraNote": "Infrastructure is set through NOCT_* environment variables or Helm values, never from this page. It is shown read-only here. The setup wizard generates the values to use.",
     "reg": {
       "open": "Open",
       "invite": "Invite",
@@ -641,7 +643,24 @@
     "interestKeyPlaceholder": "key",
     "interestLocalePlaceholder": "language (it, en, de…)",
     "interestLabelPlaceholder": "label",
-    "interestAdd": "Add interest"
+    "interestAdd": "Add interest",
+    "setupLink": "Open the setup wizard",
+    "infraKeys": {
+      "deployment_mode": "Deployment mode",
+      "instance_fqdn": "Instance FQDN",
+      "storage_backend": "Storage backend",
+      "s3_endpoint_url": "S3 endpoint",
+      "moderation_service": "Moderation service",
+      "smtp": "SMTP",
+      "nats": "NATS",
+      "redis": "Redis",
+      "subdomains_enabled": "Subdomains",
+      "worker_inline": "Inline worker",
+      "local_storage_public_url": "Local storage public URL",
+      "modules": "Active modules",
+      "bus": "Message bus",
+      "cache": "Cache"
+    }
   },
   "Theme": {
     "light": "Light",
@@ -1379,7 +1398,8 @@
     "noteTitle": "Change for @{username}",
     "resetPassword": "Reset password",
     "confirmResetPassword": "Send reset code?",
-    "resetPasswordSent": "Email sent"
+    "resetPasswordSent": "Email sent",
+    "newUser": "New account"
   },
   "Tokens": {
     "title": "API tokens",
@@ -1592,6 +1612,7 @@
     "warning": "Content warning",
     "none": "None",
     "autoModeration": "Auto-moderation",
+    "manualMarking": "Images are marked as sensitive manually by the author.",
     "flagged": "flagged",
     "clean": "clean",
     "neverLeaves": "the image never leaves the server",
@@ -2199,5 +2220,54 @@
     "sitemapSubdomain": "Single space (subdomain)",
     "saved": "Settings saved",
     "saveHint": "Saves texts, verification and meta tags. Images upload immediately."
+  },
+  "AdminSetup": {
+    "title": "Setup wizard",
+    "subtitle": "Answer a few questions and copy the generated configuration.",
+    "notice": "This page only generates text. Nothing changes until you edit your deployment (.env or Helm values) and restart the services.",
+    "questions": "Questions",
+    "mode": "Deployment mode",
+    "storage": "Storage",
+    "host": "Public host (ingress.host)",
+    "relayHost": "Upstream SMTP host (optional)",
+    "storageLocal": "Local filesystem",
+    "cache": "Cache",
+    "cacheNone": "None (in-memory)",
+    "smtp": "Email (SMTP)",
+    "smtpNone": "None",
+    "smtpHost": "SMTP host",
+    "smtpRelay": "Relay service",
+    "subdomains": "Blogs on subdomains",
+    "moderation": "Image moderation service",
+    "nats": "NATS message bus",
+    "secretsNote": "Secrets are never requested: replace every <generate> placeholder with your own value, or keep it in an existing Secret.",
+    "envTitle": ".env",
+    "helmTitle": "Helm values.yaml",
+    "copy": "Copy",
+    "copied": "Copied",
+    "superAdminOnly": "Only a Super Admin can open the setup wizard.",
+    "bannerText": "First run? The setup wizard generates the .env and Helm values for your install.",
+    "bannerOpen": "Open the wizard",
+    "bannerDismiss": "Dismiss"
+  },
+  "AdminUserCreate": {
+    "title": "New collaborator account",
+    "subtitle": "Creates an active account without registration and without sending any email.",
+    "username": "Username",
+    "email": "Email",
+    "password": "Password",
+    "passwordHint": "leave empty to generate one",
+    "submit": "Create account",
+    "createdTitle": "Account @{username} created",
+    "passwordWarning": "Copy this password now: it is shown only once and cannot be retrieved later. Hand it over through a secure channel.",
+    "customPasswordSet": "The account uses the password you entered.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "createAnother": "Create another",
+    "backToUsers": "Back to users",
+    "duplicate": "Username or email already in use.",
+    "invalid": "Invalid data: {message}",
+    "inviteHelp": "To give the account access to a blog: Dashboard > blog > Collaborators, then invite it by username.",
+    "superAdminOnly": "Only a Super Admin can create accounts."
   }
 }

@@ -1,6 +1,6 @@
 # API reference — endpoints by module
 
-List of all endpoints exposed by the backend, derived from the `api.toml` manifests of each module (236 routes in 27 modules).
+List of all endpoints exposed by the backend, derived from the `api.toml` manifests of each module (237 routes in 27 modules).
 This page complements [API.md](API.md), which describes payloads, domain rules and examples of the main flows. Here the goal is to
 know **which routes exist, with which verb, who can access them, and why they exist**. The complete machine-readable schema
 (request/response types) is served by `GET /api/v1/openapi.json` of the running backend.
@@ -47,6 +47,7 @@ Platform administration: overview, users, blogs, posts, audit log and settings. 
 |---|---|---|---|---|
 | GET | `/admin/overview` | role: super admin, administrator, moderator | KPIs, open queues, today's audit and service health |  |
 | GET | `/admin/users` | role: super admin, administrator | Users with blog count and last login (`q` on username/email) |  |
+| POST | `/admin/users` | role: super admin | Creates an active account (role `utente`) without registration or email; the password is chosen by the admin or generated and shown once | 201; rate limit 20/5 min per user |
 | PATCH | `/admin/users/{user_id}` | role: super admin, administrator | Role and activation (note required; administration roles only by the Super Admin) |  |
 | POST | `/admin/users/{user_id}/reset-password` | role: super admin, administrator | Starts for the user the same email cycle as forgotten password | 202; rate limit 20/5 min per user |
 | GET | `/admin/blogs` | role: super admin, administrator | All blogs with counters; filters `q`, `visibility`, `state` (active\|suspended\|paused\|deleted\|reported) |  |

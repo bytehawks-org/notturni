@@ -1,0 +1,266 @@
+# Notturni Helm chart values.
+#
+# Default profile: "solo" = PostgreSQL + backend (1 replica, local-storage PVC) + frontend.
+# No Redis, NATS, worker, Garage, s3-public, moderation or SMTP relay is deployed.
+# The "platform" profile is enabled by switching the flags below (see ci/platform-values.yaml).
+#
+# Secrets never live in this file. Use `secrets.existingSecret` (recommended) or let the chart
+# generate the mandatory ones once (kept across upgrades with `lookup`).
+
+# -- Deployment mode: solo | platform. Sets NOCT_DEPLOYMENT_MODE for backend, worker and frontend.
+mode: solo
+
+nameOverride: ""
+fullnameOverride: ""
+
+# ---- site identity -----------------------------------------------------------------------------
+site:
+  # Display name (NOCT_SITE_NAME) and slug (NOCT_SITE_SLUG) of the instance.
+  name: Notturni
+  slug: notturni
+  # NOCT_EXPERIMENTAL_FEATURES: comma separated `wiki`, `docs`. Empty = blogs only.
+  experimentalFeatures: ""
+  # NOCT_TURNSTILE_SITE_KEY (public). The secret key goes in the Secret (NOCT_TURNSTILE_SECRET_KEY).
+  turnstileSiteKey: ""
+  # NOCT_TRUSTED_PROXIES: number of trusted reverse proxies in front of the API (the Ingress controller).
+  trustedProxies: 1
+
+# First Super Admin, created at backend start when the three values are present (idempotent).
+# The password is NOT a value: it is generated in the chart Secret (key NOCT_SUPER_ADMIN_PASSWORD) or read
+# from `secrets.existingSecret`. Leave `email` empty to skip it (solo: use the first-run wizard instead).
+admin:
+  username: superadmin
+  email: ""
+
+# ---- images (pinned; arch-agnostic multi-arch tags) -------------------------------------------
+image:
+  pullPolicy: IfNotPresent
+  imagePullSecrets: []
+  backend:
+    repository: ghcr.io/bytehawks-org/notturni-backend
+    tag: ""            # empty = Chart appVersion
+  frontend:
+    repository: ghcr.io/bytehawks-org/notturni-frontend
+    tag: ""
+  moderation:
+    repository: ghcr.io/bytehawks-org/notturni-moderation
+    tag: ""
+  postgres:
+    repository: docker.io/library/postgres
+    tag: 16-alpine
+  redis:
+    repository: docker.io/library/redis
+    tag: 7-alpine
+  nats:
+    repository: docker.io/library/nats
+    tag: 2-alpine
+  garage:
+    repository: docker.io/dxflrs/garage
+    tag: v2.4.1
+  s3Public:
+    repository: docker.io/nginxinc/nginx-unprivileged
+    tag: 1.28-alpine
+  smtpRelay:
+    repository: docker.io/boky/postfix
+    tag: v4.4.0
+
+# ---- ingress (Traefik, as in k8s/) -------------------------------------------------------------
+ingress:
+  enabled: true
+  className: traefik
+  # Public host (required). It becomes NOCT_INSTANCE_FQDN and the base of the public URLs.
+  host: ""
+  annotations: {}
+  tls:
+    enabled: true
+    # Secret with the certificate. Default: <release>-tls.
+    secretName: ""
+    # cert-manager Certificate for the host (and `*.host` when subdomains are on).
+    certManager:
+      enabled: false
+      issuerRef:
+        name: letsencrypt-prod
+        kind: ClusterIssuer
+      # Create a namespaced Issuer with a Cloudflare DNS-01 solver (needed for the wildcard).
+      # The API token is read from the Secret key NOCT_CLOUDFLARE_API_TOKEN. When true, issuerRef is ignored.
+      createIssuer:
+        enabled: false
+        email: ""
+        server: https://acme-v02.api.letsencrypt.org/directory
+  traefik:
+    # Traefik Middleware (HSTS, nosniff, frame options) from k8s/middleware-security-headers.yaml.
+    # Needs the Traefik CRDs (traefik.io/v1alpha1, included in K3s). Set false on other controllers.
+    securityHeaders: true
+
+# ---- per-blog subdomains (platform only) -------------------------------------------------------
+subdomains:
+  # true needs mode=platform. Adds the wildcard IngressRoute and sets the CORS regex, cookie domain
+  # and NOCT_SUBDOMAINS_ENABLED=true. Needs a wildcard certificate (DNS-01).
+  enabled: false
+
+# ---- storage -----------------------------------------------------------------------------------
+storage:
+  # local = filesystem PVC served by the backend at /storage (single replica); s3 = S3-compatible.
+  type: local
+  local:
+    # NOCT_LOCAL_STORAGE_PUBLIC_URL. Empty = <scheme>://<ingress.host>/storage.
+    publicUrl: ""
+    # Mount path inside the backend container (NOCT_LOCAL_STORAGE_BASE_PATH).
+    basePath: /data/storage
+  s3:
+    # External S3 / R2 endpoint (used when garage.enabled=false). Required for type=s3 without Garage.
+    endpointUrl: ""
+    region: ""
+    # Public base URL of the objects (NOCT_S3_PUBLIC_URL). Required for external S3.
+    # With Garage the default is https://<garage.publicHost>.
+    publicUrl: ""
+    buckets:
+      avatars: avatars
+      content: notturni-content
+      audit: notturni-audit
+    # Access keys: Secret keys NOCT_S3_ACCESS_KEY_ID / NOCT_S3_SECRET_ACCESS_KEY. With both absent the AWS
+    # default credential chain (IAM role) is used. With Garage the chart generates them.
+    garage:
+      # Deploy Garage (single node) + the public read proxy (s3-public) + the bootstrap initContainer.
+      enabled: false
+      # Host of the public read proxy. Empty = s3.<ingress.host>.
+      publicHost: ""
+
+# Infrastructure backup of the module `backup` towards an EXTERNAL S3 (credentials in the Secret:
+# NOCT_BACKUP_S3_ACCESS_KEY_ID / NOCT_BACKUP_S3_SECRET_ACCESS_KEY). Empty = job inactive.
+backup:
+  s3:
+    endpointUrl: ""
+    region: ""
+    bucket: ""
+
+# ---- optional services -------------------------------------------------------------------------
+redis:
+  # false = in-memory cache, no NOCT_REDIS_* variables at all.
+  enabled: false
+
+nats:
+  # true = NATS JetStream bus + separate `worker` Deployment (NOCT_WORKER_INLINE derived to false).
+  # false = in-process bus and inline worker (single backend replica).
+  enabled: false
+
+moderation:
+  # true = deploy the image moderation service, set NOCT_MODERATION_SERVICE_URL and keep `image_moderation`
+  # in the module list. false = the module is removed from the list (no automatic filtering of sensitive images).
+  enabled: false
+
+smtp:
+  # External SMTP server. Empty host and relay.enabled=false = no email is sent.
+  # Credentials: Secret keys NOCT_SMTP_USER / NOCT_SMTP_PASSWORD.
+  host: ""
+  port: 587
+  useTls: true
+  fromEmail: ""
+  relay:
+    # Deploy the postfix relay and point NOCT_SMTP_HOST to it (port 587, no TLS inside the cluster).
+    enabled: false
+    # Upstream smarthost (NOCT_SMTP_RELAY_HOST). Empty = deliver directly.
+    # Credentials: Secret keys NOCT_SMTP_RELAY_USERNAME / NOCT_SMTP_RELAY_PASSWORD.
+    host: ""
+
+# Active modules at the FIRST start (NOCT_MODULES); afterwards the database table wins.
+# Solo list = default set without `image_moderation`. An empty list omits NOCT_MODULES (backend default set).
+modules:
+  - link_preview
+  - gdpr
+  - auth_mfa
+  - auth_sso
+  - pages
+  - backup
+  - comments
+  - discovery
+  - fragments
+  - git_sync
+  - graph
+  - interests
+  - legal
+  - newsletter
+  - notes
+  - publications
+  - reports
+  - taxonomy
+  - wiki
+  - branding
+  - custom_domains
+
+# ---- persistence (DB and storage PVCs hold personal data: back them up) ------------------------
+persistence:
+  # Add `helm.sh/resource-policy: keep` to the PVCs so `helm uninstall` does not delete user data.
+  keepOnUninstall: true
+  postgres:
+    size: 5Gi
+    storageClass: ""   # empty = cluster default; K3s: local-path
+    existingClaim: ""
+    accessMode: ReadWriteOnce
+  storage:
+    size: 10Gi
+    storageClass: ""
+    existingClaim: ""
+    accessMode: ReadWriteOnce
+  nats:
+    size: 2Gi
+    storageClass: ""
+  garage:
+    metaSize: 1Gi
+    dataSize: 10Gi
+    storageClass: ""
+
+# External PostgreSQL: when `host` is set the chart does not deploy PostgreSQL.
+# The password is read from the Secret key NOCT_POSTGRES_PASSWORD.
+postgres:
+  external:
+    host: ""
+    port: 5432
+  user: admin
+  database: notturni
+
+# ---- secrets -----------------------------------------------------------------------------------
+secrets:
+  # Name of a user-managed Secret (recommended). Mandatory keys: NOCT_POSTGRES_PASSWORD, NOCT_JWT_SECRET
+  # (>= 32 random bytes), NOCT_REVALIDATE_SECRET. Optional keys: NOCT_SUPER_ADMIN_PASSWORD, NOCT_SMTP_USER,
+  # NOCT_SMTP_PASSWORD, NOCT_S3_ACCESS_KEY_ID, NOCT_S3_SECRET_ACCESS_KEY, NOCT_GARAGE_RPC_SECRET,
+  # NOCT_GARAGE_ADMIN_TOKEN, NOCT_BACKUP_S3_*, NOCT_SMTP_RELAY_USERNAME/_PASSWORD, NOCT_OAUTH_*,
+  # NOCT_TURNSTILE_SECRET_KEY, NOCT_CLOUDFLARE_API_TOKEN.
+  # Empty = the chart creates `<release>-secrets`: it generates the mandatory keys on first install and
+  # keeps them on upgrade (`lookup`). With GitOps tools that only run `helm template` (no cluster lookup)
+  # the values would change at every render: use existingSecret there.
+  existingSecret: ""
+  # Extra keys added to the chart-created Secret (ignored with existingSecret). Pass them with
+  # `--set-file` or a values file kept out of git. Never commit real values.
+  extra: {}
+
+# ---- workloads ---------------------------------------------------------------------------------
+backend:
+  # solo / local storage: must be 1 (the chart refuses more). RWO volume + in-process bus.
+  replicaCount: 1
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  extraEnv: []
+
+frontend:
+  replicaCount: 1
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  extraEnv: []
+
+worker:
+  # deployed only when nats.enabled=true
+  replicaCount: 1
+  resources: {}
+
+postgresPod:
+  resources: {}
+
+# Default-deny ingress + allow same release + allow the ingress controller (needs a CNI that enforces them).
+networkPolicy:
+  enabled: false
+  ingressControllerNamespace: kube-system

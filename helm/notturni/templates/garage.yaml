@@ -1,0 +1,138 @@
+{{- if include "notturni.garage" . }}
+{{- $name := include "notturni.cname" (list . "garage") }}
+{{- $secret := include "notturni.secretName" . }}
+{{- /* Garage single node. Layout, key and buckets are created by the backend initContainer `garage-bootstrap`.
+       garage.toml is the same file as k8s/garage.toml (files/). */ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-config
+  labels:
+    {{- include "notturni.componentLabels" (list . "garage") | nindent 4 }}
+data:
+  garage.toml: |
+    {{- .Files.Get "files/garage.toml" | nindent 4 }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}-meta
+  labels:
+    {{- include "notturni.componentLabels" (list . "garage") | nindent 4 }}
+  {{- if .Values.persistence.keepOnUninstall }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- with .Values.persistence.garage.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.garage.metaSize | quote }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}-data
+  labels:
+    {{- include "notturni.componentLabels" (list . "garage") | nindent 4 }}
+  {{- if .Values.persistence.keepOnUninstall }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- with .Values.persistence.garage.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.garage.dataSize | quote }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "notturni.componentLabels" (list . "garage") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "notturni.componentSelector" (list . "garage") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "notturni.componentLabels" (list . "garage") | nindent 8 }}
+      annotations:
+        checksum/garage-config: {{ .Files.Get "files/garage.toml" | sha256sum }}
+    spec:
+      {{- include "notturni.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: garage
+          image: {{ include "notturni.image" (list . .Values.image.garage) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 3900
+            - containerPort: 3902
+            - containerPort: 3903
+          env:
+            - name: GARAGE_RPC_SECRET
+              valueFrom:
+                secretKeyRef: {name: {{ $secret }}, key: NOCT_GARAGE_RPC_SECRET}
+            - name: GARAGE_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef: {name: {{ $secret }}, key: NOCT_GARAGE_ADMIN_TOKEN}
+          # tcpSocket, not httpGet /health: that endpoint answers 503 until the layout is assigned
+          readinessProbe:
+            tcpSocket: {port: 3903}
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket: {port: 3900}
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          volumeMounts:
+            - name: config
+              mountPath: /etc/garage.toml
+              subPath: garage.toml
+              readOnly: true
+            - name: meta
+              mountPath: /var/lib/garage/meta
+            - name: data
+              mountPath: /var/lib/garage/data
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $name }}-config
+        - name: meta
+          persistentVolumeClaim:
+            claimName: {{ $name }}-meta
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ $name }}-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "notturni.componentLabels" (list . "garage") | nindent 4 }}
+spec:
+  selector:
+    {{- include "notturni.componentSelector" (list . "garage") | nindent 4 }}
+  ports:
+    - name: s3
+      port: 3900
+      targetPort: 3900
+    - name: web
+      port: 3902
+      targetPort: 3902
+    # admin API: in-cluster only, protected by NOCT_GARAGE_ADMIN_TOKEN, never exposed by a route
+    - name: admin
+      port: 3903
+      targetPort: 3903
+{{- end }}

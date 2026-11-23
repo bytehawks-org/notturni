@@ -1,0 +1,6 @@
+# Solo profile: chart defaults plus the mandatory host. Used by helm lint/template in CI and tests.
+mode: solo
+ingress:
+  host: example.com
+admin:
+  email: admin@example.com

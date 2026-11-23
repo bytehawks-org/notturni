@@ -1,12 +1,15 @@
-# Env comune ai servizi che parlano con lo storage S3 (rete interna di compose:
-# i servizi si raggiungono per nome, non per localhost). Sovrascrive i valori di
-# .env pensati per un backend avviato fuori da compose.
-x-s3-env: &s3-env
-  NOCT_S3_ENDPOINT_URL: http://garage:3900
-  NOCT_S3_REGION: garage
-  NOCT_S3_PUBLIC_ACCESS: website
-  # URL pubblico: il browser risolve solo la porta esposta da s3-public
-  NOCT_S3_PUBLIC_URL: http://localhost:9000
+# Stack locale di sviluppo/prova (podman-compose 1.6).
+#   podman compose up -d --build
+#       modalità "solo" minima: postgres, backend (worker inline, storage su filesystem in un volume nominato),
+#       frontend. Nessun Redis, NATS, S3, moderazione. I valori vengono dal .env (vedi .env.example).
+#   podman compose -f compose.yaml -f compose.platform.yaml --profile platform up -d --build
+#       stack completo "platform": aggiunge redis, nats, garage (+ garage-bootstrap), s3-public, moderation e il
+#       worker separato, e imposta backend/worker su quei servizi (compose.platform.yaml). Servono nel .env le
+#       chiavi NOCT_S3_* e NOCT_GARAGE_* (blocchi commentati di .env.example).
+#   --profile mail-relay: smtp-relay (postfix).   --profile dev-mail: mailhog (con NOCT_SMTP_HOST=mailhog).
+# Perché due file: podman-compose 1.6 ignora i profili inattivi ma fallisce (KeyError) su un `depends_on` con
+# condition verso un servizio di un profilo inattivo, anche con `required: false`. Le dipendenze verso i
+# servizi platform stanno quindi nell'override. I `${VAR:-}` sotto `environment` sono vuoti in solo.
 
 services:
   postgres:
@@ -27,6 +30,7 @@ services:
       retries: 5
 
   redis:
+    profiles: ["platform"]
     image: docker.io/library/redis:7-alpine
     restart: on-failure
     ports:
@@ -34,6 +38,7 @@ services:
 
   # Bus di messaggi (JetStream): eventi e job dei moduli, con consegna garantita e dead letter.
   nats:
+    profiles: ["platform"]
     image: docker.io/library/nats:2-alpine
     restart: on-failure
     command: ["-js", "-sd", "/data", "-m", "8222"]
@@ -53,6 +58,7 @@ services:
   # su :8025 o dalla sua API (GET /api/v2/messages). Non usato in produzione,
   # dove NOCT_SMTP_HOST punta a un provider SMTP/transazionale reale.
   mailhog:
+    profiles: ["dev-mail"]
     image: docker.io/mailhog/mailhog:latest
     restart: on-failure
     ports:
@@ -70,6 +76,7 @@ services:
   # usarlo, impostare NOCT_SMTP_HOST=smtp-relay/NOCT_SMTP_PORT=587 lì sotto
   # (porta submission: l'immagine non espone la 25 di proposito).
   smtp-relay:
+    profiles: ["mail-relay"]
     image: docker.io/boky/postfix:latest
     restart: on-failure
     environment:
@@ -85,6 +92,7 @@ services:
   # binario /garage, niente shell). Appena avviato non è utilizzabile (nessun
   # layout, nessuna chiave): ci pensa garage-bootstrap qui sotto.
   garage:
+    profiles: ["platform"]
     image: docker.io/dxflrs/garage:v2.4.1
     restart: on-failure
     environment:
@@ -105,6 +113,7 @@ services:
   # alias globale. Va rieseguito solo se cambiano bucket/chiave:
   # `podman compose up -d garage-bootstrap`.
   garage-bootstrap:
+    profiles: ["platform"]
     build:
       context: .
     restart: "no"
@@ -124,6 +133,7 @@ services:
   # URL path-style `{NOCT_S3_PUBLIC_URL}/{bucket}/{key}` nel web endpoint di
   # Garage ed espone solo i prefissi pubblici — vedi s3-public/default.conf.template.
   s3-public:
+    profiles: ["platform"]
     image: docker.io/nginxinc/nginx-unprivileged:1.28-alpine
     restart: on-failure
     environment:
@@ -146,6 +156,7 @@ services:
   # per il backend (fail open, vedi modules/image_moderation): un
   # depends_on con service_started basta, non service_healthy.
   moderation:
+    profiles: ["platform"]
     build:
       context: ./moderation
     restart: on-failure
@@ -168,64 +179,61 @@ services:
     environment: &backend-env
       # in rete di compose i servizi si raggiungono per nome, non per localhost
       NOCT_POSTGRES_HOST: postgres
-      NOCT_REDIS_HOST: redis
-      NOCT_NATS_URL: nats://nats:4222
-      <<: *s3-env
-      NOCT_MODERATION_SERVICE_URL: http://moderation:8100
+      NOCT_REDIS_HOST: ${NOCT_REDIS_HOST:-}
+      NOCT_NATS_URL: ${NOCT_NATS_URL:-}
+      NOCT_MODERATION_SERVICE_URL: ${NOCT_MODERATION_SERVICE_URL:-}
       # invalidazione on-demand della cache del frontend dopo publish/update di contenuti pubblici
       # (il frontend si raggiunge per nome servizio nella rete di compose)
       NOCT_FRONTEND_REVALIDATE_URL: http://frontend:3000/api/revalidate
       NOCT_REVALIDATE_SECRET: ${NOCT_REVALIDATE_SECRET:-dev-revalidate-secret}
-      # MailHog in locale: nessuna autenticazione, nessun TLS. In produzione questi tre vengono
-      # sovrascritti da un provider SMTP/transazionale reale o dal servizio smtp-relay di questo
-      # stesso file (NOCT_SMTP_HOST=smtp-relay, NOCT_SMTP_PORT=587), non da .env.
-      NOCT_SMTP_HOST: mailhog
-      NOCT_SMTP_PORT: "1025"
-      NOCT_SMTP_USE_TLS: "false"
+      # SMTP dal .env (vuoto = nessuna email). Con il profilo dev-mail: NOCT_SMTP_HOST=mailhog,
+      # NOCT_SMTP_PORT=1025, NOCT_SMTP_USE_TLS=false. Con smtp-relay: host smtp-relay, porta 587.
+      NOCT_SMTP_HOST: ${NOCT_SMTP_HOST:-}
+      NOCT_SMTP_PORT: ${NOCT_SMTP_PORT:-587}
+      NOCT_SMTP_USE_TLS: ${NOCT_SMTP_USE_TLS:-true}
+      # modalità (default solo) e storage su filesystem: volume nominato; il browser raggiunge /storage
+      # sulla porta 8000 pubblicata
+      NOCT_DEPLOYMENT_MODE: ${NOCT_DEPLOYMENT_MODE:-solo}
+      NOCT_SUBDOMAINS_ENABLED: ${NOCT_SUBDOMAINS_ENABLED:-false}
+      NOCT_LOCAL_STORAGE_BASE_PATH: /data/storage
+      NOCT_LOCAL_STORAGE_PUBLIC_URL: ${NOCT_LOCAL_STORAGE_PUBLIC_URL:-http://localhost:8000/storage}
       # destinazione del backup infrastrutturale: qui lo stesso Garage su un bucket dedicato, solo per
       # avere qualcosa di verificabile in sviluppo. In produzione NOCT_BACKUP_S3_* punta a un
       # provider S3 realmente esterno e separato.
-      NOCT_BACKUP_S3_ENDPOINT_URL: http://garage:3900
-      NOCT_BACKUP_S3_REGION: garage
-      NOCT_BACKUP_S3_ACCESS_KEY_ID: ${NOCT_S3_ACCESS_KEY_ID}
-      NOCT_BACKUP_S3_SECRET_ACCESS_KEY: ${NOCT_S3_SECRET_ACCESS_KEY}
-      NOCT_BACKUP_S3_BUCKET: notturni-backups
+      # (vuoti in solo: il backup resta disattivato; con garage impostarli nel .env, es. endpoint
+      # http://garage:3900, regione garage, bucket notturni-backups)
+      NOCT_BACKUP_S3_ENDPOINT_URL: ${NOCT_BACKUP_S3_ENDPOINT_URL:-}
+      NOCT_BACKUP_S3_REGION: ${NOCT_BACKUP_S3_REGION:-}
+      NOCT_BACKUP_S3_ACCESS_KEY_ID: ${NOCT_BACKUP_S3_ACCESS_KEY_ID:-}
+      NOCT_BACKUP_S3_SECRET_ACCESS_KEY: ${NOCT_BACKUP_S3_SECRET_ACCESS_KEY:-}
+      NOCT_BACKUP_S3_BUCKET: ${NOCT_BACKUP_S3_BUCKET:-}
     ports:
       - "8000:8000"
+    volumes:
+      - storage_data:/data/storage:U
     depends_on:
       postgres:
         condition: service_healthy
-      nats:
-        condition: service_healthy
-      redis:
-        condition: service_started
-      garage-bootstrap:
-        condition: service_completed_successfully
-      moderation:
-        condition: service_started
+      # le dipendenze da nats, redis, garage-bootstrap, moderation sono in compose.platform.yaml
 
   # Elaborazione in background (`noct-worker`): relay dell'outbox, pianificatore dei job periodici
   # (campagne newsletter, manutenzione dell'audit, pulizia dei blog, backup) e consumer di eventi e
   # job di tutti i moduli attivi. Sostituisce i cinque worker Python; se ne possono avviare più
   # repliche (`--scale worker=3`): NATS distribuisce i job e lo scheduler è a elezione atomica.
   worker:
+    profiles: ["platform"]
     build:
       context: .
     restart: on-failure
     env_file: .env
     environment: *backend-env
     command: ["noct-worker"]
+    volumes:
+      - storage_data:/data/storage:U
     depends_on:
       postgres:
         condition: service_healthy
-      nats:
-        condition: service_healthy
-      redis:
-        condition: service_started
-      garage-bootstrap:
-        condition: service_completed_successfully
-      mailhog:
-        condition: service_started
+      # le altre dipendenze (nats, redis, garage-bootstrap) sono in compose.platform.yaml
 
   frontend:
     build:
@@ -244,8 +252,13 @@ services:
       # Variabile normale, non build-arg: letta a runtime, non inglobata nel
       # bundle — non richiede un rebuild dell'immagine per essere cambiata.
       NOCT_BACKEND_INTERNAL_URL: http://backend:8000
-      # origine degli oggetti su Garage (avatar, media): serve alla CSP `img-src` in sviluppo, dove è http
-      NOCT_S3_PUBLIC_URL: http://localhost:9000
+      # modalità e sottodomini, letti a runtime (vedi frontend/src/lib/site.ts)
+      NOCT_DEPLOYMENT_MODE: ${NOCT_DEPLOYMENT_MODE:-solo}
+      NOCT_SUBDOMAINS_ENABLED: ${NOCT_SUBDOMAINS_ENABLED:-false}
+      # origine degli oggetti (avatar, media): serve alla CSP `img-src` in sviluppo, dove è http.
+      # Storage su filesystem: /storage del backend; con Garage (platform): s3-public su :9000.
+      NOCT_LOCAL_STORAGE_PUBLIC_URL: ${NOCT_LOCAL_STORAGE_PUBLIC_URL:-http://localhost:8000/storage}
+      NOCT_S3_PUBLIC_URL: ${NOCT_S3_PUBLIC_URL:-}
       # secret condiviso con il backend per la route /api/revalidate: deve
       # coincidere con NOCT_REVALIDATE_SECRET del servizio backend. Se assente
       # da entrambi, la cache si affida solo alla rivalidazione a tempo.
@@ -258,6 +271,7 @@ services:
 
 volumes:
   postgres_data:
+  storage_data:
   nats_data:
   garage_meta:
   garage_data:

@@ -1,5 +1,7 @@
 # Notturni – Kubernetes manifests
 
+These Kustomize manifests are the reference for the full **platform** deployment (Redis, NATS, worker, Garage, moderation, subdomains) and are unchanged in structure. A Helm chart with a lean **solo** default and the same components behind values is in [`helm/notturni/`](../helm/notturni/README.md). Use one or the other for an installation, not both in the same namespace. `configmap.yaml` now sets `NOCT_DEPLOYMENT_MODE` and `NOCT_SUBDOMAINS_ENABLED` explicitly (`platform`, `true`).
+
 First draft of the manifests for a single-node K3s cluster (see
 [ROADMAP.md](../ROADMAP.md#3-architecture-stack-and-infrastructure)). It requires
 a `StorageClass` and Traefik as IngressController (Traefik is already included

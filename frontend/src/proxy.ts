@@ -1,26 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
-import { apiUrl, siteHost, siteUrl } from "@/lib/site";
+import { apiUrl, siteHost, siteUrl, subdomainsEnabled } from "@/lib/site";
 
 /** Origini per connect-src, derivate dagli URL reali configurati invece che
  * hardcodate su un dominio fisso — altrimenti il dev locale (frontend su
  * localhost:3000, API su localhost:8000, origini diverse) verrebbe bloccato
  * dalla stessa CSP pensata per la produzione. Il wildcard sui sottodomini
- * serve alle pagine blog (`{slug}.{host}`) che chiamano l'API sull'apex. */
+ * serve alle pagine blog (`{slug}.{host}`) che chiamano l'API sull'apex: con
+ * `NOCT_SUBDOMAINS_ENABLED=false` non c'è e non viene emesso. */
 function connectSrcOrigins(): string {
   const site = new URL(siteUrl());
   const api = new URL(apiUrl());
-  const origins = new Set([`${site.protocol}//${site.host}`, `${site.protocol}//*.${siteHost()}`, `${api.protocol}//${api.host}`]);
+  const origins = new Set([`${site.protocol}//${site.host}`]);
+  if (subdomainsEnabled()) origins.add(`${site.protocol}//*.${siteHost()}`);
+  origins.add(`${api.protocol}//${api.host}`);
   return Array.from(origins).join(" ");
 }
 
-/** Origine pubblica dello storage (`NOCT_S3_PUBLIC_URL`, letta a runtime): `https:` è già ammesso in
- * `img-src`, ma in sviluppo gli oggetti stanno su http://localhost:9000 e la CSP li bloccherebbe. */
+/** Origini pubbliche dello storage (`NOCT_S3_PUBLIC_URL`, `NOCT_LOCAL_STORAGE_PUBLIC_URL`, lette a runtime):
+ * `https:` è già ammesso in `img-src`, ma in sviluppo gli oggetti stanno su http://localhost:9000 e la CSP li
+ * bloccherebbe. L'origine dello storage locale uguale a quella del sito è già coperta da `'self'`. */
 function storageOrigin(): string {
-  try {
-    return process.env.NOCT_S3_PUBLIC_URL ? new URL(process.env.NOCT_S3_PUBLIC_URL).origin : "";
-  } catch {
-    return "";
+  const origins = new Set<string>();
+  for (const value of [process.env.NOCT_S3_PUBLIC_URL, process.env.NOCT_LOCAL_STORAGE_PUBLIC_URL]) {
+    try {
+      if (value) origins.add(new URL(value).origin);
+    } catch {
+      // URL non valido: ignorato
+    }
   }
+  return Array.from(origins).join(" ");
 }
 
 /** Sottodomini riservati alla piattaforma stessa, mai risolti come blog —
@@ -121,7 +129,8 @@ export function proxy(request: NextRequest) {
     return response;
   };
 
-  if (hostname === siteHost() || !hostname.endsWith(`.${siteHost()}`)) {
+  // Sottodomini disattivati (`NOCT_SUBDOMAINS_ENABLED=false`): nessuna riscrittura, solo routing path-based.
+  if (!subdomainsEnabled() || hostname === siteHost() || !hostname.endsWith(`.${siteHost()}`)) {
     return withCsp(NextResponse.next({ request: { headers: requestHeaders } }));
   }
 

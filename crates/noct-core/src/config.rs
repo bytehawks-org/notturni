@@ -45,6 +45,9 @@ pub struct Config {
     /// Esegue relay dell'outbox e consumer dentro il processo API (default: sì
     /// se non c'è NATS, perché altrimenti nessuno li eseguirebbe).
     pub worker_inline: bool,
+    /// Sottodomini per-blog attivi (`NOCT_SUBDOMAINS_ENABLED`, default sì). Informa solo frontend e
+    /// pannello admin: il backend non cambia comportamento.
+    pub subdomains_enabled: bool,
     /// Prima componente del path degli oggetti su storage (`{site_slug}/userdata/...`).
     pub site_slug: String,
     /// Invalidazione della cache del frontend (entrambi necessari, altrimenti disattivata).
@@ -119,6 +122,7 @@ impl Config {
             nats_prefix: "noct".into(),
             smtp: None,
             worker_inline: true,
+            subdomains_enabled: true,
             site_slug: "notturni".into(),
             frontend_revalidate_url: None,
             revalidate_secret: None,
@@ -231,6 +235,7 @@ impl Config {
             }),
         };
         cfg.worker_inline = flag("NOCT_WORKER_INLINE").unwrap_or(cfg.nats_url.is_none());
+        cfg.subdomains_enabled = flag("NOCT_SUBDOMAINS_ENABLED").unwrap_or(true);
         if let Some(v) = get("NOCT_SITE_SLUG") {
             if !v.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') {
                 return Err(format!("NOCT_SITE_SLUG non valido: `{v}` (minuscole, cifre, `-`)"));
@@ -294,6 +299,19 @@ mod tests {
         assert_eq!(c.storage.backend, StorageBackend::Local);
         assert!(c.redis_url.is_none() && c.nats_url.is_none() && c.smtp.is_none());
         assert!(c.worker_inline, "senza NATS i worker girano nel processo API");
+    }
+
+    #[test]
+    fn subdomains_flag_defaults_to_true() {
+        let base = [("NOCT_DATABASE_URL", "x"), ("NOCT_JWT_SECRET", SECRET)];
+        assert!(cfg(&base).unwrap().subdomains_enabled, "unset = platform behavior");
+        let with = |v: &'static str| cfg(&[base[0], base[1], ("NOCT_SUBDOMAINS_ENABLED", v)]).unwrap();
+        assert!(with("true").subdomains_enabled);
+        assert!(!with("false").subdomains_enabled);
+        assert!(!with("0").subdomains_enabled);
+        // same semantics as every other flag: an unknown word is false
+        assert!(!with("boh").subdomains_enabled);
+        assert!(with("").subdomains_enabled, "empty = unset");
     }
 
     #[test]

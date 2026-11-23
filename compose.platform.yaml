@@ -1,0 +1,50 @@
+# Override "platform" di compose.yaml (vedi l'intestazione di quel file):
+#   podman compose -f compose.yaml -f compose.platform.yaml --profile platform up -d --build
+# Collega backend e worker ai servizi dei profili `platform` (nomi della rete di compose) e attiva lo storage
+# S3 (Garage). La modalità (NOCT_DEPLOYMENT_MODE) e i sottodomini restano quelli del .env.
+
+x-platform-env: &platform-env
+  NOCT_STORAGE_BACKEND: s3
+  # endpoint Garage nella rete di compose (non localhost); URL pubblico: il browser risolve solo la porta di s3-public
+  NOCT_S3_ENDPOINT_URL: http://garage:3900
+  NOCT_S3_REGION: garage
+  NOCT_S3_PUBLIC_ACCESS: website
+  NOCT_S3_PUBLIC_URL: http://localhost:9000
+  NOCT_REDIS_HOST: redis
+  NOCT_NATS_URL: nats://nats:4222
+  NOCT_MODERATION_SERVICE_URL: http://moderation:8100
+  # destinazione del backup infrastrutturale: qui lo stesso Garage su un bucket dedicato, solo per
+  # avere qualcosa di verificabile in sviluppo (in produzione: un provider S3 esterno e separato)
+  NOCT_BACKUP_S3_ENDPOINT_URL: http://garage:3900
+  NOCT_BACKUP_S3_REGION: garage
+  NOCT_BACKUP_S3_ACCESS_KEY_ID: ${NOCT_S3_ACCESS_KEY_ID}
+  NOCT_BACKUP_S3_SECRET_ACCESS_KEY: ${NOCT_S3_SECRET_ACCESS_KEY}
+  NOCT_BACKUP_S3_BUCKET: notturni-backups
+
+services:
+  backend:
+    environment: *platform-env
+    depends_on:
+      nats:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      garage-bootstrap:
+        condition: service_completed_successfully
+      moderation:
+        condition: service_started
+
+  worker:
+    environment: *platform-env
+    depends_on:
+      nats:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      garage-bootstrap:
+        condition: service_completed_successfully
+
+  frontend:
+    environment:
+      # origine degli oggetti su Garage (avatar, media): serve alla CSP `img-src` in sviluppo
+      NOCT_S3_PUBLIC_URL: http://localhost:9000

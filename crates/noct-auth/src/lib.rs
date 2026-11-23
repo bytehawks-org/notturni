@@ -10,6 +10,7 @@
 
 include!(concat!(env!("OUT_DIR"), "/module_gen.rs"));
 
+pub mod accounts;
 mod handlers_impl;
 pub mod personal_data;
 mod settings;

@@ -4,6 +4,7 @@ import { useLocale, useTranslations } from "next-intl";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
+import { useSiteFlags } from "@/components/SiteConfigProvider";
 import { BlogCard } from "@/components/blog/VisibilityBand";
 import { PostRowActions } from "@/components/dashboard/PostRowActions";
 import { StatusPill } from "@/components/blog/StatusPill";
@@ -35,6 +36,7 @@ export default function DashboardHomePage() {
   const tc = useTranslations("Common");
   const tv = useTranslations("Visibility");
   const tr = useTranslations("BlogAdmin");
+  const { isSolo } = useSiteFlags();
   const locale = useLocale();
 
   const [blogs, setBlogs] = useState<Blog[] | null>(null);
@@ -419,7 +421,7 @@ export default function DashboardHomePage() {
                   name={blog.title}
                   slug={blog.slug}
                   visibility={blog.visibility}
-                  meta={<span>{tr("youAre", { role: tr(`roles.${role === "co_autore" ? "co-author" : role === "revisore" ? "reviewer" : role === "mediatore" ? "mediator" : "author"}`) })}</span>}
+                  meta={isSolo ? undefined : <span>{tr("youAre", { role: tr(`roles.${role === "co_autore" ? "co-author" : role === "revisore" ? "reviewer" : role === "mediatore" ? "mediator" : "author"}`) })}</span>}
                 />
               </Link>
             ))}

@@ -1,0 +1,29 @@
+Notturni {{ .Chart.AppVersion }} installed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Profile : {{ .Values.mode }} ({{ if include "notturni.isLocal" . }}local storage, 1 backend replica{{ else }}S3 storage{{ end }}{{ if .Values.nats.enabled }}, NATS + worker{{ end }}{{ if .Values.redis.enabled }}, Redis{{ end }}{{ if .Values.moderation.enabled }}, image moderation{{ end }})
+URL     : {{ include "notturni.baseUrl" . }}
+{{- if include "notturni.isLocal" . }}
+Storage : {{ include "notturni.storagePublicUrl" . }} (served by the backend)
+{{- end }}
+
+Check the rollout:
+  kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "notturni.cname" (list . "backend") }}
+  kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "notturni.cname" (list . "frontend") }}
+
+Secrets are in the Secret "{{ include "notturni.secretName" . }}" and are never printed here.
+{{- if and .Values.admin.email (not .Values.secrets.existingSecret) }}
+Read the first Super Admin password (user "{{ .Values.admin.username }}") with:
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "notturni.secretName" . }} -o jsonpath='{.data.NOCT_SUPER_ADMIN_PASSWORD}' | base64 -d; echo
+{{- end }}
+{{- if and (eq .Values.mode "solo") (not .Values.admin.email) }}
+Open the URL and complete the first-run setup to create the first account.
+{{- end }}
+
+Back up the PersistentVolumeClaims: they hold the database{{ if include "notturni.isLocal" . }} and the uploaded files{{ end }} (personal data, GDPR).
+PVCs are kept by `helm uninstall` (persistence.keepOnUninstall).
+{{- if not .Values.smtp.host }}{{ if not .Values.smtp.relay.enabled }}
+No SMTP configured: no email (verification, reset, newsletter) is sent.
+{{- end }}{{ end }}
+{{- if and (eq .Values.mode "solo") (not .Values.moderation.enabled) }}
+Image moderation is off: sensitive images are not filtered automatically.
+{{- end }}

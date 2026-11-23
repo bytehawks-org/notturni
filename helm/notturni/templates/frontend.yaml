@@ -1,0 +1,69 @@
+{{- $name := include "notturni.cname" (list . "frontend") }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "notturni.componentLabels" (list . "frontend") | nindent 4 }}
+spec:
+  replicas: {{ .Values.frontend.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "notturni.componentSelector" (list . "frontend") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "notturni.componentLabels" (list . "frontend") | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      {{- include "notturni.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: frontend
+          image: {{ include "notturni.image" (list . .Values.image.frontend) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 3000
+          # only the revalidation secret is shared with the frontend, not the whole Secret
+          envFrom:
+            - configMapRef: {name: {{ include "notturni.cname" (list . "config") }}}
+          env:
+            - name: NOCT_REVALIDATE_SECRET
+              valueFrom:
+                secretKeyRef: {name: {{ include "notturni.secretName" . }}, key: NOCT_REVALIDATE_SECRET, optional: true}
+            {{- with .Values.frontend.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          readinessProbe:
+            httpGet: {path: /, port: 3000}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          {{- with .Values.frontend.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.frontend.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.frontend.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.frontend.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "notturni.componentLabels" (list . "frontend") | nindent 4 }}
+spec:
+  selector:
+    {{- include "notturni.componentSelector" (list . "frontend") | nindent 4 }}
+  ports:
+    - port: 3000
+      targetPort: 3000

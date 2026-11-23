@@ -1,0 +1,52 @@
+{{- if .Values.networkPolicy.enabled }}
+# Closed ingress by default: pods of this release talk to each other; from outside only the public services
+# (frontend, backend, s3-public) are reachable, and only from the ingress controller namespace.
+# Needs a CNI that enforces NetworkPolicy (K3s: built-in controller).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "notturni.cname" (list . "default-deny") }}
+  labels:
+    {{- include "notturni.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "notturni.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "notturni.cname" (list . "allow-release") }}
+  labels:
+    {{- include "notturni.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "notturni.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "notturni.selectorLabels" . | nindent 14 }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "notturni.cname" (list . "allow-ingress-controller") }}
+  labels:
+    {{- include "notturni.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "notturni.selectorLabels" . | nindent 6 }}
+    matchExpressions:
+      - {key: app.kubernetes.io/component, operator: In, values: [frontend, backend, s3-public]}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressControllerNamespace }}
+{{- end }}

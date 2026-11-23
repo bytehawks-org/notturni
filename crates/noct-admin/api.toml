@@ -14,6 +14,21 @@ blogs_count = "int"
 # ultimo uso di una sessione di refresh
 last_seen_at = { type = "timestamp", nullable = true }
 
+[type.AdminUserCreate]
+username = "string"
+email = "string"
+# se omessa il server ne genera una casuale e la restituisce una sola volta
+password = { type = "string", max = 128, optional = true }
+
+# come AdminUserOut, più la password iniziale generata (solo se la richiesta non ne portava una)
+[type.AdminUserCreated]
+id = "uuid"
+username = "string"
+email = "string"
+platform_role = "string"
+is_active = "bool"
+generated_password = { type = "string", nullable = true }
+
 [type.AdminUserUpdate]
 platform_role = { type = "string", optional = true }
 is_active = "bool?"
@@ -139,6 +154,19 @@ kind = "custom"
 handler = "list_users"
 response = "AdminUserOut[]"
 summary = "Utenti con numero di blog e ultimo accesso (`q` su username/email)"
+
+[[route]]
+id = "create_user"
+method = "POST"
+path = "/admin/users"
+auth = "platform_role:super_admin"
+kind = "custom"
+handler = "create_user"
+request = "AdminUserCreate"
+response = "AdminUserCreated"
+status = 201
+rate_limit = { key = "user", max = 20, window = "5m" }
+summary = "Crea un account attivo (ruolo `utente`) senza registrazione né email; solo Super Admin"
 
 [[route]]
 id = "update_user"

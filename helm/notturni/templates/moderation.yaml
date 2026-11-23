@@ -1,0 +1,49 @@
+{{- if .Values.moderation.enabled }}
+{{- $name := include "notturni.cname" (list . "moderation") }}
+{{- /* Fail open: a problem here never blocks uploads, but images are not moderated while it is down. */ -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "notturni.componentLabels" (list . "moderation") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "notturni.componentSelector" (list . "moderation") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "notturni.componentLabels" (list . "moderation") | nindent 8 }}
+    spec:
+      {{- include "notturni.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: moderation
+          image: {{ include "notturni.image" (list . .Values.image.moderation) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8100
+          # the detection model is loaded at start
+          readinessProbe:
+            httpGet: {path: /health, port: 8100}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: 8100}
+            initialDelaySeconds: 45
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "notturni.componentLabels" (list . "moderation") | nindent 4 }}
+spec:
+  selector:
+    {{- include "notturni.componentSelector" (list . "moderation") | nindent 4 }}
+  ports:
+    - port: 8100
+      targetPort: 8100
+{{- end }}
