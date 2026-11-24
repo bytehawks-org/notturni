@@ -35,6 +35,10 @@ pub async fn run(st: AppState) -> Result<(), String> {
         if let Err(e) = bootstrap_super_admin(&st, &username, &email, &password).await {
             tracing::error!(error = %e, "creazione del Super Admin non riuscita");
         }
+    } else if get("super_admin_email").is_some() && get("super_admin_password").is_none() {
+        tracing::warn!(
+            "NOCT_SUPER_ADMIN_EMAIL è impostata ma manca NOCT_SUPER_ADMIN_PASSWORD: il Super Admin non viene creato"
+        );
     }
     Ok(())
 }

@@ -1,0 +1,78 @@
+{{- if .Values.nats.enabled }}
+{{- $name := include "notturni.cname" (list . "nats") }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "notturni.componentLabels" (list . "nats") | nindent 4 }}
+  {{- if .Values.persistence.keepOnUninstall }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- with .Values.persistence.nats.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.nats.size | quote }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "notturni.componentLabels" (list . "nats") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "notturni.componentSelector" (list . "nats") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "notturni.componentLabels" (list . "nats") | nindent 8 }}
+    spec:
+      {{- include "notturni.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: nats
+          image: {{ include "notturni.image" (list . .Values.image.nats) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["-js", "-sd", "/data", "-m", "8222"]
+          ports:
+            - containerPort: 4222
+            - containerPort: 8222
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8222}
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8222}
+            initialDelaySeconds: 10
+            periodSeconds: 20
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ $name }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "notturni.componentLabels" (list . "nats") | nindent 4 }}
+spec:
+  selector:
+    {{- include "notturni.componentSelector" (list . "nats") | nindent 4 }}
+  ports:
+    - name: client
+      port: 4222
+      targetPort: 4222
+{{- end }}

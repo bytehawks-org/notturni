@@ -50,6 +50,32 @@ pub async fn list_users(ctx: RouteCtx) -> Result<Vec<Value>, ApiError> {
     Ok(rows.into_iter().map(out).collect())
 }
 
+/// Creates an account for a collaborator. Works in `solo` and `platform` mode; `register` is untouched.
+pub async fn create_user(ctx: RouteCtx, body: crate::AdminUserCreate) -> Result<Value, ApiError> {
+    let actor = noct_audit::user_actor(&mut *ctx.state.db.acquire().await?, actor_id(&ctx)?)
+        .await
+        .map_err(ApiError::internal)?;
+    let (password, generated) = match body.password {
+        Some(p) => (p, None),
+        None => {
+            let p = noct_core::security::token::random_secret(18);
+            (p.clone(), Some(p))
+        }
+    };
+    let created = noct_auth::accounts::create_user(
+        &ctx.state.db,
+        noct_auth::accounts::NewUser { username: body.username, email: body.email, password },
+        actor,
+        &ctx.meta,
+        "api",
+    )
+    .await?;
+    Ok(json!({
+        "id": created.id, "username": created.username, "email": created.email,
+        "platform_role": created.platform_role, "is_active": true, "generated_password": generated,
+    }))
+}
+
 pub async fn update_user(ctx: RouteCtx, body: crate::AdminUserUpdate) -> Result<Value, ApiError> {
     let admin = actor_id(&ctx)?;
     let id = path_uuid(&ctx, "user_id")?;

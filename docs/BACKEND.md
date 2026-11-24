@@ -12,7 +12,7 @@ The frontend (Next.js) lives in [`frontend/`](../frontend/README.md). The HTTP c
 bins/
   noct-api/      HTTP API; also hosts the hot-module supervisor and the end-to-end tests
   noct-worker/   outbox relay, periodic jobs, event consumers and jobs
-  noct-ctl/      validate, migrate, openapi, token, audit, garage-bootstrap...
+  noct-ctl/      validate, migrate, openapi, token, audit, user, garage-bootstrap...
 crates/          core: noct-core (registry, runtime, hook), manifest/codegen/migrate, auth, users, profiles,
                  blogs, posts, media, audit, events, platform, admin; infrastructure: bus, cache, storage,
                  mail, http, markdown, security; noct-bundle (the list of compiled modules)
@@ -86,6 +86,7 @@ login with `login_gates`; and to blog and post fields with `extensions`.
 | Blog deletion | job `blogs.purge_deleted`, daily: blogs deleted more than 30 days ago are removed together with their files |
 | Backup | `backup` module: copy of the Markdown of every published post; daily `pg_dump` and mirroring of the buckets to an **external** S3 storage (`NOCT_BACKUP_S3_*`) |
 | Garage | `noct-ctl garage-bootstrap` (layout, key, buckets; idempotent) |
+| User accounts without SMTP | `noct-ctl user create --email E --username U` and `noct-ctl user reset-password --email E`. The password is read from the first line of stdin (echo off on a terminal), never from an argument: `printf '%s\n' "$PW" \| noct-ctl user create ...`. `create` makes an active `utente` account and prints its id; with an empty stdin it generates a random password and prints it once as `generated_password=...` on stdout; `reset-password` sets the new password, deletes every session, invalidates the access tokens already issued and refuses unknown or inactive users (generic error) and SSO-only accounts. Same policy and hashing as the API. Audit events `admin.user_created` / `admin.user_password_reset` (actor `system`, payload `via: noct-ctl`, no password). Running them needs shell access to the deployment (`podman exec`, `kubectl exec`) and `NOCT_DATABASE_URL`. API counterpart of `create`: `POST /admin/users` |
 | Failed messages | `noct-ctl dead-letters`; outbound queue: `noct-ctl outbox` |
 | Hot modules | `GET /admin/modules`, `POST /admin/modules/{name}/enable|disable` (Super Admin); API and worker converge within ~5 seconds |
 | Service status | `GET /api/v1/health` (liveness), `GET /api/v1/health/ready` (database, cache, bus, storage) |

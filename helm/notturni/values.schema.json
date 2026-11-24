@@ -1,0 +1,152 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["mode", "ingress", "storage"],
+  "properties": {
+    "mode": {"type": "string", "enum": ["solo", "platform"]},
+    "nameOverride": {"type": "string"},
+    "fullnameOverride": {"type": "string"},
+    "site": {
+      "type": "object",
+      "properties": {
+        "name": {"type": "string"},
+        "slug": {"type": "string"},
+        "experimentalFeatures": {"type": "string"},
+        "turnstileSiteKey": {"type": "string"},
+        "trustedProxies": {"type": "integer", "minimum": 0}
+      }
+    },
+    "admin": {
+      "type": "object",
+      "properties": {"username": {"type": "string"}, "email": {"type": "string"}},
+      "additionalProperties": false
+    },
+    "image": {"type": "object"},
+    "ingress": {
+      "type": "object",
+      "required": ["host"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "className": {"type": "string"},
+        "host": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$"},
+        "annotations": {"type": "object"},
+        "tls": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "secretName": {"type": "string"},
+            "certManager": {
+              "type": "object",
+              "properties": {
+                "enabled": {"type": "boolean"},
+                "issuerRef": {"type": "object"},
+                "createIssuer": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {"type": "boolean"},
+                    "email": {"type": "string"},
+                    "server": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "traefik": {"type": "object", "properties": {"securityHeaders": {"type": "boolean"}}}
+      }
+    },
+    "subdomains": {"type": "object", "properties": {"enabled": {"type": "boolean"}}},
+    "storage": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {"type": "string", "enum": ["local", "s3"]},
+        "local": {
+          "type": "object",
+          "properties": {"publicUrl": {"type": "string"}, "basePath": {"type": "string", "pattern": "^/"}}
+        },
+        "s3": {
+          "type": "object",
+          "properties": {
+            "endpointUrl": {"type": "string"},
+            "region": {"type": "string"},
+            "publicUrl": {"type": "string"},
+            "buckets": {
+              "type": "object",
+              "properties": {
+                "avatars": {"type": "string"},
+                "content": {"type": "string"},
+                "audit": {"type": "string"}
+              }
+            },
+            "garage": {
+              "type": "object",
+              "properties": {"enabled": {"type": "boolean"}, "publicHost": {"type": "string"}}
+            }
+          }
+        }
+      }
+    },
+    "backup": {"type": "object"},
+    "redis": {"type": "object", "properties": {"enabled": {"type": "boolean"}}},
+    "nats": {"type": "object", "properties": {"enabled": {"type": "boolean"}}},
+    "moderation": {"type": "object", "properties": {"enabled": {"type": "boolean"}}},
+    "smtp": {
+      "type": "object",
+      "properties": {
+        "host": {"type": "string"},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "useTls": {"type": "boolean"},
+        "fromEmail": {"type": "string"},
+        "relay": {
+          "type": "object",
+          "properties": {"enabled": {"type": "boolean"}, "host": {"type": "string"}}
+        }
+      }
+    },
+    "modules": {"type": "array", "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}},
+    "persistence": {
+      "type": "object",
+      "properties": {
+        "keepOnUninstall": {"type": "boolean"},
+        "postgres": {"type": "object"},
+        "storage": {"type": "object"},
+        "nats": {"type": "object"},
+        "garage": {"type": "object"}
+      }
+    },
+    "postgres": {
+      "type": "object",
+      "properties": {
+        "external": {
+          "type": "object",
+          "properties": {"host": {"type": "string"}, "port": {"type": "integer"}}
+        },
+        "user": {"type": "string"},
+        "database": {"type": "string"}
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "properties": {"existingSecret": {"type": "string"}, "extra": {"type": "object"}},
+      "additionalProperties": false
+    },
+    "backend": {
+      "type": "object",
+      "properties": {"replicaCount": {"type": "integer", "minimum": 1}}
+    },
+    "frontend": {
+      "type": "object",
+      "properties": {"replicaCount": {"type": "integer", "minimum": 1}}
+    },
+    "worker": {
+      "type": "object",
+      "properties": {"replicaCount": {"type": "integer", "minimum": 1}}
+    },
+    "postgresPod": {"type": "object"},
+    "networkPolicy": {
+      "type": "object",
+      "properties": {"enabled": {"type": "boolean"}, "ingressControllerNamespace": {"type": "string"}}
+    }
+  }
+}

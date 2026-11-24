@@ -54,6 +54,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     ...(isAdmin && deploymentMode !== "solo"
       ? [{ href: "/admin/utenti", label: t("users"), icon: "◯", mobile: true } as NavItem]
       : []),
+    ...(user.platform_role === "super_admin" && deploymentMode === "solo"
+      ? [{ href: "/admin/utenti/nuovo", label: t("collaborators"), icon: "◯", mobile: true } as NavItem]
+      : []),
     ...(isAdmin ? [{ href: "/admin/seo", label: t("seo"), icon: "◈", mobile: false } as NavItem] : []),
     ...(isAdmin ? [{ href: "/admin/legale", label: t("legal"), icon: "§", mobile: false } as NavItem] : []),
     ...(isAdmin ? [{ href: "/admin/testi", label: t("texts"), icon: "¶", mobile: false } as NavItem] : []),
@@ -70,6 +73,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       : []),
     ...(user.platform_role === "super_admin"
       ? [{ href: "/admin/impostazioni", label: t("platformSettings"), icon: "⚙", mobile: false } as NavItem]
+      : []),
+    ...(user.platform_role === "super_admin" && deploymentMode === "solo"
+      ? [{ href: "/admin/setup", label: t("setup"), icon: "✦", mobile: false } as NavItem]
       : []),
   ];
 

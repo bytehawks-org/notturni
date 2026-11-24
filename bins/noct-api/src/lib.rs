@@ -220,7 +220,11 @@ pub fn app(registry: &Registry, enabled: &[usize], state: AppState) -> Router {
         }
     }
     let cors = cors_layer(&state.config);
-    let inner = app.layer(middleware::from_fn(peer_ip)).layer(cors).with_state(state);
+    let inner = app
+        .layer(middleware::from_fn(response_hardening))
+        .layer(middleware::from_fn(peer_ip))
+        .layer(cors)
+        .with_state(state);
     // `/api/v1/spaces...` è l'alias di `/api/v1/blogs...`: la riscrittura avviene prima del routing
     Router::new().fallback_service(tower::service_fn(move |mut req: Request| {
         rewrite_spaces_alias(&mut req);
@@ -267,6 +271,25 @@ fn cors_layer(cfg: &Config) -> tower_http::cors::CorsLayer {
         .allow_credentials(true)
         .allow_methods(AllowMethods::mirror_request())
         .allow_headers(AllowHeaders::mirror_request())
+}
+
+/// Responses under `/api/v1/admin/` and `/api/v1/auth/` can carry secrets (generated passwords,
+/// tokens): they must never be cached. Files served from `/storage/` (local backend) get
+/// `X-Content-Type-Options: nosniff` and a short public cache lifetime.
+async fn response_hardening(req: Request, next: Next) -> Response {
+    let path = req.uri().path();
+    let sensitive = path.starts_with("/api/v1/admin/") || path.starts_with("/api/v1/auth/");
+    let storage = path.starts_with("/storage/");
+    let mut res = next.run(req).await;
+    let headers = res.headers_mut();
+    if sensitive {
+        headers.insert(axum::http::header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    }
+    if storage {
+        headers.insert(axum::http::header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+        headers.entry(axum::http::header::CACHE_CONTROL).or_insert(HeaderValue::from_static("public, max-age=3600"));
+    }
+    res
 }
 
 /// Scrive l'IP del peer TCP in un header interno, scartando sempre quello eventualmente

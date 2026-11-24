@@ -43,6 +43,7 @@ async fn public_config_and_footer_are_readable_without_login_and_follow_the_sett
     let (s, cfg) = env.get("/config", None).await;
     assert_eq!(s, StatusCode::OK, "{cfg}");
     assert_eq!(cfg["deployment_mode"], "platform");
+    assert_eq!(cfg["subdomains_enabled"], true, "default: platform behavior unchanged");
     assert_eq!(cfg["default_locale"], "it");
     assert_eq!(cfg["registration_mode"], "open");
     assert!(cfg["turnstile_site_key"].is_null());
@@ -231,5 +232,21 @@ async fn blog_export_is_a_zip_of_open_formats_for_the_owner_only() {
     let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
     let names: Vec<String> = (0..zip.len()).map(|i| zip.by_index(i).unwrap().name().unwrap().to_string()).collect();
     assert!(names.iter().any(|n| n == "blog.json") && !names.iter().any(|n| n == "comments.json"), "{names:?}");
+    env.teardown().await;
+}
+
+#[tokio::test]
+async fn public_config_reports_subdomains_flag_and_solo_mode() {
+    let off: &dyn Fn(&mut noct_core::Config) = &|c| c.subdomains_enabled = false;
+    let env = setup_with(&[], &[("NOCT_DEPLOYMENT_MODE", "solo")], Some(off)).await;
+    let (s, cfg) = env.get("/config", None).await;
+    assert_eq!(s, StatusCode::OK, "{cfg}");
+    assert_eq!(cfg["deployment_mode"], "solo");
+    assert_eq!(cfg["subdomains_enabled"], false);
+    env.teardown().await;
+
+    let env = setup(&[], &[("NOCT_DEPLOYMENT_MODE", "solo")]).await;
+    let (_, cfg) = env.get("/config", None).await;
+    assert_eq!((cfg["deployment_mode"].as_str(), cfg["subdomains_enabled"].as_bool()), (Some("solo"), Some(true)));
     env.teardown().await;
 }

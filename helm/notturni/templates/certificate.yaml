@@ -1,0 +1,49 @@
+{{- if and .Values.ingress.enabled .Values.ingress.tls.enabled .Values.ingress.tls.certManager.enabled }}
+{{- $cm := .Values.ingress.tls.certManager }}
+{{- $issuerName := include "notturni.cname" (list . "issuer") }}
+# One SAN certificate for the host, the wildcard (subdomains) and the object-storage host (Garage).
+# Wildcards need a DNS-01 solver. cert-manager must be installed separately.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "notturni.cname" (list . "tls") }}
+  labels:
+    {{- include "notturni.labels" . | nindent 4 }}
+spec:
+  secretName: {{ include "notturni.tlsSecretName" . }}
+  issuerRef:
+    {{- if $cm.createIssuer.enabled }}
+    name: {{ $issuerName }}
+    kind: Issuer
+    {{- else }}
+    {{- toYaml $cm.issuerRef | nindent 4 }}
+    {{- end }}
+  dnsNames:
+    - {{ .Values.ingress.host | quote }}
+    {{- if .Values.subdomains.enabled }}
+    - {{ printf "*.%s" .Values.ingress.host | quote }}
+    {{- else if include "notturni.garage" . }}
+    - {{ include "notturni.s3Host" . | quote }}
+    {{- end }}
+{{- if $cm.createIssuer.enabled }}
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ $issuerName }}
+  labels:
+    {{- include "notturni.labels" . | nindent 4 }}
+spec:
+  acme:
+    server: {{ $cm.createIssuer.server | quote }}
+    email: {{ $cm.createIssuer.email | quote }}
+    privateKeySecretRef:
+      name: {{ $issuerName }}-account-key
+    solvers:
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: {{ include "notturni.secretName" . }}
+              key: NOCT_CLOUDFLARE_API_TOKEN
+{{- end }}
+{{- end }}

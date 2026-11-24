@@ -1,0 +1,113 @@
+{{- $name := include "notturni.cname" (list . "backend") }}
+{{- $cfg := include "notturni.cname" (list . "config") }}
+{{- $secret := include "notturni.secretName" . }}
+{{- $local := include "notturni.isLocal" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "notturni.componentLabels" (list . "backend") | nindent 4 }}
+spec:
+  replicas: {{ .Values.backend.replicaCount }}
+  {{- if $local }}
+  # ReadWriteOnce volume: the old pod must stop before the new one mounts it
+  strategy:
+    type: Recreate
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "notturni.componentSelector" (list . "backend") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "notturni.componentLabels" (list . "backend") | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+        {{- if $local }}
+        # the image runs as UID 10001: the volume must be writable by it
+        fsGroup: 10001
+        {{- end }}
+      {{- include "notturni.imagePullSecrets" . | nindent 6 }}
+      {{- if include "notturni.garage" . }}
+      # brings Garage to the expected state (layout, key, buckets); idempotent
+      initContainers:
+        - name: garage-bootstrap
+          image: {{ include "notturni.image" (list . .Values.image.backend) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          command: ["noct-ctl", "garage-bootstrap"]
+          envFrom:
+            - configMapRef: {name: {{ $cfg }}}
+            - secretRef: {name: {{ $secret }}}
+      {{- end }}
+      containers:
+        - name: backend
+          image: {{ include "notturni.image" (list . .Values.image.backend) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef: {name: {{ $cfg }}}
+            - secretRef: {name: {{ $secret }}}
+          {{- with .Values.backend.extraEnv }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          readinessProbe:
+            httpGet: {path: /api/v1/health/ready, port: 8000}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /api/v1/health, port: 8000}
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          {{- with .Values.backend.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if $local }}
+          volumeMounts:
+            - name: storage
+              mountPath: {{ .Values.storage.local.basePath }}
+          {{- end }}
+      {{- if $local }}
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: {{ default (include "notturni.cname" (list . "storage")) .Values.persistence.storage.existingClaim }}
+      {{- end }}
+      {{- with .Values.backend.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backend.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backend.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "notturni.componentLabels" (list . "backend") | nindent 4 }}
+spec:
+  selector:
+    {{- include "notturni.componentSelector" (list . "backend") | nindent 4 }}
+  ports:
+    - port: 8000
+      targetPort: 8000

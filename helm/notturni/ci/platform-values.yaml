@@ -1,0 +1,46 @@
+# Platform profile with the bundled components: Redis, NATS + worker, Garage + s3-public, moderation,
+# SMTP relay, wildcard subdomains, cert-manager, NetworkPolicy (like k8s/ today).
+mode: platform
+ingress:
+  host: example.com
+  tls:
+    certManager:
+      enabled: true
+      createIssuer:
+        enabled: true
+        email: admin@example.com
+subdomains:
+  enabled: true
+storage:
+  type: s3
+  s3:
+    garage:
+      enabled: true
+redis:
+  enabled: true
+nats:
+  enabled: true
+moderation:
+  enabled: true
+smtp:
+  fromEmail: info@example.com
+  relay:
+    enabled: true
+    host: smtp.example.com
+backup:
+  s3:
+    endpointUrl: https://backup.example.com
+    region: auto
+    bucket: notturni-backups
+modules: []
+backend:
+  replicaCount: 2
+frontend:
+  replicaCount: 2
+worker:
+  replicaCount: 2
+networkPolicy:
+  enabled: true
+persistence:
+  postgres:
+    storageClass: local-path

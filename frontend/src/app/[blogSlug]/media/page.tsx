@@ -10,7 +10,7 @@ import { BlogHeaderActions } from "@/components/blog/PostHeaderActions";
 import { ExpandIcon } from "@/components/editor/icons";
 import { BlogHeader } from "@/components/shell/BlogHeader";
 import { FilterChip } from "@/components/ui/Pill";
-import { SENSITIVITY_CATEGORY_LABELS } from "@/lib/content-media";
+import { SENSITIVITY_CATEGORY_LABELS, isMediaSensitive } from "@/lib/content-media";
 import { blogLinks } from "@/lib/blog-path";
 import { formatDate } from "@/lib/format";
 import { getBlogMediaBibliography, getPublicBlog, getPublicBlogConfig, getPublicPublications } from "@/lib/server-api";
@@ -46,12 +46,10 @@ function MediaFigure({
   resolvePermalink: (permalink: string) => string;
   expandLabel: string;
 }) {
-  // `is_sensitive`, non `categories.length > 0`: un'immagine segnalata
-  // dalla sola automoderazione (o dal modal senza una categoria specifica
-  // scelta) ha `categories` vuoto ma è comunque sensibile — vedi
-  // crates/noct-media e la pagina del post, che la sfoca
-  // già in base allo stesso flag.
-  const sensitive = entry.is_sensitive;
+  // Stessa condizione della libreria media del dashboard: segnalata
+  // dall'automoderazione (`is_sensitive`) oppure dall'autore (categorie).
+  // Con il modulo `image_moderation` spento solo le categorie la segnalano.
+  const sensitive = isMediaSensitive(entry);
   const first = entry.citations[0];
   return (
     <figure className="flex min-w-0 flex-col gap-2">

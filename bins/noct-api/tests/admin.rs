@@ -389,6 +389,12 @@ async fn config_core_fields_are_validated_and_audited_with_old_values() {
     assert!(cfg["reserved_builtin"].as_array().unwrap().iter().any(|n| n == "admin"));
     assert_eq!(cfg["infrastructure"]["storage_backend"], "localstorage");
     assert!(cfg["infrastructure"].get("jwt_secret").is_none());
+    let infra = &cfg["infrastructure"];
+    assert_eq!(infra["subdomains_enabled"], true);
+    assert_eq!(infra["worker_inline"], true);
+    assert_eq!((infra["bus"].as_str(), infra["cache"].as_str()), (Some("memory"), Some("memory")));
+    assert_eq!(infra["local_storage_public_url"], "http://localhost:8000/storage");
+    assert!(infra["modules"].as_array().unwrap().iter().any(|m| m == "comments"), "{infra}");
 
     for (body, why) in [
         (json!({"default_locale": "xx"}), "lingua"),
@@ -679,4 +685,19 @@ async fn platform_comment_queue_spans_all_blogs() {
     assert_eq!(rep[0]["report_note"], "offensivo");
     assert_eq!(rep[0]["reported_to_platform"], true);
     c.env.teardown().await;
+}
+
+#[tokio::test]
+async fn infrastructure_summary_follows_flag_and_solo_mode() {
+    let off: &dyn Fn(&mut noct_core::Config) = &|c| c.subdomains_enabled = false;
+    let env = setup_with(MODULES, &[("NOCT_DEPLOYMENT_MODE", "solo")], Some(off)).await;
+    let root = env.user("root", "super_admin").await;
+    let (s, cfg) = env.get("/admin/config", Some(root)).await;
+    assert_eq!(s, StatusCode::OK, "{cfg}");
+    let infra = &cfg["infrastructure"];
+    assert_eq!(infra["deployment_mode"], "solo");
+    assert_eq!(infra["subdomains_enabled"], false);
+    assert!(infra["modules"].is_array());
+    assert!(infra.get("database_url").is_none() && infra.get("jwt_secret").is_none());
+    env.teardown().await;
 }

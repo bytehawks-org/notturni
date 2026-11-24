@@ -629,6 +629,16 @@ export interface MeProfile extends Profile {
   directory_listed: boolean;
 }
 
+/** Response of `POST /admin/users`; `generated_password` is returned once, only when no password was sent. */
+export interface CreatedUser {
+  id: string;
+  username: string;
+  email: string;
+  platform_role: PlatformRole;
+  is_active: boolean;
+  generated_password: string | null;
+}
+
 export interface AdminUser {
   id: string;
   username: string;
@@ -880,7 +890,26 @@ export interface PlatformConfig {
   /** Domini email che assegnano il sigillo BLU, in aggiunta a quello della piattaforma stessa. */
   verification_blue_domains: string[];
   updated_at: string | null;
-  infrastructure: Record<string, string | boolean | null>;
+  infrastructure: PlatformInfrastructure;
+}
+
+/** Read-only summary of the `NOCT_*` environment (`infrastructure` block of `GET /admin/config`). Never secrets. */
+export interface PlatformInfrastructure {
+  deployment_mode: "solo" | "platform" | string;
+  instance_fqdn: string | null;
+  storage_backend: "s3" | "localstorage" | string;
+  s3_endpoint_url?: string | null;
+  moderation_service: boolean;
+  smtp: boolean;
+  nats: boolean;
+  redis: boolean;
+  subdomains_enabled: boolean;
+  worker_inline: boolean;
+  local_storage_public_url?: string | null;
+  /** Active modules. */
+  modules: string[];
+  bus: "memory" | "nats" | string;
+  cache: "memory" | "redis" | string;
 }
 
 /** Voce di `GET /api/v1/interests` (blocco "interessi utente"): tag fisso

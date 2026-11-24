@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { SetupBanner } from "@/components/admin/SetupBanner";
 import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { SkeletonRows } from "@/components/ui/States";
@@ -63,6 +64,8 @@ export default function AdminHomePage() {
           )}
         </p>
       </header>
+
+      {user?.platform_role === "super_admin" && <SetupBanner />}
 
       {overview && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

@@ -40,6 +40,9 @@ enum Cmd {
     /// Manutenzione del registro di audit.
     #[command(subcommand)]
     Audit(AuditCmd),
+    /// Account utente senza SMTP né registrazione (la password si legge da stdin, mai da argomento).
+    #[command(subcommand)]
+    User(UserCmd),
     /// Porta Garage allo stato atteso (layout del nodo, chiave applicativa, bucket); idempotente.
     GarageBootstrap,
 }
@@ -50,6 +53,22 @@ enum AuditCmd {
     Maintain,
     /// Rimette a database gli eventi di una settimana archiviata (`2026w36`).
     Restore { week: String },
+}
+
+#[derive(Subcommand)]
+enum UserCmd {
+    /// Crea un account attivo con ruolo `utente`; stampa solo l'id. Password da stdin.
+    Create {
+        #[arg(long)]
+        email: String,
+        #[arg(long)]
+        username: String,
+    },
+    /// Imposta una nuova password (stdin), revoca le sessioni e scrive l'audit. Recupero senza SMTP.
+    ResetPassword {
+        #[arg(long)]
+        email: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -119,6 +138,7 @@ async fn main() -> Result<()> {
             match cli.cmd {
                 Cmd::Token(TokenCmd::Create { name }) => create_core_token(&name).await,
                 Cmd::Audit(cmd) => audit(cmd).await,
+                Cmd::User(cmd) => user(cmd).await,
                 Cmd::GarageBootstrap => garage_bootstrap().await,
                 Cmd::Outbox => outbox().await,
                 Cmd::DeadLetters => dead_letters().await,
@@ -448,6 +468,74 @@ async fn create_core_token(name: &str) -> Result<()> {
     tx.commit().await?;
     println!("{plaintext}");
     eprintln!("Token core `{name}` creato (id {id}). Conservalo ora: non sarà più mostrato.");
+    Ok(())
+}
+
+// ---- utenti ---------------------------------------------------------------------------------------------------------
+
+/// Legge la password dalla prima riga di stdin. Con un terminale disattiva l'eco (`stty`, come `passwd`);
+/// con una pipe non stampa nulla. Mai da argomento di riga di comando: finirebbe in history e `ps`.
+fn read_password() -> Result<String> {
+    read_password_opt()?.ok_or_else(|| anyhow!("password vuota su stdin"))
+}
+
+/// `None` when the first line is empty (end of input or blank line).
+fn read_password_opt() -> Result<Option<String>> {
+    use std::io::{BufRead, IsTerminal, Write};
+    let stdin = std::io::stdin();
+    let tty = stdin.is_terminal();
+    let set_echo = |on: bool| {
+        let _ = std::process::Command::new("stty").arg(if on { "echo" } else { "-echo" }).status();
+    };
+    if tty {
+        eprint!("Password: ");
+        let _ = std::io::stderr().flush();
+        set_echo(false);
+    }
+    let mut line = String::new();
+    let read = stdin.lock().read_line(&mut line);
+    if tty {
+        set_echo(true);
+        eprintln!();
+    }
+    read.context("lettura della password da stdin")?;
+    let password = line.trim_end_matches(['\n', '\r']).to_string();
+    Ok(if password.is_empty() { None } else { Some(password) })
+}
+
+async fn user(cmd: UserCmd) -> Result<()> {
+    use noct_auth::accounts;
+    let pool = connect().await?;
+    let meta = noct_core::RequestMeta::default();
+    // senza attore umano: l'evento è `system` e il payload riporta `via = noct-ctl`
+    let actor = noct_audit::AuditActor::System;
+    match cmd {
+        UserCmd::Create { email, username } => {
+            // empty stdin: generate a random password and print it once
+            let (password, generated) = match read_password_opt()? {
+                Some(p) => (p, false),
+                None => (noct_core::security::token::random_secret(18), true),
+            };
+            let shown = generated.then(|| password.clone());
+            let new = accounts::NewUser { username, email, password };
+            let created = accounts::create_user(&pool, new, actor, &meta, "noct-ctl")
+                .await
+                .map_err(|e| anyhow!("{}", e.detail))?;
+            println!("{}", created.id);
+            if let Some(p) = shown {
+                println!("generated_password={p}");
+                eprintln!("Password generata: mostrata una sola volta.");
+            }
+            eprintln!("Utente `{}` creato (ruolo {}, attivo).", created.username, created.platform_role);
+        }
+        UserCmd::ResetPassword { email } => {
+            let password = read_password()?;
+            accounts::reset_password(&pool, &email, password, actor, &meta, "noct-ctl")
+                .await
+                .map_err(|e| anyhow!("{}", e.detail))?;
+            eprintln!("Password reimpostata; sessioni revocate.");
+        }
+    }
     Ok(())
 }
 

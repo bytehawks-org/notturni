@@ -15,6 +15,10 @@ data:
   NOCT_SITE_NAME: "Notturni"
   # NOCT_SITE_URL: "https://notturni.eu"
   # NOCT_API_PUBLIC_URL: ""
+  # Modalità e sottodomini: letti da backend, worker e frontend (runtime). Questo manifest è la
+  # installazione "platform" completa (per solo usare il chart Helm): sottodomini per-blog attivi.
+  NOCT_DEPLOYMENT_MODE: "platform"
+  NOCT_SUBDOMAINS_ENABLED: "true"
 
   # Funzioni SPERIMENTALI, spente di default (opt-in): elenco separato da virgole di `wiki` e/o `docs`.
   # Abilitano la creazione di Spazi di quel tipo e la relativa modalità di visualizzazione; i blog non

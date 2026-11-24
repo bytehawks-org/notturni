@@ -171,7 +171,14 @@ and their status, see [ROADMAP.md](ROADMAP.md). For the product abstract, see
   (`NOCT_INSTANCE_FQDN`, `NOCT_DEPLOYMENT_MODE=solo|platform`). `solo` is for a
   personal blog or site with a single owner: the first registered user becomes
   Super Admin, and registration closes afterwards. `platform` is for the multi-user
-  stack described in the rest of this document. Every entity in the database has a
+  stack described in the rest of this document. `solo` installs a lean stack
+  (PostgreSQL, backend, frontend; local storage, no Redis, NATS or image
+  moderation; blogs on paths). The Super Admin creates collaborator accounts
+  (`noct-ctl user create` or the admin form) and recovers passwords without
+  SMTP (`noct-ctl user reset-password`); see
+  [docs/CONFIGURATION.md](docs/CONFIGURATION.md#deployment-profiles-solo-and-platform).
+  A Helm chart in [helm/notturni/](helm/notturni/README.md) installs either
+  profile on K3s. Every entity in the database has a
   UUID as its primary key, a prerequisite for possible future federation (see
   [ROADMAP.md](ROADMAP.md#5-future-developments-not-started), AT Protocol first).
 
@@ -217,9 +224,11 @@ At a high level (the full, spec-by-spec list is in [ROADMAP.md](ROADMAP.md)):
 │   │   └── components/       # shared UI (Button, Card, SearchInput, ...), editor/ (Tiptap, tags, categories, cover, translations), ThemeToggle
 │   └── Dockerfile
 ├── Dockerfile           # backend image (cargo-chef, multi-arch): noct-api, noct-worker, noct-ctl
-├── k8s/                  # Kubernetes manifests
+├── k8s/                  # Kubernetes manifests (Kustomize, platform reference)
+├── helm/notturni/        # Helm chart (solo by default, platform through values)
 ├── garage/, s3-public/  # Garage configuration and the proxy for public reads
-├── compose.yaml         # local stack via Podman/Docker compose (includes the moderation service)
+├── compose.yaml         # local stack via Podman/Docker compose: solo by default, platform components behind profiles
+├── compose.platform.yaml # override that wires backend and worker to the platform services
 ├── deny.toml            # cargo-deny: licenses, sources, vulnerabilities
 └── .env.example          # environment variables (prefix NOCT_)
 ```
@@ -227,18 +236,19 @@ At a high level (the full, spec-by-spec list is in [ROADMAP.md](ROADMAP.md)):
 ## Quick start (local)
 
 ```bash
-cp .env.example .env
+scripts/gen-env.sh        # .env from .env.example with random secrets (solo defaults)
 podman compose up -d --build
 ```
+
+This starts the lean solo stack (PostgreSQL, backend, frontend). For the full platform stack, see [docs/INSTALL.md](docs/INSTALL.md#22b-quickstart-platform).
 
 Exposed services:
 
 - Frontend (dashboard and administration included): <http://localhost:3000>
 - Backend (OpenAPI): <http://localhost:8000/api/v1/openapi.json>
 - Backend (health): <http://localhost:8000/api/v1/health>, readiness: <http://localhost:8000/api/v1/health/ready>
-- Image moderation (health): <http://localhost:8100/health>
-- Development email (MailHog): <http://localhost:8025>
-- S3 storage (Garage): API <http://localhost:3900>, public reads <http://localhost:9000>
+- Uploaded files (local storage): `http://localhost:8000/storage/...`
+- Platform profile only: image moderation (health) <http://localhost:8100/health>, S3 storage (Garage) API <http://localhost:3900>, public reads <http://localhost:9000>; MailHog <http://localhost:8025> with `--profile dev-mail`
 
 Migrations of the active modules apply automatically at startup (advisory lock: safe
 with multiple replicas). Set `NOCT_AUTO_MIGRATE=false` to apply them elsewhere with
@@ -269,6 +279,8 @@ modules, is at `/api/v1/openapi.json`.
 A per-module list of all routes (verb, access, purpose) is in
 [docs/API_REFERENCE.md](docs/API_REFERENCE.md). All environment variables, with
 defaults and examples, are in [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+Deploying with the Helm chart (profiles, values, secrets, operations):
+[docs/HELM.md](docs/HELM.md).
 
 ## Tests
 
@@ -323,7 +335,7 @@ See [docs/BACKEND.md](docs/BACKEND.md) and [frontend/README.md](frontend/README.
 
 ## Kubernetes
 
-See [k8s/README.md](k8s/README.md).
+See [k8s/README.md](k8s/README.md) (Kustomize) and [helm/notturni/README.md](helm/notturni/README.md) (Helm chart).
 
 ## Specifications and roadmap
 

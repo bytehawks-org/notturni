@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 
@@ -95,6 +96,11 @@ export default function DashboardUsersPage() {
           {users && <p className="text-sm text-muted">{t("summary", { count: users.length })}</p>}
         </div>
         <div className="flex items-center gap-2">
+          {me?.platform_role === "super_admin" && (
+            <Link href="/admin/utenti/nuovo">
+              <Button size="sm">{t("newUser")}</Button>
+            </Link>
+          )}
           <SearchInput value={q} onChange={setQ} placeholder={t("search")} />
           <Button size="sm" variant="secondary" onClick={exportCsv} disabled={!users || users.length === 0}>
             {t("exportCsv")}
