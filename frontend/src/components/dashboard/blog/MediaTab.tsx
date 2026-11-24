@@ -4,6 +4,7 @@ import { useLocale, useTranslations } from "next-intl";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { useSiteFlags } from "@/components/SiteConfigProvider";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { FilterChip, Pill } from "@/components/ui/Pill";
@@ -11,7 +12,7 @@ import { EmptyState, SkeletonCards } from "@/components/ui/States";
 import { useToast } from "@/components/ui/Toast";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { SENSITIVITY_CATEGORIES, SENSITIVITY_CATEGORY_LABELS, type SensitivityCategory } from "@/lib/content-media";
+import { SENSITIVITY_CATEGORIES, SENSITIVITY_CATEGORY_LABELS, isMediaSensitive, type SensitivityCategory } from "@/lib/content-media";
 import { formatDate } from "@/lib/format";
 import type { MediaFile, MediaLibrary } from "@/lib/types";
 
@@ -30,6 +31,7 @@ function formatBytes(bytes: number): string {
  * dettagli, copia URL ed eliminazione (solo se non usata). */
 export function MediaTab({ blogSlug, canWrite }: { blogSlug: string; canWrite: boolean }) {
   const { authFetch } = useAuth();
+  const { isSolo } = useSiteFlags();
   const t = useTranslations("MediaTab");
   const tc = useTranslations("Common");
   const locale = useLocale();
@@ -77,7 +79,7 @@ export function MediaTab({ blogSlug, canWrite }: { blogSlug: string; canWrite: b
   }
 
   const items = (library?.items ?? []).filter((m) =>
-    filter === "unused" ? m.used_in.length === 0 : filter === "no-alt" ? !m.alt_text : filter === "sensitive" ? m.is_sensitive || m.categories.length > 0 : true
+    filter === "unused" ? m.used_in.length === 0 : filter === "no-alt" ? !m.alt_text : filter === "sensitive" ? isMediaSensitive(m) : true
   );
 
   return (
@@ -132,10 +134,10 @@ export function MediaTab({ blogSlug, canWrite }: { blogSlug: string; canWrite: b
                   className={`relative block aspect-square overflow-hidden rounded-[10px] border bg-surface md:aspect-[4/3] ${selected?.id === m.id ? "border-primary" : "border-border"}`}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element -- URL storage esterno */}
-                  <img src={m.url} alt={m.alt_text} className={`h-full w-full object-cover transition ${m.is_sensitive || m.categories.length > 0 ? "blur-xl" : ""}`} />
+                  <img src={m.url} alt={m.alt_text} className={`h-full w-full object-cover transition ${isMediaSensitive(m) ? "blur-xl" : ""}`} />
                   {!m.alt_text && <span className="absolute left-2 top-2 rounded bg-danger px-1.5 py-0.5 text-[11px] font-semibold text-white">{t("badge.noAlt")}</span>}
                   {m.alt_text && m.used_in.length === 0 && <span className="absolute left-2 top-2 rounded bg-muted px-1.5 py-0.5 text-[11px] font-semibold text-background">{t("badge.unused")}</span>}
-                  {(m.is_sensitive || m.categories.length > 0) && <span className="absolute right-2 top-2 rounded bg-sensitive px-1.5 py-0.5 text-[11px] font-semibold text-white">{t("badge.sensitive")}</span>}
+                  {isMediaSensitive(m) && <span className="absolute right-2 top-2 rounded bg-sensitive px-1.5 py-0.5 text-[11px] font-semibold text-white">{t("badge.sensitive")}</span>}
                 </button>
                 <figcaption className="flex flex-col gap-0.5 text-[13px] leading-snug">
                   <span className="truncate font-medium">{m.alt_text || <span className="text-danger">{t("missingAlt")}</span>}</span>
@@ -183,7 +185,7 @@ export function MediaTab({ blogSlug, canWrite }: { blogSlug: string; canWrite: b
               ))}
             </div>
             <span className="text-[13px] text-muted">
-              {t("autoModeration")}: {selected.is_sensitive ? t("flagged") : t("clean")} · {t("neverLeaves")}
+              {isSolo ? t("manualMarking") : `${t("autoModeration")}: ${selected.is_sensitive ? t("flagged") : t("clean")} · ${t("neverLeaves")}`}
             </span>
           </div>
           <div className="flex flex-col gap-1 text-[13px]">

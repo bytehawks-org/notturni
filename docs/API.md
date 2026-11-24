@@ -1997,7 +1997,7 @@ can no longer be set), `audit_retention_days` (7–3650, default seeded from
 job `audit.maintenance`, read from the `platform_config` row
 on each run, no longer from the env after the row is created). The response
 also includes `infrastructure`: a read-only summary of the `NOCT_*`
-environment (never secrets; it no longer includes `audit_retention_days`, which is now an editable field of its own, not an env value),
+environment (never secrets; besides the deployment, storage and service flags it carries `subdomains_enabled`, `worker_inline`, `local_storage_public_url` (only with `localstorage`), `modules` (active modules), `bus` (`memory`|`nats`) and `cache` (`memory`|`redis`); it no longer includes `audit_retention_days`, which is now an editable field of its own, not an env value),
 `footer_column1_markdown`/`footer_column2_markdown`/`footer_column3_markdown`/`footer_bottom_bar_markdown`
 (free Markdown, max 5000 characters each, `""` clears it — footer shown on
 every public platform page and on every blog; see `GET /api/v1/footer`
@@ -2093,6 +2093,18 @@ responds with the user's data as JSON (same format as
 `blogs_count` — blogs owned — and `last_seen_at`, last use of a refresh
 session, `null` if never used). Optional query param `q`: filters by
 username or email (`ilike`, substring).
+
+**`POST /api/v1/admin/users`** — `Super Admin` only, `201`, rate limited (20 per 5 minutes per
+admin). Body `{username, email, password?}`: creates an account with platform role `utente`,
+**active at once** (there is no email-verification step: login only checks `is_active`), without registration and without
+sending any email. It works in `solo` and `platform` mode and does not change `POST /auth/register`, which stays closed in
+`solo` after the first user. Same validations and Argon2 hashing as `register` (`400` on invalid
+username, email or password; `409` "Username o email già in uso."). If `password` is omitted the server generates a random one and
+returns it **once** in `generated_password` (`null` otherwise; at least 20 characters, CSPRNG, never stored in clear nor written to the audit log); the admin hands it over out of band and the user
+changes it with the usual change-password route. Response: `{id, username, email, platform_role, is_active,
+generated_password}` (never the hash). The audit event `admin.user_created` (actor, target user, no password) is written in the same
+transaction. The created user can then be invited by username to a blog (`POST /blogs/{slug}/invitations`). The same operation
+is available from the shell without SMTP: `noct-ctl user create` (see BACKEND.md).
 
 **`PATCH /api/v1/admin/users/{user_id}`** — `{platform_role?, is_active?}`.
 - Assigning or removing the `amministratore`/`super_admin` roles (both as
@@ -2369,8 +2381,8 @@ advance. Production example: `https://([a-z0-9-]+\.)?notturni\.eu`.
 compose healthcheck).
 
 **`GET /api/v1/config`** — public, no authentication. Exposes
-`{"deployment_mode": "solo"|"platform", "turnstile_site_key": "..."|null}`
-(`NOCT_DEPLOYMENT_MODE`/`NOCT_TURNSTILE_SITE_KEY`), plus `default_locale`,
+`{"deployment_mode": "solo"|"platform", "subdomains_enabled": true|false, "turnstile_site_key": "..."|null}`
+(`NOCT_DEPLOYMENT_MODE`/`NOCT_SUBDOMAINS_ENABLED`/`NOCT_TURNSTILE_SITE_KEY`; `subdomains_enabled` defaults to `true` when unset and only informs the frontend, the backend rules do not change), plus `default_locale`,
 `registration_mode` and `sso_providers` (the enabled and configured providers; `[]` without the
 `auth_sso` module). `deployment_mode` is
 used by `frontend/src/app/admin/layout.tsx` to hide the Users entry in

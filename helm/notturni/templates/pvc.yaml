@@ -1,0 +1,42 @@
+{{- /* PVCs hold personal data (database, uploaded media): kept on uninstall unless persistence.keepOnUninstall=false. */ -}}
+{{- if and (include "notturni.internalPostgres" .) (not .Values.persistence.postgres.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "notturni.cname" (list . "postgres") }}
+  labels:
+    {{- include "notturni.componentLabels" (list . "postgres") | nindent 4 }}
+  {{- if .Values.persistence.keepOnUninstall }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
+spec:
+  accessModes: [{{ .Values.persistence.postgres.accessMode | quote }}]
+  {{- with .Values.persistence.postgres.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.postgres.size | quote }}
+---
+{{- end }}
+{{- if and (include "notturni.isLocal" .) (not .Values.persistence.storage.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "notturni.cname" (list . "storage") }}
+  labels:
+    {{- include "notturni.componentLabels" (list . "backend") | nindent 4 }}
+  {{- if .Values.persistence.keepOnUninstall }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
+spec:
+  accessModes: [{{ .Values.persistence.storage.accessMode | quote }}]
+  {{- with .Values.persistence.storage.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.storage.size | quote }}
+{{- end }}

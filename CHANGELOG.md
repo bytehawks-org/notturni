@@ -9,6 +9,29 @@ Two phases shape the history:
 
 For the product roadmap and status of each feature, see [ROADMAP.md](ROADMAP.md). For backend details, see [docs/BACKEND.md](docs/BACKEND.md).
 
+## 2026-11-23
+
+### Added
+- Lean **solo** install profile: PostgreSQL, backend and frontend only, with local storage on a volume, in-memory cache and bus, and no image moderation. `.env.example` now defaults to it. See [docs/CONFIGURATION.md](docs/CONFIGURATION.md#deployment-profiles-solo-and-platform).
+- `NOCT_SUBDOMAINS_ENABLED` (default `true`; solo sets `false`). The backend exposes it in the public config and in the admin infrastructure block, together with `worker_inline`, `local_storage_public_url`, `modules`, `bus` and `cache`; the frontend drops the wildcard CSP origin and the subdomain rewrite and shows path addresses when it is `false`.
+- Compose profiles: `compose.yaml` starts the solo stack; `compose.platform.yaml` with `--profile platform` adds Redis, NATS, Garage, `s3-public`, moderation and the worker; `mail-relay` and `dev-mail` profiles for the SMTP relay and MailHog. The local storage lives in a named volume.
+- `noct-ctl user create` and `POST /api/v1/admin/users` (Super Admin only), plus an admin form (`/admin/utenti/nuovo`): collaborator accounts in solo mode, where registration is closed. Generated passwords are shown once.
+- `noct-ctl user reset-password`: password recovery without SMTP; revokes sessions and writes an audit event.
+- Admin infrastructure panel (read-only) in `/admin/impostazioni` and a first-run wizard at `/admin/setup` that only prints `.env` and Helm values.
+- Helm chart `helm/notturni` (solo by default, platform through values), a `helm` job in CI (`helm lint`, `helm template`, Helm 3.19.0) and chart tests. See [helm/notturni/README.md](helm/notturni/README.md), which also holds the manual smoke-test checklist. Deployment guide: [docs/HELM.md](docs/HELM.md).
+- Files served from `/storage/` (local storage) now carry `X-Content-Type-Options: nosniff` and `Cache-Control: public, max-age=3600`; the former `no_store_sensitive` middleware is now `response_hardening`.
+- Vitest and Testing Library for the frontend, with a CI job; tests for the in-memory bus across a restart (`solo_membus.rs`).
+
+### Changed
+- In solo the UI hides the verification seal and role labels, and replaces the automatic-moderation line of the media library with a manual-marking hint. Permissions and API fields are unchanged.
+- `k8s/configmap.yaml` sets `NOCT_DEPLOYMENT_MODE=platform` and `NOCT_SUBDOMAINS_ENABLED=true` explicitly.
+- The frontend allows the local storage origin in `img-src` (`NOCT_LOCAL_STORAGE_PUBLIC_URL`) and reads `NOCT_DEPLOYMENT_MODE` at runtime.
+- Public media bibliography blurs images that are flagged sensitive or carry categories (marking by hand without the moderation module).
+- Breaking for compose users: `podman compose up -d --build` no longer starts Redis, NATS, Garage, moderation or the worker. Use `-f compose.yaml -f compose.platform.yaml --profile platform`, and `scripts/gen-env.sh --platform` (new option) to generate and uncomment the S3 and Garage secrets.
+
+### Documentation
+- Solo and platform profiles, how to switch components on, MemoryBus limits, image moderation off (operator responsibility, GDPR and NIS2), collaborators and their roles, password recovery, the module-table caveat, Helm and compose installation, and the roadmap rows: [docs/CONFIGURATION.md](docs/CONFIGURATION.md), [docs/INSTALL.md](docs/INSTALL.md), [GETTING_STARTED.md](GETTING_STARTED.md), [ROADMAP.md](ROADMAP.md).
+
 ## 2026-10-25
 
 ### Added

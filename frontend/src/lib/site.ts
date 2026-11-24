@@ -11,11 +11,17 @@
  *            `NEXT_PUBLIC_SITE_URL` → `http://localhost:3000`
  *   - API:   `NOCT_API_PUBLIC_URL` → `NEXT_PUBLIC_API_URL` → URL del sito (stessa origine: l'Ingress
  *            instrada già `/api` verso il backend)
- *   - nome:  `NOCT_SITE_NAME` → "Notturni" (il nome impostato in `/admin/seo` ha la precedenza, vedi layout). */
+ *   - nome:  `NOCT_SITE_NAME` → "Notturni" (il nome impostato in `/admin/seo` ha la precedenza, vedi layout).
+ *   - modo:  `NOCT_DEPLOYMENT_MODE` = `solo` → "solo", qualsiasi altro valore (o assente) → "platform".
+ *   - sottodomini: `NOCT_SUBDOMAINS_ENABLED`, default `true` se assente; `false|0|no|off` li disattiva
+ *            (i blog restano raggiungibili solo path-based, `{siteUrl}/{slug}`). Il pacchetto solo lo
+ *            imposta esplicitamente a `false`: qui `solo` da solo NON cambia il default. */
 export interface SiteConfig {
   siteUrl: string;
   apiUrl: string;
   siteName: string;
+  deploymentMode: "solo" | "platform";
+  subdomainsEnabled: boolean;
 }
 
 export const DEFAULT_SITE_NAME = "Notturni";
@@ -36,7 +42,13 @@ function configFromEnv(): SiteConfig {
       "http://localhost:3000",
   );
   const apiUrl = trimSlash(env.NOCT_API_PUBLIC_URL || publicApiUrl || siteUrl);
-  return { siteUrl, apiUrl, siteName: env.NOCT_SITE_NAME?.trim() || DEFAULT_SITE_NAME };
+  return {
+    siteUrl,
+    apiUrl,
+    siteName: env.NOCT_SITE_NAME?.trim() || DEFAULT_SITE_NAME,
+    deploymentMode: env.NOCT_DEPLOYMENT_MODE?.trim().toLowerCase() === "solo" ? "solo" : "platform",
+    subdomainsEnabled: !["false", "0", "no", "off"].includes((env.NOCT_SUBDOMAINS_ENABLED ?? "").trim().toLowerCase()),
+  };
 }
 
 let clientConfig: SiteConfig | null = null;
@@ -63,3 +75,12 @@ export const apiUrl = () => siteConfig().apiUrl;
 
 /** Nome della piattaforma da env; il layout lo sostituisce con quello di `/admin/seo` se impostato. */
 export const siteName = () => siteConfig().siteName;
+
+/** `true` se i blog possono essere serviti su `{slug}.{host}` (default). */
+export const subdomainsEnabled = () => siteConfig().subdomainsEnabled;
+
+/** `true` con `NOCT_DEPLOYMENT_MODE=solo`. */
+export const isSolo = () => siteConfig().deploymentMode === "solo";
+
+/** Indirizzo pubblico mostrato per un blog: `{slug}.{host}` con i sottodomini attivi, altrimenti `{siteUrl}/{slug}`. */
+export const blogAddress = (slug: string) => (subdomainsEnabled() ? `${slug}.${siteHost()}` : `${siteUrl()}/${slug}`);

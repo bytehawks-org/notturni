@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { useSiteFlags } from "@/components/SiteConfigProvider";
 import { VisibilityLabel } from "@/components/blog/VisibilityBand";
 import { AppearanceTab } from "@/components/dashboard/blog/AppearanceTab";
 import { CollaboratorsTab } from "@/components/dashboard/blog/CollaboratorsTab";
@@ -26,7 +27,7 @@ import { Button } from "@/components/ui/Button";
 import { SkeletonRows } from "@/components/ui/States";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { siteHost } from "@/lib/site";
+import { blogAddress } from "@/lib/site";
 import { type Blog, type BlogRole } from "@/lib/types";
 
 type Tab = "overview" | "posts" | "outline" | "pages" | "publications" | "notes" | "media" | "newsletter" | "comments" | "appearance" | "git" | "collaborators" | "settings";
@@ -60,6 +61,7 @@ export default function BlogDetailPage() {
   const searchParams = useSearchParams();
   const { user, accessToken, authFetch } = useAuth();
   const t = useTranslations("BlogTabs");
+  const { isSolo } = useSiteFlags();
   const ta = useTranslations("BlogAdmin");
   const tc = useTranslations("Common");
 
@@ -108,14 +110,14 @@ export default function BlogDetailPage() {
           <h1 className="truncate font-serif text-[28px] font-medium leading-tight text-foreground">{blog.title}</h1>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-muted">
             <span className="font-mono">
-              {blog.slug}.{siteHost()}
+              {blogAddress(blog.slug)}
             </span>
             <VisibilityLabel visibility={blog.visibility} />
             {blog.deleted_at && <span className="font-semibold text-danger">{ta("deleted")}</span>}
             {blog.is_paused && !blog.deleted_at && <span className="font-semibold text-[#b8862b]">{ta("paused")}</span>}
             {blog.is_suspended && <span className="font-semibold text-danger">{ta("suspended")}</span>}
-            {isOwner && <span>{ta("youAre", { role: ta("roles.owner") })}</span>}
-            {!isOwner && role && <span>{ta("youAre", { role: ta(`roles.${roleMessageKey(role)}`) })}</span>}
+            {!isSolo && isOwner && <span>{ta("youAre", { role: ta("roles.owner") })}</span>}
+            {!isSolo && !isOwner && role && <span>{ta("youAre", { role: ta(`roles.${roleMessageKey(role)}`) })}</span>}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">

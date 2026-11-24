@@ -18,6 +18,7 @@ noct-manifest.workspace = true
 noct-migrate.workspace = true
 noct-bundle.workspace = true
 noct-audit.workspace = true
+noct-auth.workspace = true
 reqwest.workspace = true
 chrono.workspace = true
 uuid.workspace = true

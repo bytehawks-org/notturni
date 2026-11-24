@@ -1,10 +1,12 @@
+import { isSolo } from "@/lib/site";
 import type { VerificationTier } from "@/lib/types";
 
 /** Sigillo di verifica del profilo (stile Bluesky/Instagram/Twitter),
  * CLAUDE.md #5: "bronze" da dominio custom verificato via DNS, "gold"/
  * "silver"/"blue" da elenchi ed elenchi di domini gestiti a mano da un
  * Super Admin (/admin/impostazioni, sezione Verifica — vedi backend
- * app/domain/verification.py). "none" non renderizza nulla. */
+ * app/domain/verification.py). "none" non renderizza nulla, e in modalità solo (`NOCT_DEPLOYMENT_MODE=solo`) il sigillo
+ * non si mostra mai (valido sia su server sia su client, vedi `lib/site.ts`). */
 const TIER_COLORS: Record<Exclude<VerificationTier, "none">, string> = {
   bronze: "#B08D57",
   silver: "#A8A9AD",
@@ -32,7 +34,7 @@ export function VerificationBadge({
   size?: number;
   label?: string;
 }) {
-  if (tier === "none") return null;
+  if (tier === "none" || isSolo()) return null;
 
   const color = TIER_COLORS[tier];
   const resolvedLabel = label ?? DEFAULT_TIER_LABELS[tier];

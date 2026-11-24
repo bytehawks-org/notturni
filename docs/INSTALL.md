@@ -40,8 +40,8 @@ The `moderation/` service (Python, image classification) is **optional**: withou
 | Inbound network | 80, 443 | 80, 443 (22 only from the management network) |
 
 In every case you need: a domain with `A`/`AAAA` DNS records pointing to the server (for blogs on subdomains,
-`username.example.com`, also a wildcard record `*.example.com`), a reachable SMTP server for email
-(password reset, MFA codes, newsletters) and, for wildcard certificates, a DNS provider with an API for the
+`username.example.com`, also a wildcard record `*.example.com`), an SMTP server for email
+(password reset, MFA codes, newsletters; optional in solo, where recovery uses `noct-ctl user reset-password`) and, for wildcard certificates, a DNS provider with an API for the
 DNS-01 challenge.
 
 ### 1.3 Secrets: `scripts/gen-env.sh`
@@ -52,7 +52,12 @@ create the Super Admin with the example password. Create the `.env` file with ra
 ```bash
 git clone https://github.com/bytehawks-org/notturni.git && cd notturni
 scripts/gen-env.sh            # creates .env (mode 600) and prints the Super Admin password
+scripts/gen-env.sh --platform # same, plus the S3/Garage secrets (platform profile)
 ```
+
+The script prints the Super Admin password **once, to the terminal**, and also stores it in `.env`
+(`NOCT_SUPER_ADMIN_PASSWORD`, file mode 600). Copy it to a password manager. Do not run the script
+where the terminal output is logged (CI logs, shared screen sessions). Change the password after the first login.
 
 Then edit by hand the variables that depend on the installation:
 
@@ -87,9 +92,7 @@ Then sign in at `https://example.com` with `superadmin` and the password printed
 
 ## 2. Podman and Docker Compose
 
-The full stack (Postgres, Redis, NATS, Garage + bootstrap, public-read proxy for storage, moderation,
-MailHog, backend, worker, frontend) is defined in [`compose.yaml`](../compose.yaml). It is meant for **development
-and trials**: it publishes the service ports on the host and uses MailHog instead of a real SMTP server.
+[`compose.yaml`](../compose.yaml) defines the stack for **development and trials**: it publishes the service ports on the host. By default it starts the lean **solo** profile (PostgreSQL, backend with inline worker and local storage on a named volume, frontend). The components of the **platform** profile (Redis, NATS, Garage + bootstrap, the public-read proxy `s3-public`, image moderation, the separate worker) sit behind the compose profile `platform`; `smtp-relay` behind `mail-relay`; MailHog behind `dev-mail`. For what each profile means, see [Deployment profiles](CONFIGURATION.md#deployment-profiles-solo-and-platform).
 
 ### 2.1 Prerequisites
 
@@ -102,35 +105,45 @@ and trials**: it publishes the service ports on the host and uses MailHog instea
 If `podman compose` is not available, use `podman-compose` (same syntax). With Docker, replace
 `podman compose` with `docker compose`: the file is the same. Git is needed to clone the repository.
 
-### 2.2 Quickstart (5 commands)
+### 2.2 Quickstart: solo (5 commands)
 
 ```bash
 git clone https://github.com/bytehawks-org/notturni.git && cd notturni
 scripts/gen-env.sh                      # random secrets; note the Super Admin password
 podman compose up -d --build            # (docker compose up -d --build)
-podman compose ps                       # garage-bootstrap exits by itself with exit 0: this is normal
+podman compose ps                       # only postgres, backend and frontend
 curl -s http://localhost:8000/api/v1/health/ready
 ```
 
-The first build of the Rust backend takes several minutes. Reachable services:
+The first build of the Rust backend takes several minutes. `.env.example` is already set for solo (`NOCT_DEPLOYMENT_MODE=solo`, `NOCT_SUBDOMAINS_ENABLED=false`, `NOCT_STORAGE_BACKEND=localstorage`, no Redis, NATS, S3 or moderation). Reachable services:
 
 | Service | URL |
 | --- | --- |
 | Frontend (dashboard and administration) | <http://localhost:3000> |
 | API / OpenAPI | <http://localhost:8000/api/v1/openapi.json> |
-| Development email (MailHog) | <http://localhost:8025> |
-| Public storage reads (avatars, media) | <http://localhost:9000> |
+| Uploaded files (local storage, served by the backend) | `http://localhost:8000/storage/...` |
 
-Sign in with `superadmin` and the password printed by `gen-env.sh`. The rest of the trial path is in
-[GETTING_STARTED.md](../GETTING_STARTED.md).
+Sign in with the Super Admin email and the password printed by `gen-env.sh`. Without SMTP no email is sent. To read test emails, add `--profile dev-mail` and set `NOCT_SMTP_HOST=mailhog`, `NOCT_SMTP_PORT=1025`, `NOCT_SMTP_USE_TLS=false`: MailHog is then at <http://localhost:8025>. The rest of the trial path is in [GETTING_STARTED.md](../GETTING_STARTED.md). Collaborator accounts, password recovery without SMTP and the other solo specifics are in [CONFIGURATION.md](CONFIGURATION.md#collaborators-in-solo-mode).
+
+### 2.2b Quickstart: platform
+
+podman-compose 1.6 fails with a `KeyError` on a `depends_on` that has a `condition` and points to a service of an inactive profile, even with `required: false`. The dependencies on the platform services therefore live in an override file:
+
+```bash
+podman compose -f compose.yaml -f compose.platform.yaml --profile platform up -d --build
+```
+
+This adds Redis, NATS, Garage (`garage-bootstrap` exits by itself with exit 0: this is normal), `s3-public`, the moderation service and the separate worker, and points the backend at them (S3 storage, Redis cache, NATS bus). `--profile platform` alone starts the containers but leaves the backend environment and dependencies in their solo form.
+
+Generate `.env` with `scripts/gen-env.sh --platform`: besides the common secrets it generates and uncomments `NOCT_S3_ACCESS_KEY_ID`, `NOCT_S3_SECRET_ACCESS_KEY`, `NOCT_GARAGE_RPC_SECRET` and `NOCT_GARAGE_ADMIN_TOKEN`. The option does not change the mode: set `NOCT_DEPLOYMENT_MODE=platform`, `NOCT_SUBDOMAINS_ENABLED=true` and `NOCT_STORAGE_BACKEND=s3` by hand, and uncomment the other `NOCT_S3_*` lines you need (the compose files already point the backend to `garage`). Verified with podman 6.2.0 and podman-compose 1.6.0; Docker Compose is not verified here. Extra ports: Garage S3 API <http://localhost:3900>, public reads (avatars, media) <http://localhost:9000>.
 
 ### 2.3 Operations
 
 ```bash
-podman compose logs -f backend worker          # logs
+podman compose logs -f backend                 # logs (platform: add worker)
 podman compose exec backend noct-ctl migrate status
 podman compose exec backend noct-ctl token create --name core-engine   # machine-to-machine API token
-podman compose up -d --build backend worker    # update after a git pull
+podman compose up -d --build backend            # update after a git pull (platform: add worker)
 podman compose down                            # stop (data stays in the volumes)
 podman compose down -v                         # stop and DELETE the data
 ```
@@ -144,7 +157,7 @@ podman compose down -v                         # stop and DELETE the data
    everything else to `localhost:3000`. Pass to the `frontend` service in `compose.yaml`, as environment variables
    (read at runtime), `NOCT_SITE_URL=https://example.com` and, to change the name, `NOCT_SITE_NAME`. Remove the
    `NEXT_PUBLIC_*` build arguments, which are meant for `localhost`.
-2. **Close the unneeded ports**: remove (or bind to `127.0.0.1:`) the `ports:` entries of `postgres`, `redis`, `nats`,
+2. **Close the unneeded ports**: remove (or bind to `127.0.0.1:`) the `ports:` entries of `postgres` and, if you run them, `redis`, `nats`,
    `garage`, `mailhog`, `smtp-relay` and `moderation`; only the reverse proxy should be reachable from outside.
    The host firewall must block everything else.
 3. **Real SMTP**: in `.env` and in the `environment` block of the `backend` service, replace MailHog
@@ -275,6 +288,27 @@ from Traefik (`kube-system`).
 | Update | new `newTag` in `kustomization.yaml`, then `kubectl apply -k .` (migrations run automatically) |
 | More replicas | `kubectl -n notturni scale deploy/backend --replicas=3` (same for `worker`: the scheduler uses atomic leader election) |
 | Remove everything | `kubectl delete -k .` (PVCs remain until you delete them) |
+
+### 3.8 Helm chart (alternative to the Kustomize manifests)
+
+The chart in [`helm/notturni/`](../helm/notturni/README.md) installs the same stack with a choice of profiles. It defaults to the lean solo profile: PostgreSQL, backend (1 replica, local storage on a PVC), frontend and a Traefik Ingress. Redis, NATS with a worker, Garage, image moderation, the SMTP relay and per-blog subdomains are switched on with values. Kustomize in `k8s/` stays the reference for the full platform profile; see [k8s/README.md](../k8s/README.md).
+
+```bash
+cat > my-solo.yaml <<'EOF'
+mode: solo
+ingress:
+  host: example.com
+smtp:
+  host: smtp.example.com
+secrets:
+  existingSecret: notturni-secrets
+EOF
+helm lint helm/notturni -f my-solo.yaml
+helm install notturni helm/notturni -n notturni --create-namespace -f my-solo.yaml
+kubectl -n notturni get pods,pvc,ingress
+```
+
+Create the Secret first (keys and a ready-made command in the [chart README](../helm/notturni/README.md#secrets)), or leave `secrets.existingSecret` empty and let the chart generate the mandatory keys. Upgrades use `helm upgrade`. `helm uninstall` does not delete the PVCs (`persistence.keepOnUninstall: true`). The chart has not yet been installed on a real cluster: the manual checklist is in the [chart README](../helm/notturni/README.md#smoke-test-checklist-manual). The full deployment guide (profiles, values reference, secrets, backup, operations, troubleshooting) is [HELM.md](HELM.md).
 
 ---
 

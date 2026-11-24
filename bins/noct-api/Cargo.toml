@@ -33,6 +33,7 @@ uuid.workspace = true
 chrono.workspace = true
 futures.workspace = true
 noct-security.workspace = true
+noct-auth.workspace = true
 noct-auth-mfa.workspace = true
 noct-newsletter.workspace = true
 noct-git-sync.workspace = true

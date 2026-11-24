@@ -1,0 +1,90 @@
+# Every option set to a non-default value: external S3 and PostgreSQL, external SMTP, existing Secret,
+# existing claims, annotations, extra env. Exercises the rarely used branches of the templates.
+mode: platform
+nameOverride: nct
+site:
+  name: Example
+  slug: example
+  experimentalFeatures: wiki,docs
+  turnstileSiteKey: 1x00000000000000000000AA
+  trustedProxies: 2
+admin:
+  username: root
+  email: root@example.com
+image:
+  pullPolicy: Always
+  imagePullSecrets:
+    - name: regcred
+  backend:
+    tag: 0.2.0-rust
+ingress:
+  host: blog.example.com
+  className: traefik
+  annotations:
+    example.com/annotation: "yes"
+  tls:
+    enabled: true
+    secretName: blog-tls
+    certManager:
+      enabled: true
+      issuerRef:
+        name: letsencrypt-staging
+        kind: ClusterIssuer
+  traefik:
+    securityHeaders: true
+subdomains:
+  enabled: true
+storage:
+  type: s3
+  s3:
+    endpointUrl: https://s3.eu.example.com
+    region: eu-1
+    publicUrl: https://cdn.example.com
+    buckets:
+      avatars: av
+      content: content
+      audit: audit
+redis:
+  enabled: true
+nats:
+  enabled: true
+moderation:
+  enabled: true
+smtp:
+  host: smtp.example.com
+  port: 465
+  useTls: true
+  fromEmail: info@example.com
+modules:
+  - pages
+  - comments
+  - image_moderation
+persistence:
+  keepOnUninstall: false
+  postgres:
+    existingClaim: my-postgres
+    size: 20Gi
+  storage:
+    size: 50Gi
+postgres:
+  user: notturni
+  database: notturni
+secrets:
+  existingSecret: my-notturni-secrets
+backend:
+  replicaCount: 3
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+  extraEnv:
+    - name: RUST_LOG
+      value: info
+frontend:
+  replicaCount: 2
+  extraEnv:
+    - name: TZ
+      value: UTC
+worker:
+  replicaCount: 2
+networkPolicy:
+  enabled: true
+  ingressControllerNamespace: traefik

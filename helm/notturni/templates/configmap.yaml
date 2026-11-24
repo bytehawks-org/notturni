@@ -1,0 +1,112 @@
+{{- /* Single place that turns values into NOCT_* variables (non-secret). Backend, worker and frontend read it. */ -}}
+{{- include "notturni.validate" . -}}
+{{- $base := include "notturni.baseUrl" . -}}
+{{- $modules := include "notturni.modules" . -}}
+{{- $pgPort := 5432 -}}
+{{- if .Values.postgres.external.host -}}{{- $pgPort = .Values.postgres.external.port -}}{{- end -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "notturni.cname" (list . "config") }}
+  labels:
+    {{- include "notturni.labels" . | nindent 4 }}
+data:
+  NOCT_APP_ENV: "production"
+  NOCT_INSTANCE_FQDN: {{ .Values.ingress.host | quote }}
+  NOCT_SITE_SLUG: {{ .Values.site.slug | quote }}
+  NOCT_SITE_NAME: {{ .Values.site.name | quote }}
+  NOCT_SITE_URL: {{ $base | quote }}
+  NOCT_DEPLOYMENT_MODE: {{ .Values.mode | quote }}
+  NOCT_SUBDOMAINS_ENABLED: {{ .Values.subdomains.enabled | quote }}
+  NOCT_EXPERIMENTAL_FEATURES: {{ .Values.site.experimentalFeatures | quote }}
+  NOCT_TRUSTED_PROXIES: {{ .Values.site.trustedProxies | quote }}
+  {{- with .Values.site.turnstileSiteKey }}
+  NOCT_TURNSTILE_SITE_KEY: {{ . | quote }}
+  {{- end }}
+  {{- if $modules }}
+  NOCT_MODULES: {{ $modules | quote }}
+  {{- end }}
+
+  # database (service name or external host); the password comes from the Secret
+  NOCT_POSTGRES_HOST: {{ include "notturni.postgresHost" . | quote }}
+  NOCT_POSTGRES_PORT: {{ $pgPort | quote }}
+  NOCT_POSTGRES_USER: {{ .Values.postgres.user | quote }}
+  NOCT_POSTGRES_DB: {{ .Values.postgres.database | quote }}
+
+  # internal URLs (SSR and cache revalidation)
+  NOCT_BACKEND_INTERNAL_URL: {{ printf "http://%s:8000" (include "notturni.cname" (list . "backend")) | quote }}
+  NOCT_FRONTEND_REVALIDATE_URL: {{ printf "http://%s:3000/api/revalidate" (include "notturni.cname" (list . "frontend")) | quote }}
+
+  # session cookie, CORS and OAuth redirect
+  NOCT_SESSION_COOKIE_SECURE: {{ .Values.ingress.tls.enabled | quote }}
+  NOCT_SESSION_COOKIE_SAMESITE: "lax"
+  NOCT_CORS_ORIGINS: {{ $base | quote }}
+  NOCT_OAUTH_REDIRECT_BASE_URL: {{ $base | quote }}
+  {{- if .Values.subdomains.enabled }}
+  NOCT_CORS_ORIGIN_REGEX: {{ printf "%s://([a-z0-9-]+\\.)?%s" (include "notturni.scheme" .) (.Values.ingress.host | replace "." "\\.") | quote }}
+  NOCT_SESSION_COOKIE_DOMAIN: {{ printf ".%s" .Values.ingress.host | quote }}
+  {{- end }}
+
+  # bus and cache: variables are absent (not empty) when the component is off
+  {{- if .Values.nats.enabled }}
+  NOCT_NATS_URL: {{ printf "nats://%s:4222" (include "notturni.cname" (list . "nats")) | quote }}
+  {{- end }}
+  {{- if .Values.redis.enabled }}
+  NOCT_REDIS_HOST: {{ include "notturni.cname" (list . "redis") | quote }}
+  NOCT_REDIS_PORT: "6379"
+  {{- end }}
+  {{- if .Values.moderation.enabled }}
+  NOCT_MODERATION_SERVICE_URL: {{ printf "http://%s:8100" (include "notturni.cname" (list . "moderation")) | quote }}
+  {{- end }}
+
+  # object storage
+  {{- if eq .Values.storage.type "local" }}
+  NOCT_STORAGE_BACKEND: "localstorage"
+  NOCT_LOCAL_STORAGE_BASE_PATH: {{ .Values.storage.local.basePath | quote }}
+  NOCT_LOCAL_STORAGE_PUBLIC_URL: {{ include "notturni.storagePublicUrl" . | quote }}
+  {{- else }}
+  NOCT_STORAGE_BACKEND: "s3"
+  NOCT_S3_BUCKET_AVATARS: {{ .Values.storage.s3.buckets.avatars | quote }}
+  NOCT_S3_BUCKET_CONTENT: {{ .Values.storage.s3.buckets.content | quote }}
+  NOCT_S3_BUCKET_AUDIT: {{ .Values.storage.s3.buckets.audit | quote }}
+  {{- if include "notturni.garage" . }}
+  NOCT_S3_ENDPOINT_URL: {{ printf "http://%s:3900" (include "notturni.cname" (list . "garage")) | quote }}
+  NOCT_S3_REGION: "garage"
+  NOCT_GARAGE_ADMIN_URL: {{ printf "http://%s:3903" (include "notturni.cname" (list . "garage")) | quote }}
+  NOCT_S3_PUBLIC_URL: {{ default (printf "%s://%s" (include "notturni.scheme" .) (include "notturni.s3Host" .)) .Values.storage.s3.publicUrl | quote }}
+  {{- else }}
+  NOCT_S3_ENDPOINT_URL: {{ .Values.storage.s3.endpointUrl | quote }}
+  NOCT_S3_PUBLIC_URL: {{ .Values.storage.s3.publicUrl | quote }}
+  {{- with .Values.storage.s3.region }}
+  NOCT_S3_REGION: {{ . | quote }}
+  {{- end }}
+  {{- end }}
+  {{- end }}
+
+  # infrastructure backup (external S3; credentials in the Secret)
+  {{- with .Values.backup.s3.bucket }}
+  NOCT_BACKUP_S3_BUCKET: {{ . | quote }}
+  NOCT_BACKUP_S3_ENDPOINT_URL: {{ $.Values.backup.s3.endpointUrl | quote }}
+  NOCT_BACKUP_S3_REGION: {{ $.Values.backup.s3.region | quote }}
+  {{- end }}
+
+  # SMTP: no variable at all when nothing is configured (no email is sent)
+  {{- if .Values.smtp.relay.enabled }}
+  NOCT_SMTP_HOST: {{ include "notturni.cname" (list . "smtp-relay") | quote }}
+  NOCT_SMTP_PORT: "587"
+  NOCT_SMTP_USE_TLS: "false"
+  NOCT_SMTP_RELAY_HOST: {{ .Values.smtp.relay.host | quote }}
+  {{- else if .Values.smtp.host }}
+  NOCT_SMTP_HOST: {{ .Values.smtp.host | quote }}
+  NOCT_SMTP_PORT: {{ .Values.smtp.port | quote }}
+  NOCT_SMTP_USE_TLS: {{ .Values.smtp.useTls | quote }}
+  {{- end }}
+  {{- if and (or .Values.smtp.relay.enabled .Values.smtp.host) .Values.smtp.fromEmail }}
+  NOCT_SMTP_FROM_EMAIL: {{ .Values.smtp.fromEmail | quote }}
+  {{- end }}
+
+  # first Super Admin (password in the Secret)
+  {{- if .Values.admin.email }}
+  NOCT_SUPER_ADMIN_USERNAME: {{ .Values.admin.username | quote }}
+  NOCT_SUPER_ADMIN_EMAIL: {{ .Values.admin.email | quote }}
+  {{- end }}

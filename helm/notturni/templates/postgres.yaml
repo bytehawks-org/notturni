@@ -1,0 +1,71 @@
+{{- if include "notturni.internalPostgres" . }}
+{{- $name := include "notturni.cname" (list . "postgres") }}
+{{- $cfg := include "notturni.cname" (list . "config") }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "notturni.componentLabels" (list . "postgres") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "notturni.componentSelector" (list . "postgres") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "notturni.componentLabels" (list . "postgres") | nindent 8 }}
+    spec:
+      {{- include "notturni.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: postgres
+          image: {{ include "notturni.image" (list . .Values.image.postgres) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef: {name: {{ $cfg }}, key: NOCT_POSTGRES_USER}
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef: {name: {{ $cfg }}, key: NOCT_POSTGRES_DB}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: {{ include "notturni.secretName" . }}, key: NOCT_POSTGRES_PASSWORD}
+            # sub-directory: storage classes that create lost+found in the volume root break initdb
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "$(POSTGRES_USER)"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          {{- with .Values.postgresPod.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ default $name .Values.persistence.postgres.existingClaim }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "notturni.componentLabels" (list . "postgres") | nindent 4 }}
+spec:
+  selector:
+    {{- include "notturni.componentSelector" (list . "postgres") | nindent 4 }}
+  ports:
+    - port: 5432
+      targetPort: 5432
+{{- end }}

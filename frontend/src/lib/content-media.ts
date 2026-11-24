@@ -46,3 +46,8 @@ export function isFlaggedSensitive(title: string | null | undefined): boolean {
 export function buildSensitiveTitle(categories: SensitivityCategory[]): string {
   return categories.length > 0 ? `sensitive:${categories.join(",")}` : "sensitive";
 }
+
+/** Un'immagine è sensibile se segnalata dall'automoderazione (`is_sensitive`) o dall'autore (categorie scelte). */
+export function isMediaSensitive(media: { is_sensitive: boolean; categories: readonly string[] }): boolean {
+  return media.is_sensitive || media.categories.length > 0;
+}

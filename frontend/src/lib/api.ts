@@ -5,6 +5,7 @@ import type {
   AdminOverview,
   AdminPost,
   AdminUser,
+  CreatedUser,
   ApiToken,
   ApiTokenCreated,
   AuditChannel,
@@ -937,6 +938,9 @@ export const api = {
     executeGdpr: (token: string, id: string) => request<Record<string, unknown>>(`/api/v1/admin/gdpr/${id}/execute`, { method: "POST", token }),
     listUsers: (token: string, q?: string) =>
       request<AdminUser[]>(withQuery("/api/v1/admin/users", { q }), { token }),
+    /** Super Admin only. Without `password` the server generates one and returns it once. */
+    createUser: (token: string, payload: { username: string; email: string; password?: string }) =>
+      request<CreatedUser>("/api/v1/admin/users", { method: "POST", token, body: payload }),
     updateUser: (
       token: string,
       userId: string,

@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import { siteHost } from "@/lib/site";
+import { siteHost, subdomainsEnabled } from "@/lib/site";
 
 export interface BlogLinks {
   /** Prefisso da anteporre ai link interni *costruiti a mano* (es.
@@ -22,7 +22,7 @@ export interface BlogLinks {
 export async function blogLinks(blogSlug: string): Promise<BlogLinks> {
   const host = (await headers()).get("host") ?? "";
   const hostname = host.split(":")[0];
-  const onSubdomain = hostname === `${blogSlug}.${siteHost()}`;
+  const onSubdomain = subdomainsEnabled() && hostname === `${blogSlug}.${siteHost()}`;
   const prefix = `/${blogSlug}`;
   return {
     basePath: onSubdomain ? "" : prefix,

@@ -70,6 +70,12 @@ async fn render(ctx: &RouteCtx, r: &Row) -> Result<Value, ApiError> {
             "smtp": st.config.smtp.is_some(),
             "nats": st.config.nats_url.is_some(),
             "redis": st.config.redis_url.is_some(),
+            "subdomains_enabled": st.config.subdomains_enabled,
+            "worker_inline": st.config.worker_inline,
+            "local_storage_public_url": if storage.backend == StorageBackend::Local { Some(storage.local_public_url.clone()) } else { None },
+            "modules": st.modules.iter().collect::<Vec<_>>(),
+            "bus": st.services.bus.backend(),
+            "cache": st.services.cache.backend(),
         },
     });
     out.as_object_mut().expect("oggetto").extend(st.admin_sections.settings(st).await?);

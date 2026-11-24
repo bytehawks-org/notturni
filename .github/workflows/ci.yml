@@ -76,6 +76,36 @@ jobs:
       - name: OpenAPI generabile
         run: cargo run --locked -q -p noct-ctl -- openapi > /dev/null
 
+  helm:
+    name: Chart Helm (lint, template, test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HELM_VERSION: v3.19.0
+      # SHA-256 del tarball ufficiale (https://get.helm.sh/helm-v3.19.0-linux-amd64.tar.gz.sha256sum)
+      HELM_SHA256: a7f81ce08007091b86d8bd696eb4d86b8d0f2e1b9f6c714be62f82f96a594496
+    steps:
+      - uses: actions/checkout@v5
+      - name: Installa helm (versione fissata, checksum verificato)
+        run: |
+          curl -fsSL -o helm.tgz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          echo "${HELM_SHA256}  helm.tgz" | sha256sum -c -
+          tar -xzf helm.tgz linux-amd64/helm
+          sudo install -m 0755 linux-amd64/helm /usr/local/bin/helm
+          helm version --short
+      - name: helm lint e helm template (solo, platform, full)
+        run: |
+          for f in helm/notturni/ci/*-values.yaml; do
+            echo "::group::$f"
+            helm lint helm/notturni -f "$f"
+            helm template notturni helm/notturni -f "$f" > /dev/null
+            echo "::endgroup::"
+          done
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Test del chart (helm_chart, deploy_configs)
+        run: cargo test --locked -p noct-api --test helm_chart --test deploy_configs
+
   test:
     name: Test (Postgres, Redis, NATS, S3)
     runs-on: ubuntu-latest
@@ -111,6 +141,32 @@ jobs:
         run: sudo apt-get update && sudo apt-get install --no-install-recommends -y postgresql-client
       - name: cargo test
         run: cargo test --workspace --locked
+
+  frontend:
+    name: Frontend (tsc, lint, test, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: npm ci
+        run: npm ci
+      # build first: it generates the `.next/types` (LayoutProps) that tsc needs
+      - name: build
+        run: npm run build
+      - name: tsc
+        run: npx tsc --noEmit
+      - name: lint
+        run: npm run lint
+      - name: test
+        run: npm test
 
   supply-chain:
     name: Licenze e vulnerabilità (cargo-deny, cargo-audit)

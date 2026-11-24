@@ -122,6 +122,16 @@ async fn media_upload_validates_what_is_really_inside() {
         .await
         .unwrap();
     assert_eq!((size as usize, uploader), (ok.len(), w.bruno));
+
+    // file servito dallo storage locale: nosniff e cache breve; il bucket di audit non è servito
+    let path = url.strip_prefix("http://localhost:8000").expect("URL del backend locale");
+    let req = Request::builder().method(Method::GET).uri(path).body(Body::empty()).unwrap();
+    let (s, h, _) = env.send(req).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(h.get("x-content-type-options").and_then(|v| v.to_str().ok()), Some("nosniff"));
+    assert_eq!(h.get("cache-control").and_then(|v| v.to_str().ok()), Some("public, max-age=3600"));
+    let req = Request::builder().method(Method::GET).uri("/api/v1/health").body(Body::empty()).unwrap();
+    assert!(env.send(req).await.1.get("x-content-type-options").is_none(), "nosniff solo su /storage/");
     w.env.teardown().await;
 }
 

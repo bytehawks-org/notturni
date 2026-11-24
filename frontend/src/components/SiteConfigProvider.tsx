@@ -19,3 +19,10 @@ export function SiteConfigProvider({ config, children }: { config: SiteConfig; c
 export function useSiteName(): string {
   return useContext(SiteConfigContext)?.siteName ?? DEFAULT_SITE_NAME;
 }
+
+/** Flag di deployment (solo/platform, sottodomini) per i client component. Senza provider: valori predefiniti
+ * della piattaforma (comportamento invariato). */
+export function useSiteFlags(): { isSolo: boolean; subdomainsEnabled: boolean } {
+  const config = useContext(SiteConfigContext);
+  return { isSolo: config?.deploymentMode === "solo", subdomainsEnabled: config?.subdomainsEnabled ?? true };
+}
