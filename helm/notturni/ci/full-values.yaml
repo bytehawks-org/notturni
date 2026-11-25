@@ -16,7 +16,7 @@ image:
   imagePullSecrets:
     - name: regcred
   backend:
-    tag: 0.2.0-rust
+    tag: 0.2.1
 ingress:
   host: blog.example.com
   className: traefik

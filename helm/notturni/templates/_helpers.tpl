@@ -104,7 +104,7 @@ imagePullSecrets:
 {{- if not (has .Values.storage.type (list "local" "s3")) -}}{{- fail "storage.type must be `local` or `s3`" -}}{{- end -}}
 {{- if not .Values.ingress.host -}}{{- fail "ingress.host is required (public host name, e.g. example.com)" -}}{{- end -}}
 {{- if and .Values.subdomains.enabled (ne .Values.mode "platform") -}}
-{{- fail "subdomains.enabled=true needs mode=platform (solo serves blogs on /blog/<slug> paths only)" -}}
+{{- fail "subdomains.enabled=true needs mode=platform (solo serves blogs on /<slug> paths only)" -}}
 {{- end -}}
 {{- if and (include "notturni.isLocal" .) (gt (int .Values.backend.replicaCount) 1) -}}
 {{- fail "storage.type=local keeps objects on a ReadWriteOnce volume: backend.replicaCount must be 1 (use storage.type=s3 to scale)" -}}

@@ -27,7 +27,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: worker
-          image: ghcr.io/bytehawks-org/notturni-backend:0.2.0-rust
+          image: ghcr.io/bytehawks-org/notturni-backend:0.2.1
           imagePullPolicy: Always
           securityContext:
             allowPrivilegeEscalation: false

@@ -1,6 +1,6 @@
 # Deploying with the Helm chart
 
-This guide describes how to install, configure, operate and troubleshoot Notturni with the Helm chart in [`helm/notturni/`](../helm/notturni/README.md). It is written against the chart as it is in the repository (chart `0.1.0`, `appVersion` `0.2.0-rust`); every key, default and object name below comes from `values.yaml` and `templates/`.
+This guide describes how to install, configure, operate and troubleshoot Notturni with the Helm chart in [`helm/notturni/`](../helm/notturni/README.md). It is written against the chart as it is in the repository (chart `0.2.1`, `appVersion` `0.2.1`); every key, default and object name below comes from `values.yaml` and `templates/`.
 
 **Status.** The chart passes `helm lint` and `helm template` for the three value sets in `helm/notturni/ci/` and the tests in `bins/noct-api/tests/helm_chart.rs`, with Helm 3.19.0 in CI. It has **not yet been installed on a real cluster**: the smoke test (task T019) is pending. Statements about runtime behavior that rely on a live cluster are marked "not yet verified on a cluster".
 
@@ -101,11 +101,11 @@ kubectl -n notturni rollout status deploy/notturni-backend
 The workflow `publish-chart.yml` publishes the chart to `oci://ghcr.io/bytehawks-org/charts/notturni` (Helm 3.8 or later). A push to `develop` publishes `<chart version>-develop` (moving tag) and `<chart version>-develop.<sha7>` (fixed), with `appVersion: develop`. With no `image.*.tag` in your values, the chart then uses the images tagged `develop` from `publish-images.yml`. A `vX.Y.Z` tag publishes version and appVersion `X.Y.Z`.
 
 ```bash
-helm install notturni oci://ghcr.io/bytehawks-org/charts/notturni --version 0.1.0-develop \
+helm install notturni oci://ghcr.io/bytehawks-org/charts/notturni --version 0.2.1-develop \
   -n notturni -f my-solo.yaml --set image.pullPolicy=Always
 ```
 
-The `develop` image tag is mutable. `image.pullPolicy=Always` makes a pod restart pull the current image. For a reproducible install, pin `--version 0.1.0-develop.<sha7>` and set `image.backend.tag` and `image.frontend.tag` to `sha-<sha7>`. A package created by a workflow starts private on GHCR: make it public once in the package settings, or run `helm registry login ghcr.io` with a `read:packages` token. Upgrades use `helm upgrade` with the same reference and `-f` file.
+The `develop` image tag is mutable. `image.pullPolicy=Always` makes a pod restart pull the current image. For a reproducible install, pin `--version 0.2.1-develop.<sha7>` and set `image.backend.tag` and `image.frontend.tag` to `sha-<sha7>`. A package created by a workflow starts private on GHCR: make it public once in the package settings, or run `helm registry login ghcr.io` with a `read:packages` token. Upgrades use `helm upgrade` with the same reference and `-f` file.
 
 ### First login and the admin account
 
@@ -158,7 +158,7 @@ The schema in `values.schema.json` rejects wrong types, an invalid `mode` or `st
 |---|---|---|
 | `image.pullPolicy` | `IfNotPresent` | Applied to every container. |
 | `image.imagePullSecrets` | `[]` | List of `{name: ...}` for a private registry. |
-| `image.backend`, `image.frontend`, `image.moderation` | `ghcr.io/bytehawks-org/notturni-{backend,frontend,moderation}`, tag empty | Empty `tag` means the chart `appVersion` (`0.2.0-rust`). The worker and the `garage-bootstrap` init container use the backend image. |
+| `image.backend`, `image.frontend`, `image.moderation` | `ghcr.io/bytehawks-org/notturni-{backend,frontend,moderation}`, tag empty | Empty `tag` means the chart `appVersion` (`0.2.1`). The worker and the `garage-bootstrap` init container use the backend image. |
 | `image.postgres` | `docker.io/library/postgres:16-alpine` | |
 | `image.redis` | `docker.io/library/redis:7-alpine` | |
 | `image.nats` | `docker.io/library/nats:2-alpine` | |

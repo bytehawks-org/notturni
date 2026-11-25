@@ -2,7 +2,7 @@ apiVersion: v2
 name: notturni
 description: Notturni publishing platform. Lean "solo" profile by default (PostgreSQL, backend, frontend); the "platform" profile adds Redis, NATS, worker, Garage, moderation and per-blog subdomains.
 type: application
-version: 0.1.0
-appVersion: "0.2.0-rust"
+version: 0.2.1
+appVersion: "0.2.1"
 kubeVersion: ">=1.27.0-0"
 keywords: [blog, publishing, notturni]

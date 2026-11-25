@@ -51,8 +51,8 @@ configMapGenerator:
 # valido (l'ultimo pubblicato) per chi li applica senza passare da kustomize.
 images:
   - name: ghcr.io/bytehawks-org/notturni-backend
-    newTag: 0.2.0-rust
+    newTag: 0.2.1
   - name: ghcr.io/bytehawks-org/notturni-frontend
-    newTag: 0.2.0-rust
+    newTag: 0.2.1
   - name: ghcr.io/bytehawks-org/notturni-moderation
-    newTag: 0.2.0-rust
+    newTag: 0.2.1

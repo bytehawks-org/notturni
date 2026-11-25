@@ -217,16 +217,14 @@ kubectl -n cert-manager rollout status deploy/cert-manager-webhook
 
 ### 3.4 Images
 
-The manifests point to `ghcr.io/bytehawks-org/notturni-{backend,frontend,moderation}` with the tag `0.2.0-rust`
-(`images:` in `k8s/kustomization.yaml`), published by the `publish-images` workflow on every push to the
-`migration/rust` branch. The earlier images (tags `sha-…`) are the Python ones and must not be used.
+The manifests point to `ghcr.io/bytehawks-org/notturni-{backend,frontend,moderation}` with the tag `0.2.1`
+(`images:` in `k8s/kustomization.yaml`), published by the `publish-images` workflow when a `vX.Y.Z` git tag is pushed. Pushes to `develop` publish the mutable `develop` tag and `sha-<commit>`; pushes to `main` publish `main` and `latest`. The earlier images (tags `sha-…` from before the Rust rewrite) are the Python ones and must not be used.
 
 **A. GitHub CI** (recommended): the frontend image does not depend on the domain (URL and name are set at runtime
-in the ConfigMap: `NOCT_INSTANCE_FQDN`/`NOCT_SITE_URL`, `NOCT_SITE_NAME`). Start the workflow (push to the branch, or *Run workflow*
-on `migration/rust`) and wait for the three builds (the backend and moderation arm64 builds under QEMU are slow). The GHCR
+in the ConfigMap: `NOCT_INSTANCE_FQDN`/`NOCT_SITE_URL`, `NOCT_SITE_NAME`). Start the workflow (push the `vX.Y.Z` tag, or *Run workflow*
+on the branch) and wait for the three builds (the backend and moderation builds are slow). The GHCR
 package must be readable by the cluster: public, or `imagePullSecrets` with a `read:packages` token.
-For later releases the workflow also publishes `sha-<commit>` and, on `vX.Y.Z` tags, the semver version:
-update the three `newTag` values.
+For later releases update the three `newTag` values to the new semver version.
 
 **B. Local build on the node** (no registry):
 

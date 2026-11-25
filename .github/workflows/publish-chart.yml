@@ -3,7 +3,7 @@ name: Pubblica chart Helm (OCI su GHCR)
 # Pubblica il chart `helm/notturni` come artefatto OCI in
 # oci://ghcr.io/<owner>/charts/notturni, così si installa da remoto senza clonare il repository:
 #
-#   helm install notturni oci://ghcr.io/bytehawks-org/charts/notturni --version 0.1.0-develop \
+#   helm install notturni oci://ghcr.io/bytehawks-org/charts/notturni --version 0.2.1-develop \
 #     -n <namespace> --create-namespace -f my-values.yaml --set image.pullPolicy=Always
 #
 # Versioni pubblicate:

@@ -23,7 +23,7 @@ spec:
       # repliche, attende da sé che Garage sia raggiungibile.
       initContainers:
         - name: garage-bootstrap
-          image: ghcr.io/bytehawks-org/notturni-backend:0.2.0-rust
+          image: ghcr.io/bytehawks-org/notturni-backend:0.2.1
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -34,7 +34,7 @@ spec:
             - secretRef: {name: notturni-secrets}
       containers:
         - name: backend
-          image: ghcr.io/bytehawks-org/notturni-backend:0.2.0-rust
+          image: ghcr.io/bytehawks-org/notturni-backend:0.2.1
           imagePullPolicy: Always
           securityContext:
             allowPrivilegeEscalation: false

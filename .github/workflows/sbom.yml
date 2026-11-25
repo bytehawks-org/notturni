@@ -19,12 +19,10 @@ on:
     branches:
       - main
       - develop
-      - migration/rust
   pull_request:
     branches:
       - main
       - develop
-      - migration/rust
   workflow_dispatch: {}
 
 permissions:
