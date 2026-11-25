@@ -1,0 +1,105 @@
+name: Pubblica chart Helm (OCI su GHCR)
+
+# Pubblica il chart `helm/notturni` come artefatto OCI in
+# oci://ghcr.io/<owner>/charts/notturni, così si installa da remoto senza clonare il repository:
+#
+#   helm install notturni oci://ghcr.io/bytehawks-org/charts/notturni --version 0.1.0-develop \
+#     -n <namespace> --create-namespace -f my-values.yaml --set image.pullPolicy=Always
+#
+# Versioni pubblicate:
+#   - push su `develop`: `<versione di Chart.yaml>-develop` (tag mobile, sovrascritto a ogni push) e
+#     `<versione di Chart.yaml>-develop.<sha7>` (fissa). L'appVersion è `develop`: senza `image.*.tag`
+#     nei values il chart usa quindi le immagini `notturni-{backend,frontend,moderation}:develop`
+#     pubblicate da publish-images.yml. Il tag `develop` è mobile: usa `image.pullPolicy=Always`.
+#   - tag `vX.Y.Z`: versione e appVersion = `X.Y.Z` (stesso tag semver delle immagini).
+#
+# Come per le immagini, il pacchetto GHCR creato da un workflow nasce privato: va reso pubblico a mano
+# una volta (Package settings), oppure `helm registry login` con un token `read:packages`.
+on:
+  push:
+    branches:
+      - develop
+    tags:
+      - "v*.*.*"
+    paths:
+      - "helm/**"
+      - ".github/workflows/publish-chart.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-chart-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Lint, package e push
+    runs-on: ubuntu-latest
+    env:
+      # stessa versione e checksum di ci.yml (job `helm`)
+      HELM_VERSION: v3.19.0
+      HELM_SHA256: a7f81ce08007091b86d8bd696eb4d86b8d0f2e1b9f6c714be62f82f96a594496
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Installa helm (versione fissata, checksum verificato)
+        run: |
+          curl -fsSL -o helm.tgz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          echo "${HELM_SHA256}  helm.tgz" | sha256sum -c -
+          tar -xzf helm.tgz linux-amd64/helm
+          sudo install -m 0755 linux-amd64/helm /usr/local/bin/helm
+          helm version --short
+
+      - name: Lint con i values di CI
+        run: |
+          for f in helm/notturni/ci/*-values.yaml; do
+            echo "== $f"
+            helm lint helm/notturni -f "$f"
+          done
+
+      - name: Calcola versione e appVersion
+        id: ver
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          base="$(awk '/^version:/ {print $2}' helm/notturni/Chart.yaml)"
+          if [ "$REF_TYPE" = "tag" ]; then
+            v="${REF_NAME#v}"
+            echo "versions=${v}" >> "$GITHUB_OUTPUT"
+            echo "app=${v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "versions=${base}-develop.${SHA:0:7} ${base}-develop" >> "$GITHUB_OUTPUT"
+            echo "app=develop" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Login a GHCR
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: echo "$TOKEN" | helm registry login ghcr.io -u "$ACTOR" --password-stdin
+
+      - name: Package e push
+        env:
+          VERSIONS: ${{ steps.ver.outputs.versions }}
+          APP_VERSION: ${{ steps.ver.outputs.app }}
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          for v in $VERSIONS; do
+            helm package helm/notturni --version "$v" --app-version "$APP_VERSION" --destination "$RUNNER_TEMP/chart"
+            helm push "$RUNNER_TEMP/chart/notturni-${v}.tgz" "oci://ghcr.io/${owner}/charts"
+          done
+
+      - name: Verifica
+        env:
+          VERSIONS: ${{ steps.ver.outputs.versions }}
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          for v in $VERSIONS; do
+            helm show chart "oci://ghcr.io/${owner}/charts/notturni" --version "$v" | grep -E '^(version|appVersion):'
+          done

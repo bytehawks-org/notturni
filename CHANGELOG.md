@@ -9,6 +9,11 @@ Two phases shape the history:
 
 For the product roadmap and status of each feature, see [ROADMAP.md](ROADMAP.md). For backend details, see [docs/BACKEND.md](docs/BACKEND.md).
 
+## 2026-11-25
+
+### Added
+- Workflow `publish-chart.yml`: publishes the Helm chart as an OCI artifact to `oci://ghcr.io/bytehawks-org/charts/notturni`. Pushes to `develop` publish `<chart version>-develop` and `<chart version>-develop.<sha7>` with `appVersion: develop` (default images tagged `develop`); `vX.Y.Z` tags publish that version. See [docs/HELM.md](docs/HELM.md#installing-from-the-oci-registry-no-clone).
+
 ## 2026-11-23
 
 ### Added
