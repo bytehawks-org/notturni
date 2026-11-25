@@ -3,7 +3,10 @@
 
 mod common;
 
-use axum::http::StatusCode;
+use axum::{
+    body::Body,
+    http::{Method, Request, StatusCode, header},
+};
 use common::*;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -559,5 +562,126 @@ async fn bibliographies_group_published_media_and_links() {
     env.blog("riservato", w.anna, "private").await;
     assert_eq!(env.get("/blogs/riservato/media-bibliography", None).await.0, StatusCode::NOT_FOUND);
     assert_eq!(env.get("/blogs/riservato/links-bibliography", Some(w.anna)).await.0, StatusCode::OK);
+    w.env.teardown().await;
+}
+
+const PNG_HEAD: &[u8] = b"\x89PNG\r\n\x1a\n";
+
+/// Immagine PNG sintetica; `extra` cambia la lunghezza, quindi il contenuto e l'URL.
+fn png(extra: usize) -> Vec<u8> {
+    let mut v = PNG_HEAD.to_vec();
+    v.extend(std::iter::repeat_n(7u8, extra));
+    v
+}
+
+/// Carica un'immagine nella libreria del blog `diario` e ne restituisce l'URL pubblico e l'id.
+async fn upload_library_image(w: &World, extra: usize) -> (String, Uuid) {
+    let boundary = "XBOUNDARYX";
+    let mut body = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"foto\"\r\nContent-Type: image/png\r\n\r\n"
+    )
+    .into_bytes();
+    body.extend_from_slice(&png(extra));
+    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/api/v1/blogs/diario/media")
+        .header(header::CONTENT_TYPE, format!("multipart/form-data; boundary={boundary}"))
+        .header(header::AUTHORIZATION, format!("Bearer {}", w.env.access_token(w.anna)))
+        .body(Body::from(body))
+        .unwrap();
+    let (s, _, j) = w.env.send(req).await;
+    assert_eq!(s, StatusCode::CREATED, "{j}");
+    let url = j["url"].as_str().unwrap().to_string();
+    let media_id: Uuid = sqlx::query_scalar("SELECT id FROM media_files WHERE url = $1")
+        .bind(&url)
+        .fetch_one(&w.env.pool)
+        .await
+        .unwrap();
+    (url, media_id)
+}
+
+/// Blocco ```` ```gallery ```` con un'immagine per URL; la seconda è segnalata come sensibile.
+fn gallery_block(urls: &[String]) -> String {
+    let mut block = String::from("```gallery\n");
+    for (i, url) in urls.iter().enumerate() {
+        match i {
+            1 => block.push_str(&format!("![img{i}]({url} \"sensitive:nudity\")\n")),
+            _ => block.push_str(&format!("![img{i}]({url})\n")),
+        }
+    }
+    block.push_str("```\n");
+    block
+}
+
+#[tokio::test]
+async fn gallery_images_fill_post_media_and_block_media_deletion() {
+    let w = world().await;
+    let env = &w.env;
+    let mut urls = Vec::new();
+    let mut media_ids = Vec::new();
+    for extra in [10, 11, 12] {
+        let (url, id) = upload_library_image(&w, extra).await;
+        urls.push(url);
+        media_ids.push(id);
+    }
+
+    let content = format!("Testo introduttivo.\n\n{}\nChiusura.", gallery_block(&urls));
+    let p = created(&w, w.anna, json!({"slug": "galleria", "title": "Galleria", "content": content})).await;
+    let pid = Uuid::parse_str(&id(&p)).unwrap();
+
+    // una riga per immagine, in ordine di galleria, con la sensibilità conservata
+    let rows: Vec<(i32, String, String, Vec<String>, bool)> = sqlx::query_as(
+        "SELECT position, url, alt_text, categories, is_sensitive FROM post_media WHERE post_id = $1 ORDER BY position",
+    )
+    .bind(pid)
+    .fetch_all(&env.pool)
+    .await
+    .unwrap();
+    let expected: Vec<(i32, String, String, Vec<String>, bool)> = vec![
+        (0, urls[0].clone(), "img0".into(), vec![], false),
+        (1, urls[1].clone(), "img1".into(), vec!["nudity".into()], true),
+        (2, urls[2].clone(), "img2".into(), vec![], false),
+    ];
+    assert_eq!(rows, expected);
+
+    // ogni immagine della galleria è in uso: la libreria non la cancella
+    for media_id in &media_ids {
+        let s = env.delete(&format!("/blogs/diario/media/{media_id}"), Some(w.anna)).await;
+        assert_eq!(s, StatusCode::CONFLICT, "media {media_id} usato dalla galleria");
+    }
+    let still: i64 = sqlx::query_scalar("SELECT count(*) FROM media_files").fetch_one(&env.pool).await.unwrap();
+    assert_eq!(still, 3, "nessuna immagine cancellata");
+    w.env.teardown().await;
+}
+
+#[tokio::test]
+async fn gallery_over_ten_images_is_rejected_on_create_and_update() {
+    let w = world().await;
+    let env = &w.env;
+    let urls: Vec<String> = (0..11).map(|i| format!("https://i.org/{i}.png")).collect();
+    let too_many = format!("Testo.\n\n{}", gallery_block(&urls));
+
+    let body = json!({"slug": "troppe", "title": "T", "content": too_many});
+    let (s, b) = env.post("/blogs/diario/posts", Some(w.anna), body).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST, "{b}");
+    assert!(detail(&b).contains("al massimo 10"), "{b}");
+    let created_rows: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM posts WHERE slug = 'troppe'").fetch_one(&env.pool).await.unwrap();
+    assert_eq!(created_rows, 0, "il post non viene creato");
+
+    // un post esistente con una galleria da 10 immagini: 11 in modifica sono rifiutate
+    let ten = format!("Testo.\n\n{}", gallery_block(&urls[..10]));
+    let p = created(&w, w.anna, json!({"slug": "dieci", "title": "T", "content": ten.clone()})).await;
+    let url = format!("/posts/{}", id(&p));
+    let (s, b) = env.patch(&url, Some(w.anna), json!({"content": too_many})).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST, "{b}");
+    assert!(detail(&b).contains("al massimo 10"), "{b}");
+    let stored: String = sqlx::query_scalar("SELECT content FROM posts WHERE id = $1")
+        .bind(Uuid::parse_str(&id(&p)).unwrap())
+        .fetch_one(&env.pool)
+        .await
+        .unwrap();
+    assert_eq!(stored, ten, "il contenuto precedente resta");
     w.env.teardown().await;
 }

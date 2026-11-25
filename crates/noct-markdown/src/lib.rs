@@ -49,13 +49,46 @@ fn sanitizer() -> Builder<'static> {
     b
 }
 
+/// Riscrive i blocchi ```` ```gallery ```` in righe immagine separate da una
+/// riga vuota, così ogni immagine diventa un normale paragrafo con `<img>`.
+///
+/// Un blocco si apre con una riga ```` ```gallery ```` e si chiude con una riga
+/// ```` ``` ````. Un blocco senza chiusura, e ogni altro fence, restano invariati.
+/// Le righe non vuote del blocco sono mantenute: la validazione del contenuto
+/// spetta al chiamante (vedi `noct-posts`).
+pub fn expand_gallery_fences(markdown: &str) -> String {
+    let mut out = String::with_capacity(markdown.len());
+    let mut lines = markdown.split_inclusive('\n').peekable();
+    while let Some(line) = lines.next() {
+        if line.trim_end() != "```gallery" {
+            out.push_str(line);
+            continue;
+        }
+        // Cerca la chiusura senza consumare le righe finché non la trova.
+        let rest: Vec<&str> = lines.clone().collect();
+        let Some(close) = rest.iter().position(|l| l.trim_end() == "```") else {
+            out.push_str(line);
+            continue;
+        };
+        for item in rest[..close].iter().map(|l| l.trim()).filter(|l| !l.is_empty()) {
+            out.push_str(item);
+            out.push_str("\n\n");
+        }
+        for _ in 0..=close {
+            lines.next();
+        }
+    }
+    out
+}
+
 /// Converte Markdown in HTML e lo sanifica.
 pub fn render_safe_html(markdown: &str) -> String {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
     options.insert(Options::ENABLE_STRIKETHROUGH);
+    let expanded = expand_gallery_fences(markdown);
     let mut raw = String::new();
-    html::push_html(&mut raw, Parser::new_ext(markdown, options));
+    html::push_html(&mut raw, Parser::new_ext(&expanded, options));
     sanitizer().clean(&raw).to_string()
 }
 
@@ -101,5 +134,58 @@ mod tests {
     fn disallowed_tags_are_removed_but_text_survives() {
         let html = render_safe_html("<div><span>ciao</span></div>");
         assert!(!html.contains("<div") && !html.contains("<span") && html.contains("ciao"));
+    }
+
+    #[test]
+    fn gallery_fence_renders_each_image() {
+        let md = "Intro\n\n```gallery\n![uno](https://example.com/1.jpg)\n![due](https://example.com/2.jpg \"t\")\n![tre](https://example.com/3.jpg)\n```\n\nFine\n";
+        let html = render_safe_html(md);
+        assert_eq!(html.matches("<img ").count(), 3, "{html}");
+        assert!(!html.contains("<pre"), "{html}");
+        assert!(!html.contains("!["), "{html}");
+        assert!(html.contains(r#"src="https://example.com/2.jpg""#));
+        assert!(html.contains("Fine"));
+    }
+
+    #[test]
+    fn normal_fenced_code_is_unchanged() {
+        let md = "```rust\nfn main() {}\n```\n";
+        assert_eq!(expand_gallery_fences(md), md);
+        let html = render_safe_html(md);
+        assert!(html.contains("<pre>") && html.contains("fn main() {}"));
+    }
+
+    #[test]
+    fn gallery_fence_with_other_info_is_untouched() {
+        let md = "```gallerytext\n![a](https://example.com/a.jpg)\n```\n";
+        assert_eq!(expand_gallery_fences(md), md);
+    }
+
+    #[test]
+    fn unclosed_gallery_fence_does_not_panic_and_is_kept() {
+        let md = "```gallery\n![a](https://example.com/a.jpg)\n";
+        assert_eq!(expand_gallery_fences(md), md);
+        let html = render_safe_html(md);
+        assert!(!html.contains("<img"));
+    }
+
+    #[test]
+    fn gallery_alt_and_url_are_sanitized() {
+        let md = "```gallery\n![<script>alert(1)</script>](javascript:alert(1))\n![x\" onerror=\"alert(2)](https://example.com/b.jpg)\n```\n";
+        let html = render_safe_html(md);
+        // Alt text is escaped inside the attribute: no live element or handler.
+        assert!(!html.contains("<script"), "{html}");
+        assert!(!html.contains(r#"src="javascript"#), "{html}");
+        assert!(!html.contains(r#"" onerror"#) && !html.contains("<img onerror"), "{html}");
+        assert!(html.contains(r#"src="https://example.com/b.jpg""#), "{html}");
+    }
+
+    #[test]
+    fn gallery_fence_is_not_rewritten_inside_other_fence_content() {
+        // Un blocco gallery senza chiusura prima di un altro fence non deve
+        // inghiottire il resto del documento.
+        let md = "```gallery\n![a](https://example.com/a.jpg)\n\n```rust\nlet x = 1;\n```\n";
+        let out = expand_gallery_fences(md);
+        assert!(out.contains("```rust"), "{out}");
     }
 }

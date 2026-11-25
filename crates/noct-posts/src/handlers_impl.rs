@@ -247,6 +247,7 @@ pub async fn create_post(ctx: RouteCtx, body: PostCreate) -> Result<Value, ApiEr
     let locale = body.locale.clone().unwrap_or(default_locale);
     noct_blogs::rules::validate_locale(&locale).map_err(ApiError::bad_request)?;
     rules::validate_post_slug(&body.slug).map_err(ApiError::bad_request)?;
+    rules::validate_galleries(&body.content).map_err(ApiError::bad_request)?;
     let (manual_tags, effective_tags) =
         rules::resolve_tags(body.tags.as_deref().unwrap_or_default(), &body.content).map_err(ApiError::bad_request)?;
     let cover_categories = rules::validate_categories(body.cover_image_categories.as_deref().unwrap_or_default())
@@ -301,6 +302,7 @@ pub async fn add_translation(ctx: RouteCtx, body: PostTranslation) -> Result<Val
     }
     noct_blogs::rules::validate_locale(&body.locale).map_err(ApiError::bad_request)?;
     rules::validate_post_slug(&body.slug).map_err(ApiError::bad_request)?;
+    rules::validate_galleries(&body.content).map_err(ApiError::bad_request)?;
     let (manual_tags, effective_tags) =
         rules::resolve_tags(body.tags.as_deref().unwrap_or_default(), &body.content).map_err(ApiError::bad_request)?;
     let cover_categories = rules::validate_categories(body.cover_image_categories.as_deref().unwrap_or_default())
@@ -493,6 +495,9 @@ pub async fn update_post(ctx: RouteCtx, body: PostUpdate) -> Result<Value, ApiEr
     let mut tx = st.db.begin().await?;
     let row = fetch_row(&mut tx, found.id, true).await?.ok_or_else(not_found)?;
     let content = body.content.clone().unwrap_or_else(|| row.content.clone());
+    if body.content.is_some() {
+        rules::validate_galleries(&content).map_err(ApiError::bad_request)?;
+    }
     let mut qb = QueryBuilder::<Postgres>::new("UPDATE posts SET updated_at = now()");
     if let Some(t) = &body.title {
         qb.push(", title = ").push_bind(t);

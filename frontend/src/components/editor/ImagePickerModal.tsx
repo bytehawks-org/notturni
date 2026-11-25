@@ -3,7 +3,8 @@
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 
-import { ApiClientError, api } from "@/lib/api";
+import { ApiClientError, api, type MediaUploadOutcome, uploadMediaMany } from "@/lib/api";
+import { GALLERY_MAX } from "@/lib/gallery";
 import type { MediaFile, MyMediaFile } from "@/lib/types";
 import { ImageIcon } from "./icons";
 
@@ -17,24 +18,47 @@ interface ImagePickerModalProps {
    * cui mostrare la libreria (tab "Libreria del blog"). */
   blogSlug: string;
   authFetch: <T>(fn: (token: string) => Promise<T>) => Promise<T>;
+  /** Called with one image when a single file is picked or a library item is chosen. */
   onSelect: (image: PickedImage) => void;
+  /**
+   * Called with the images of a multi-file upload (2 to GALLERY_MAX files), in
+   * selection order. Only successful uploads are passed. Optional: without it,
+   * each image is passed to `onSelect` in turn.
+   */
+  onPickMany?: (images: PickedImage[]) => void;
   onClose: () => void;
 }
 
 type Tab = "upload" | "blog" | "mine";
 
+/** One file of a multi-file upload batch. */
+interface BatchItem {
+  key: number;
+  file: File;
+  status: "uploading" | "done" | "failed";
+  error?: string;
+}
+
 /** Modal "Inserisci immagine", stesso stile a overlay di ContentWarningModal/
- * NoteModal: tre schede — caricamento diretto (comportamento preesistente),
- * libreria del blog corrente (B7) e libreria aggregata di tutti i blog
+ * NoteModal: tre schede — caricamento diretto (singolo file: comportamento
+ * preesistente; da 2 a GALLERY_MAX file: caricamento multiplo con stato per
+ * file), libreria del blog corrente (B7) e libreria aggregata di tutti i blog
  * dell'utente (già esposta in `/dashboard/media`, qui riusata come sorgente
  * di selezione invece che di sola consultazione). Nessuna integrazione
  * Unsplash in questo blocco. */
-export function ImagePickerModal({ blogSlug, authFetch, onSelect, onClose }: ImagePickerModalProps) {
+export function ImagePickerModal({ blogSlug, authFetch, onSelect, onPickMany, onClose }: ImagePickerModalProps) {
   const t = useTranslations("ImagePickerModal");
+  const tg = useTranslations("Gallery");
   const [tab, setTab] = useState<Tab>("upload");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [batch, setBatch] = useState<BatchItem[] | null>(null);
+  // Mirror of `batch`, readable right after an await without stale closures.
+  const batchRef = useRef<BatchItem[]>([]);
+  const keySeq = useRef(0);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
   const [blogItems, setBlogItems] = useState<MediaFile[] | null>(null);
   const [mineItems, setMineItems] = useState<MyMediaFile[] | null>(null);
@@ -52,6 +76,21 @@ export function ImagePickerModal({ blogSlug, authFetch, onSelect, onClose }: Ima
     }
   }, [tab, blogItems, mineItems, authFetch, blogSlug, t]);
 
+  function setItems(update: (items: BatchItem[]) => BatchItem[]) {
+    const next = update(batchRef.current);
+    batchRef.current = next;
+    setBatch(next);
+  }
+
+  function emitMany(images: PickedImage[]) {
+    if (images.length === 0) return;
+    if (onPickMany) {
+      onPickMany(images);
+    } else {
+      images.forEach(onSelect);
+    }
+  }
+
   async function handleFile(file: File) {
     setUploading(true);
     setError(null);
@@ -64,6 +103,74 @@ export function ImagePickerModal({ blogSlug, authFetch, onSelect, onClose }: Ima
     } finally {
       setUploading(false);
     }
+  }
+
+  /** Uploads the given batch items, updates their status and returns the successes to the parent. */
+  async function runUploads(targets: BatchItem[]) {
+    const keys = new Set(targets.map((item) => item.key));
+    setItems((items) => items.map((i) => (keys.has(i.key) ? { ...i, status: "uploading", error: undefined } : i)));
+    setUploading(true);
+    setError(null);
+    setProgress({ done: 0, total: targets.length });
+
+    let outcomes: MediaUploadOutcome[];
+    try {
+      outcomes = await authFetch((token) =>
+        uploadMediaMany(
+          token,
+          blogSlug,
+          targets.map((item) => item.file),
+          { onProgress: (done, total) => setProgress({ done, total }) },
+        ),
+      );
+    } catch (err) {
+      // Token or transport failure before any file settled: mark the whole run as failed.
+      const message = err instanceof Error ? err.message : t("uploadFailed");
+      outcomes = targets.map((item) => ({ file: item.file, ok: false, error: message }));
+    }
+
+    const byKey = new Map<number, MediaUploadOutcome>();
+    targets.forEach((item, index) => byKey.set(item.key, outcomes[index]));
+    setItems((items) =>
+      items.map((i) => {
+        const outcome = byKey.get(i.key);
+        if (!outcome) return i;
+        return outcome.ok ? { ...i, status: "done" } : { ...i, status: "failed", error: outcome.error };
+      }),
+    );
+
+    setUploading(false);
+    setProgress(null);
+
+    const successes: PickedImage[] = [];
+    targets.forEach((item, index) => {
+      const outcome = outcomes[index];
+      if (outcome.ok) successes.push({ url: outcome.media.url, is_sensitive: outcome.media.is_sensitive });
+    });
+    emitMany(successes);
+
+    // Stay open while any file still failed, so the user can retry it.
+    if (!batchRef.current.some((i) => i.status === "failed")) onClose();
+  }
+
+  function handleFiles(files: File[]) {
+    if (files.length === 0) return;
+    if (files.length > GALLERY_MAX) {
+      setError(tg("tooMany", { max: GALLERY_MAX }));
+      return;
+    }
+    if (files.length === 1) {
+      setBatch(null);
+      batchRef.current = [];
+      void handleFile(files[0]);
+      return;
+    }
+    const items: BatchItem[] = files.map((file) => {
+      keySeq.current += 1;
+      return { key: keySeq.current, file, status: "uploading" };
+    });
+    setItems(() => items);
+    void runUploads(items);
   }
 
   function pick(item: MediaFile | MyMediaFile) {
@@ -82,7 +189,7 @@ export function ImagePickerModal({ blogSlug, authFetch, onSelect, onClose }: Ima
             type="button"
             onClick={() => pick(item)}
             title={item.alt_text || undefined}
-            className="group relative aspect-square overflow-hidden rounded-lg border border-border"
+            className="group relative aspect-square overflow-hidden rounded-lg border border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             {/* eslint-disable-next-line @next/next/no-img-element -- URL storage esterno, non ottimizzabile da next/image */}
             <img
@@ -110,7 +217,7 @@ export function ImagePickerModal({ blogSlug, authFetch, onSelect, onClose }: Ima
       role="presentation"
     >
       <div
-        className="w-full max-w-lg rounded-2xl border border-border bg-background p-5 shadow-lg"
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border bg-background p-5 shadow-lg"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -135,7 +242,7 @@ export function ImagePickerModal({ blogSlug, authFetch, onSelect, onClose }: Ima
               type="button"
               disabled={uploading}
               onClick={() => fileInputRef.current?.click()}
-              className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border/70 text-sm text-muted transition hover:border-primary/50 hover:text-primary disabled:opacity-60"
+              className="flex min-h-11 aspect-video w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border/70 text-sm text-muted transition hover:border-primary/50 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60"
             >
               <ImageIcon />
               <span>{uploading ? t("uploading") : t("uploadCta")}</span>
@@ -148,19 +255,57 @@ export function ImagePickerModal({ blogSlug, authFetch, onSelect, onClose }: Ima
         <input
           ref={fileInputRef}
           type="file"
+          multiple
           accept="image/png,image/jpeg,image/webp,image/gif"
           className="hidden"
           onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void handleFile(file);
+            handleFiles(Array.from(e.target.files ?? []));
             e.target.value = "";
           }}
         />
 
+        <p aria-live="polite" className="mt-2 text-xs text-muted">
+          {uploading && progress ? tg("uploading", { done: progress.done, total: progress.total }) : ""}
+        </p>
+
+        {batch && batch.length > 0 && (
+          <ul className="mt-2 divide-y divide-border rounded-lg border border-border text-sm">
+            {batch.map((item) => (
+              <li key={item.key} className="flex flex-wrap items-center gap-2 px-3 py-2">
+                {item.status === "failed" ? (
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-red-700">{tg("fileFailed", { name: item.file.name })}</p>
+                    {item.error && <p className="text-xs text-red-700">{item.error}</p>}
+                  </div>
+                ) : (
+                  <p className="min-w-0 flex-1 truncate text-foreground">
+                    {item.file.name}
+                    {item.status === "uploading" && <span className="ml-2 text-xs text-muted">{t("uploading")}</span>}
+                  </p>
+                )}
+                {item.status === "failed" && (
+                  <button
+                    type="button"
+                    disabled={uploading}
+                    onClick={() => void runUploads([item])}
+                    className="min-h-11 min-w-11 rounded-md px-3 text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60"
+                  >
+                    {tg("retry")}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+
         {error && <p className="mt-2 text-xs text-red-700">{error}</p>}
 
         <div className="mt-5 flex justify-end">
-          <button type="button" onClick={onClose} className="text-[13px] text-muted hover:text-foreground">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-11 min-w-11 rounded-md px-3 text-[13px] text-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
             {t("cancel")}
           </button>
         </div>
@@ -182,7 +327,7 @@ function TabButton({
     <button
       type="button"
       onClick={onClick}
-      className={`-mb-px border-b-2 px-3 py-2 font-medium transition ${
+      className={`-mb-px min-h-11 border-b-2 px-3 py-2 font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
         active ? "border-primary text-primary" : "border-transparent text-muted hover:text-foreground"
       }`}
     >

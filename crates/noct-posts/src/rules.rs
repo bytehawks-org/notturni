@@ -209,6 +209,44 @@ pub fn extract_links(content: &str) -> Vec<LinkRef> {
         .collect()
 }
 
+// ---- gallerie di immagini -----------------------------------------------------------------------------
+
+/// Numero massimo di immagini in un blocco ```` ```gallery ````.
+pub const MAX_GALLERY_IMAGES: usize = 10;
+
+/// Rifiuta un blocco ```` ```gallery ```` con più di [`MAX_GALLERY_IMAGES`] righe immagine.
+/// Le altre recinzioni di codice non sono controllate. Un blocco non chiuso arriva fino alla
+/// fine del contenuto. Le righe che non sono immagini non sono contate.
+pub fn validate_galleries(content: &str) -> Result<(), String> {
+    // `None` fuori da ogni blocco; `Some(is_gallery)` dentro un blocco recintato
+    let mut open: Option<bool> = None;
+    let mut images = 0usize;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        match open {
+            Some(is_gallery) => {
+                if trimmed.starts_with("```") {
+                    open = None;
+                } else if is_gallery && IMAGE_RE.is_match(line) {
+                    images += 1;
+                }
+            }
+            None => {
+                if let Some(info) = trimmed.strip_prefix("```") {
+                    open = Some(info.trim() == "gallery");
+                    images = 0;
+                }
+            }
+        }
+        if open == Some(true) && images > MAX_GALLERY_IMAGES {
+            return Err(format!(
+                "Una galleria può contenere al massimo {MAX_GALLERY_IMAGES} immagini (trovate almeno {images})."
+            ));
+        }
+    }
+    Ok(())
+}
+
 // ---- nome pubblico dell'autore ------------------------------------------------------------------------
 
 /// Dati del profilo da cui deriva il nome personale.
@@ -359,6 +397,64 @@ poi ![auto](https://x.org/c.webp "sensitive") e ![](https://x.org/d.gif)
             adj.iter().map(|x| x.url.as_str()).collect::<Vec<_>>(),
             ["https://1.org", "https://2.org", "https://4.org"]
         );
+    }
+
+    fn gallery(n: usize) -> String {
+        let items: String = (0..n).map(|i| format!("![foto {i}](https://example.com/{i}.jpg)\n")).collect();
+        format!("```gallery\n{items}```\n")
+    }
+
+    #[test]
+    fn gallery_with_ten_images_is_accepted_and_eleven_rejected() {
+        assert!(validate_galleries(&gallery(10)).is_ok());
+        let err = validate_galleries(&gallery(11)).unwrap_err();
+        assert!(err.contains("10"), "{err}");
+    }
+
+    #[test]
+    fn gallery_limit_is_per_block() {
+        let two = format!("{}\nTesto.\n\n{}", gallery(6), gallery(6));
+        assert!(validate_galleries(&two).is_ok());
+    }
+
+    #[test]
+    fn gallery_with_one_image_is_accepted() {
+        assert!(validate_galleries(&gallery(1)).is_ok());
+    }
+
+    #[test]
+    fn non_gallery_fence_is_not_checked() {
+        let text = format!("```text\n{}```\n", "![x](https://example.com/x.jpg)\n".repeat(12));
+        assert!(validate_galleries(&text).is_ok());
+    }
+
+    #[test]
+    fn unclosed_gallery_counts_until_end_of_content() {
+        let open = gallery(11).trim_end().trim_end_matches("```").to_string();
+        assert!(validate_galleries(&open).is_err());
+        let ok = gallery(10).trim_end().trim_end_matches("```").to_string();
+        assert!(validate_galleries(&ok).is_ok());
+    }
+
+    #[test]
+    fn non_image_lines_in_gallery_are_not_counted() {
+        let mut text = String::from("```gallery\n");
+        text.push_str(&"Didascalia senza immagine\n".repeat(12));
+        text.push_str("![a](https://example.com/a.jpg)\n```\n");
+        assert!(validate_galleries(&text).is_ok());
+    }
+
+    #[test]
+    fn extract_media_still_returns_gallery_images_in_order_with_sensitivity() {
+        let text = "Intro\n```gallery\n![uno](https://example.com/1.jpg)\n![due](https://example.com/2.jpg \"sensitive:nudity\")\n![tre](https://example.com/3.jpg)\n```\n";
+        let m = extract_media(text);
+        assert_eq!(
+            m.iter().map(|x| x.url.as_str()).collect::<Vec<_>>(),
+            ["https://example.com/1.jpg", "https://example.com/2.jpg", "https://example.com/3.jpg"]
+        );
+        assert_eq!(m.iter().map(|x| x.position).collect::<Vec<_>>(), [0, 1, 2]);
+        assert!(!m[0].is_sensitive && m[1].is_sensitive && !m[2].is_sensitive);
+        assert_eq!(m[1].categories, ["nudity"]);
     }
 
     #[test]

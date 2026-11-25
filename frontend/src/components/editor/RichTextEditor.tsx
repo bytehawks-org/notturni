@@ -14,9 +14,10 @@ import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Markdown, type MarkdownStorage } from "tiptap-markdown";
+import { Markdown, type MarkdownNodeSpec, type MarkdownStorage } from "tiptap-markdown";
 
 import { api } from "@/lib/api";
+import type { GalleryItem } from "@/lib/gallery";
 import { MAX_NOTE_LENGTH, type PostNote } from "@/lib/types";
 
 import {
@@ -41,6 +42,8 @@ import { CodeBlockNode, HeadingNode, ParagraphNode, TextAlignExtension, Underlin
 import { LinkModal, type LinkModalValue } from "./LinkModal";
 import { NoteModal, type NoteModalValue } from "./NoteModal";
 import { sensitiveImageNodeView } from "./SensitiveImageNodeView";
+import { GalleryExtension, clampGalleryItems } from "./GalleryExtension";
+import { GalleryAddContext, galleryNodeView } from "./GalleryNodeView";
 
 export interface RichTextEditorProps {
   /** Contenuto iniziale in Markdown (il backend salva/legge solo Markdown). */
@@ -307,6 +310,40 @@ const DEFAULT_TOOLBAR_STATE = {
   canRedo: false,
 };
 
+/** Image serializer with the same output as prosemirror-markdown's stock one,
+ * plus a closed block: without it a paragraph after an image is glued to it
+ * (`![a](u)text`). Parsing still comes from tiptap-markdown's default spec. */
+const serializeImageBlock: MarkdownNodeSpec["serialize"] = (state, node) => {
+  const alt = String(node.attrs.alt ?? "");
+  const src = String(node.attrs.src ?? "").replace(/[()]/g, "\\$&");
+  const title = node.attrs.title ? ` "${String(node.attrs.title).replace(/"/g, '\\"')}"` : "";
+  state.write(`![${state.esc(alt)}](${src}${title})`);
+  state.closeBlock(node);
+};
+
+/** Image extension used by the editor: sensitive node view and block-closing Markdown output. */
+export const EditorImageExtension = ImageExtension.extend({
+  addNodeView: sensitiveImageNodeView,
+  addStorage() {
+    return { markdown: { serialize: serializeImageBlock } };
+  },
+});
+
+/** Gallery block with the editor node view (remove, reorder, alt text, add). */
+export const EditorGalleryExtension = GalleryExtension.extend({
+  addNodeView: galleryNodeView,
+});
+
+function pickedToGalleryItem(image: PickedImage): GalleryItem {
+  return {
+    url: image.url,
+    alt: "",
+    title: image.is_sensitive ? "sensitive" : undefined,
+    sensitive: image.is_sensitive,
+    categories: [],
+  };
+}
+
 export function RichTextEditor({
   value,
   onChange,
@@ -321,6 +358,8 @@ export function RichTextEditor({
   const t = useTranslations("RichTextEditor");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
+  // Position of the gallery node that the picker adds images to (null: normal insert).
+  const [galleryTarget, setGalleryTarget] = useState<number | null>(null);
   // "create": nuova nota inserita al cursore. "edit": modifica dei campi
   // bibliografici di una nota già presente nell'elenco sotto l'editor
   // (idx valorizzato, nessun nuovo marcatore da inserire nel testo).
@@ -347,7 +386,8 @@ export function RichTextEditor({
       UnderlineMark,
       TextAlignExtension,
       LinkExtension.configure({ openOnClick: false, autolink: true }),
-      ImageExtension.extend({ addNodeView: sensitiveImageNodeView }),
+      EditorImageExtension,
+      EditorGalleryExtension,
       Placeholder.configure({ placeholder: placeholder ?? t("placeholder") }),
       // resizable:false — una larghezza di colonna persistita non è
       // rappresentabile in una tabella Markdown a pipe, che non la prevede.
@@ -557,6 +597,24 @@ export function RichTextEditor({
    * le pillole in sovraimpressione sull'immagine (stile Bluesky, CLAUDE.md
    * #2/#3) — niente più window.prompt bloccante. Un paragrafo vuoto subito
    * dopo permette di continuare a scrivere senza doverlo creare a mano. */
+  /** Inserisce una galleria (upload multiplo) al cursore, seguita da un paragrafo vuoto. */
+  function insertGalleryFromPicker(images: PickedImage[]) {
+    const items = clampGalleryItems(images.map(pickedToGalleryItem));
+    if (items.length === 0) return;
+    editor!.chain().focus().insertGallery(items).insertContent({ type: "paragraph" }).run();
+  }
+
+  /** Aggiunge immagini a una galleria esistente (posizione `pos`), fino a GALLERY_MAX. */
+  function addImagesToGallery(pos: number, images: PickedImage[]) {
+    const current = editor!.state.doc.nodeAt(pos);
+    if (!current || current.type.name !== "gallery" || images.length === 0) return;
+    const items = clampGalleryItems([
+      ...clampGalleryItems(current.attrs.items),
+      ...images.map(pickedToGalleryItem),
+    ]);
+    editor!.view.dispatch(editor!.state.tr.setNodeMarkup(pos, undefined, { ...current.attrs, items }));
+  }
+
   function insertImage(media: PickedImage) {
     editor!
       .chain()
@@ -791,18 +849,32 @@ export function RichTextEditor({
         )}
       </div>
 
-      {imagePickerOpen && blogSlug && (
+      {(imagePickerOpen || galleryTarget !== null) && blogSlug && (
         <ImagePickerModal
           blogSlug={blogSlug}
           authFetch={authFetch}
-          onSelect={insertImage}
-          onClose={() => setImagePickerOpen(false)}
+          onSelect={
+            galleryTarget !== null
+              ? (image) => addImagesToGallery(galleryTarget, [image])
+              : insertImage
+          }
+          onPickMany={
+            galleryTarget !== null
+              ? (images) => addImagesToGallery(galleryTarget, images)
+              : insertGalleryFromPicker
+          }
+          onClose={() => {
+            setImagePickerOpen(false);
+            setGalleryTarget(null);
+          }}
         />
       )}
 
       {uploadError && <p className="mb-2 text-xs text-red-700">{uploadError}</p>}
 
-      <EditorContent editor={editor} />
+      <GalleryAddContext.Provider value={setGalleryTarget}>
+        <EditorContent editor={editor} />
+      </GalleryAddContext.Provider>
       {mentionMenu}
 
       {linkModal && (

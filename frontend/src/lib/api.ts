@@ -1,4 +1,5 @@
 import type { SensitivityCategory } from "./content-media";
+import { GALLERY_MAX } from "./gallery";
 import type {
   AdminBlog,
   AdminComment,
@@ -1071,3 +1072,76 @@ export const api = {
       }),
   },
 };
+
+export type MediaUploadResult = Awaited<ReturnType<typeof api.blogs.uploadMedia>>;
+
+export type MediaUploadOutcome =
+  | { file: File; ok: true; media: MediaUploadResult }
+  | { file: File; ok: false; error: string };
+
+export interface UploadMediaManyOptions {
+  /** Parallel requests in flight. Default 3. */
+  concurrency?: number;
+  /** Called after each file settles (success, failure or aborted), with the count of settled files. */
+  onProgress?: (done: number, total: number) => void;
+  /** Aborting stops files not yet started; requests already in flight run to completion. */
+  signal?: AbortSignal;
+}
+
+/**
+ * Uploads several images to a blog through `api.blogs.uploadMedia`, one request per file.
+ *
+ * - Throws `RangeError` before any request when `files.length > GALLERY_MAX`
+ *   or when `concurrency` is not a positive integer.
+ * - The result keeps the input order, whatever the completion order.
+ * - A failed file yields `ok: false` with its error message; the others continue.
+ * - Files not started after `signal` aborts yield `ok: false` with an aborted message.
+ */
+export async function uploadMediaMany(
+  token: string,
+  slug: string,
+  files: File[],
+  opts: UploadMediaManyOptions = {},
+): Promise<MediaUploadOutcome[]> {
+  if (files.length > GALLERY_MAX) {
+    throw new RangeError(`Too many files: ${files.length} (max ${GALLERY_MAX})`);
+  }
+  const concurrency = opts.concurrency ?? 3;
+  if (!Number.isInteger(concurrency) || concurrency < 1) {
+    throw new RangeError(`Invalid concurrency: ${concurrency} (must be a positive integer)`);
+  }
+
+  const total = files.length;
+  const results: MediaUploadOutcome[] = new Array(total);
+  let nextIndex = 0;
+  let settled = 0;
+
+  const runOne = async (index: number): Promise<void> => {
+    const file = files[index];
+    let outcome: MediaUploadOutcome;
+    if (opts.signal?.aborted) {
+      outcome = { file, ok: false, error: "Caricamento annullato" };
+    } else {
+      try {
+        const media = await api.blogs.uploadMedia(token, slug, file);
+        outcome = { file, ok: true, media };
+      } catch (err) {
+        outcome = { file, ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    }
+    results[index] = outcome;
+    settled += 1;
+    opts.onProgress?.(settled, total);
+  };
+
+  const worker = async (): Promise<void> => {
+    while (nextIndex < total) {
+      const index = nextIndex;
+      nextIndex += 1;
+      await runOne(index);
+    }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, total) }, () => worker()));
+  return results;
+}

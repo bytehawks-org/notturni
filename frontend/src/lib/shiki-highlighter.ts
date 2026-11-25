@@ -23,7 +23,7 @@ function getHighlighter(): Promise<Highlighter> {
 }
 
 const FENCE_LANG_RE = /^`{3,}[ \t]*([a-zA-Z0-9_+#.-]+)/gm;
-const NO_HIGHLIGHT_LANGS = new Set(["text", "plaintext", "plain", "txt", ""]);
+const NO_HIGHLIGHT_LANGS = new Set(["text", "plaintext", "plain", "txt", "gallery", ""]);
 
 /** Carica (se non già caricati sull'highlighter condiviso) i linguaggi
  * citati nei fence ```` ```lang ```` di un documento, **prima** di un render
@@ -44,7 +44,17 @@ export async function ensureLanguagesLoaded(markdown: string): Promise<Highlight
   }
   const loaded = new Set(highlighter.getLoadedLanguages());
   const toLoad = [...wanted].filter((lang) => !loaded.has(lang));
-  await Promise.all(toLoad.map((lang) => highlighter.loadLanguage(lang as never).catch(() => undefined)));
+  // loadLanguage can throw synchronously for an unknown language: wrap it in
+  // an async function so that every failure is swallowed.
+  await Promise.all(
+    toLoad.map(async (lang) => {
+      try {
+        await highlighter.loadLanguage(lang as never);
+      } catch {
+        // Unknown language: the fence stays plain text.
+      }
+    }),
+  );
   return highlighter;
 }
 

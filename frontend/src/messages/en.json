@@ -1128,6 +1128,26 @@
     "empty": "No images here yet.",
     "cancel": "Cancel"
   },
+  "Gallery": {
+    "label": "Image gallery",
+    "moreCount": "+{count}",
+    "insertTitle": "Insert gallery",
+    "selectUpTo": "Select up to {max} images",
+    "tooMany": "You can add at most {max} images",
+    "uploading": "Uploading {done} of {total}",
+    "fileFailed": "{name}: upload failed",
+    "retry": "Retry",
+    "remove": "Remove image",
+    "moveUp": "Move image up",
+    "moveDown": "Move image down",
+    "editorBlockLabel": "Image gallery"
+  },
+  "Lightbox": {
+    "prev": "Previous image",
+    "next": "Next image",
+    "close": "Close",
+    "counter": "{current} / {total}"
+  },
   "Editor": {
     "status": "Status",
     "publishNow": "Publish now",

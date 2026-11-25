@@ -4,6 +4,7 @@ import DOMPurify from "isomorphic-dompurify";
 import { JSDOM } from "jsdom";
 import MarkdownIt from "markdown-it";
 
+import { galleryLayout, parseGalleryBody } from "./gallery";
 import { codeBlockMarkdownPlugin, textAlignMarkdownPlugin, underlineMarkdownPlugin } from "./markdown-format-extensions";
 import { REVALIDATE_SECONDS } from "./revalidate";
 import { ensureLanguagesLoaded, highlightCode } from "./shiki-highlighter";
@@ -32,6 +33,44 @@ const renderer = new MarkdownIt({ html: false, linkify: true, breaks: false })
   .use(underlineMarkdownPlugin)
   .use(textAlignMarkdownPlugin)
   .use(codeBlockMarkdownPlugin);
+
+interface GalleryEnv {
+  galleryCount?: number;
+  galleryLabel?: string;
+}
+
+// Blocco ```gallery: una riga immagine per tile (vedi lib/gallery.ts). Emette
+// <img> normali (title "sensitive" incluso): il wrapper di blur viene poi
+// applicato solo ai tile davvero sensibili da `wrapSensitiveImages`, nella
+// pipeline. Tutto il testo/URL è escapato qui e l'HTML passa comunque da
+// DOMPurify. Gli altri fence restano invariati.
+const defaultFenceRule = renderer.renderer.rules.fence!;
+renderer.renderer.rules.fence = (tokens, idx, options, env, slf) => {
+  const token = tokens[idx];
+  const lang = renderer.utils.unescapeAll(token.info).trim().split(/\s+/)[0];
+  if (lang !== "gallery") return defaultFenceRule(tokens, idx, options, env, slf);
+
+  const e = env as GalleryEnv;
+  const esc = renderer.utils.escapeHtml;
+  const items = parseGalleryBody(token.content).filter((it) => renderer.validateLink(it.url));
+  if (items.length === 0) return "";
+  e.galleryCount = (e.galleryCount ?? 0) + 1;
+  const id = `g${e.galleryCount}`;
+  const layout = galleryLayout(items.length);
+  const tiles = items.map((it, i) => {
+    const src = esc(renderer.normalizeLink(it.url));
+    const title = it.sensitive && it.title ? ` title="${esc(it.title)}"` : "";
+    const img = `<img src="${src}" alt="${esc(it.alt)}"${title} data-gallery="${id}" data-gallery-index="${i}">`;
+    const more = i === 3 && layout.overflow > 0;
+    const cls = ["post-gallery__tile"];
+    if (i >= 4) cls.push("post-gallery__tile--hidden");
+    if (more) cls.push("post-gallery__more");
+    const count = more ? `<span class="post-gallery__count" aria-hidden="true">+${layout.overflow}</span>` : "";
+    return `<div class="${cls.join(" ")}">${img}${count}</div>`;
+  });
+  const label = esc(e.galleryLabel ?? "Gallery");
+  return `<div class="post-gallery post-gallery--${layout.modifier}" data-gallery="${id}" role="group" aria-label="${label}">${tiles.join("")}</div>\n`;
+};
 
 /** Un'immagine segnalata sensibile dalla moderazione automatica (vedi
  * API.md) viene inserita dall'editor come `![alt](url "sensitive")`: il
@@ -576,6 +615,8 @@ export interface RenderOptions {
    * "evidenziazione sintassi"), stesso motivo/default di `expandImageLabel`. */
   copyCodeLabel?: string;
   copiedCodeLabel?: string;
+  /** aria-label dei gruppi `gallery` (default "Gallery"). */
+  galleryLabel?: string;
 }
 
 export interface RenderedPost {
@@ -626,7 +667,7 @@ async function renderPipeline(markdown: string, options: RenderOptions, withHead
   // un linguaggio già caricato da un'altra richiesta).
   const highlighter = await ensureLanguagesLoaded(markdown);
   renderer.set({ highlight: (code: string, lang: string) => highlightCode(highlighter, code, lang) });
-  const rawHtml = renderer.render(markdown);
+  const rawHtml = renderer.render(markdown, { galleryLabel: options.galleryLabel });
   const cleanHtml = DOMPurify.sanitize(rawHtml);
 
   // Un solo parse DOM per l'intera pipeline: prima ogni passo faceva
@@ -644,6 +685,18 @@ async function renderPipeline(markdown: string, options: RenderOptions, withHead
   // wrapSensitiveImages, mai la stessa immagine cliccabile direttamente
   // (altrimenti il primo click aprirebbe subito la lightbox invece di
   // limitarsi a rivelarla).
+  // Tile sensibili di una gallery: il pulsante di ingrandimento porta lo
+  // stesso gruppo/indice dell'immagine, così la Lightbox può includerli.
+  document.querySelectorAll(".post-gallery .sensitive-image-wrapper").forEach((w) => {
+    const img = w.querySelector("img");
+    const btn = w.querySelector(".lightbox-expand-btn");
+    const gid = img?.getAttribute("data-gallery");
+    const gi = img?.getAttribute("data-gallery-index");
+    if (btn && gid && gi) {
+      btn.setAttribute("data-gallery", gid);
+      btn.setAttribute("data-gallery-index", gi);
+    }
+  });
   document.querySelectorAll("img").forEach((img) => {
     if (!img.closest(".sensitive-image-wrapper")) {
       img.setAttribute("data-lightbox", "1");
