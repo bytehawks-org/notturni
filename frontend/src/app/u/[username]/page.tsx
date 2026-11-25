@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/ui/States";
 import { VerificationBadge } from "@/components/ui/VerificationBadge";
 import { formatDate } from "@/lib/format";
 import { interestLabel, interestsByKey } from "@/lib/interests";
+import { isSolo } from "@/lib/site";
 import { languageName } from "@/lib/languages";
 import {
   getPublicInterests,
@@ -66,13 +67,15 @@ function resolvePersonalDisplayName(profile: Profile): string {
  * visitatore, mai disponibile a un Server Component. */
 export default async function PublicProfilePage({ params }: { params: Promise<PageParams> }) {
   const { username } = await params;
+  // In solo gli interessi non sono esposti: non si chiama GET /interests.
+  const solo = isSolo();
   const [profile, posts, blogs, comments, followers, interestsList, locale, t, tTier] = await Promise.all([
     getPublicUserProfile(username),
     getPublicUserPosts(username),
     getPublicUserBlogs(username),
     getPublicUserComments(username),
     getPublicUserFollowers(username),
-    getPublicInterests(),
+    solo ? Promise.resolve([]) : getPublicInterests(),
     getLocale(),
     getTranslations("PublicProfile"),
     getTranslations("VerificationTier"),
@@ -115,7 +118,7 @@ export default async function PublicProfilePage({ params }: { params: Promise<Pa
                 )}
               </p>
               {profile.bio && <p className="max-w-[560px] text-[15px] leading-relaxed text-foreground">{profile.bio}</p>}
-              {profile.interests.length > 0 && (
+              {!solo && profile.interests.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {profile.interests.map((key) => (
                     <Link

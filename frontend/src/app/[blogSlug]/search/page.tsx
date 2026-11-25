@@ -6,7 +6,7 @@ import { BlogPageShell } from "@/components/blog/BlogPageShell";
 import { BlogStateNotice, blogIsOffline } from "@/components/blog/BlogStateNotice";
 import { FeedPostCard } from "@/components/FeedPostCard";
 import { BlogHeader } from "@/components/shell/BlogHeader";
-import { blogLinks } from "@/lib/blog-path";
+import { currentBlogLinks } from "@/lib/blog-links";
 import { getPublicBlog, getPublicBlogConfig, getPublicPublications, searchBlogPosts } from "@/lib/server-api";
 
 interface PageParams {
@@ -36,14 +36,14 @@ export default async function BlogSearchPage({
     getPublicBlog(blogSlug),
     getPublicBlogConfig(blogSlug),
     getTranslations("BlogSearchPage"),
-    blogLinks(blogSlug),
+    currentBlogLinks(blogSlug),
   ]);
   if (!blog) notFound();
   const hasPublications = (await getPublicPublications(blogSlug).catch(() => [])).length > 0;
   if (blogIsOffline(blog)) {
     return (
       <BlogPageShell config={config}>
-        <BlogHeader basePath={links.basePath} name={blog.title} hasPublications={hasPublications} current="posts" />
+        <BlogHeader basePath={links.basePath} homeHref={links.homeHref} name={blog.title} hasPublications={hasPublications} current="posts" />
         <BlogStateNotice blog={blog} />
       </BlogPageShell>
     );
@@ -52,7 +52,7 @@ export default async function BlogSearchPage({
 
   return (
     <BlogPageShell config={config}>
-      <BlogHeader basePath={links.basePath} name={blog.title} hasPublications={hasPublications} current="posts" />
+      <BlogHeader basePath={links.basePath} homeHref={links.homeHref} name={blog.title} hasPublications={hasPublications} current="posts" />
       <main className="mx-auto w-full max-w-[1184px] flex-1 px-5 py-10 lg:px-12 lg:py-14">
         <div className="flex flex-col gap-4">
           <h1 className="font-serif text-[34px] font-medium leading-[1.12] tracking-tight md:text-[40px]">

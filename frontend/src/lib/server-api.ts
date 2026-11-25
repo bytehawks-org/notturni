@@ -1,6 +1,7 @@
 import "server-only";
 
 import { REVALIDATE_SECONDS, revalidateTags } from "./revalidate";
+import { isSolo } from "./site";
 import type {
   Backlink,
   BibliographyEntry,
@@ -8,6 +9,7 @@ import type {
   BlogConfig,
   Category,
   Interest,
+  InstanceConfig,
   LegalLink,
   LinkBibliographyEntry,
   MediaBibliographyEntry,
@@ -106,6 +108,26 @@ export async function getPublicPlatformPages(): Promise<Page[]> {
   });
   if (!res.ok) throw new Error(`Errore ${res.status} nel recupero delle pagine di piattaforma.`);
   return (await res.json()) as Page[];
+}
+
+const PRIMARY_SLUG_REVALIDATE_SECONDS = 5;
+
+/** Slug del blog primario dell'istanza solo (`primary_blog_slug` di `GET /api/v1/config`). `null` in platform,
+ * se non impostato, o se la richiesta fallisce (il sito resta utilizzabile senza). */
+export async function getPrimaryBlogSlug(): Promise<string | null> {
+  if (!isSolo()) return null;
+  try {
+    // Short window: before the first registration the slug is null, and a long cache would keep the
+    // platform-style home for minutes after the owner registers.
+    const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/config`, {
+      next: { revalidate: PRIMARY_SLUG_REVALIDATE_SECONDS },
+    });
+    if (!res.ok) return null;
+    const config = (await res.json()) as Partial<InstanceConfig>;
+    return config.primary_blog_slug ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** Dettaglio pubblico di un blog. `null` se non trovato o non visibile (404). */

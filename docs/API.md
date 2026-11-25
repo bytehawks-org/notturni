@@ -351,7 +351,7 @@ the section "Wiki and documentation spaces".
 → `201`. Applies the domain rules (see
 [ROADMAP.md](../ROADMAP.md#1-product-and-domain-rules)): slug of at least 4
 alphanumeric characters or hyphens, not in the blacklist (names reserved by the platform
-and by the administrator), at most 5 Spaces per user (a single limit for blog, wiki and docs, `max_blogs_per_user`). `default_locale` is
+and by the administrator), at most 5 Spaces per user (a single limit for blog, wiki and docs, `max_blogs_per_user`; in `solo` the primary blog is not counted, see [Solo mode](#solo-mode-primary-blog-and-personal-site-routes)). `default_locale` is
 optional (default `it`). `subtitle` (max 64) and `description` (max 256) are
 optional. `default_author_display_name` is optional (the frontend pre-fills it
 with the username of the person creating the blog, but it remains a free field,
@@ -365,7 +365,8 @@ falls back to the profile preference of the author (`username` by default).
 - `private`: diary. Readable only by the owner and collaborators,
   **writable only by the owner** regardless of memberships.
 
-`400` if a rule is not respected, `409` if the slug is already in use.
+`400` if a rule is not respected, `409` if the slug is already in use. In `solo` the slug rules are
+different (see "Solo mode" above): only the format and the collisions with site routes are checked.
 
 `BlogOut` (response of all blog endpoints) also includes
 `mentions_enabled` (bool, default `true`). If active, the frontend turns
@@ -469,7 +470,7 @@ deletion is `404` for anyone except the owner.
 **`POST /api/v1/blogs/{slug}/transfer`** — `{username}`, owner only.
 Transfers ownership to a **current co-author** (`400` if the
 user has no `co_autore` membership, or has already reached the blog
-limit; `404` if it does not exist). The transferring owner remains as co-author. The membership of the
+limit; `404` if it does not exist). In `solo` the primary blog cannot be transferred: `400` with "Il blog primario non può essere trasferito." and the owner stays unchanged. The transferring owner remains as co-author. The membership of the
 new owner is removed. Recorded in the audit log
 (`blog.ownership_transferred`).
 
@@ -817,6 +818,65 @@ Invitee side (on the current user, path without slug to avoid a clash with
 - **`POST /api/v1/blogs/received-invitations/{invitation_id}/decline`**:
   marks it `declined`.
 
+## Solo mode: primary blog and personal-site routes
+
+In `solo` mode (`NOCT_DEPLOYMENT_MODE=solo`) the instance is one personal site. The
+behaviour below applies only in `solo`; `platform` is unchanged.
+
+**Primary blog.** The site has one primary blog, marked in `platform_config.primary_blog_id`
+(no foreign key: the platform migration runs before the blog tables exist). The backend
+creates it in an idempotent way:
+
+- at the first registration (the first user becomes Super Admin and owns the blog), in the
+  same transaction as the account;
+- at startup, for the oldest active Super Admin, which also covers `NOCT_SUPER_ADMIN_*` and
+  installations that have no blog yet.
+
+Title: `NOCT_SITE_NAME` if set and not blank, otherwise the owner's username. Slug: the title
+slugified (lowercase ASCII letters, digits and hyphens, at most 55 characters before the
+suffix), then `-2`, `-3`, ... on a collision with an existing slug or a site route (see the
+slug rules below). The creation writes the audit event `blog.primary_created` (actor
+`system`). The primary blog is public and uses the default locale of the platform.
+
+**Space limit.** In `solo` the primary blog does not count toward `max_blogs_per_user` (default 5): the owner can create that many other Spaces in addition to it. The exclusion applies to creation and to ownership transfer. In `platform` every Space counts, also when a `primary_blog_id` value is left over from a switch from `solo`.
+
+The marker counts only while the blog row exists. A blog in the deletion grace period
+(`deleted_at` set) still exists and is restored with `POST /blogs/{slug}/restore`; a
+blog removed by the daily `blogs.purge_deleted` job is recreated at the next backend
+restart (a running instance does not recreate it).
+
+**`GET /api/v1/config`** exposes `primary_blog_slug`: the slug of the primary blog, or `null`
+when there is none or while it is in the grace period. Only `solo` creates a primary blog; an
+instance that was switched from `solo` to `platform` keeps the marker and the field.
+
+**Routes (frontend).** Posts of the primary blog have the permalink `/post/<post-slug>`.
+Posts of every other blog keep `/<blog-slug>/<post-slug>`. The `permalink` field of
+`PostOut`, the sitemap entries and the crawl directives follow this rule. Other paths:
+
+| Path | Result |
+|---|---|
+| `/` | Home of the primary blog (same output as its blog home) |
+| `/post/<post-slug>` | Post of the primary blog (404 in `platform`) |
+| `/<primary-slug>` | `308` to `/` (the query string is kept) |
+| `/<primary-slug>/<post-slug>` | `308` to `/post/<post-slug>` |
+| `/<primary-slug>/<sub-page>` | Unchanged: sub-pages (`/pagina/...`, `/pub/...`, `/bibliografia`, `/media`, `/link`, `/search`) stay under `/<primary-slug>/` |
+| `/feed.xml`, `/atom.xml` | Feed of the primary blog |
+
+Spaces other than the primary one are reached by path only, `/<slug>/`. In `solo` the
+subdomain addresses are off (`NOCT_SUBDOMAINS_ENABLED=false`).
+
+**Known limit.** Other modules (notes, fragments, publications, comments, newsletter, pages,
+`noct-media`) still build `/{blog}/{post}` links by hand. Those links reach the post only
+through the `308` redirect. See the postponed requests in [ROADMAP.md](../ROADMAP.md#8-postponed-requests).
+
+**Slug rules for `POST /api/v1/blogs` in `solo`.** The slug must match the usual format
+(lowercase letters, digits and hyphens, at most 63 characters) and must not equal a
+site route: `admin`, `api`, `blogs`, `dashboard`, `forgot-password`, `login`, `newsletter`,
+`p`, `post`, `register`, `search`, `sitemaps`, `tag`, `u`, `users`, `_next`, `storage`.
+There is no minimum length and no list of reserved names. A failed check returns `400`.
+In `platform`, the rules are the ones described in the Blog section (minimum of 4 characters,
+platform blacklist).
+
 ## Post
 
 The content (`content`) is **Markdown**. The backend does not render it. The
@@ -1078,6 +1138,49 @@ extracted from the Markdown and stored in read-only tables (`post_media` and
 `post_links`) on every save. The client does not send them separately. They feed
 the blog's aggregated bibliography. See `GET /api/v1/blogs/{slug}/media-bibliography`
 and `.../links-bibliography` in the Blog section.
+
+### Image gallery (`gallery` fence)
+
+A gallery groups up to 10 images in one block of the post `content`. It is a
+fenced block whose info string is exactly `gallery`, with one standard
+image line per item:
+
+````markdown
+```gallery
+![alt one](https://.../a.jpg)
+![alt two](https://.../b.jpg "sensitive:nudity")
+```
+````
+
+Rules:
+
+- The info string is `gallery` (trailing spaces allowed). Any other info
+  string is an ordinary code block. The block closes at the next line that
+  starts with three backticks. A block without a closing line runs to the end
+  of the content.
+- Each image line uses the same grammar as any Markdown image in a post
+  (see "Content warning" above for the `sensitive` titles).
+- Lines that are not image lines are ignored by the frontend renderer. The
+  backend counts only image lines.
+- **More than 10 image lines in one `gallery` block → `400`** on `POST
+  /api/v1/blogs/{slug}/posts` and on `PATCH /api/v1/posts/{post_id}` (when
+  `content` is sent). The message is in Italian and names the limit. The
+  rule applies to drafts too. Other fences are not checked.
+- A gallery with one image is stored and rendered as a plain image line,
+  without the fence. The editor does this on save.
+- The editor drops `[` and `]` from alt text on save, because the image
+  grammar does not accept them in alt text.
+- Images inside a gallery are media like any other image: they feed
+  `post_media` and the usage check of `DELETE` on media.
+- Upload: there is no gallery endpoint. The client sends one
+  `POST /api/v1/blogs/{slug}/media` per file (see "Media and backups"). Quota,
+  moderation and the responsive variants apply per image.
+
+Layout (frontend only): 1 image is shown full width; 2 side by side; 3 with
+one large image on top and two below; 4 or more with one large image on top
+and three small ones below. With more than 4 images, the fourth small tile
+shows "+N", where N is the number of images beyond four. All images stay
+reachable in the lightbox.
 
 **`POST /api/v1/posts/{post_id}/submit-for-review`**: owner, author, or
 co-author. Moves a post from `draft` to `pending_review`. Returns `400` if the
@@ -1344,6 +1447,10 @@ has excluded from search engines (blog or post).
   noindex, entries[{path, updated_at, alternates[]}]}` in stable order (home page,
   site pages, Spaces, posts). And **`GET /api/v1/blogs/{slug}/sitemap`** → `{slug,
   entries[]}`.
+- In `solo`, both sitemaps (global and per-Space) use the primary-blog addresses: the
+  primary blog is listed as `/` and its posts as `/post/<slug>`. Other Spaces and their
+  posts keep `/<slug>` and `/<slug>/<post>`. The redirect URLs are not listed. See
+  [Solo mode](#solo-mode-primary-blog-and-personal-site-routes).
 
 ## Privacy policy and cookie policy (`legal` module)
 
@@ -1726,6 +1833,13 @@ Pages such as About, Contact, Privacy are not tied to a user blog (`blog_id: nul
 [{"key": "music", "translations": {"it": "Musica", "en": "Music"}}, ...]
 ```
 
+In `solo` mode no interests are offered: `GET /api/v1/interests` returns `[]`, the directory
+filter `?interest=` is ignored, and public profiles return `"interests": []`. `PATCH /api/v1/users/me`
+with a non-empty `interests` list answers `400` (the list is empty for the platform), while an
+empty array is accepted. Values already stored in `users.interests` stay in the database and in
+the GDPR export; the interests module and the admin editor of `platform_config.interests` are not
+changed by `solo`.
+
 The only source of truth is `platform_config.interests`. It is seeded from `NOCT_DEFAULT_INTERESTS` (JSON, same schema) or from a curated built-in list at first installation, and then a Super Admin can change it at any time (`PATCH /api/v1/admin/config`, field `interests` — see the Platform administration section). The frontend resolves the translation in the current language itself (fallback `en`, then the first available, then `key`).
 
 ## User profile and follow
@@ -1914,6 +2028,10 @@ of the caller's own tokens, `404` if the id does not exist.
 
 ## Editable site texts (`/site-texts`, `/admin/site-texts`)
 
+In `solo` mode `PUT /api/v1/admin/site-texts/{locale}` answers `403` ("Site texts are fixed in solo
+mode."), after the authentication and role checks. `GET /api/v1/site-texts` keeps working and returns
+the overrides already stored. Footer texts stay editable through `PATCH /api/v1/admin/config`.
+
 Administrators can rewrite, language by language, the texts of the home page
 (manifesto, pillars, buttons) and of the newsletter sign-up form. The defaults
 stay in the frontend translation files; only the overrides are stored here.
@@ -1977,6 +2095,11 @@ ends up in `payload.note` of the audit entry. No note is required if the
 request changes nothing.
 
 ### Platform settings
+
+In `solo` mode `reserved_blog_names` is not available: `GET` returns `[]`, a `PATCH` with a non-empty
+list answers `400` ("I nomi riservati non sono disponibili in modalità solo."), and an empty list is
+accepted without writing anything. A value saved earlier stays in the database and is not shown. The
+footer fields stay editable in `solo`.
 
 **`GET /api/v1/admin/config`** / **`PATCH /api/v1/admin/config`** — `super_admin`
 only (`403` otherwise). Single row `platform_config`, created on first access with the defaults (`NOCT_DEFAULT_LOCALE` for the language, 5 blogs,
@@ -2381,7 +2504,8 @@ advance. Production example: `https://([a-z0-9-]+\.)?notturni\.eu`.
 compose healthcheck).
 
 **`GET /api/v1/config`** — public, no authentication. Exposes
-`{"deployment_mode": "solo"|"platform", "subdomains_enabled": true|false, "turnstile_site_key": "..."|null}`
+`{"deployment_mode": "solo"|"platform", "subdomains_enabled": true|false, "turnstile_site_key": "..."|null, "primary_blog_slug": "..."|null}`
+(`primary_blog_slug` is described in "Solo mode" above)
 (`NOCT_DEPLOYMENT_MODE`/`NOCT_SUBDOMAINS_ENABLED`/`NOCT_TURNSTILE_SITE_KEY`; `subdomains_enabled` defaults to `true` when unset and only informs the frontend, the backend rules do not change), plus `default_locale`,
 `registration_mode` and `sso_providers` (the enabled and configured providers; `[]` without the
 `auth_sso` module). `deployment_mode` is

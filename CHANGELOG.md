@@ -12,7 +12,35 @@ For the product roadmap and status of each feature, see [ROADMAP.md](ROADMAP.md)
 ## 2026-11-25
 
 ### Added
+- Image gallery in posts (E04, code complete; live and browser checks pending). Markdown format: a fenced block with info string `gallery`, one image per line, max 10 lines. A gallery with one image is saved as a plain image. Sensitive tiles use the `sensitive` or `sensitive:<categories>` title, as single images do.
+- Backend: `POST` and `PATCH` of a post return `400` when a `gallery` block has more than 10 image lines (`rules::validate_galleries`, `MAX_GALLERY_IMAGES = 10`). Drafts are checked too.
+- Public post: gallery layouts for 1, 2, 3 and 4 or more images. With more than 4 images, the fourth tile shows "+N" (N = images beyond four). The lightbox moves through the whole gallery (arrows, Home/End, Escape, focus back to the opener). Sensitive tiles are skipped until revealed.
+- Editor: gallery block with a multi-file picker (1 to 10 files per upload, one `POST /blogs/{slug}/media` per file, per-file errors and retry), alt text, move up/down and remove for each image. Alt text loses `[` and `]` on save.
+- Newsletter: the gallery is sent as a sequence of plain images.
+- Tests: unit tests for `validate_galleries`, `expand_gallery_fences`, the frontend gallery helpers, renderer, lightbox, editor node view, and a backend integration test for `post_media` with a gallery.
+- Solo personal site: one primary blog per instance, created at the first registration and at backend startup (idempotent). Marker `platform_config.primary_blog_id` (migration `0005`, nullable, no foreign key). Title from the new optional `NOCT_SITE_NAME` or else the owner's username; audit event `blog.primary_created`. A blog removed by the purge job is recreated at the next restart. `GET /api/v1/config` returns `primary_blog_slug`. See [docs/API.md](docs/API.md#solo-mode-primary-blog-and-personal-site-routes) and [docs/CONFIGURATION.md](docs/CONFIGURATION.md#solo-personal-site).
+- Frontend: `/` shows the primary blog in `solo`; `/post/<slug>` serves its posts; `/<primary>` and `/<primary>/<post>` redirect (308) to `/` and `/post/<post>`; root `feed.xml` and `atom.xml` serve the primary blog.
+- Backend helpers: `AppState::is_solo()` and the permalink helper `noct-posts::permalink` (primary blog at `/post/<slug>`, others at `/<blog>/<slug>`).
+- Tests: `solo_primary_blog`, `solo_primary_permalink`, `solo_slugs`, `solo_admin_config`, `solo_interests`, `solo_site_texts` (backend, against PostgreSQL) and Vitest tests for the solo UI.
 - Workflow `publish-chart.yml`: publishes the Helm chart as an OCI artifact to `oci://ghcr.io/bytehawks-org/charts/notturni`. Pushes to `develop` publish `<chart version>-develop` and `<chart version>-develop.<sha7>` with `appVersion: develop` (default images tagged `develop`); `vX.Y.Z` tags publish that version. See [docs/HELM.md](docs/HELM.md#installing-from-the-oci-registry-no-clone).
+
+### Changed
+- CI and image publishing no longer reference the removed `migration/rust` branch (workflows `ci`, `codeql`, `sbom`, `publish-images`; the fixed `0.2.0-rust` image tag is gone). Images, chart `appVersion` and the Kubernetes manifests now use `0.2.1`, published by pushing the `v0.2.1` git tag. `docs/INSTALL.md` section 3.4 updated.
+- Solo: the primary blog no longer counts toward `max_blogs_per_user` (creation and ownership transfer). Platform mode is unchanged, also when a marker is left over from a switch from `solo`. Tests: `solo_primary_blog` (solo limit, platform limit, leftover marker).
+- Solo: the primary blog cannot be transferred. `POST /api/v1/blogs/{slug}/transfer` returns `400` ("Il blog primario non può essere trasferito."); the owner stays unchanged. Other blogs transfer as before. Platform mode is unchanged. Tests: `solo_primary_blog`.
+- Solo: space slugs are checked only for format and collisions with site routes (no minimum length, no reserved list); create-space form shows the path address and no minimum length.
+- Solo: `reserved_blog_names` is rejected by `PATCH /admin/config` (`400`) and returned as `[]`; the admin settings page hides the reserved-names and interests editors.
+- Solo: user interests are off (`GET /api/v1/interests` returns `[]`, profile `PATCH` with a non-empty list returns `400`, UI hidden). Stored values stay in the database and in the GDPR export.
+- Solo: `PUT /api/v1/admin/site-texts/{locale}` returns `403`; the `/admin/testi` page redirects to `/admin`. Footer texts stay editable.
+- Texts in `.env.example` and the Helm chart now show the path address of a space as `/<slug>` (they said `/blog/<slug>`).
+- Platform behaviour is unchanged.
+
+### Fixed
+- Frontend `getPrimaryBlogSlug()` revalidates every 5 seconds instead of using a long cache. A cached `null` from before the first registration no longer delays the home page and the redirects.
+- Solo: the global sitemap and the per-Space sitemap list the primary blog as `/` and its posts as `/post/<slug>`, instead of the `/<slug>/<post>` addresses that redirect.
+
+### Verified
+- Live check on podman compose, solo and platform (2026-11-25): stack start, primary blog and routes, API restrictions, sitemaps. Not yet checked: the browser redirect of `/admin/testi` and the visual check of the solo UI. See [ROADMAP.md](ROADMAP.md).
 
 ## 2026-11-23
 

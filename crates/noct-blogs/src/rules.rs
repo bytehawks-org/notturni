@@ -32,6 +32,41 @@ pub fn validate_slug(slug: &str, extra_reserved: &[String]) -> Result<(), String
     Ok(())
 }
 
+/// Rotte statiche del frontend (primo livello di `frontend/src/app`) più quelle riservate al
+/// sito. In modalità solo uno slug non può coincidere con una di queste. Il test
+/// `route_collisions_cover_every_static_frontend_route` verifica che l'elenco non resti indietro.
+pub const SOLO_ROUTE_COLLISIONS: &[&str] = &[
+    "admin",
+    "api",
+    "blogs",
+    "dashboard",
+    "forgot-password",
+    "login",
+    "newsletter",
+    "p",
+    "post",
+    "register",
+    "search",
+    "sitemaps",
+    "tag",
+    "u",
+    "users",
+    "_next",
+    "storage",
+];
+
+/// Validazione dello slug in modalità solo: formato e collisione con le rotte del sito, niente
+/// lunghezza minima né elenchi riservati di piattaforma.
+pub fn validate_slug_solo(slug: &str) -> Result<(), String> {
+    if !SLUG_RE.is_match(slug) || slug.chars().count() > 63 {
+        return Err("Lo slug può contenere solo lettere minuscole, numeri e trattini.".into());
+    }
+    if SOLO_ROUTE_COLLISIONS.contains(&slug) {
+        return Err(format!("'{slug}' collides with a site page."));
+    }
+    Ok(())
+}
+
 pub fn validate_locale(locale: &str) -> Result<(), String> {
     if LOCALE_RE.is_match(locale) {
         Ok(())
@@ -248,6 +283,23 @@ mod tests {
         assert!(validate_slug("status", &[]).is_err());
         assert!(validate_slug("nuovo-nome", &["nuovo-nome".to_string()]).is_err(), "elenco del Super Admin");
         assert!(validate_slug("nuovo-nome", &[]).is_ok());
+    }
+
+    #[test]
+    fn solo_slug_accepts_short_names_and_rejects_route_collisions() {
+        for ok in ["ab", "www", "mail", "blog", "a", "il-mio-blog"] {
+            assert!(validate_slug_solo(ok).is_ok(), "{ok}");
+        }
+        // `_next` non supera il formato: è già rifiutato come formato non valido
+        for route in SOLO_ROUTE_COLLISIONS.iter().filter(|r| !r.starts_with('_')) {
+            assert!(validate_slug_solo(route).unwrap_err().contains("collides with a site page"), "{route}");
+        }
+        assert!(validate_slug_solo("_next").is_err());
+        for bad in ["Blog-Mio", "-ab", "ab-", "ab--cd", "ab_cd", ""] {
+            assert!(validate_slug_solo(bad).is_err(), "{bad}");
+        }
+        assert!(validate_slug_solo(&"a".repeat(63)).is_ok());
+        assert!(validate_slug_solo(&"a".repeat(64)).is_err());
     }
 
     #[test]

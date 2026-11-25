@@ -1,6 +1,6 @@
 [module]
 name = "profiles"
-version = "0.1.0"
+version = "0.2.1"
 kind = "core"
 requires = ["users", "blogs", "posts", "media", "audit", "events"]
 description = "Profilo utente: anagrafica pubblica e privata, avatar, link social, cambio email in tre passi, directory degli utenti, blog e post pubblici di un utente"

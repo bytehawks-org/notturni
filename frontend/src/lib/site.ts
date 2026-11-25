@@ -82,5 +82,13 @@ export const subdomainsEnabled = () => siteConfig().subdomainsEnabled;
 /** `true` con `NOCT_DEPLOYMENT_MODE=solo`. */
 export const isSolo = () => siteConfig().deploymentMode === "solo";
 
+/** `true` se `blogSlug` è il blog primario di un'istanza solo: i suoi post stanno su `/post/{postSlug}`. */
+export const isPrimaryBlog = (blogSlug: string, primarySlug: string | null | undefined) =>
+  isSolo() && !!primarySlug && primarySlug === blogSlug;
+
+/** Href pubblico di un post. Blog primario in solo: `/post/{postSlug}`; altrimenti `/{blogSlug}/{postSlug}`. */
+export const postHref = (blogSlug: string, postSlug: string, primarySlug: string | null | undefined) =>
+  isPrimaryBlog(blogSlug, primarySlug) ? `/post/${postSlug}` : `/${blogSlug}/${postSlug}`;
+
 /** Indirizzo pubblico mostrato per un blog: `{slug}.{host}` con i sottodomini attivi, altrimenti `{siteUrl}/{slug}`. */
 export const blogAddress = (slug: string) => (subdomainsEnabled() ? `${slug}.${siteHost()}` : `${siteUrl()}/${slug}`);

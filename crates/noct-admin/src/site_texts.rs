@@ -10,6 +10,10 @@ use noct_platform::{rules, texts_of};
 use serde_json::{Value, json};
 
 pub async fn put_site_texts(ctx: RouteCtx, body: crate::AdminSiteTextsIn) -> Result<Value, ApiError> {
+    // in solo i testi sono fissi: le sovrascritture già salvate restano e continuano a essere servite
+    if ctx.state.is_solo() {
+        return Err(ApiError::forbidden("Site texts are fixed in solo mode."));
+    }
     let admin = actor_id(&ctx)?;
     let locale = ctx.path.get("locale").map(|l| l.to_ascii_lowercase()).unwrap_or_default();
     if !LOCALES.contains(&locale.as_str()) {

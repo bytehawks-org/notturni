@@ -854,6 +854,8 @@ export interface InstanceConfig {
   default_locale: string;
   registration_mode: "open" | "invite" | "closed";
   sso_providers: string[];
+  /** Slug del blog primario (solo, `NOCT_DEPLOYMENT_MODE=solo`): le sue pagine post stanno su `/post/{slug}`. `null` se non impostato o in platform. */
+  primary_blog_slug: string | null;
 }
 
 /** `GET/PATCH /admin/config` (B6, mockup 5f), solo super admin. */

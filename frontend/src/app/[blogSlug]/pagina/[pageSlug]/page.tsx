@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 
 import { BlogPageShell } from "@/components/blog/BlogPageShell";
 import { BlogHeader } from "@/components/shell/BlogHeader";
-import { blogBasePath } from "@/lib/blog-path";
+import { currentBlogLinks } from "@/lib/blog-links";
 import { excerpt, renderMarkdown } from "@/lib/markdown";
 import { getPublicBlog, getPublicBlogConfig, getPublicPage, getPublicPublications } from "@/lib/server-api";
 
@@ -48,10 +48,10 @@ export default async function PublicBlogPagePage({
 }) {
   const { blogSlug, pageSlug } = await params;
   const { locale = "it" } = await searchParams;
-  const [page, blog, basePath, config, publications] = await Promise.all([
+  const [page, blog, links, config, publications] = await Promise.all([
     getPublicPage(blogSlug, pageSlug, locale),
     getPublicBlog(blogSlug),
-    blogBasePath(blogSlug),
+    currentBlogLinks(blogSlug),
     getPublicBlogConfig(blogSlug),
     getPublicPublications(blogSlug).catch(() => []),
   ]);
@@ -67,7 +67,7 @@ export default async function PublicBlogPagePage({
 
   return (
     <BlogPageShell config={config}>
-      <BlogHeader basePath={basePath} name={blog?.title ?? blogSlug} current="posts" hasPublications={publications.length > 0} />
+      <BlogHeader basePath={links.basePath} homeHref={links.homeHref} name={blog?.title ?? blogSlug} current="posts" hasPublications={publications.length > 0} />
       <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-12">
         <h1 className="font-serif text-5xl font-semibold leading-tight text-foreground">{page.title}</h1>
 

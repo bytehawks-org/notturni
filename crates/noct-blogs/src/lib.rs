@@ -9,6 +9,7 @@ include!(concat!(env!("OUT_DIR"), "/module_gen.rs"));
 mod handlers_impl;
 pub mod jobs;
 pub mod personal_data;
+pub mod primary;
 pub mod rules;
 pub mod view;
 

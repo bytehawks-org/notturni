@@ -82,6 +82,7 @@ pub async fn render(st: &AppState, rows: Vec<PostRow>) -> Result<Vec<Value>, Api
     if rows.is_empty() {
         return Ok(Vec::new());
     }
+    let links = crate::permalink::Permalinks::load(st).await?;
     let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
     let author_ids: Vec<Uuid> = rows.iter().map(|r| r.author_id).collect();
     let authors: HashMap<Uuid, AuthorRow> = sqlx::query_as::<_, AuthorRow>(
@@ -149,7 +150,7 @@ pub async fn render(st: &AppState, rows: Vec<PostRow>) -> Result<Vec<Value>, Api
             "created_at": r.created_at,
             "is_hidden": r.is_hidden,
             "blog_slug": r.blog_slug,
-            "permalink": rules::permalink(&r.blog_slug, &r.slug),
+            "permalink": links.of(&r.blog_slug, &r.slug),
             "mentions_enabled": r.blog_mentions_enabled,
             "manual_tags": r.manual_tags,
             "tags": rules::effective_tags(&r.manual_tags, &r.content),

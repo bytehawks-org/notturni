@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { LanguagePicker } from "@/components/LanguagePicker";
+import { useSiteFlags } from "@/components/SiteConfigProvider";
 import { UiLanguagePicker } from "@/components/shell/UiLanguagePicker";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -31,6 +32,7 @@ const AUTHOR_NAME_STYLES: PostAuthorNameStyle[] = ["username", "full_name", "dis
 export default function ProfilePage() {
   const router = useRouter();
   const { user, authFetch, refreshUser, logout } = useAuth();
+  const { isSolo } = useSiteFlags();
   const t = useTranslations("Profile");
   const uiLocale = useLocale();
   const tc = useTranslations("Common");
@@ -65,8 +67,10 @@ export default function ProfilePage() {
   const [savingBio, setSavingBio] = useState(false);
 
   useEffect(() => {
+    // In solo gli interessi non sono esposti: nessuna chiamata a GET /interests.
+    if (isSolo) return;
     api.interests.list().then(setAvailableInterests).catch(() => {});
-  }, []);
+  }, [isSolo]);
 
   const [linkPlatform, setLinkPlatform] = useState(SOCIAL_PLATFORMS[0].key);
   const [linkUrl, setLinkUrl] = useState("");
@@ -173,7 +177,7 @@ export default function ProfilePage() {
           country,
           native_language: nativeLanguage ?? "",
           fallback_languages: fallbackLanguages,
-          interests,
+          ...(isSolo ? {} : { interests }),
         })
       );
       setProfile(updated);
@@ -684,29 +688,31 @@ export default function ProfilePage() {
                 />
               </FieldGroup>
 
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs font-semibold uppercase tracking-[.04em] text-muted">
-                  {t("interests", { count: interests.length, max: MAX_USER_INTERESTS })}
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {availableInterests.map((interest) => {
-                    const active = interests.includes(interest.key);
-                    return (
-                      <button
-                        key={interest.key}
-                        type="button"
-                        onClick={() => toggleInterest(interest.key)}
-                        disabled={!active && interests.length >= MAX_USER_INTERESTS}
-                        className={`rounded-full border px-3 py-1 text-[13px] transition disabled:cursor-not-allowed disabled:opacity-40 ${
-                          active ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted hover:border-primary/40"
-                        }`}
-                      >
-                        {interestLabel(interest, interest.key, uiLocale)}
-                      </button>
-                    );
-                  })}
+              {!isSolo && (
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-xs font-semibold uppercase tracking-[.04em] text-muted">
+                    {t("interests", { count: interests.length, max: MAX_USER_INTERESTS })}
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {availableInterests.map((interest) => {
+                      const active = interests.includes(interest.key);
+                      return (
+                        <button
+                          key={interest.key}
+                          type="button"
+                          onClick={() => toggleInterest(interest.key)}
+                          disabled={!active && interests.length >= MAX_USER_INTERESTS}
+                          className={`rounded-full border px-3 py-1 text-[13px] transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                            active ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted hover:border-primary/40"
+                          }`}
+                        >
+                          {interestLabel(interest, interest.key, uiLocale)}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
             </section>
 
             <section id="lingue" className="flex scroll-mt-6 flex-col gap-5">

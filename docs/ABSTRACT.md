@@ -74,7 +74,9 @@ Architecture constraints:
 - Every S3 client takes its endpoint from configuration.
 - Environment variables use the `NOCT_` prefix.
 - `NOCT_DEPLOYMENT_MODE` selects `platform` (multi-user, default) or `solo` (one owner; the
-  first registered user becomes Super Admin, and registration then closes).
+  first registered user becomes Super Admin, and registration then closes). In `solo` the site is a
+  personal site: its primary blog is the home page `/`, its posts are at `/post/<slug>`, and other
+  spaces are reached by path only. Interests are off. See [API.md](API.md#solo-mode-primary-blog-and-personal-site-routes).
 
 ## Authentication
 

@@ -40,6 +40,33 @@ pub async fn run(st: AppState) -> Result<(), String> {
             "NOCT_SUPER_ADMIN_EMAIL è impostata ma manca NOCT_SUPER_ADMIN_PASSWORD: il Super Admin non viene creato"
         );
     }
+    if st.is_solo()
+        && let Err(e) = ensure_primary_blog(&st).await
+    {
+        tracing::error!(error = %e, "creazione del blog primario non riuscita");
+    }
+    Ok(())
+}
+
+/// Modalità "solo": garantisce il blog primario (idempotente) per il Super Admin più vecchio.
+/// Copre `NOCT_SUPER_ADMIN_*` e le installazioni esistenti senza blog.
+async fn ensure_primary_blog(st: &AppState) -> Result<(), String> {
+    let mut tx = st.db.begin().await.map_err(|e| e.to_string())?;
+    let owner: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT id FROM users WHERE platform_role = 'super_admin' AND is_active ORDER BY created_at, id LIMIT 1",
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+    let Some(owner) = owner else { return Ok(()) };
+    let created =
+        noct_blogs::primary::ensure_primary_blog(&mut tx, owner, &noct_blogs::primary::SiteInfo::from_state(st))
+            .await
+            .map_err(|e| e.detail)?;
+    tx.commit().await.map_err(|e| e.to_string())?;
+    if created.is_some() {
+        tracing::info!("blog primario creato");
+    }
     Ok(())
 }
 

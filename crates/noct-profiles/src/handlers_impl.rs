@@ -83,7 +83,8 @@ pub async fn get_profile(ctx: RouteCtx) -> Result<Value, ApiError> {
 
 /// Chiavi degli interessi di piattaforma; vuoto se il modulo è spento (nessun interesse scegliibile).
 async fn available_interests(st: &AppState) -> Result<Vec<String>, ApiError> {
-    if !st.module_enabled("interests") {
+    // solo: nessun interesse offerto, anche se il modulo è attivo nella tabella dei moduli
+    if st.is_solo() || !st.module_enabled("interests") {
         return Ok(Vec::new());
     }
     let items: Option<Value> =
@@ -469,7 +470,7 @@ pub async fn list_users(ctx: RouteCtx) -> Result<Vec<Value>, ApiError> {
     if let Some(locale) = ctx.query.get("locale").filter(|l| !l.is_empty()) {
         qb.push(" AND u.native_language = ").push_bind(locale.clone());
     }
-    if let Some(interest) = ctx.query.get("interest").filter(|i| !i.is_empty()) {
+    if let Some(interest) = ctx.query.get("interest").filter(|i| !i.is_empty() && !st.is_solo()) {
         qb.push(" AND ").push_bind(interest.clone()).push(" = ANY(u.interests)");
     }
     qb.push(match ctx.query.get("sort").map(String::as_str) {
@@ -496,7 +497,7 @@ pub async fn list_users(ctx: RouteCtx) -> Result<Vec<Value>, ApiError> {
                 "avatar_url": view::avatar_url(st, u.avatar_object_key.as_deref()),
                 "verification_tier": rules::verification_tier(&lists, &fqdn, &u.email, &u.username, u.verified_domain.as_deref()),
                 "custom_domain": u.verified_domain,
-                "interests": u.interests,
+                "interests": if st.is_solo() { Vec::new() } else { u.interests },
                 "follower_count": follower_count,
             })
         })

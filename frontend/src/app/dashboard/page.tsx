@@ -18,6 +18,7 @@ import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useExperimentalFeatures } from "@/lib/experimental";
 import { formatDate } from "@/lib/format";
+import { siteUrl } from "@/lib/site";
 import { displayPostStatus, type DisplayPostStatus } from "@/lib/post-status";
 import type { Blog, BlogComment, BlogInvitation, BlogVisibility, MembershipBlog, Post, SpaceKind } from "@/lib/types";
 
@@ -62,6 +63,8 @@ export default function DashboardHomePage() {
   const [defaultAuthorNameInput, setDefaultAuthorNameInput] = useState<string | null>(null);
   const defaultAuthorName = defaultAuthorNameInput ?? user?.username ?? "";
   const [createError, setCreateError] = useState<string | null>(null);
+  // Solo: l'errore 400 dello slug (es. collisione con una rotta del sito) appare sotto il campo.
+  const [slugError, setSlugError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const errorMessage = useCallback(
@@ -103,6 +106,7 @@ export default function DashboardHomePage() {
   async function handleCreate(event: FormEvent) {
     event.preventDefault();
     setCreateError(null);
+    setSlugError(null);
     setSubmitting(true);
     try {
       const blog = await authFetch((token) =>
@@ -123,7 +127,11 @@ export default function DashboardHomePage() {
       setVisibility("public");
       setDefaultAuthorNameInput(null);
     } catch (err) {
-      setCreateError(errorMessage(err));
+      if (isSolo && err instanceof ApiClientError && err.status === 400) {
+        setSlugError(errorMessage(err));
+      } else {
+        setCreateError(errorMessage(err));
+      }
     } finally {
       setSubmitting(false);
     }
@@ -235,18 +243,27 @@ export default function DashboardHomePage() {
           <CardTitle>{t("newBlog")}</CardTitle>
           <form onSubmit={handleCreate}>
             <FieldGroup>
-              <Label htmlFor="slug" hint={t("slugHint")}>
+              {/* Solo: nessun minimo di 4 caratteri (lo impone il backend solo), max 63, e l'indirizzo del blog è `{siteUrl}/{slug}`. */}
+              <Label htmlFor="slug" hint={isSolo ? `${siteUrl()}/${slug}` : t("slugHint")}>
                 {t("slug")}
               </Label>
               <Input
                 id="slug"
                 required
-                minLength={4}
+                minLength={isSolo ? undefined : 4}
+                maxLength={isSolo ? 63 : undefined}
                 pattern="[a-z0-9]+(-[a-z0-9]+)*"
                 placeholder="il-mio-blog"
                 value={slug}
+                aria-describedby={slugError ? "slug-error" : undefined}
+                aria-invalid={slugError ? true : undefined}
                 onChange={(e) => setSlug(e.target.value)}
               />
+              {slugError && (
+                <p id="slug-error" role="alert" className="mt-1.5 text-xs text-danger">
+                  {slugError}
+                </p>
+              )}
             </FieldGroup>
             <FieldGroup>
               <Label htmlFor="title">{t("title")}</Label>

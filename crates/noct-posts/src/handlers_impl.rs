@@ -742,11 +742,12 @@ pub async fn media_bibliography(ctx: RouteCtx) -> Result<Vec<MediaBibliographyEn
     .bind(blog.id)
     .fetch_all(&ctx.state.db)
     .await?;
+    let links = crate::permalink::Permalinks::load(&ctx.state).await?;
     let mut order: Vec<String> = Vec::new();
     let mut entries: HashMap<String, MediaBibliographyEntry> = HashMap::new();
     for r in rows {
         let cite = json!({
-            "post_title": r.title, "post_slug": r.slug, "permalink": rules::permalink(&blog.slug, &r.slug),
+            "post_title": r.title, "post_slug": r.slug, "permalink": links.of(&blog.slug, &r.slug),
             "locale": r.locale, "used_at": r.published_at,
         });
         let entry = entries.entry(r.url.clone()).or_insert_with(|| {
@@ -788,11 +789,12 @@ pub async fn links_bibliography(ctx: RouteCtx) -> Result<Vec<LinkBibliographyEnt
     .bind(blog.id)
     .fetch_all(&ctx.state.db)
     .await?;
+    let links = crate::permalink::Permalinks::load(&ctx.state).await?;
     let mut order: Vec<String> = Vec::new();
     let mut entries: HashMap<String, LinkBibliographyEntry> = HashMap::new();
     for r in rows {
         let cite = json!({
-            "post_title": r.title, "post_slug": r.slug, "permalink": rules::permalink(&blog.slug, &r.slug),
+            "post_title": r.title, "post_slug": r.slug, "permalink": links.of(&blog.slug, &r.slug),
             "locale": r.locale, "used_at": r.published_at,
         });
         let entry = entries.entry(r.url.clone()).or_insert_with(|| {
@@ -843,11 +845,12 @@ pub async fn my_links(ctx: RouteCtx) -> Result<Vec<MyLinkEntry>, ApiError> {
     .bind(user)
     .fetch_all(&ctx.state.db)
     .await?;
+    let links = crate::permalink::Permalinks::load(&ctx.state).await?;
     let mut order: Vec<String> = Vec::new();
     let mut entries: HashMap<String, MyLinkEntry> = HashMap::new();
     for r in rows {
         let cite = json!({
-            "post_title": r.title, "post_slug": r.slug, "permalink": rules::permalink(&r.blog_slug, &r.slug),
+            "post_title": r.title, "post_slug": r.slug, "permalink": links.of(&r.blog_slug, &r.slug),
             "locale": r.locale, "used_at": r.published_at, "blog_slug": r.blog_slug, "blog_title": r.blog_title,
         });
         let entry = entries.entry(r.url.clone()).or_insert_with(|| {

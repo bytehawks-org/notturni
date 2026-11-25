@@ -38,4 +38,16 @@ describe("admin nav", () => {
     await waitFor(() => expect(screen.getByRole("link", { name: "Users" })).toBeInTheDocument());
     expect(screen.queryByRole("link", { name: "Collaborators" })).toBeNull();
   });
+
+  it("solo: hides the site texts entry", async () => {
+    renderWithIntl(<AdminLayout>x</AdminLayout>);
+    await waitFor(() => expect(screen.getByRole("link", { name: "Collaborators" })).toBeInTheDocument());
+    expect(screen.queryByRole("link", { name: "Site texts" })).toBeNull();
+  });
+
+  it("platform: shows the site texts entry", async () => {
+    h.mode = "platform";
+    renderWithIntl(<AdminLayout>x</AdminLayout>);
+    await waitFor(() => expect(screen.getByRole("link", { name: "Site texts" })).toHaveAttribute("href", "/admin/testi"));
+  });
 });

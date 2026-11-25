@@ -2475,7 +2475,7 @@ dependencies = [
 
 [[package]]
 name = "noct-admin"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -2496,7 +2496,7 @@ dependencies = [
 
 [[package]]
 name = "noct-api"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -2534,7 +2534,7 @@ dependencies = [
 
 [[package]]
 name = "noct-audit"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -2557,12 +2557,13 @@ dependencies = [
 
 [[package]]
 name = "noct-auth"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
  "chrono",
  "noct-audit",
+ "noct-blogs",
  "noct-codegen",
  "noct-core",
  "noct-manifest",
@@ -2578,7 +2579,7 @@ dependencies = [
 
 [[package]]
 name = "noct-auth-mfa"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -2603,7 +2604,7 @@ dependencies = [
 
 [[package]]
 name = "noct-auth-sso"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -2625,7 +2626,7 @@ dependencies = [
 
 [[package]]
 name = "noct-backup"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -2647,7 +2648,7 @@ dependencies = [
 
 [[package]]
 name = "noct-blogs"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -2668,7 +2669,7 @@ dependencies = [
 
 [[package]]
 name = "noct-branding"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "axum",
  "bytes",
@@ -2690,7 +2691,7 @@ dependencies = [
 
 [[package]]
 name = "noct-bundle"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "noct-admin",
  "noct-audit",
@@ -2730,7 +2731,7 @@ dependencies = [
 
 [[package]]
 name = "noct-bus"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-nats",
  "async-trait",
@@ -2745,7 +2746,7 @@ dependencies = [
 
 [[package]]
 name = "noct-cache"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "redis",
@@ -2756,7 +2757,7 @@ dependencies = [
 
 [[package]]
 name = "noct-codegen"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "noct-manifest",
  "noct-migrate",
@@ -2764,7 +2765,7 @@ dependencies = [
 
 [[package]]
 name = "noct-comments"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -2787,7 +2788,7 @@ dependencies = [
 
 [[package]]
 name = "noct-core"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -2815,7 +2816,7 @@ dependencies = [
 
 [[package]]
 name = "noct-ctl"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2835,7 +2836,7 @@ dependencies = [
 
 [[package]]
 name = "noct-custom-domains"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -2856,7 +2857,7 @@ dependencies = [
 
 [[package]]
 name = "noct-discovery"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -2875,7 +2876,7 @@ dependencies = [
 
 [[package]]
 name = "noct-events"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "axum",
  "chrono",
@@ -2890,7 +2891,7 @@ dependencies = [
 
 [[package]]
 name = "noct-fragments"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -2909,7 +2910,7 @@ dependencies = [
 
 [[package]]
 name = "noct-gdpr"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "axum",
  "chrono",
@@ -2926,7 +2927,7 @@ dependencies = [
 
 [[package]]
 name = "noct-git-sync"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -2950,7 +2951,7 @@ dependencies = [
 
 [[package]]
 name = "noct-graph"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "axum",
  "chrono",
@@ -2967,7 +2968,7 @@ dependencies = [
 
 [[package]]
 name = "noct-http"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "bytes",
  "reqwest",
@@ -2979,7 +2980,7 @@ dependencies = [
 
 [[package]]
 name = "noct-image-moderation"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "axum",
  "chrono",
@@ -2994,7 +2995,7 @@ dependencies = [
 
 [[package]]
 name = "noct-interests"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -3011,7 +3012,7 @@ dependencies = [
 
 [[package]]
 name = "noct-legal"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "axum",
  "chrono",
@@ -3033,7 +3034,7 @@ dependencies = [
 
 [[package]]
 name = "noct-link-preview"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "axum",
  "chrono",
@@ -3054,7 +3055,7 @@ dependencies = [
 
 [[package]]
 name = "noct-mail"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "lettre",
@@ -3065,7 +3066,7 @@ dependencies = [
 
 [[package]]
 name = "noct-manifest"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "regex",
  "serde",
@@ -3076,7 +3077,7 @@ dependencies = [
 
 [[package]]
 name = "noct-markdown"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "ammonia",
  "pulldown-cmark",
@@ -3084,7 +3085,7 @@ dependencies = [
 
 [[package]]
 name = "noct-media"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "axum",
  "bytes",
@@ -3109,7 +3110,7 @@ dependencies = [
 
 [[package]]
 name = "noct-migrate"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "hex",
  "noct-manifest",
@@ -3122,7 +3123,7 @@ dependencies = [
 
 [[package]]
 name = "noct-newsletter"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -3144,7 +3145,7 @@ dependencies = [
 
 [[package]]
 name = "noct-notes"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -3162,7 +3163,7 @@ dependencies = [
 
 [[package]]
 name = "noct-pages"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -3179,7 +3180,7 @@ dependencies = [
 
 [[package]]
 name = "noct-platform"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "axum",
  "chrono",
@@ -3194,7 +3195,7 @@ dependencies = [
 
 [[package]]
 name = "noct-posts"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -3213,7 +3214,7 @@ dependencies = [
 
 [[package]]
 name = "noct-profiles"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -3234,7 +3235,7 @@ dependencies = [
 
 [[package]]
 name = "noct-publications"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -3251,7 +3252,7 @@ dependencies = [
 
 [[package]]
 name = "noct-reports"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -3269,7 +3270,7 @@ dependencies = [
 
 [[package]]
 name = "noct-sandbox"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -3285,7 +3286,7 @@ dependencies = [
 
 [[package]]
 name = "noct-security"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "argon2",
  "base64 0.23.1",
@@ -3304,7 +3305,7 @@ dependencies = [
 
 [[package]]
 name = "noct-storage"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "aws-config",
@@ -3317,7 +3318,7 @@ dependencies = [
 
 [[package]]
 name = "noct-taxonomy"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -3333,7 +3334,7 @@ dependencies = [
 
 [[package]]
 name = "noct-users"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "axum",
  "chrono",
@@ -3348,7 +3349,7 @@ dependencies = [
 
 [[package]]
 name = "noct-wiki"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -3367,7 +3368,7 @@ dependencies = [
 
 [[package]]
 name = "noct-worker"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "noct-api",

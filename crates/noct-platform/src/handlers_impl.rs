@@ -7,6 +7,13 @@ pub async fn public_config(ctx: RouteCtx) -> Result<Value, ApiError> {
     let st = &ctx.state;
     let mut conn = st.db.acquire().await?;
     let platform = crate::get_in(&mut conn).await?;
+    // null in `platform`, prima dell'installazione e se il blog primario è in cancellazione
+    let primary_blog_slug: Option<String> = sqlx::query_scalar(
+        "SELECT b.slug FROM platform_config p JOIN blogs b ON b.id = p.primary_blog_id
+         WHERE p.id = 1 AND b.deleted_at IS NULL",
+    )
+    .fetch_optional(&mut *conn)
+    .await?;
     let mut out = json!({
         "deployment_mode": st.module_config_str("auth", "deployment_mode").unwrap_or("platform"),
         "subdomains_enabled": st.config.subdomains_enabled,
@@ -14,6 +21,7 @@ pub async fn public_config(ctx: RouteCtx) -> Result<Value, ApiError> {
         "experimental_features": st.config.experimental_features,
         "default_locale": platform.default_locale,
         "registration_mode": platform.registration_mode,
+        "primary_blog_slug": primary_blog_slug,
         "sso_providers": [],
     });
     out.as_object_mut().expect("oggetto").extend(st.admin_sections.public_config(st).await?);

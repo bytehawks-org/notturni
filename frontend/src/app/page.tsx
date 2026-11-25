@@ -12,15 +12,20 @@ import { NewsletterSignup } from "@/components/NewsletterSignup";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/shell/SiteFooter";
 import { FilterChip } from "@/components/ui/Pill";
+import { BlogHome, blogHomeMetadata } from "@/components/blog/BlogHome";
 import { languageName } from "@/lib/languages";
 import {
   getFeedLocales,
+  getPrimaryBlogSlug,
   getPublicBlogs,
   getPublicFeed,
   getTrendingTags,
 } from "@/lib/server-api";
 
+/** In solo con un blog primario la home `/` è quella del blog (stesso canonical, stessi feed); altrimenti home di piattaforma. */
 export async function generateMetadata(_props: unknown, parent: ResolvingMetadata): Promise<Metadata> {
+  const primary = await getPrimaryBlogSlug();
+  if (primary) return blogHomeMetadata({ blogSlug: primary, root: true }, parent);
   return {
     alternates: {
       canonical: "/",
@@ -44,6 +49,8 @@ export default async function Home({
   }>;
 }) {
   const { tag, category, locale, tab } = await searchParams;
+  const primary = await getPrimaryBlogSlug();
+  if (primary) return <BlogHome blogSlug={primary} category={category} />;
   const followingTab = tab === "following";
   const [posts, trending, blogs, feedLocales, t, tHome] = await Promise.all([
     getPublicFeed({ limit: 20, tag, category, locale }).catch(() => []),

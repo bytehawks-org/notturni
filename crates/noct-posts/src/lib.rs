@@ -8,6 +8,7 @@ include!(concat!(env!("OUT_DIR"), "/module_gen.rs"));
 mod export;
 mod handlers_impl;
 mod out;
+pub mod permalink;
 pub mod personal_data;
 pub mod rules;
 mod seo;

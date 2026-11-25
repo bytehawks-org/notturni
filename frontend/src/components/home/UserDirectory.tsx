@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { VerificationBadge } from "@/components/ui/VerificationBadge";
 import { interestLabel, interestsByKey } from "@/lib/interests";
+import { isSolo } from "@/lib/site";
 import type { Interest, PublicUser } from "@/lib/types";
 
 const hue = (s: string) => `oklch(0.55 0.06 ${[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % 360})`;
@@ -50,6 +51,8 @@ export async function UserDirectoryGrid({
   const t = await getTranslations("UserDirectory");
   if (!users.length) return <p className="py-10 text-center text-sm text-muted">{t("noMatch")}</p>;
   const interestsMap = interestsByKey(interests);
+  // In solo gli interessi non sono esposti: nessun chip di filtro sulle card.
+  const showInterests = !isSolo();
   return (
     <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
       {users.map((u) => (
@@ -68,7 +71,7 @@ export async function UserDirectoryGrid({
             </div>
           </div>
           {u.bio && <p className="text-sm leading-relaxed text-muted line-clamp-3">{u.bio}</p>}
-          {u.interests.length > 0 && (
+          {showInterests && u.interests.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {u.interests.map((key) => (
                 <Link

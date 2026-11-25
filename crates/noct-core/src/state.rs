@@ -102,9 +102,57 @@ impl AppState {
         self.modules.contains(name)
     }
 
+    /// `true` quando l'istanza gira in modalità `solo` (`auth.deployment_mode = "solo"`).
+    /// Il default, `platform`, e il valore non impostato danno `false`.
+    pub fn is_solo(&self) -> bool {
+        self.module_config_str("auth", "deployment_mode") == Some("solo")
+    }
+
     /// Registra le estensioni dei moduli attivi (vedi [`Registry::extensions`](crate::Registry::extensions)).
     pub fn with_extensions(mut self, extensions: Extensions) -> Self {
         self.extensions = extensions;
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Config, Services};
+    use noct_bus::MemoryBus;
+    use noct_cache::MemoryCache;
+    use noct_http::{Moderation, Revalidator};
+    use noct_mail::NotConfiguredMailer;
+    use noct_storage::LocalStorage;
+
+    /// Stato di test: pool pigro (nessuna connessione reale), servizi in memoria.
+    fn state_with_deployment_mode(mode: Option<&str>) -> AppState {
+        let cfg = Config::minimal("postgres://x@127.0.0.1:1/x");
+        let services = Services {
+            storage: Arc::new(LocalStorage::new(std::env::temp_dir(), "http://localhost.invalid")),
+            cache: Arc::new(MemoryCache::default()),
+            bus: Arc::new(MemoryBus::default()),
+            mailer: Arc::new(NotConfiguredMailer),
+            revalidate: Revalidator::new(cfg.frontend_revalidate_url.clone(), cfg.revalidate_secret.clone()),
+            moderation: Moderation::new(cfg.moderation_service_url.clone()),
+        };
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .connect_lazy("postgres://x@127.0.0.1:1/x")
+            .expect("pool pigro");
+        let mut module_cfg = BTreeMap::new();
+        if let Some(mode) = mode {
+            let auth = BTreeMap::from([("deployment_mode".to_string(), ConfigValue::String(mode.to_string()))]);
+            module_cfg.insert("auth".to_string(), auth);
+        }
+        AppState::new(pool, cfg, services, module_cfg)
+    }
+
+    #[tokio::test]
+    async fn is_solo_only_for_solo_deployment_mode() {
+        assert!(state_with_deployment_mode(Some("solo")).is_solo());
+        assert!(!state_with_deployment_mode(Some("platform")).is_solo());
+        assert!(!state_with_deployment_mode(Some("")).is_solo());
+        assert!(!state_with_deployment_mode(None).is_solo(), "non impostato = platform");
     }
 }

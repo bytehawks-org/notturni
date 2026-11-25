@@ -59,7 +59,7 @@ Reference for all `NOCT_*` variables (plus the two `NEXT_PUBLIC_*` variables of 
 | `NOCT_FRONTEND_REVALIDATE_URL` | core | — | no | On-demand invalidation of the SSR cache after a change to public content. Empty = time-based cache only. | `http://frontend:3000/api/revalidate` |
 | `NOCT_REVALIDATE_SECRET` | core + frontend | — | no | **Secret.** Must match between backend and frontend. | `openssl rand -base64 32` |
 | `NOCT_BACKEND_INTERNAL_URL` | frontend | `NEXT_PUBLIC_API_URL`, then `http://localhost:8000` | recommended | Internal backend URL used by server-side rendering (avoids leaving the cluster network). | `http://backend:8000` |
-| `NOCT_SITE_NAME` | frontend | `Notturni` | no | Platform name in the header, login, dashboard, titles, feed, manifest and interface texts. The name set in `/admin/seo` takes precedence. Read at runtime. | `Blue Inks` |
+| `NOCT_SITE_NAME` | frontend, auth | `Notturni` (frontend); unset (auth) | no | Frontend: platform name in the header, login, dashboard, titles, feed, manifest and interface texts. The name set in `/admin/seo` takes precedence. Read at runtime. Auth (backend, `module.toml` option `site_name`): in `solo` it is the title of the primary blog, and its slug is derived from it. If unset or blank, the owner's username is used. The backend does not read `/admin/seo`, so the primary blog keeps the name it got at creation. See [Solo personal site](#solo-personal-site). | `Blue Inks` |
 | `NOCT_SITE_URL` | frontend | `https://$NOCT_INSTANCE_FQDN` if `NOCT_APP_ENV=production`, then `NEXT_PUBLIC_SITE_URL`, then `http://localhost:3000` | no | Public site URL (canonical, sitemap, blog subdomains, CSP). Read at runtime. | `https://notturni.example.com` |
 | `NOCT_API_PUBLIC_URL` | frontend | `NEXT_PUBLIC_API_URL`, then the site URL | no | API URL used by the browser. Empty = same origin as the site (the Ingress routes `/api` to the backend). Read at runtime. | `https://api.example.com` |
 | `NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_SITE_URL` | frontend | empty | no | Local development fallback only (build args, embedded in the bundle; `compose.yaml` sets them). In production, use the `NOCT_*` variables above: no rebuild is needed to change the domain. | `http://localhost:8000` |
@@ -174,7 +174,7 @@ One code base, two ways to run it. Nothing is removed from the code: the profile
 | Object storage | `localstorage`: a volume mounted in the backend, served on `/storage` | S3-compatible (Garage, AWS S3, R2) |
 | Cache and rate limits | In memory, per process | Redis |
 | Message bus | In memory (`MemoryBus`) | NATS JetStream, at-least-once |
-| Blog addresses | `/<slug>` only (`NOCT_SUBDOMAINS_ENABLED=false`) | `<slug>.<domain>` and paths |
+| Blog addresses | `/<slug>` only (`NOCT_SUBDOMAINS_ENABLED=false`); the primary blog is the home `/` and its posts are `/post/<slug>` (see [Solo personal site](#solo-personal-site)) | `<slug>.<domain>` and paths |
 | Verification seal and role labels | Hidden in the UI (the API still returns `verification_tier` and roles; permissions are unchanged) | Shown |
 | Email | An existing SMTP server, optionally through the `smtp-relay` container; none if unset | Same |
 | Image moderation | Off; sensitive images are marked by hand | On |
@@ -196,6 +196,16 @@ With compose, `--profile platform` alone starts the services but does not wire t
 ### Existing database moved to solo
 
 `NOCT_MODULES` applies only at the first installation. After that, the module table in the database wins. If you point a solo install at a database that already ran as `platform`, `image_moderation` stays active until you turn it off in `/admin/modules`, whatever `NOCT_MODULES` says.
+
+### Solo personal site
+
+In `solo` the instance is a personal site with one primary blog. The behaviour is set by the code, with no extra variable, except `NOCT_SITE_NAME`:
+
+- **Primary blog.** Created at the first registration and at backend startup (idempotent), for the first user or the oldest active Super Admin. Its title is `NOCT_SITE_NAME`, or the owner's username if unset. Its slug is derived from the title (`-2`, `-3`, ... on a collision). The site root `/` shows it, and its posts are at `/post/<slug>`. `GET /api/v1/config` returns its slug as `primary_blog_slug`. If the blog was removed by the purge of deleted blogs, the next backend restart creates a new one.
+- **Spaces.** Other blogs are reached by path only (`/<slug>/`). Subdomains are off (`NOCT_SUBDOMAINS_ENABLED=false`, the `.env.example` default).
+- **Off in solo:** the reserved-names list (`reserved_blog_names`), the minimum slug length, the user interests (selector, filter and profile values; stored values stay in the database), and the editing of site texts (`PUT /api/v1/admin/site-texts/{locale}` returns `403`; the admin page is hidden). Footer texts stay editable in the admin settings page (`/admin/impostazioni`).
+
+The full list of routes and rules is in [API.md](API.md#solo-mode-primary-blog-and-personal-site-routes).
 
 ### No NATS: MemoryBus limits
 

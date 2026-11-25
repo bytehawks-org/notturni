@@ -52,9 +52,11 @@ async fn render(ctx: &RouteCtx, r: &Row) -> Result<Value, ApiError> {
     let storage = &st.config.storage;
     let mut reserved: Vec<&str> = noct_blogs::rules::RESERVED_BLOG_SLUGS.to_vec();
     reserved.sort_unstable();
+    // solo: l'elenco extra non esiste; il valore eventualmente salvato resta in DB ma non viene mostrato
+    let reserved_blog_names: &[String] = if st.is_solo() { &[] } else { &r.reserved_blog_names };
     let mut out = json!({
         "default_locale": r.default_locale, "registration_mode": r.registration_mode,
-        "mfa_required_for_admins": r.mfa_required_for_admins, "reserved_blog_names": r.reserved_blog_names,
+        "mfa_required_for_admins": r.mfa_required_for_admins, "reserved_blog_names": reserved_blog_names,
         "reserved_builtin": reserved, "moderation_threshold": r.moderation_threshold,
         "max_blogs_per_user": r.max_blogs_per_user, "audit_retention_days": r.audit_retention_days,
         "footer_column1_markdown": r.footer_column1_markdown, "footer_column2_markdown": r.footer_column2_markdown,
@@ -167,11 +169,18 @@ pub async fn update_config(ctx: RouteCtx, _body: crate::AdminConfigUpdate) -> Re
             names.iter().map(|n| n.trim().to_lowercase()).filter(|n| !n.is_empty()).collect();
         cleaned.sort();
         cleaned.dedup();
-        let bad: Vec<&str> = cleaned.iter().filter(|n| !SLUG_RE.is_match(n)).map(String::as_str).collect();
-        if !bad.is_empty() {
-            return Err(ApiError::bad_request(format!("Nomi non validi: {}.", bad.join(", "))));
+        if ctx.state.is_solo() {
+            // solo: un elenco vuoto è tollerato (la UI può inviare la bozza), uno pieno è rifiutato
+            if !cleaned.is_empty() {
+                return Err(ApiError::bad_request("I nomi riservati non sono disponibili in modalità solo."));
+            }
+        } else {
+            let bad: Vec<&str> = cleaned.iter().filter(|n| !SLUG_RE.is_match(n)).map(String::as_str).collect();
+            if !bad.is_empty() {
+                return Err(ApiError::bad_request(format!("Nomi non validi: {}.", bad.join(", "))));
+            }
+            ch.set("reserved_blog_names", &mut row.reserved_blog_names, cleaned);
         }
-        ch.set("reserved_blog_names", &mut row.reserved_blog_names, cleaned);
     }
     if let Some(v) = raw.get("moderation_threshold").filter(|v| !v.is_null()) {
         let t = v.as_f64().ok_or_else(|| ApiError::bad_request("`moderation_threshold` deve essere un numero."))?;

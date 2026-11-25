@@ -1,6 +1,6 @@
 [module]
 name = "newsletter"
-version = "0.1.0"
+version = "0.2.1"
 kind = "optional"
 default_enabled = true
 requires = ["users", "blogs", "posts", "events"]

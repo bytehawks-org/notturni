@@ -71,8 +71,18 @@ fn revalidate_blog(st: &AppState, slug: &str) {
     st.services.revalidate.spawn(vec![revalidate::blog(slug), revalidate::feed()]);
 }
 
-async fn count_owned(conn: &mut PgConnection, owner: Uuid) -> Result<i64, ApiError> {
-    Ok(sqlx::query_scalar("SELECT count(*) FROM blogs WHERE owner_id = $1").bind(owner).fetch_one(conn).await?)
+/// Spazi posseduti da `owner`. In `solo` il blog primario (`platform_config.primary_blog_id`) non conta.
+/// Fuori da `solo` il marker è ignorato (anche se resta dopo un passaggio solo -> platform): il
+/// `CASE` vale NULL, e `IS DISTINCT FROM` NULL non esclude nessuna riga.
+async fn count_owned(conn: &mut PgConnection, owner: Uuid, solo: bool) -> Result<i64, ApiError> {
+    Ok(sqlx::query_scalar(
+        "SELECT count(*) FROM blogs WHERE owner_id = $1
+         AND id IS DISTINCT FROM (CASE WHEN $2 THEN (SELECT primary_blog_id FROM platform_config WHERE id = 1) END)",
+    )
+    .bind(owner)
+    .bind(solo)
+    .fetch_one(conn)
+    .await?)
 }
 
 fn limit_message(max: i32) -> String {
@@ -85,7 +95,11 @@ pub async fn create_blog(ctx: RouteCtx, body: BlogCreate) -> Result<Value, ApiEr
     let actor = actor(&ctx)?;
     let st = &ctx.state;
     let platform = noct_platform::get(&st.db).await?;
-    rules::validate_slug(&body.slug, &platform.reserved_blog_names).map_err(ApiError::bad_request)?;
+    if st.is_solo() {
+        rules::validate_slug_solo(&body.slug).map_err(ApiError::bad_request)?;
+    } else {
+        rules::validate_slug(&body.slug, &platform.reserved_blog_names).map_err(ApiError::bad_request)?;
+    }
     let locale = body.default_locale.clone().unwrap_or_else(|| "it".into());
     rules::validate_locale(&locale).map_err(ApiError::bad_request)?;
     let subtitle = body.subtitle.clone().filter(|s| !s.is_empty());
@@ -100,7 +114,7 @@ pub async fn create_blog(ctx: RouteCtx, body: BlogCreate) -> Result<Value, ApiEr
     let mut tx = st.db.begin().await?;
     // serializza le creazioni dello stesso utente: il conteggio e l'inserimento non devono avere corse
     sqlx::query("SELECT id FROM users WHERE id = $1 FOR UPDATE").bind(actor.user_id).execute(&mut *tx).await?;
-    if count_owned(&mut tx, actor.user_id).await? >= i64::from(platform.max_blogs_per_user) {
+    if count_owned(&mut tx, actor.user_id, st.is_solo()).await? >= i64::from(platform.max_blogs_per_user) {
         return Err(ApiError::bad_request(limit_message(platform.max_blogs_per_user)));
     }
     let visibility = body.visibility.clone().unwrap_or_else(|| "public".into());
@@ -358,6 +372,14 @@ pub async fn transfer_blog(ctx: RouteCtx, body: BlogTransfer) -> Result<Value, A
     if owner != actor.user_id {
         return Err(ApiError::forbidden("Solo il proprietario può farlo."));
     }
+    // in solo il blog primario resta dell'istanza: non si trasferisce
+    if st.is_solo() {
+        let primary: Option<Uuid> =
+            sqlx::query_scalar("SELECT primary_blog_id FROM platform_config WHERE id = 1").fetch_one(&mut *tx).await?;
+        if primary == Some(blog.id) {
+            return Err(ApiError::bad_request("Il blog primario non può essere trasferito."));
+        }
+    }
     sqlx::query("SELECT id FROM users WHERE id = $1 FOR UPDATE").bind(target_id).execute(&mut *tx).await?;
     let role: Option<String> =
         sqlx::query_scalar("SELECT role::text FROM blog_memberships WHERE blog_id = $1 AND user_id = $2")
@@ -368,7 +390,7 @@ pub async fn transfer_blog(ctx: RouteCtx, body: BlogTransfer) -> Result<Value, A
     if role.as_deref() != Some("co_autore") {
         return Err(ApiError::bad_request("Il nuovo proprietario deve essere un coautore del blog."));
     }
-    if count_owned(&mut tx, target_id).await? >= i64::from(platform.max_blogs_per_user) {
+    if count_owned(&mut tx, target_id, st.is_solo()).await? >= i64::from(platform.max_blogs_per_user) {
         return Err(ApiError::bad_request(format!(
             "Il nuovo proprietario: {}",
             limit_message(platform.max_blogs_per_user)

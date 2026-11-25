@@ -7,6 +7,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/shell/SiteFooter";
 import { FilterChip } from "@/components/ui/Pill";
 import { interestLabel } from "@/lib/interests";
+import { isSolo } from "@/lib/site";
 import { languageName } from "@/lib/languages";
 import { getPublicInterests, getPublicUsers } from "@/lib/server-api";
 
@@ -28,7 +29,10 @@ export default async function UsersPage({
 }: {
   searchParams: Promise<{ locale?: string; q?: string; interest?: string }>;
 }) {
-  const { locale, q, interest } = await searchParams;
+  const { locale, q, interest: requestedInterest } = await searchParams;
+  // In solo gli interessi non sono esposti: filtro e chiamata GET /interests disattivati.
+  const solo = isSolo();
+  const interest = solo ? undefined : requestedInterest;
   const [users, allInterests, uiLocale, t] = await Promise.all([
     getPublicUsers({
       limit: 100,
@@ -37,7 +41,7 @@ export default async function UsersPage({
       interest: interest || undefined,
       sort: "new",
     }).catch(() => []),
-    getPublicInterests(),
+    solo ? Promise.resolve([]) : getPublicInterests(),
     getLocale(),
     getTranslations("UsersPage"),
   ]);

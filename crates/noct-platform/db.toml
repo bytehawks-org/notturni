@@ -23,6 +23,9 @@ columns = [
   { name = "footer_bottom_bar_markdown", type = "text", null = true },
   { name = "updated_at", type = "timestamptz", null = true },
   { name = "updated_by_id", type = "uuid", null = true, ref = "users.id", on_delete = "set_null" },
+  # blog primario dell'istanza `solo` (`blogs.id`, null in `platform`). Senza FK: `platform` si
+  # migra prima di `blogs`. Un id che non corrisponde più a un blog vale come "non impostato".
+  { name = "primary_blog_id", type = "uuid", null = true },
 ]
 
 # Stato desiderato dei moduli opzionali (§10 del piano): `NOCT_MODULES` o i default dei manifest

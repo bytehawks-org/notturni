@@ -94,6 +94,36 @@ login with `login_gates`; and to blog and post fields with `extensions`.
 Container image: [`Dockerfile`](../Dockerfile) (cargo-chef, multi-arch, one image with the three binaries; the
 command selects the role). Kubernetes manifests are in [`k8s/`](../k8s/README.md). CI is in `.github/workflows/`.
 
+## Solo mode: primary blog and mode helpers
+
+The mode is read in one place: `AppState::is_solo()` (`crates/noct-core/src/state.rs`), true when
+`auth.deployment_mode` is `solo`. Use it for new mode checks. Older code may still read the
+setting directly with `module_config_str`.
+
+The primary blog is the one blog of a `solo` instance. Its code is in `crates/noct-blogs/src/primary.rs`:
+
+- `ensure_primary_blog(conn, owner_id, site)` is idempotent. It takes the advisory lock
+  `REGISTRATION_LOCK` (shared with registration), then checks the marker `platform_config.primary_blog_id`.
+  The marker counts only if the blog row exists. Otherwise it creates the blog (title from
+  `auth.site_name`, else the username; slug from the title, checked by `validate_slug_solo`), sets
+  the marker, and writes the audit event `blog.primary_created`. The caller must run it in a transaction.
+- Callers: `noct-auth` at the first registration (same transaction as the account) and `noct-auth`
+  `startup.rs` (after the `NOCT_SUPER_ADMIN_*` bootstrap, for the oldest active Super Admin).
+- The marker has no foreign key because `noct-platform` migrates before `blogs` exists. The migration is
+  `crates/noct-platform/migrations/0005_schema_update.sql`.
+- Permalinks: `crates/noct-posts/src/permalink.rs` (`permalink_for`, `Permalinks::load`) returns `/post/<slug>`
+  for the primary blog in `solo` and `/<blog>/<slug>` for the others. `out.rs`, `seo.rs` and the
+  bibliography handlers use it. Other modules (`modules/notes`, `fragments`, `publications`, `comments`,
+  `newsletter`, `pages`) and `crates/noct-media` still build `/{blog}/{post}` by hand; they depend on the
+  `308` redirect in the frontend (see ROADMAP.md, section 8).
+- Erasure (GDPR) keeps owned blogs, so the marker stays valid. After `blogs.purge_deleted` removes the row,
+  the next startup recreates the primary blog. A blog in the grace period (`deleted_at` set) keeps the
+  marker, and `GET /config` returns `primary_blog_slug` as `null` until it is restored.
+
+Other `solo` rules: slug checks (`rules::validate_slug_solo`, route collision list `SOLO_ROUTE_COLLISIONS`,
+which must match the static frontend routes; a drift test checks it, skipping names with a dot and `[`, `(`, `_` prefixes); no reserved list in admin config;
+no interests (`modules/interests`, `noct-profiles`); site texts `PUT` returns `403` (`noct-admin`).
+
 ## From v1: where things went
 
 The documentation and the historical notes sometimes cite v1 files (Python/FastAPI). They were removed with the

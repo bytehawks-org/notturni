@@ -56,11 +56,11 @@ Platform administration: overview, users, blogs, posts, audit log and settings. 
 | PATCH | `/admin/posts/{post_id}` | role: super admin, administrator | Hides or shows a post (note required if it changes) |  |
 | GET | `/admin/audit-log` | role: super admin, administrator | Audit log, newest first; filters action, actor_id, target_id, blog_id, channel, since, until, limit (max 500), offset |  |
 | GET | `/admin/config` | role: super admin | Platform settings, including those of the active modules |  |
-| PATCH | `/admin/config` | role: super admin | Updates the settings; every change goes to the audit log with the previous values |  |
+| PATCH | `/admin/config` | role: super admin | Updates the settings; every change goes to the audit log with the previous values. In solo, a non-empty `reserved_blog_names` is rejected (400) | |
 | GET | `/admin/modules` | role: super admin | Modules compiled into the binary, with desired and running state |  |
 | POST | `/admin/modules/{name}/enable` | role: super admin | Enables an optional module (hot: migrates the schema, mounts the routes, starts the consumers) |  |
 | POST | `/admin/modules/{name}/disable` | role: super admin | Disables an optional module (routes unmounted, data and tables intact; rejected if another active module requires it) |  |
-| PUT | `/admin/site-texts/{locale}` | role: super admin, administrator | Bulk-edits the UI texts of one language (atomic, audited); only keys of the allowed groups, plain text without braces or tags |  |
+| PUT | `/admin/site-texts/{locale}` | role: super admin, administrator | Bulk-edits the UI texts of one language (atomic, audited); only keys of the allowed groups, plain text without braces or tags. In solo, always 403 | |
 
 ## auth  (core)
 
@@ -87,7 +87,7 @@ Blogs, collaborators and invitations, lifecycle (pause, deletion with grace peri
 
 | Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| POST | `/blogs` | user | Creates a Space (`kind` = blog\|wiki\|docs; slug of at least 4 characters, not reserved; per-user limit across all Spaces) | 201 |
+| POST | `/blogs` | user | Creates a Space (`kind` = blog\|wiki\|docs; slug of at least 4 characters, not reserved; per-user limit across all Spaces). In solo: no minimum length and no reserved list, only format and collisions with site routes | 201 |
 | GET | `/blogs/mine` | user | Blogs owned by the user |  |
 | GET | `/blogs/member-of` | user | Blogs of other owners on which the user has a membership |  |
 | GET | `/blogs/received-invitations` | user | Collaboration invitations awaiting a response |  |
@@ -132,7 +132,7 @@ Platform settings (single row): limits, reserved names, moderation threshold, fo
 
 | Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| GET | `/config` | public | Public instance configuration: language, registrations, captcha, access providers |  |
+| GET | `/config` | public | Public instance configuration: language, registrations, captcha, access providers, deployment mode, `primary_blog_slug` (solo) | |
 | GET | `/footer` | public | Platform footer in raw Markdown (columns 1-2 can be overridden per blog) |  |
 | GET | `/site-texts` | public | UI texts overridden by administrators for the language `?locale=` (empty if none); the frontend merges them with the defaults |  |
 
@@ -173,7 +173,7 @@ User profile: public and private personal details, avatar, social links, three-s
 |---|---|---|---|---|
 | GET | `/users` | public | Public user directory (`q`, `locale`, `interest`, `sort` = new\|followers, `limit` max 100, `offset`) |  |
 | GET | `/users/me` | user | Private profile of the owner (with the email) |  |
-| PATCH | `/users/me` | user | Updates the profile; absent fields stay unchanged, "" clears text fields |  |
+| PATCH | `/users/me` | user | Updates the profile; absent fields stay unchanged, "" clears text fields. In solo, a non-empty `interests` list is rejected (400) | |
 | GET | `/users/{username}` | public | Public profile, by username or by verified personal domain |  |
 | POST | `/users/me/avatar` | user | Avatar (PNG, JPEG, WEBP; max 2 MiB) | rate limit 20/10 min per user; upload |
 | DELETE | `/users/me/avatar` | user | Removes the avatar | 204 |
@@ -328,7 +328,7 @@ Public list of platform interests, chosen by users in their profile and used to 
 
 | Verb | Path | Access | Description | Notes |
 |---|---|---|---|---|
-| GET | `/interests` | public | Platform interests selectable in the profile |  |
+| GET | `/interests` | public | Platform interests selectable in the profile. Returns `[]` in solo | |
 
 ## legal  (optional)
 

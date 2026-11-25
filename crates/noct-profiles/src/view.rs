@@ -99,7 +99,7 @@ pub async fn public_json(st: &AppState, u: &UserRow) -> Result<Value, ApiError> 
         "country": u.country,
         "native_language": u.native_language,
         "fallback_languages": u.fallback_languages,
-        "interests": u.interests,
+        "interests": if st.is_solo() { Vec::new() } else { u.interests.clone() },
         "avatar_url": avatar_url(st, u.avatar_object_key.as_deref()),
         "social_links": social_links(st, u.id).await?,
         "created_at": u.created_at,

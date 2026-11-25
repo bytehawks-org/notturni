@@ -20,6 +20,7 @@ uuid.workspace = true
 chrono.workspace = true
 tokio.workspace = true
 noct-audit.workspace = true
+noct-blogs.workspace = true
 noct-security.workspace = true
 tracing.workspace = true
 noct-manifest.workspace = true

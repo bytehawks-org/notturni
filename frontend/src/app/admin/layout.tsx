@@ -59,7 +59,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       : []),
     ...(isAdmin ? [{ href: "/admin/seo", label: t("seo"), icon: "◈", mobile: false } as NavItem] : []),
     ...(isAdmin ? [{ href: "/admin/legale", label: t("legal"), icon: "§", mobile: false } as NavItem] : []),
-    ...(isAdmin ? [{ href: "/admin/testi", label: t("texts"), icon: "¶", mobile: false } as NavItem] : []),
+    ...(isAdmin && deploymentMode !== "solo"
+      ? [{ href: "/admin/testi", label: t("texts"), icon: "¶", mobile: false } as NavItem]
+      : []),
     ...(isAdmin ? [{ href: "/admin/blog", label: t("allBlogs"), icon: "✎", mobile: true } as NavItem] : []),
     ...(isAdmin ? [{ href: "/admin/moderazione", label: t("moderation"), icon: "◔", mobile: true } as NavItem] : []),
     ...(isAdmin ? [{ href: "/admin/newsletter", label: t("newsletter"), icon: "✉", mobile: true } as NavItem] : []),

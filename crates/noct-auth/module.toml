@@ -1,8 +1,8 @@
 [module]
 name = "auth"
-version = "0.1.0"
+version = "0.2.1"
 kind = "core"
-requires = ["users", "events", "audit", "platform"]
+requires = ["users", "events", "audit", "platform", "blogs"]
 description = "Registrazione, login con sessione (access JWT + refresh con rotation), password dimenticata, cambio password, API token"
 
 [config]
@@ -13,6 +13,8 @@ registration_mode = { type = "string", env = "NOCT_REGISTRATION_MODE", default =
 default_locale = { type = "string", env = "NOCT_DEFAULT_LOCALE", default = "it" }
 # platform | solo: in "solo" il primo utente diventa Super Admin e la registrazione si chiude
 deployment_mode = { type = "string", env = "NOCT_DEPLOYMENT_MODE", default = "platform" }
+# nome del sito: titolo e slug del blog primario in modalità "solo" (se assente, lo username)
+site_name = { type = "string", env = "NOCT_SITE_NAME", optional = true }
 refresh_ttl_days = { type = "int", env = "NOCT_JWT_REFRESH_TOKEN_TTL_DAYS", default = 30 }
 cookie_secure = { type = "bool", env = "NOCT_SESSION_COOKIE_SECURE", default = true }
 cookie_samesite = { type = "string", env = "NOCT_SESSION_COOKIE_SAMESITE", default = "lax" }

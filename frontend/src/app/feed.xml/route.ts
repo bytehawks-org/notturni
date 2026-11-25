@@ -1,5 +1,6 @@
 import { FEED_HEADERS, buildRss, postToFeedItem } from "@/lib/feed";
 import { getPublicFeed } from "@/lib/server-api";
+import { getPrimaryBlogFeed } from "@/lib/primary-feed";
 import { siteName, siteUrl } from "@/lib/site";
 
 // Come sitemap.ts/robots.ts: senza questo Next prova a pre-renderizzare la
@@ -8,10 +9,12 @@ export const dynamic = "force-dynamic";
 
 const FEED_LIMIT = 50;
 
-/** RSS 2.0 del feed cronologico di piattaforma (richiesta esplicita) — stessi
+/** RSS 2.0 del feed cronologico di piattaforma (richiesta esplicita). In solo con un blog primario serve quello del blog — stessi
  * post di `GET /api/v1/feed/posts` mostrati sulla home, già filtrati per
  * visibilità pubblica. Vedi anche `atom.xml` per la variante Atom. */
 export async function GET() {
+  const primary = await getPrimaryBlogFeed("/feed.xml");
+  if (primary) return new Response(buildRss(primary.meta, primary.items), { headers: FEED_HEADERS.rss });
   const posts = await getPublicFeed({ limit: FEED_LIMIT }).catch(() => []);
   const xml = buildRss(
     {

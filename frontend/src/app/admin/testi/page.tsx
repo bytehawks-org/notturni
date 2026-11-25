@@ -2,8 +2,10 @@
 
 import { useTranslations } from "next-intl";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { useSiteFlags } from "@/components/SiteConfigProvider";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -32,6 +34,8 @@ function errorMessage(err: unknown, fallback: string): string {
  * «Ripristina») riporta il predefinito. */
 export default function AdminTextsPage() {
   const { authFetch } = useAuth();
+  const { isSolo } = useSiteFlags();
+  const router = useRouter();
   const t = useTranslations("AdminTexts");
   const tc = useTranslations("Common");
   const notify = useToast();
@@ -52,6 +56,11 @@ export default function AdminTextsPage() {
       .catch((err) => setError(errorMessage(err, tc("unexpectedError"))));
   }, [locale, tc]);
   useEffect(load, [load]);
+
+  // In solo la pagina non esiste: torna all'overview admin.
+  useEffect(() => {
+    if (isSolo) router.replace("/admin");
+  }, [isSolo, router]);
 
   function changeLocale(next: Locale) {
     if (next === locale) return;
@@ -86,6 +95,9 @@ export default function AdminTextsPage() {
       setBusy(false);
     }
   }
+
+  // Early return only after every hook above.
+  if (isSolo) return null;
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">

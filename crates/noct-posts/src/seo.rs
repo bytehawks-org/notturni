@@ -78,12 +78,13 @@ pub async fn crawl_directives(ctx: RouteCtx) -> Result<Value, ApiError> {
             ai.push(format!("/{slug}"));
         }
     }
+    let links = crate::permalink::Permalinks::load(&ctx.state).await?;
     for p in visible_posts(&ctx).await? {
         // già escluso per intero a livello di blog: nessun percorso in più
         if !p.blog_search && !p.blog_ai {
             continue;
         }
-        let path = format!("/{}/{}", p.blog_slug, p.slug);
+        let path = links.of(&p.blog_slug, &p.slug);
         if !effective(p.blog_search, p.post_search) {
             search.push(path.clone());
         }
@@ -106,11 +107,12 @@ pub async fn sitemap_entries(ctx: RouteCtx) -> Result<Value, ApiError> {
     ))
     .fetch_all(&ctx.state.db)
     .await?;
+    let links = crate::permalink::Permalinks::load(&ctx.state).await?;
     let posts: Vec<Value> = visible_posts(&ctx)
         .await?
         .into_iter()
         .filter(|p| p.blog_search && effective(p.blog_search, p.post_search))
-        .map(|p| json!({"permalink": format!("/{}/{}", p.blog_slug, p.slug), "updated_at": p.updated_at.to_rfc3339()}))
+        .map(|p| json!({"permalink": links.of(&p.blog_slug, &p.slug), "updated_at": p.updated_at.to_rfc3339()}))
         .collect();
     Ok(json!({
         "blogs": blogs.into_iter().map(|(slug, at)| json!({"slug": slug, "updated_at": at.to_rfc3339()})).collect::<Vec<_>>(),
@@ -147,9 +149,10 @@ async fn post_alternates(
     ctx: &RouteCtx,
     groups: &[uuid::Uuid],
     blog: Option<&str>,
+    primary: Option<&str>,
 ) -> Result<std::collections::HashMap<uuid::Uuid, Vec<Value>>, ApiError> {
     let rows: Vec<AltRow> = sqlx::query_as(&format!(
-        "SELECT p.translation_group_id AS grp, p.locale, '/' || b.slug || '/' || p.slug AS path
+        "SELECT p.translation_group_id AS grp, p.locale, CASE WHEN b.slug = $3 THEN '/post/' || p.slug ELSE '/' || b.slug || '/' || p.slug END AS path
          FROM posts p JOIN blogs b ON b.id = p.blog_id
          WHERE p.translation_group_id = ANY($1) AND {LISTABLE_BLOG} AND {VISIBLE_SQL} AND {POST_INDEXABLE}
            AND ($2::text IS NULL OR b.slug = $2)
@@ -157,6 +160,7 @@ async fn post_alternates(
     ))
     .bind(groups)
     .bind(blog)
+    .bind(primary)
     .fetch_all(&ctx.state.db)
     .await?;
     let mut map: std::collections::HashMap<uuid::Uuid, Vec<Value>> = std::collections::HashMap::new();
@@ -196,6 +200,9 @@ pub async fn sitemap_page(ctx: RouteCtx) -> Result<Value, ApiError> {
     };
     let (offset, limit) = (int("offset", 0, i64::MAX / 2)?, int("limit", MAX_SITEMAP_LIMIT, MAX_SITEMAP_LIMIT)?.max(1));
     let noindex = portal_noindex(&ctx).await?;
+    // solo: il blog primario è la radice del sito e i suoi post stanno su `/post/<slug>`
+    let links = crate::permalink::Permalinks::load(&ctx.state).await?;
+    let primary = links.primary_slug();
     if noindex {
         return Ok(json!({"total": 0, "noindex": true, "entries": []}));
     }
@@ -210,19 +217,21 @@ pub async fn sitemap_page(ctx: RouteCtx) -> Result<Value, ApiError> {
            SELECT 0 AS ord, '/' AS path, NULL::timestamptz AS updated_at, NULL::uuid AS grp
            UNION ALL {pages}
            SELECT 2, '/' || b.slug, b.updated_at, NULL::uuid FROM blogs b WHERE {LISTABLE_BLOG} AND b.search_indexing_enabled
+             AND b.slug IS DISTINCT FROM $3
            UNION ALL
-           SELECT 3, '/' || b.slug || '/' || p.slug, p.updated_at, p.translation_group_id
+           SELECT 3, CASE WHEN b.slug = $3 THEN '/post/' || p.slug ELSE '/' || b.slug || '/' || p.slug END, p.updated_at, p.translation_group_id
            FROM posts p JOIN blogs b ON b.id = p.blog_id WHERE {LISTABLE_BLOG} AND {VISIBLE_SQL} AND {POST_INDEXABLE}
          )
          SELECT path, updated_at, grp, count(*) OVER () AS total FROM entries ORDER BY ord, path OFFSET $1 LIMIT $2"
     ))
     .bind(offset)
     .bind(limit)
+    .bind(primary)
     .fetch_all(&ctx.state.db)
     .await?;
     let total = rows.first().map_or(0, |r| r.total);
     let groups: Vec<uuid::Uuid> = rows.iter().filter_map(|r| r.grp).collect();
-    let alts = post_alternates(&ctx, &groups, None).await?;
+    let alts = post_alternates(&ctx, &groups, None, primary).await?;
     // le traduzioni di una pagina del sito stanno sullo stesso indirizzo, scelte con `?locale=`
     let mut page_alts: std::collections::HashMap<String, Vec<Value>> = std::collections::HashMap::new();
     if pages.is_empty() {
@@ -270,17 +279,21 @@ pub async fn space_sitemap(ctx: RouteCtx) -> Result<Value, ApiError> {
     .fetch_optional(&ctx.state.db)
     .await?;
     let Some((blog_id, updated_at)) = blog else { return Err(ApiError::not_found("Spazio non trovato.")) };
+    let links = crate::permalink::Permalinks::load(&ctx.state).await?;
+    let is_primary = links.primary_slug() == Some(slug.as_str());
     let posts: Vec<EntryRow> = sqlx::query_as(&format!(
-        "SELECT '/' || b.slug || '/' || p.slug AS path, p.updated_at, p.translation_group_id AS grp, 0::bigint AS total
+        "SELECT CASE WHEN $2 THEN '/post/' || p.slug ELSE '/' || b.slug || '/' || p.slug END AS path, p.updated_at, p.translation_group_id AS grp, 0::bigint AS total
          FROM posts p JOIN blogs b ON b.id = p.blog_id WHERE b.id = $1 AND {VISIBLE_SQL} AND {POST_INDEXABLE}
          ORDER BY p.published_at DESC NULLS LAST, p.slug"
     ))
     .bind(blog_id)
+    .bind(is_primary)
     .fetch_all(&ctx.state.db)
     .await?;
     let groups: Vec<uuid::Uuid> = posts.iter().filter_map(|r| r.grp).collect();
-    let alts = post_alternates(&ctx, &groups, Some(&slug)).await?;
-    let mut entries = vec![entry(&format!("/{slug}"), Some(updated_at), Vec::new())];
+    let alts = post_alternates(&ctx, &groups, Some(&slug), links.primary_slug()).await?;
+    let mut entries =
+        vec![entry(&if is_primary { "/".to_string() } else { format!("/{slug}") }, Some(updated_at), Vec::new())];
     for r in &posts {
         entries.push(entry(&r.path, r.updated_at, r.grp.and_then(|g| alts.get(&g).cloned()).unwrap_or_default()));
     }

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { blogLinks } from "@/lib/blog-path";
-import { blogAddress, isSolo, siteConfig, subdomainsEnabled } from "@/lib/site";
+import { blogAddress, isSolo, postHref, siteConfig, subdomainsEnabled } from "@/lib/site";
 import { mockHeaders } from "@/test/next-mocks";
 
 beforeEach(() => {
@@ -81,5 +81,28 @@ describe("blogLinks", () => {
     const links = await blogLinks("foo");
     expect(links.basePath).toBe("/foo");
     expect(links.fromPermalink("/foo/post-1")).toBe("/foo/post-1");
+  });
+});
+
+describe("postHref", () => {
+  it("solo: the primary blog uses /post/{postSlug}", () => {
+    vi.stubEnv("NOCT_DEPLOYMENT_MODE", "solo");
+    expect(postHref("foo", "post-1", "foo")).toBe("/post/post-1");
+  });
+
+  it("solo: other blogs keep /{blog}/{post}", () => {
+    vi.stubEnv("NOCT_DEPLOYMENT_MODE", "solo");
+    expect(postHref("bar", "post-1", "foo")).toBe("/bar/post-1");
+  });
+
+  it("solo: no primary slug keeps /{blog}/{post}", () => {
+    vi.stubEnv("NOCT_DEPLOYMENT_MODE", "solo");
+    expect(postHref("foo", "post-1", null)).toBe("/foo/post-1");
+    expect(postHref("foo", "post-1", undefined)).toBe("/foo/post-1");
+  });
+
+  it("platform: outputs are unchanged, primary slug ignored", () => {
+    expect(postHref("foo", "post-1", null)).toBe("/foo/post-1");
+    expect(postHref("foo", "post-1", "foo")).toBe("/foo/post-1");
   });
 });

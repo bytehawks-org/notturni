@@ -3,6 +3,7 @@
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
+import { useSiteFlags } from "@/components/SiteConfigProvider";
 import { InfrastructurePanel } from "@/components/admin/InfrastructurePanel";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -157,6 +158,8 @@ export default function PlatformSettingsPage() {
   const tc = useTranslations("Common");
   const locale = useLocale();
   const notify = useToast();
+  // Solo: niente elenco di nomi riservati né editor degli interessi (il backend rifiuta reserved_blog_names).
+  const { isSolo } = useSiteFlags();
   const [config, setConfig] = useState<PlatformConfig | null>(null);
   const [draft, setDraft] = useState<PlatformConfig | null>(null);
   const [reservedInput, setReservedInput] = useState("");
@@ -193,7 +196,8 @@ export default function PlatformSettingsPage() {
           registration_mode: draft.registration_mode,
           sso_providers: draft.sso_providers,
           mfa_required_for_admins: draft.mfa_required_for_admins,
-          reserved_blog_names: draft.reserved_blog_names,
+          // In solo il campo non va inviato: il backend rifiuta valori non vuoti.
+          ...(isSolo ? {} : { reserved_blog_names: draft.reserved_blog_names }),
           moderation_threshold: draft.moderation_threshold,
           max_blogs_per_user: draft.max_blogs_per_user,
           anonymous_comments_allowed: draft.anonymous_comments_allowed,
@@ -297,6 +301,7 @@ export default function PlatformSettingsPage() {
 
       <Card className="flex flex-col gap-5">
         <CardTitle>{t("blogsModeration")}</CardTitle>
+        {!isSolo && (
         <div className="flex flex-col gap-2">
           <SectionLabel>{t("reserved")}</SectionLabel>
           <div className="flex flex-wrap gap-2">
@@ -330,6 +335,7 @@ export default function PlatformSettingsPage() {
           </div>
           <span className="text-[13px] text-muted">{t("reservedHint")}</span>
         </div>
+        )}
         <div className="grid gap-5 md:grid-cols-2">
           {config.infrastructure.modules.includes("image_moderation") && (
             <div className="flex flex-col gap-1.5">
@@ -382,6 +388,7 @@ export default function PlatformSettingsPage() {
         <Toggle checked={draft.anonymous_comments_allowed} onChange={(v) => patch({ anonymous_comments_allowed: v })} label={t("anonComments")} />
       </Card>
 
+      {!isSolo && (
       <Card className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
           <CardTitle>{t("interests")}</CardTitle>
@@ -448,6 +455,7 @@ export default function PlatformSettingsPage() {
           </Button>
         </div>
       </Card>
+      )}
 
       <Card className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">

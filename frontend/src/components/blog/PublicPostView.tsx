@@ -1,0 +1,401 @@
+import type { CSSProperties } from "react";
+
+import type { Metadata, ResolvingMetadata } from "next";
+import { withSiteOpenGraph } from "@/lib/metadata";
+import { getLocale, getTranslations } from "next-intl/server";
+import Image from "next/image";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+
+import { BlogPageShell, blogMeasure } from "@/components/blog/BlogPageShell";
+import { JsonLd } from "@/components/blog/JsonLd";
+import { PostActions } from "@/components/blog/PostActions";
+import { BlogHeaderActions } from "@/components/blog/PostHeaderActions";
+import { PostToc } from "@/components/blog/PostToc";
+import { SensitiveImage } from "@/components/blog/SensitiveImage";
+import { ChapterNav, ChapterProgress } from "@/components/publications/PublicationIndex";
+import { ReadBeacon } from "@/components/blog/ReadBeacon";
+import { ReportButton } from "@/components/blog/ReportDialog";
+import { CommentsSection } from "@/components/CommentsSection";
+import { FragmentReader } from "@/components/FragmentReader";
+import { BlogHeader } from "@/components/shell/BlogHeader";
+import { TagPills } from "@/components/TagPills";
+import { formatDate, readingMinutes } from "@/lib/format";
+import { languageName } from "@/lib/languages";
+import { excerpt, renderPost } from "@/lib/markdown";
+import { getPrimaryBlogSlug, getPublicBacklinks, getPublicBlog, getPublicOutline, getPublicBlogConfig, getPublicPostByPermalink, getPublicPostTranslations, getPublicPublication, getPublicPublications } from "@/lib/server-api";
+import { siteUrl } from "@/lib/site";
+import { blogLinks } from "@/lib/blog-path";
+import { ancestorsOf, neighbours } from "@/lib/outline-tree";
+import { effectiveDisplayMode } from "@/lib/space-mode";
+import { SpaceNav } from "@/components/space/SpaceNav";
+import { Breadcrumbs, PrevNext } from "@/components/space/SpacePageChrome";
+
+export interface PageParams {
+  blogSlug: string;
+  postSlug: string;
+}
+
+export async function generatePostMetadata({ params }: { params: Promise<PageParams> }, parent: ResolvingMetadata): Promise<Metadata> {
+  const { blogSlug, postSlug } = await params;
+  const post = await getPublicPostByPermalink(blogSlug, postSlug);
+  if (!post) return {};
+  const description = excerpt(post.content);
+  return {
+    title: post.title,
+    description,
+    alternates: { canonical: post.permalink },
+    // Opt-out per crawler (app/domain/seo.py::effective_search_indexing) —
+    // il blocco dei crawler IA/LLM specifici passa invece da robots.txt
+    // (frontend/src/app/robots.ts), non da questo meta tag.
+    robots: post.effective_search_indexing_enabled ? undefined : { index: false, follow: false },
+    // senza una copertina propria (o se è sensibile) vale l'immagine di condivisione del portale
+    openGraph: await withSiteOpenGraph(parent, {
+      title: post.title,
+      description,
+      type: "article",
+      url: post.permalink,
+      publishedTime: post.published_at ?? undefined,
+      authors: [post.author_display_name],
+      images: post.cover_image_url && !post.cover_image_is_sensitive ? [post.cover_image_url] : undefined,
+    }),
+  };
+}
+
+/** Pagina pubblica del post (mockup 1a desktop / 1b mobile): griglia
+ * `1fr 680px 1fr` da xl con indice a sinistra e note/categoria/lingue a
+ * destra; colonna singola sotto, con il menu frammenti come bottom-sheet. */
+export async function PublicPostView({ params }: { params: Promise<PageParams> }) {
+  const { blogSlug, postSlug } = await params;
+  const primarySlug = await getPrimaryBlogSlug();
+  const [post, blog, config, t, locale, links] = await Promise.all([
+    getPublicPostByPermalink(blogSlug, postSlug),
+    getPublicBlog(blogSlug),
+    getPublicBlogConfig(blogSlug),
+    getTranslations("PostPage"),
+    getLocale(),
+    blogLinks(blogSlug, primarySlug),
+  ]);
+  const basePath = links.basePath;
+  if (!post) notFound();
+  const measure = blogMeasure(config);
+  const articleWidth = measure === "narrow" ? "560px" : "680px";
+  const tPost = await getTranslations("Post");
+  const translations = (await getPublicPostTranslations(post.id).catch(() => [])).filter(
+    (tr) => tr.status === "published"
+  );
+  // B9: capitolo di una pubblicazione → barra di avanzamento e prev/next
+  const [publication, publications] = await Promise.all([
+    post.publication ? getPublicPublication(blogSlug, post.publication.name).catch(() => null) : Promise.resolve(null),
+    getPublicPublications(blogSlug).catch(() => []),
+  ]);
+  const chapterIndex = publication ? publication.chapters.findIndex((c) => c.post_id === post.id) : -1;
+  const chapter = chapterIndex >= 0 && publication ? { current: chapterIndex + 1, total: publication.chapters.length, prev: publication.chapters[chapterIndex - 1], next: publication.chapters[chapterIndex + 1] } : null;
+
+  const isWikiSpace = !!blog && blog.kind !== "blog";
+  const backlinks = isWikiSpace ? await getPublicBacklinks(post.id).catch(() => []) : [];
+  const { html, headings } = await renderPost(post.content, {
+    mentions: post.mentions_enabled,
+    wikiLinks: isWikiSpace ? { hrefFor: (slug) => `${basePath}/${slug}` } : undefined,
+    tags: post.tags,
+    notes: post.notes,
+    footnoteLabels: { title: tPost("notes"), backToText: tPost("backToText") },
+    expandImageLabel: tPost("expandImage"),
+    copyCodeLabel: tPost("copyCode"),
+    copiedCodeLabel: tPost("copiedCode"),
+  });
+  const blogTitle = blog?.title ?? blogSlug;
+  const minutes = readingMinutes(post.content);
+  const publishedDate = post.published_at ? formatDate(post.published_at, locale) : null;
+  const citation = `${post.author_display_name}, “${post.title}”, ${blogTitle}${publishedDate ? `, ${publishedDate}.` : "."}`;
+
+  // Dati strutturati Schema.org: `dateModified`
+  // non è tracciato separatamente da `created_at`/`published_at` nel modello
+  // (nessun campo "ultima modifica" sul post), quindi resta assente invece
+  // di riportare un valore non affidabile.
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    headline: post.title,
+    description: excerpt(post.content),
+    url: `${siteUrl()}${post.permalink}`,
+    mainEntityOfPage: `${siteUrl()}${post.permalink}`,
+    datePublished: post.published_at ?? undefined,
+    inLanguage: post.locale,
+    author: { "@type": "Person", name: post.author_display_name },
+    isPartOf: { "@type": "Blog", name: blogTitle, url: `${siteUrl()}/${blogSlug}` },
+    ...(post.cover_image_url && !post.cover_image_is_sensitive ? { image: post.cover_image_url } : {}),
+  };
+
+  const rail = (
+    <div className="flex flex-col gap-6 text-[13px]">
+      {/* L'elenco completo delle note è già a piè di corpo (renderFootnotes): qui solo il rimando */}
+      {post.notes.length > 0 && (
+        <Link href={`${basePath}/bibliografia`} className="text-primary no-underline hover:underline">
+          {tPost("blogBibliography")}
+        </Link>
+      )}
+      {backlinks.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <span className="font-mono text-[11px] uppercase tracking-[.08em] text-muted">{tPost("backlinks")}</span>
+          <ul className="flex flex-col gap-1">
+            {backlinks.map((b) => (
+              <li key={b.id}>
+                <Link href={`${basePath}/${b.slug}`} className="text-primary no-underline hover:underline">
+                  {b.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {(post.category || translations.length > 1) && (
+        <div className="flex flex-col gap-2">
+          <span className="font-mono text-[11px] uppercase tracking-[.08em] text-muted">{t("about")}</span>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted">
+            {post.category && (
+              <Link href={`/?category=${encodeURIComponent(post.category.slug)}`} className="font-medium text-foreground no-underline hover:text-primary">
+                {post.category.name}
+              </Link>
+            )}
+            {post.category && translations.length > 1 && <span>·</span>}
+            {translations.map((tr, i) => (
+              <span key={tr.id}>
+                {i > 0 && <span className="mr-2">·</span>}
+                {tr.locale === post.locale ? (
+                  <span className="font-medium text-foreground">{languageName(tr.locale, locale)}</span>
+                ) : (
+                  <Link href={`${basePath}/${tr.slug}`} className="no-underline hover:text-foreground">
+                    {languageName(tr.locale, locale)}
+                  </Link>
+                )}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // Spazi wiki e docs: sidebar con l'indice, breadcrumb e, in modalità docs, indice a destra e
+  // pagina precedente/successiva (layout dedicati al posto dell'articolo da blog)
+  if (blog && isWikiSpace) {
+    const mode = effectiveDisplayMode(blog);
+    const tSpace = await getTranslations("SpacePage");
+    const outline = await getPublicOutline(blogSlug, post.locale).catch(() => []);
+    const hrefFor = (n: { slug: string }) => `${basePath}/${n.slug}`;
+    const trail = ancestorsOf(outline, post.id);
+    const { prev, next } = neighbours(outline, post.id);
+    const sidebar = (
+      <SpaceNav nodes={outline} currentId={post.id} hrefFor={hrefFor} openPath={new Set(trail.map((n) => n.id))} />
+    );
+    return (
+      <BlogPageShell config={config}>
+        <JsonLd data={jsonLd} />
+        <BlogHeader basePath={basePath} homeHref={links.homeHref} name={blogTitle} current="posts" hasPublications={publications.length > 0} actions={<BlogHeaderActions slug={blogSlug} />} />
+        <main className="mx-auto w-full max-w-[1280px] flex-1 px-5 py-8 lg:px-10 lg:py-12">
+          <div
+            className={`grid gap-8 lg:gap-12 ${
+              mode === "docs" ? "lg:grid-cols-[250px_minmax(0,1fr)] xl:grid-cols-[250px_minmax(0,1fr)_220px]" : "lg:grid-cols-[250px_minmax(0,1fr)]"
+            }`}
+          >
+            <aside className="lg:sticky lg:top-8 lg:max-h-[calc(100vh-4rem)] lg:self-start lg:overflow-y-auto">
+              <details className="rounded-xl border border-border bg-surface px-4 py-3 text-sm lg:hidden">
+                <summary className="cursor-pointer font-medium text-foreground">{tSpace("index")}</summary>
+                <div className="mt-3">{sidebar}</div>
+              </details>
+              <div className="hidden lg:block">{sidebar}</div>
+            </aside>
+
+            <article className="min-w-0 max-w-[760px]">
+              <Breadcrumbs
+                spaceName={blogTitle}
+                spaceHref={basePath || "/"}
+                trail={trail}
+                hrefFor={hrefFor}
+                label={tSpace("breadcrumb")}
+              />
+              <h1 className="font-serif text-[34px] font-medium leading-[1.12] tracking-tight text-foreground md:text-[42px]">
+                {post.title}
+              </h1>
+              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
+                <span>{post.author_display_name}</span>
+                <span>{t("minRead", { min: minutes })}</span>
+                <PostActions permalink={links.fromPermalink(post.permalink)} title={post.title} citation={citation} />
+                <ReportButton target={{ type: "post", id: post.id }} />
+              </div>
+              {mode === "docs" && headings.length > 0 && (
+                <details className="mt-6 rounded-xl border border-border bg-surface px-4 py-3 text-sm xl:hidden">
+                  <summary className="cursor-pointer font-medium text-foreground">{t("inThisPost")}</summary>
+                  <div className="mt-3">
+                    <PostToc headings={headings} />
+                  </div>
+                </details>
+              )}
+              <div style={{ fontSize: "var(--blog-body-size)" }}>
+                <FragmentReader
+                  postId={post.id}
+                  html={html}
+                  permalink={links.fromPermalink(post.permalink)}
+                  quoteAttribution={`${post.author_display_name}, ${post.title}`}
+                  className="notturni-prose notturni-prose--reading mt-8 leading-[1.7]"
+                />
+              </div>
+              {post.tags.length > 0 && (
+                <div className="mt-10">
+                  <TagPills tags={post.tags} />
+                </div>
+              )}
+              {backlinks.length > 0 && (
+                <section className="mt-10 rounded-xl border border-border bg-surface px-5 py-4">
+                  <h2 className="font-mono text-[11px] uppercase tracking-[.08em] text-muted">{tPost("backlinks")}</h2>
+                  <ul className="mt-2 flex flex-col gap-1 text-[15px]">
+                    {backlinks.map((b) => (
+                      <li key={b.id}>
+                        <Link href={`${basePath}/${b.slug}`} className="text-primary no-underline hover:underline">
+                          {b.title}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+              {mode === "docs" && (
+                <PrevNext prev={prev} next={next} hrefFor={hrefFor} prevLabel={tSpace("previous")} nextLabel={tSpace("next")} />
+              )}
+              <CommentsSection postId={post.id} mode={post.effective_comments_mode} />
+              <ReadBeacon postId={post.id} />
+            </article>
+
+            {mode === "docs" && (
+              <aside className="hidden xl:block">
+                <div className="sticky top-8">
+                  <span className="mb-2 block font-mono text-[11px] uppercase tracking-[.08em] text-muted">{tSpace("onThisPage")}</span>
+                  <PostToc headings={headings} />
+                </div>
+              </aside>
+            )}
+          </div>
+        </main>
+      </BlogPageShell>
+    );
+  }
+
+  return (
+    <BlogPageShell config={config}>
+      <JsonLd data={jsonLd} />
+      <BlogHeader basePath={basePath} homeHref={links.homeHref} name={blogTitle} current={chapter ? "publications" : "posts"} hasPublications={publications.length > 0} actions={<BlogHeaderActions slug={blogSlug} />} />
+      {chapter && <ChapterProgress current={chapter.current} total={chapter.total} />}
+      <main className="mx-auto w-full max-w-[1184px] flex-1 px-5 py-10 lg:px-12 lg:py-14">
+        <div
+          className="grid gap-10 xl:grid-cols-[minmax(0,1fr)_var(--blog-article-width)_minmax(0,1fr)] xl:gap-12"
+          style={{ "--blog-article-width": articleWidth } as CSSProperties}
+        >
+          <aside className="hidden xl:block">
+            <div className="sticky top-8">
+              <PostToc headings={headings} />
+            </div>
+          </aside>
+
+          <article className="mx-auto w-full min-w-0" style={{ maxWidth: articleWidth }}>
+            <header className="flex flex-col gap-4">
+              {chapter && publication && (
+                <Link href={`${basePath}/pub/${publication.name}`} className="font-mono text-[11px] uppercase tracking-[.08em] text-primary no-underline hover:underline">
+                  {publication.title} · {chapter.current}/{chapter.total}
+                </Link>
+              )}
+              <h1 className="font-serif text-[34px] font-medium leading-[1.12] tracking-tight text-foreground md:text-[44px]">
+                {post.title}
+              </h1>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
+                <span className="flex items-center gap-2">
+                  {post.author_avatar_url ? (
+                    <Image
+                      src={post.author_avatar_url}
+                      alt=""
+                      width={28}
+                      height={28}
+                      className="h-7 w-7 rounded-full object-cover"
+                      unoptimized
+                    />
+                  ) : (
+                    <span className="grid h-7 w-7 place-items-center rounded-full bg-primary font-serif text-sm text-background">
+                      {post.author_display_name[0]?.toUpperCase()}
+                    </span>
+                  )}
+                  <span className="font-medium text-foreground">{post.author_display_name}</span>
+                </span>
+                {publishedDate && <span>{publishedDate}</span>}
+                <span>{t("minRead", { min: minutes })}</span>
+                {post.category && (
+                  <Link href={`/?category=${encodeURIComponent(post.category.slug)}`} className="no-underline hover:text-foreground">
+                    {post.category.name}
+                  </Link>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-4">
+                <PostActions permalink={links.fromPermalink(post.permalink)} title={post.title} citation={citation} />
+                <ReportButton target={{ type: "post", id: post.id }} />
+              </div>
+            </header>
+
+            {post.cover_image_url && (
+              <SensitiveImage
+                src={post.cover_image_url}
+                sensitive={post.cover_image_is_sensitive}
+                priority
+                sizes="(min-width: 768px) 680px, 100vw"
+                className="mt-8 block aspect-[16/9] w-full overflow-hidden rounded-xl object-cover"
+                revealLabel={t("revealCover")}
+                sensitiveLabel={t("sensitiveCover")}
+                expandLabel={t("expandImage")}
+              />
+            )}
+
+            {headings.length > 0 && (
+              <div className="mt-6 xl:hidden">
+                <details className="rounded-xl border border-border bg-surface px-4 py-3 text-sm">
+                  <summary className="cursor-pointer font-medium text-foreground">{t("inThisPost")}</summary>
+                  <div className="mt-3">
+                    <PostToc headings={headings} />
+                  </div>
+                </details>
+              </div>
+            )}
+
+            <div style={{ fontSize: "var(--blog-body-size)" }}>
+              <FragmentReader
+                postId={post.id}
+                html={html}
+                permalink={links.fromPermalink(post.permalink)}
+                quoteAttribution={`${post.author_display_name}, ${post.title}`}
+                className="notturni-prose notturni-prose--reading mt-8 leading-[1.7]"
+              />
+            </div>
+
+            {post.tags.length > 0 && (
+              <div className="mt-10">
+                <TagPills tags={post.tags} />
+              </div>
+            )}
+
+            <div className="mt-10 xl:hidden">{rail}</div>
+
+            {chapter && publication && (
+              <ChapterNav prev={chapter.prev} next={chapter.next} index={{ title: publication.title, href: `${basePath}/pub/${publication.name}` }} resolvePermalink={links.fromPermalink} />
+            )}
+
+            <CommentsSection postId={post.id} mode={post.effective_comments_mode} />
+            <ReadBeacon postId={post.id} />
+
+            <p className="mt-10 text-[13px] leading-relaxed text-muted">{t("privacyNote")}</p>
+          </article>
+
+          <aside className="hidden xl:block">
+            <div className="sticky top-8">{rail}</div>
+          </aside>
+        </div>
+      </main>
+    </BlogPageShell>
+  );
+}

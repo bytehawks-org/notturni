@@ -116,7 +116,10 @@ pub async fn register(ctx: RouteCtx, body: RegisterRequest) -> Result<UserOut, A
 
     let mut tx = ctx.state.db.begin().await?;
     // serializza le registrazioni: il conteggio per "il primo utente" non deve avere corse
-    sqlx::query("SELECT pg_advisory_xact_lock(727274001)").execute(&mut *tx).await?;
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(noct_blogs::primary::REGISTRATION_LOCK)
+        .execute(&mut *tx)
+        .await?;
     let is_first: bool = sqlx::query_scalar("SELECT NOT EXISTS (SELECT 1 FROM users)").fetch_one(&mut *tx).await?;
     // modalità "solo": una sola persona gestisce l'istanza; il primo utente è Super Admin
     // e la registrazione si chiude, senza interventi manuali sul DB
@@ -150,6 +153,11 @@ pub async fn register(ctx: RouteCtx, body: RegisterRequest) -> Result<UserOut, A
     )
     .await
     .map_err(audit_err)?;
+    // modalità "solo": il sito nasce con il suo blog primario, nella stessa transazione
+    if s.solo && is_first {
+        noct_blogs::primary::ensure_primary_blog(&mut tx, id, &noct_blogs::primary::SiteInfo::from_state(&ctx.state))
+            .await?;
+    }
     let out = user_out(&mut tx, id).await?;
     tx.commit().await?;
     Ok(out)

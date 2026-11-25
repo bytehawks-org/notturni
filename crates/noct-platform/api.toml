@@ -11,6 +11,8 @@ turnstile_site_key = { type = "string", nullable = true }
 experimental_features = "string[]"
 default_locale = "string"
 registration_mode = "string"
+# slug del blog primario (solo `solo`); null in `platform` o se non ancora creato
+primary_blog_slug = { type = "string", nullable = true }
 # provider di accesso abilitati (con il modulo `auth_sso`); altrimenti assente
 
 [type.PublicFooter]
