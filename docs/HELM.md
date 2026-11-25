@@ -8,7 +8,7 @@ This guide describes how to install, configure, operate and troubleshoot Notturn
 
 1. [Overview and requirements](#1-overview-and-requirements)
 2. [Profiles: solo and platform](#2-profiles-solo-and-platform)
-3. [Quick start: solo](#3-quick-start-solo)
+3. [Quick start: solo](#3-quick-start-solo) (includes [installing from the OCI registry](#installing-from-the-oci-registry-no-clone))
 4. [Values reference](#4-values-reference)
 5. [Secrets](#5-secrets)
 6. [Storage and data](#6-storage-and-data)
@@ -95,6 +95,17 @@ kubectl -n notturni rollout status deploy/notturni-backend
 ```
 
 `ingress.host` is the only required value. Without SMTP settings the instance sends no email. To let the chart generate the secrets instead, leave `secrets.existingSecret` empty; `NOTES.txt` then points at the generated Secret `<fullname>-secrets` and never prints its values.
+
+### Installing from the OCI registry (no clone)
+
+The workflow `publish-chart.yml` publishes the chart to `oci://ghcr.io/bytehawks-org/charts/notturni` (Helm 3.8 or later). A push to `develop` publishes `<chart version>-develop` (moving tag) and `<chart version>-develop.<sha7>` (fixed), with `appVersion: develop`. With no `image.*.tag` in your values, the chart then uses the images tagged `develop` from `publish-images.yml`. A `vX.Y.Z` tag publishes version and appVersion `X.Y.Z`.
+
+```bash
+helm install notturni oci://ghcr.io/bytehawks-org/charts/notturni --version 0.1.0-develop \
+  -n notturni -f my-solo.yaml --set image.pullPolicy=Always
+```
+
+The `develop` image tag is mutable. `image.pullPolicy=Always` makes a pod restart pull the current image. For a reproducible install, pin `--version 0.1.0-develop.<sha7>` and set `image.backend.tag` and `image.frontend.tag` to `sha-<sha7>`. A package created by a workflow starts private on GHCR: make it public once in the package settings, or run `helm registry login ghcr.io` with a `read:packages` token. Upgrades use `helm upgrade` with the same reference and `-f` file.
 
 ### First login and the admin account
 
