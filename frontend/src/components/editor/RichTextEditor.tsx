@@ -42,7 +42,7 @@ import { CodeBlockNode, HeadingNode, ParagraphNode, TextAlignExtension, Underlin
 import { LinkModal, type LinkModalValue } from "./LinkModal";
 import { NoteModal, type NoteModalValue } from "./NoteModal";
 import { sensitiveImageNodeView } from "./SensitiveImageNodeView";
-import { GalleryExtension, clampGalleryItems } from "./GalleryExtension";
+import { GalleryExtension, clampGalleryItems, insertGalleryBlock } from "./GalleryExtension";
 import { GalleryAddContext, galleryNodeView } from "./GalleryNodeView";
 
 export interface RichTextEditorProps {
@@ -601,7 +601,7 @@ export function RichTextEditor({
   function insertGalleryFromPicker(images: PickedImage[]) {
     const items = clampGalleryItems(images.map(pickedToGalleryItem));
     if (items.length === 0) return;
-    editor!.chain().focus().insertGallery(items).insertContent({ type: "paragraph" }).run();
+    insertGalleryBlock(editor!, items);
   }
 
   /** Aggiunge immagini a una galleria esistente (posizione `pos`), fino a GALLERY_MAX. */

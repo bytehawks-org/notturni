@@ -3,7 +3,7 @@ import { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import ImageExtension from "@tiptap/extension-image";
 import { Markdown, type MarkdownStorage } from "tiptap-markdown";
-import { GalleryExtension, clampGalleryItems } from "./GalleryExtension";
+import { GalleryExtension, clampGalleryItems, insertGalleryBlock } from "./GalleryExtension";
 import type { GalleryItem } from "@/lib/gallery";
 
 function roundTrip(md: string): string {
@@ -98,5 +98,24 @@ describe("insertGallery and clamp", () => {
     const md = (editor.storage as unknown as { markdown: MarkdownStorage }).markdown.getMarkdown();
     editor.destroy();
     expect(md).toBe(gal(Array.from({ length: 10 }, (_, i) => img(i))));
+  });
+});
+
+describe("insertGalleryBlock", () => {
+  const items: GalleryItem[] = [1, 2].map((n) => ({ url: `/m/${n}.png`, alt: "", sensitive: false, categories: [] }));
+
+  it.each([
+    ["empty document", ""],
+    ["after text", "before"],
+  ])("keeps the gallery and adds a paragraph after it (%s)", (_name, content) => {
+    const editor = new Editor({ extensions: [StarterKit, GalleryExtension, Markdown], content });
+    editor.commands.setTextSelection(editor.state.doc.content.size);
+
+    insertGalleryBlock(editor, items);
+
+    const types = editor.getJSON().content?.map((n) => n.type) ?? [];
+    expect(types.filter((t) => t === "gallery")).toHaveLength(1);
+    expect(types[types.indexOf("gallery") + 1]).toBe("paragraph");
+    editor.destroy();
   });
 });

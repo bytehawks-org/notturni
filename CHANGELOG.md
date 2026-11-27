@@ -9,6 +9,11 @@ Two phases shape the history:
 
 For the product roadmap and status of each feature, see [ROADMAP.md](ROADMAP.md). For backend details, see [docs/BACKEND.md](docs/BACKEND.md).
 
+## 2026-11-27
+
+### Fixed
+- Editor: a multi-image upload closed the picker without adding anything. The paragraph inserted after the gallery replaced the gallery node. Both nodes are now inserted in one operation. Regression test: `insertGalleryBlock`.
+
 ## 2026-11-25
 
 ### Added

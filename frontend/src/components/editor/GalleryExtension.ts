@@ -1,4 +1,4 @@
-import { Node, mergeAttributes } from "@tiptap/core";
+import { Node, mergeAttributes, type Editor } from "@tiptap/core";
 import type { MarkdownNodeSpec } from "tiptap-markdown";
 import { GALLERY_MAX, parseGalleryBody, serializeGallery, type GalleryItem } from "@/lib/gallery";
 
@@ -31,6 +31,18 @@ export function clampGalleryItems(items: unknown): GalleryItem[] {
     });
   }
   return out;
+}
+
+/** Inserts a gallery at the cursor, followed by an empty paragraph. */
+export function insertGalleryBlock(editor: Editor, items: GalleryItem[]) {
+  const clamped = clampGalleryItems(items);
+  if (clamped.length === 0) return;
+  // One insert for both nodes: a second insert would replace the selected (atom) gallery.
+  editor
+    .chain()
+    .focus()
+    .insertContent([{ type: "gallery", attrs: { items: clamped } }, { type: "paragraph" }])
+    .run();
 }
 
 function encodeItems(items: GalleryItem[]): string {
