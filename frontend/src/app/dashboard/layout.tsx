@@ -9,6 +9,8 @@ import { UiLanguagePicker } from "@/components/shell/UiLanguagePicker";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/lib/auth-context";
+import { usePrimaryBlogSlug } from "@/lib/primary-blog-client";
+import { spaceHref } from "@/lib/site";
 import { PLATFORM_ADMIN_ROLES, PLATFORM_MODERATION_ROLES } from "@/lib/types";
 
 // Slug del blog su cui si sta lavorando, quando la pagina corrente è
@@ -23,6 +25,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const t = useTranslations("Nav");
   const tc = useTranslations("Common");
   const currentBlogSlug = BLOG_CONTEXT_RE.exec(pathname)?.[1];
+  const primarySlug = usePrimaryBlogSlug();
 
   useEffect(() => {
     if (!loading && !user) {
@@ -72,7 +75,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <DashboardShell
         items={items}
         platformLink={{ href: "/", label: t("backToPlatform") }}
-        blogLink={currentBlogSlug ? { href: `/${currentBlogSlug}`, label: t("viewCurrentBlog", { slug: currentBlogSlug }) } : undefined}
+        blogLink={currentBlogSlug ? { href: spaceHref(currentBlogSlug, "", primarySlug), label: t("viewCurrentBlog", { slug: currentBlogSlug }) } : undefined}
         footer={(collapsed) =>
           collapsed ? (
             <div className="flex flex-col items-center gap-2 px-1">

@@ -3,7 +3,7 @@
 use crate::{FragmentCreate, FragmentUpdate, validate_text};
 use chrono::{DateTime, Utc};
 use noct_core::{ApiError, RouteCtx, can_view_blog, load_blog, parse_uuid};
-use noct_posts::VISIBLE_SQL;
+use noct_posts::{VISIBLE_SQL, permalink::Permalinks};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -108,6 +108,7 @@ pub async fn list_my_fragments(ctx: RouteCtx) -> Result<Vec<Value>, ApiError> {
     .bind(user)
     .fetch_all(&ctx.state.db)
     .await?;
+    let links = Permalinks::load(&ctx.state).await?;
     Ok(rows
         .into_iter()
         .map(|(id, text, is_public, created_at, post_title, author, blog_slug, post_slug)| {
@@ -116,7 +117,7 @@ pub async fn list_my_fragments(ctx: RouteCtx) -> Result<Vec<Value>, ApiError> {
                 "post_title": post_title,
                 // già risolto al salvataggio del post: vista secondaria, non ricalcolata come PostOut
                 "author_display_name": author,
-                "permalink": noct_posts::rules::permalink(&blog_slug, &post_slug),
+                "permalink": links.of(&blog_slug, &post_slug),
             })
         })
         .collect())

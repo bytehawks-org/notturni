@@ -12,6 +12,7 @@ use noct_core::{
     mail::{Email, MailError},
     markdown::render_safe_html,
 };
+use noct_posts::permalink::Permalinks;
 use serde_json::json;
 use sqlx::PgConnection;
 use uuid::Uuid;
@@ -94,6 +95,7 @@ enum Outcome {
 
 async fn build_content(
     st: &AppState,
+    links: &Permalinks,
     kind: &str,
     post: Option<Uuid>,
     blog_slug: Option<&str>,
@@ -118,7 +120,7 @@ async fn build_content(
         return Ok(Outcome::Skip("canceled", "il post non è più pubblicato"));
     }
     let excerpt = content::excerpt(&content);
-    let url = format!("https://{}{}", fqdn(st), noct_posts::rules::permalink(blog_slug, &slug));
+    let url = format!("https://{}{}", fqdn(st), links.of(blog_slug, &slug));
     Ok(Outcome::Send(Content {
         subject,
         text: format!("{title}\n\n{excerpt}\n\nLeggi tutto: {url}"),
@@ -192,7 +194,8 @@ async fn process(st: &AppState, id: Uuid) -> Result<(), HandlerError> {
             }
         }
     };
-    let content = match build_content(st, &kind, post, slug.as_deref(), subject, body).await.map_err(retry)? {
+    let links = Permalinks::load(st).await.map_err(|e| retry(format!("{e:?}")))?;
+    let content = match build_content(st, &links, &kind, post, slug.as_deref(), subject, body).await.map_err(retry)? {
         Outcome::Send(c) => c,
         Outcome::Skip(status, why) => {
             tracing::warn!(campaign = %id, why, "campagna non inviabile");

@@ -4,7 +4,8 @@ import { useTranslations } from "next-intl";
 import Image from "next/image";
 import Link from "next/link";
 
-import { blogAddress } from "@/lib/site";
+import { usePrimaryBlogSlug } from "@/lib/primary-blog-client";
+import { blogAddress, isPrimaryBlog, siteUrl, spaceHref, subdomainsEnabled, siteHost } from "@/lib/site";
 import type { Blog } from "@/lib/types";
 
 const hue = (s: string) => `oklch(0.55 0.06 ${[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % 360})`;
@@ -12,6 +13,7 @@ const hue = (s: string) => `oklch(0.55 0.06 ${[...s].reduce((a, c) => a + c.char
 /** Variante client della griglia della directory (tab "Blog" del profilo, mockup 3e). */
 export function BlogDirectoryGridClient({ blogs }: { blogs: Blog[] }) {
   const t = useTranslations("Directory");
+  const primarySlug = usePrimaryBlogSlug();
   return (
     <div className="grid gap-5 sm:grid-cols-2">
       {blogs.map((b) => (
@@ -36,16 +38,16 @@ export function BlogDirectoryGridClient({ blogs }: { blogs: Blog[] }) {
               </span>
             )}
             <div className="flex min-w-0 flex-col leading-tight">
-              <Link href={`/${b.slug}`} className="truncate font-serif text-[19px] text-foreground no-underline hover:text-primary">
+              <Link href={spaceHref(b.slug, "", primarySlug)} className="truncate font-serif text-[19px] text-foreground no-underline hover:text-primary">
                 {b.title}
               </Link>
               <span className="font-mono text-xs text-muted">
-                {blogAddress(b.slug)}
+                {isPrimaryBlog(b.slug, primarySlug) ? (subdomainsEnabled() ? siteHost() : siteUrl()) : blogAddress(b.slug)}
               </span>
             </div>
           </div>
           {(b.subtitle || b.description) && <p className="text-sm leading-relaxed text-muted">{b.subtitle ?? b.description}</p>}
-          <Link href={`/${b.slug}`} className="mt-auto text-[13px] font-medium no-underline hover:underline">
+          <Link href={spaceHref(b.slug, "", primarySlug)} className="mt-auto text-[13px] font-medium no-underline hover:underline">
             {t("follow")}
           </Link>
         </article>

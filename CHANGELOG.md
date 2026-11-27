@@ -11,6 +11,16 @@ For the product roadmap and status of each feature, see [ROADMAP.md](ROADMAP.md)
 
 ## 2026-11-27
 
+### Changed
+- Solo mode: the primary blog's sub-pages are served at the domain root: `/pagina/...`, `/pub/...`, `/bibliografia`, `/media`, `/link`, `/search`. The old `/<primary-slug>/...` addresses of those pages and of the feed files answer `308` to the root path. With `NOCT_SUBDOMAINS_ENABLED=true` the root routing applies to the apex host only; with `false` it applies to every host. Routing: `frontend/src/proxy.ts` and `frontend/src/lib/solo-routing.ts`.
+- Solo mode: the root sitemap and the per-Space sitemap list the primary blog's `/pagina/` and `/pub/` entries at their root paths.
+- Solo mode: a primary blog that opts out of search or AI crawling gets `Disallow` lines for its root routes (never `Disallow: /`). Code: `PRIMARY_ROOT_DISALLOW` in `crates/noct-posts/src/seo.rs`.
+- Solo mode: slugs `bibliografia`, `link`, `media`, `pagina` and `pub` are site routes. New Spaces cannot take them (`400`). The primary blog gets a suffixed slug (`-2`, `-3`, ...) when its title matches one of them.
+- Solo mode: at startup the backend logs one warning line with the existing Spaces whose slug collides with a site route. It does not rename or delete them. Code: `warn_route_collisions` in `crates/noct-blogs/src/primary.rs`. Upgrade note: owners of such a Space must rename it by hand.
+- Solo mode: the primary blog's address and links never include its slug in the server-rendered home and blog directory.
+- Frontend: the per-Space sitemap is read without cache, so a Space that turns indexing off leaves the sitemaps and `robots.txt` at once. Cost: one backend call per request.
+- Backend: the paths of a Space's sub-pages come from one helper, `space_path_for` in `crates/noct-core/src/permalink.rs` (`/` for the primary blog's home in `solo`, root paths for its sub-pages).
+
 ### Fixed
 - Editor: a multi-image upload closed the picker without adding anything. The paragraph inserted after the gallery replaced the gallery node. Both nodes are now inserted in one operation. Regression test: `insertGalleryBlock`.
 

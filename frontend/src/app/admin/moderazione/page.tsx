@@ -12,6 +12,8 @@ import { Pill } from "@/components/ui/Pill";
 import { EmptyState, SkeletonRows } from "@/components/ui/States";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { usePrimaryBlogSlug } from "@/lib/primary-blog-client";
+import { postHref } from "@/lib/site";
 import { formatDate } from "@/lib/format";
 import { type AdminPost } from "@/lib/types";
 
@@ -19,6 +21,7 @@ import { type AdminPost } from "@/lib/types";
  * nascondi/mostra con nota obbligatoria per il registro. */
 export default function DashboardModerationPage() {
   const { authFetch } = useAuth();
+  const primarySlug = usePrimaryBlogSlug();
   const t = useTranslations("AdminPosts");
   const tc = useTranslations("Common");
   const ts = useTranslations("Status");
@@ -79,7 +82,7 @@ export default function DashboardModerationPage() {
                 <tr key={p.id} className="border-b border-border last:border-0">
                   <td className="px-4 py-3">
                     <div className="flex flex-col">
-                      <Link href={`/${p.blog_slug}/${p.slug}`} className="font-medium text-foreground no-underline hover:underline">
+                      <Link href={postHref(p.blog_slug, p.slug, primarySlug)} className="font-medium text-foreground no-underline hover:underline">
                         {p.title}
                       </Link>
                       <span className="text-xs text-muted">

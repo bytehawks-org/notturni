@@ -174,7 +174,7 @@ One code base, two ways to run it. Nothing is removed from the code: the profile
 | Object storage | `localstorage`: a volume mounted in the backend, served on `/storage` | S3-compatible (Garage, AWS S3, R2) |
 | Cache and rate limits | In memory, per process | Redis |
 | Message bus | In memory (`MemoryBus`) | NATS JetStream, at-least-once |
-| Blog addresses | `/<slug>` only (`NOCT_SUBDOMAINS_ENABLED=false`); the primary blog is the home `/` and its posts are `/post/<slug>` (see [Solo personal site](#solo-personal-site)) | `<slug>.<domain>` and paths |
+| Blog addresses | `/<slug>` only (`NOCT_SUBDOMAINS_ENABLED=false`); the primary blog is the home `/`, its posts are `/post/<slug>`, and its sub-pages (`/pagina/...`, `/pub/...`, `/bibliografia`, `/media`, `/link`, `/search`) are at the root (see [Solo personal site](#solo-personal-site)) | `<slug>.<domain>` and paths |
 | Verification seal and role labels | Hidden in the UI (the API still returns `verification_tier` and roles; permissions are unchanged) | Shown |
 | Email | An existing SMTP server, optionally through the `smtp-relay` container; none if unset | Same |
 | Image moderation | Off; sensitive images are marked by hand | On |
@@ -201,7 +201,7 @@ With compose, `--profile platform` alone starts the services but does not wire t
 
 In `solo` the instance is a personal site with one primary blog. The behaviour is set by the code, with no extra variable, except `NOCT_SITE_NAME`:
 
-- **Primary blog.** Created at the first registration and at backend startup (idempotent), for the first user or the oldest active Super Admin. Its title is `NOCT_SITE_NAME`, or the owner's username if unset. Its slug is derived from the title (`-2`, `-3`, ... on a collision). The site root `/` shows it, and its posts are at `/post/<slug>`. `GET /api/v1/config` returns its slug as `primary_blog_slug`. If the blog was removed by the purge of deleted blogs, the next backend restart creates a new one.
+- **Primary blog.** Created at the first registration and at backend startup (idempotent), for the first user or the oldest active Super Admin. Its title is `NOCT_SITE_NAME`, or the owner's username if unset. Its slug is derived from the title (`-2`, `-3`, ... on a collision). The site root `/` shows it, and its posts are at `/post/<slug>`, and its sub-pages (`/pagina/...`, `/pub/...`, `/bibliografia`, `/media`, `/link`, `/search`, and the feed files `/feed.xml`, `/atom.xml`) are at the root too. The old `/<slug>/...` addresses of those pages answer `308` to the root. `GET /api/v1/config` returns its slug as `primary_blog_slug`. If the blog was removed by the purge of deleted blogs, the next backend restart creates a new one.
 - **Spaces.** Other blogs are reached by path only (`/<slug>/`). Subdomains are off (`NOCT_SUBDOMAINS_ENABLED=false`, the `.env.example` default).
 - **Off in solo:** the reserved-names list (`reserved_blog_names`), the minimum slug length, the user interests (selector, filter and profile values; stored values stay in the database), and the editing of site texts (`PUT /api/v1/admin/site-texts/{locale}` returns `403`; the admin page is hidden). Footer texts stay editable in the admin settings page (`/admin/impostazioni`).
 

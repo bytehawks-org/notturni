@@ -12,11 +12,12 @@ import { FieldGroup, Input, Label, TextArea } from "@/components/ui/Field";
 import { useToast } from "@/components/ui/Toast";
 import { CoverImageUpload } from "@/components/editor/CoverImageUpload";
 import { FaviconUpload } from "@/components/dashboard/blog/FaviconUpload";
+import { usePrimaryBlogSlug } from "@/lib/primary-blog-client";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { formatDate } from "@/lib/format";
 import { languageName } from "@/lib/languages";
-import { blogAddress, siteHost, siteUrl, subdomainsEnabled } from "@/lib/site";
+import { blogAddress, isPrimaryBlog, siteHost, siteUrl, subdomainsEnabled } from "@/lib/site";
 import { useExperimentalFeatures } from "@/lib/experimental";
 import { effectiveDisplayMode } from "@/lib/space-mode";
 import type { Blog, BlogMember, BlogVisibility, Category, CommentsMode, SpaceDisplayMode } from "@/lib/types";
@@ -34,6 +35,7 @@ const COMMENT_MODES: CommentsMode[] = ["members", "everyone", "closed"];
  * cancellazione con 30 giorni di tolleranza e ripristino. */
 export function SettingsTab({ blog, canEdit, onUpdated }: { blog: Blog; canEdit: boolean; onUpdated: (blog: Blog) => void }) {
   const { user, authFetch } = useAuth();
+  const primarySlug = usePrimaryBlogSlug();
   const t = useTranslations("Settings");
   const tc = useTranslations("Common");
   const locale = useLocale();
@@ -180,7 +182,9 @@ export function SettingsTab({ blog, canEdit, onUpdated }: { blog: Blog; canEdit:
                 {t("slug")}
               </Label>
               <span className="flex items-center gap-1 rounded-lg border border-border bg-surface px-3 py-2.5 font-mono text-[13px] text-muted">
-                {subdomainsEnabled() ? (
+                {isPrimaryBlog(blog.slug, primarySlug) ? (
+                  <span className="text-foreground">{subdomainsEnabled() ? siteHost() : siteUrl()}</span>
+                ) : subdomainsEnabled() ? (
                   <>
                     <span className="text-foreground">{blog.slug}</span>.{siteHost()}
                   </>
@@ -368,7 +372,7 @@ export function SettingsTab({ blog, canEdit, onUpdated }: { blog: Blog; canEdit:
             <Label htmlFor="blog-domain">{t("customDomain")}</Label>
             <Input id="blog-domain" disabled value={blog.custom_domain ?? ""} placeholder={`${blog.slug}.example.eu`} />
           </FieldGroup>
-          <span className="text-[13px] text-muted">{t("domainNote", { host: blogAddress(blog.slug) })}</span>
+          <span className="text-[13px] text-muted">{t("domainNote", { host: isPrimaryBlog(blog.slug, primarySlug) ? (subdomainsEnabled() ? siteHost() : siteUrl()) : blogAddress(blog.slug) })}</span>
         </section>
 
         {canEdit && (

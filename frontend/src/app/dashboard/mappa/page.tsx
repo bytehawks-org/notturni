@@ -11,8 +11,10 @@ import { Input } from "@/components/ui/Field";
 import { FilterChip } from "@/components/ui/Pill";
 import { EmptyState, SkeletonRows } from "@/components/ui/States";
 import { ApiClientError, api } from "@/lib/api";
+import { usePrimaryBlogSlug } from "@/lib/primary-blog-client";
 import { useAuth } from "@/lib/auth-context";
 import { formatDate } from "@/lib/format";
+import { spaceHref } from "@/lib/site";
 import { PLATFORM_ADMIN_ROLES, type GraphData, type GraphEdge, type GraphNode } from "@/lib/types";
 
 type Layer = "blog" | "tag" | "category" | "link";
@@ -24,6 +26,7 @@ const LAYERS: Layer[] = ["blog", "tag", "category", "link"];
  * di tutto ciò che è pubblico sulla piattaforma. */
 export default function GraphPage() {
   const { user, authFetch } = useAuth();
+  const primarySlug = usePrimaryBlogSlug();
   const t = useTranslations("GraphPage");
   const tc = useTranslations("Common");
   const locale = useLocale();
@@ -239,7 +242,7 @@ export default function GraphPage() {
                   )}
                   {selected.type === "blog" && (
                     <>
-                      <Link href={`/${selected.slug}`} className="text-primary no-underline hover:underline" target="_blank">
+                      <Link href={spaceHref(selected.slug ?? "", "", primarySlug)} className="text-primary no-underline hover:underline" target="_blank">
                         {t("open")} ↗
                       </Link>
                       <Link href={`/dashboard/blogs/${selected.slug}`} className="text-primary no-underline hover:underline">

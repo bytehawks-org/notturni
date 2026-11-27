@@ -7,6 +7,8 @@ import { FillImage } from "@/components/FillImage";
 import Link from "next/link";
 
 import { excerptClient } from "@/lib/excerpt-client";
+import { postHref, spaceHref } from "@/lib/site";
+import { usePrimaryBlogSlug } from "@/lib/primary-blog-client";
 import { formatDate, readingMinutes } from "@/lib/format";
 import type { Post } from "@/lib/types";
 
@@ -15,6 +17,8 @@ import type { Post } from "@/lib/types";
 export function FeedPostCardClient({ post, blogTitle, showBlog = true }: { post: Post; blogTitle?: string; showBlog?: boolean }) {
   const t = useTranslations("Feed");
   const locale = useLocale();
+  const primarySlug = usePrimaryBlogSlug();
+  const href = postHref(post.blog_slug, post.slug, primarySlug);
   return (
     <article className="grid gap-4 border-b border-border py-5 last:border-0 md:grid-cols-[minmax(0,1fr)_128px] md:gap-7 md:py-6">
       <div className="flex min-w-0 flex-col gap-2">
@@ -37,7 +41,7 @@ export function FeedPostCardClient({ post, blogTitle, showBlog = true }: { post:
           {showBlog && (
             <span>
               {t("in")}{" "}
-              <Link href={`/${post.blog_slug}`} className="no-underline hover:underline">
+              <Link href={spaceHref(post.blog_slug, "", primarySlug)} className="no-underline hover:underline">
                 {blogTitle ?? post.blog_slug}
               </Link>
             </span>
@@ -50,7 +54,7 @@ export function FeedPostCardClient({ post, blogTitle, showBlog = true }: { post:
           )}
         </div>
         <h3 className="m-0 font-serif text-xl font-medium leading-tight text-pretty md:text-[23px]">
-          <Link href={post.permalink} className="text-foreground no-underline hover:text-primary">
+          <Link href={href} className="text-foreground no-underline hover:text-primary">
             {post.title}
           </Link>
         </h3>
@@ -67,7 +71,7 @@ export function FeedPostCardClient({ post, blogTitle, showBlog = true }: { post:
         </div>
       </div>
       {post.cover_image_url && (
-        <Link href={post.permalink} className="relative hidden h-24 w-full overflow-hidden rounded-lg border border-border md:block">
+        <Link href={href} className="relative hidden h-24 w-full overflow-hidden rounded-lg border border-border md:block">
           <FillImage
             src={post.cover_image_url}
             sizes="128px"

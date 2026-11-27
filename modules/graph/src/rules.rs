@@ -1,6 +1,7 @@
 //! Costruzione pura del grafo a partire dalle righe lette dal database, con i test.
 
 use chrono::{DateTime, Utc};
+use noct_core::permalink::permalink_for;
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use url::Url;
@@ -34,6 +35,8 @@ pub struct Inputs {
     pub urls: Vec<(Uuid, String)>,
     /// link interni `[[slug]]`: `(post, slug di destinazione)`, nello stesso Spazio
     pub wikilinks: Vec<(Uuid, String)>,
+    /// Slug del blog primario in modalità `solo`: i suoi post hanno percorso `/post/<slug>`.
+    pub primary_slug: Option<String>,
 }
 
 pub struct Graph {
@@ -45,6 +48,12 @@ pub struct Graph {
 /// `https://{blog}.{fqdn}/{post}` oppure il percorso relativo `/{blog}/{post}`. `None` per tutto il resto
 /// (siti esterni, pagine che non sono post, domini personali).
 pub fn link_target(raw: &str, fqdn: &str) -> Option<(String, String)> {
+    link_target_with_primary(raw, fqdn, None)
+}
+
+/// Come `link_target`, con il blog primario della modalità `solo`: `/post/<slug>` (sul dominio del sito)
+/// punta al primario. I link `/{primary}/{slug}` restano riconosciuti.
+pub fn link_target_with_primary(raw: &str, fqdn: &str, primary: Option<&str>) -> Option<(String, String)> {
     let fqdn = fqdn.trim().to_ascii_lowercase();
     let base = Url::parse(&format!("https://{fqdn}/")).ok()?;
     let url = if raw.starts_with('/') && !raw.starts_with("//") {
@@ -58,6 +67,12 @@ pub fn link_target(raw: &str, fqdn: &str) -> Option<(String, String)> {
     let host = url.host_str()?.to_ascii_lowercase();
     let segments: Vec<&str> = url.path_segments()?.filter(|s| !s.is_empty()).collect();
     if host == fqdn || host == format!("www.{fqdn}") {
+        if let Some(primary) = primary
+            && segments.len() >= 2
+            && segments[0] == "post"
+        {
+            return Some((primary.to_string(), segments[1].to_string()));
+        }
         return (segments.len() >= 2).then(|| (segments[0].to_string(), segments[1].to_string()));
     }
     let blog = host.strip_suffix(&format!(".{fqdn}"))?;
@@ -82,7 +97,7 @@ pub fn build(inputs: &Inputs, fqdn: &str) -> Graph {
         nodes.push(json!({
             "id": format!("post:{}", p.id), "type": "post", "label": p.title, "blog": p.blog_slug, "slug": p.slug,
             "locale": p.locale, "status": p.status, "published_at": p.published_at,
-            "path": format!("/{}/{}", p.blog_slug, p.slug),
+            "path": permalink_for(&p.blog_slug, &p.slug, inputs.primary_slug.as_deref(), true),
         }));
         edges
             .push(json!({"source": format!("post:{}", p.id), "target": format!("blog:{}", p.blog_slug), "type": "in"}));
@@ -117,7 +132,7 @@ pub fn build(inputs: &Inputs, fqdn: &str) -> Graph {
         }
     };
     for (post, url) in inputs.urls.iter().filter(|(p, _)| post_ids.contains(p)) {
-        if let Some((blog, slug)) = link_target(url, fqdn)
+        if let Some((blog, slug)) = link_target_with_primary(url, fqdn, inputs.primary_slug.as_deref())
             && let Some(&to) = by_slug.get(&(blog.as_str(), slug.as_str()))
         {
             link(*post, to, "url", &mut edges);
@@ -205,6 +220,7 @@ mod tests {
             ],
             wikilinks: vec![(c.id, "c".into()), (c.id, "assente".into())],
             posts: vec![a, b, c],
+            primary_slug: None,
         };
         let g = build(&inputs, "notturni.eu");
         assert_eq!((count(&g, "type", "blog"), count(&g, "type", "post")), (2, 3), "lo Spazio senza post non compare");
@@ -220,6 +236,51 @@ mod tests {
         assert!(links.iter().all(|l| l["via"] == "url"));
         assert!(g.edges.iter().filter(|e| e["type"] == "in").count() == 3);
         assert!(!g.nodes.iter().any(|n| n["label"] == "#fantasma" || n["label"] == "Fuori"));
+    }
+
+    #[test]
+    fn solo_primary_post_urls_resolve_to_primary_blog() {
+        let want = Some(("anna".to_string(), "ciao".to_string()));
+        let t = |u: &str| link_target_with_primary(u, "example.com", Some("anna"));
+        assert_eq!(t("/post/ciao"), want);
+        assert_eq!(t("https://example.com/post/ciao"), want);
+        assert_eq!(t("/anna/ciao"), want, "i link vecchi `/{{primary}}/{{post}}` restano riconosciuti");
+        assert_eq!(t("https://anna.example.com/ciao"), want);
+    }
+
+    #[test]
+    fn without_primary_post_prefix_is_a_blog_slug() {
+        assert_eq!(
+            link_target_with_primary("/post/ciao", "example.com", None),
+            Some(("post".to_string(), "ciao".to_string()))
+        );
+        assert_eq!(link_target_with_primary("/anna/ciao", "example.com", None), Some(("anna".into(), "ciao".into())));
+    }
+
+    #[test]
+    fn solo_primary_posts_are_emitted_under_post_prefix() {
+        let (a, b) = (post("anna", "ciao"), post("diario", "x"));
+        let inputs = Inputs { posts: vec![a, b], primary_slug: Some("anna".into()), ..Default::default() };
+        let g = build(&inputs, "notturni.eu");
+        let paths: Vec<&str> =
+            g.nodes.iter().filter(|n| n["type"] == "post").filter_map(|n| n["path"].as_str()).collect();
+        assert_eq!(paths, vec!["/post/ciao", "/diario/x"]);
+    }
+
+    #[test]
+    fn solo_primary_post_link_written_as_post_prefix_is_detected() {
+        let (a, b) = (post("diario", "a"), post("anna", "ciao"));
+        let (a_id, b_id) = (a.id, b.id);
+        let inputs = Inputs {
+            urls: vec![(a_id, "https://notturni.eu/post/ciao".into())],
+            posts: vec![a, b],
+            primary_slug: Some("anna".into()),
+            ..Default::default()
+        };
+        let g = build(&inputs, "notturni.eu");
+        let links: Vec<_> = g.edges.iter().filter(|e| e["type"] == "link").collect();
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0]["target"], format!("post:{b_id}"));
     }
 
     #[test]

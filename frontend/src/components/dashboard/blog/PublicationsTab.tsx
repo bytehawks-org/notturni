@@ -12,10 +12,12 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { FieldGroup, Input, Label, TextArea } from "@/components/ui/Field";
 import { EmptyState, SkeletonRows } from "@/components/ui/States";
 import { useToast } from "@/components/ui/Toast";
+import { usePrimaryBlogSlug } from "@/lib/primary-blog-client";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { formatDate } from "@/lib/format";
 import { displayPostStatus } from "@/lib/post-status";
+import { spaceHref } from "@/lib/site";
 import type { Chapter, Publication, PublicationDetail } from "@/lib/types";
 
 import { errorMessage } from "./shared";
@@ -24,6 +26,7 @@ import { errorMessage } from "./shared";
  * capitoli riordinabile (drag & drop e frecce), eliminazione. I post entrano
  * in una pubblicazione dal rail dell'editor (`PublicationSelect`). */
 export function PublicationsTab({ blogSlug, canWrite }: { blogSlug: string; canWrite: boolean }) {
+  const primarySlug = usePrimaryBlogSlug();
   const { accessToken, authFetch } = useAuth();
   const t = useTranslations("PublicationsTab");
   const tc = useTranslations("Common");
@@ -121,7 +124,7 @@ export function PublicationsTab({ blogSlug, canWrite }: { blogSlug: string; canW
                   <span className="font-serif text-[17px] text-foreground">{p.title}</span>
                   <span className="text-[13px] text-muted">{t("chaptersOf", { published: p.chapters_published, total: p.chapters_total })}</span>
                 </div>
-                <span className="font-mono text-xs text-muted">/{blogSlug}/pub/{p.name}</span>
+                <span className="font-mono text-xs text-muted">{spaceHref(blogSlug, `/pub/${p.name}`, primarySlug)}</span>
               </li>
             ))}
           </ul>
@@ -214,7 +217,7 @@ export function PublicationsTab({ blogSlug, canWrite }: { blogSlug: string; canW
               <div className="flex items-start justify-between gap-3">
                 <div className="flex flex-col gap-0.5">
                   <span className="font-serif text-lg text-foreground">{selected.title}</span>
-                  <span className="font-mono text-xs text-muted">/{blogSlug}/pub/{selected.name}</span>
+                  <span className="font-mono text-xs text-muted">{spaceHref(blogSlug, `/pub/${selected.name}`, primarySlug)}</span>
                 </div>
                 <button type="button" onClick={() => setSelected(null)} className="text-muted hover:text-foreground" aria-label={tc("close")}>
                   ✕
@@ -224,7 +227,7 @@ export function PublicationsTab({ blogSlug, canWrite }: { blogSlug: string; canW
               <span className="text-[13px] text-muted">{t("chaptersOf", { published: selected.chapters_published, total: selected.chapters_total })}</span>
               <div className="flex flex-wrap gap-2">
                 {selected.chapters_published > 0 && (
-                  <Link href={`/${blogSlug}/pub/${selected.name}`} className="no-underline">
+                  <Link href={spaceHref(blogSlug, `/pub/${selected.name}`, primarySlug)} className="no-underline">
                     <Button size="sm" variant="secondary">
                       {t("view")} ↗
                     </Button>

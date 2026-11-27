@@ -9,6 +9,7 @@ mod error;
 mod extension;
 mod hooks;
 mod patch;
+pub mod permalink;
 mod rate_limit;
 mod registry;
 pub mod revalidate;

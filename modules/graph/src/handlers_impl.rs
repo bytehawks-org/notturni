@@ -2,7 +2,7 @@
 
 use crate::rules::{BlogIn, Inputs, PostIn, build};
 use chrono::{DateTime, Utc};
-use noct_core::{ApiError, RouteCtx};
+use noct_core::{ApiError, RouteCtx, permalink::Permalinks};
 use serde_json::{Value, json};
 use sqlx::FromRow;
 use uuid::Uuid;
@@ -132,7 +132,9 @@ pub async fn get_graph(ctx: RouteCtx) -> Result<Value, ApiError> {
         Vec::new()
     };
 
+    let primary_slug = Permalinks::load(st).await?.primary_slug().map(str::to_string);
     let inputs = Inputs {
+        primary_slug,
         blogs: blogs.into_iter().map(|b| BlogIn { slug: b.slug, title: b.title, kind: b.kind }).collect(),
         posts: posts
             .into_iter()

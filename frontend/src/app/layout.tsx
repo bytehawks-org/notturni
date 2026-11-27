@@ -9,7 +9,7 @@ import { CodeCopyProvider } from "@/components/blog/CodeCopyProvider";
 import { ToastProvider } from "@/components/ui/Toast";
 import { AuthProvider } from "@/lib/auth-context";
 import { NonceProvider } from "@/lib/nonce-context";
-import { getSiteSeo } from "@/lib/server-api";
+import { getPrimaryBlogSlug, getSiteSeo } from "@/lib/server-api";
 import { SiteConfigProvider } from "@/components/SiteConfigProvider";
 import { siteConfig, siteUrl } from "@/lib/site";
 import { ThemeProvider } from "@/lib/theme-context";
@@ -68,6 +68,8 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   // dell'API sono risolti a runtime (lib/site.ts), non inglobati nel bundle.
   const seo = await getSiteSeo(locale);
   const config = { ...siteConfig(), siteName: seo?.site_name || siteConfig().siteName };
+  // Slug del blog primario (solo; `null` in platform): al server serve già nel primo render, senza fetch lato client.
+  const primarySlug = await getPrimaryBlogSlug();
   // Nonce CSP della richiesta corrente (proxy.ts): 'self' non basta per gli
   // script inline (né i nostri né quelli che Next stesso inietta per
   // l'idratazione), va passato esplicitamente a ogni <Script>.
@@ -83,7 +85,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <Script src="/theme-init.js" strategy="beforeInteractive" nonce={nonce ?? undefined} />
         <NonceProvider nonce={nonce}>
           <NextIntlClientProvider locale={locale} messages={messages}>
-            <SiteConfigProvider config={config}>
+            <SiteConfigProvider config={config} primarySlug={primarySlug}>
             <ThemeProvider>
               <AuthProvider>
                 <ToastProvider>

@@ -38,13 +38,18 @@ pub fn validate_slug(slug: &str, extra_reserved: &[String]) -> Result<(), String
 pub const SOLO_ROUTE_COLLISIONS: &[&str] = &[
     "admin",
     "api",
+    "bibliografia",
     "blogs",
     "dashboard",
     "forgot-password",
+    "link",
     "login",
+    "media",
     "newsletter",
     "p",
+    "pagina",
     "post",
+    "pub",
     "register",
     "search",
     "sitemaps",
@@ -295,6 +300,10 @@ mod tests {
             assert!(validate_slug_solo(route).unwrap_err().contains("collides with a site page"), "{route}");
         }
         assert!(validate_slug_solo("_next").is_err());
+        // pagine radice del blog primario: non possono diventare slug di uno spazio
+        for root in ["media", "link", "bibliografia", "pub", "pagina"] {
+            assert!(validate_slug_solo(root).unwrap_err().contains("collides with a site page"), "{root}");
+        }
         for bad in ["Blog-Mio", "-ab", "ab-", "ab--cd", "ab_cd", ""] {
             assert!(validate_slug_solo(bad).is_err(), "{bad}");
         }

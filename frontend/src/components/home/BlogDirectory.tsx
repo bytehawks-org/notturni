@@ -2,7 +2,8 @@ import { getTranslations } from "next-intl/server";
 import Image from "next/image";
 import Link from "next/link";
 
-import { blogAddress } from "@/lib/site";
+import { getPrimaryBlogSlug } from "@/lib/server-api";
+import { blogAddress, isPrimaryBlog, siteHost, siteUrl, spaceHref, subdomainsEnabled } from "@/lib/site";
 import type { PublicBlog } from "@/lib/types";
 
 const hue = (s: string) => `oklch(0.55 0.06 ${[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % 360})`;
@@ -34,7 +35,9 @@ function Avatar({ blog, size = 44 }: { blog: PublicBlog; size?: number }) {
 
 /** Elenco compatto nella sidebar della home (mockup 4a), con i conteggi di `GET /blogs`. */
 export async function BlogDirectoryList({ blogs, total }: { blogs: PublicBlog[]; total: number }) {
-  const t = await getTranslations("Directory");
+  const [t, primarySlug] = await Promise.all([getTranslations("Directory"), getPrimaryBlogSlug()]);
+  const addressOf = (slug: string) =>
+    isPrimaryBlog(slug, primarySlug) ? (subdomainsEnabled() ? siteHost() : siteUrl()) : blogAddress(slug);
   if (!blogs.length) return null;
   return (
     <div className="flex flex-col gap-3">
@@ -49,14 +52,14 @@ export async function BlogDirectoryList({ blogs, total }: { blogs: PublicBlog[];
           <li key={b.slug} className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 border-b border-border py-2.5">
             <Avatar blog={b} size={36} />
             <div className="flex min-w-0 flex-col leading-snug">
-              <Link href={`/${b.slug}`} className="truncate font-semibold text-foreground no-underline hover:text-primary">
+              <Link href={spaceHref(b.slug, "", primarySlug)} className="truncate font-semibold text-foreground no-underline hover:text-primary">
                 {b.title}
               </Link>
               <span className="truncate text-xs text-muted">
-                {blogAddress(b.slug)} · {b.default_locale.toUpperCase()} · {t("postsCount", { count: b.post_count })}
+                {addressOf(b.slug)} · {b.default_locale.toUpperCase()} · {t("postsCount", { count: b.post_count })}
               </span>
             </div>
-            <Link href={`/${b.slug}`} className="text-[13px] font-medium no-underline hover:underline">
+            <Link href={spaceHref(b.slug, "", primarySlug)} className="text-[13px] font-medium no-underline hover:underline">
               {t("follow")}
             </Link>
           </li>
@@ -68,7 +71,9 @@ export async function BlogDirectoryList({ blogs, total }: { blogs: PublicBlog[];
 
 /** Griglia di card per /blogs (mockup 4c). */
 export async function BlogDirectoryGrid({ blogs }: { blogs: PublicBlog[] }) {
-  const t = await getTranslations("Directory");
+  const [t, primarySlug] = await Promise.all([getTranslations("Directory"), getPrimaryBlogSlug()]);
+  const addressOf = (slug: string) =>
+    isPrimaryBlog(slug, primarySlug) ? (subdomainsEnabled() ? siteHost() : siteUrl()) : blogAddress(slug);
   if (!blogs.length) return <p className="py-10 text-center text-sm text-muted">{t("noMatch")}</p>;
   return (
     <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -77,11 +82,11 @@ export async function BlogDirectoryGrid({ blogs }: { blogs: PublicBlog[] }) {
           <div className="flex items-center gap-3">
             <Avatar blog={b} />
             <div className="flex min-w-0 flex-col leading-tight">
-              <Link href={`/${b.slug}`} className="truncate font-serif text-[19px] text-foreground no-underline hover:text-primary">
+              <Link href={spaceHref(b.slug, "", primarySlug)} className="truncate font-serif text-[19px] text-foreground no-underline hover:text-primary">
                 {b.title}
               </Link>
               <span className="font-mono text-xs text-muted">
-                {blogAddress(b.slug)}
+                {addressOf(b.slug)}
               </span>
             </div>
           </div>
@@ -90,7 +95,7 @@ export async function BlogDirectoryGrid({ blogs }: { blogs: PublicBlog[] }) {
             <span>
               {b.default_locale.toUpperCase()} · {t("postsCount", { count: b.post_count })} · {t("followers", { count: b.follower_count })}
             </span>
-            <Link href={`/${b.slug}`} className="font-medium no-underline hover:underline">
+            <Link href={spaceHref(b.slug, "", primarySlug)} className="font-medium no-underline hover:underline">
               {t("follow")}
             </Link>
           </div>

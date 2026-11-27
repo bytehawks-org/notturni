@@ -43,6 +43,27 @@ pub fn slugify(input: &str) -> String {
     if out.is_empty() { "blog".into() } else { out }
 }
 
+/// Logga (una sola riga, solo slug) i blog esistenti in collisione con le rotte del sito in
+/// modalità solo, escluso il blog primario. Non rinomina né cancella nulla: un errore della
+/// query viene solo loggato, non blocca l'avvio.
+async fn warn_route_collisions(conn: &mut PgConnection, primary: Option<Uuid>) -> Result<(), ApiError> {
+    let reserved: Vec<&str> = rules::SOLO_ROUTE_COLLISIONS.to_vec();
+    let found: Result<Vec<String>, sqlx::Error> =
+        sqlx::query_scalar("SELECT slug FROM blogs WHERE slug = ANY($1) AND id IS DISTINCT FROM $2 ORDER BY slug")
+            .bind(reserved)
+            .bind(primary)
+            .fetch_all(&mut *conn)
+            .await;
+    match found {
+        Ok(slugs) if !slugs.is_empty() => {
+            tracing::warn!(slugs = ?slugs, "blog solo con slug in collisione con le rotte del sito");
+        }
+        Ok(_) => {}
+        Err(e) => tracing::error!(error = %e, "controllo delle collisioni di slug non riuscito"),
+    }
+    Ok(())
+}
+
 /// Garantisce che esista il blog primario. `Ok(None)` se c'era già (marker valido), `Ok(Some(id))`
 /// se lo ha creato. Il marker vale solo se punta a un blog esistente: dopo una cancellazione
 /// definitiva (`purge_deleted`) il blog viene ricreato al prossimo avvio. Un blog in tolleranza
@@ -61,6 +82,7 @@ pub async fn ensure_primary_blog(
         sqlx::query_scalar("SELECT primary_blog_id FROM platform_config WHERE id = 1 FOR UPDATE")
             .fetch_one(&mut *conn)
             .await?;
+    warn_route_collisions(conn, current).await?;
     if let Some(id) = current {
         let exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM blogs WHERE id = $1)")
             .bind(id)
@@ -120,6 +142,15 @@ pub async fn ensure_primary_blog(
 #[cfg(test)]
 mod tests {
     use super::slugify;
+
+    #[test]
+    fn site_named_like_a_root_page_gets_a_suffixed_solo_slug() {
+        // stessa logica del ciclo in `ensure_primary_blog`: i candidati riservati vengono saltati
+        let base = slugify("Media");
+        assert_eq!(base, "media");
+        assert!(crate::rules::validate_slug_solo(&base).is_err());
+        assert!(crate::rules::validate_slug_solo("media-2").is_ok());
+    }
 
     #[test]
     fn slugify_produces_valid_slugs() {

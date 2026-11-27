@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { apiUrl, siteHost, siteUrl, subdomainsEnabled } from "@/lib/site";
+import { apiUrl, isSolo, siteHost, siteUrl, subdomainsEnabled } from "@/lib/site";
+import { needsPrimarySlug, soloRoute } from "@/lib/solo-routing";
 
 /** Origini per connect-src, derivate dagli URL reali configurati invece che
  * hardcodate su un dominio fisso — altrimenti il dev locale (frontend su
@@ -71,6 +72,32 @@ const PLATFORM_ONLY_PATHS = new Set([
   "p",
 ]);
 
+const PRIMARY_SLUG_TTL_MS = 30_000;
+const PRIMARY_SLUG_TIMEOUT_MS = 2_000;
+
+let primarySlugCache: { slug: string; expiresAt: number } | null = null;
+
+/** Primary blog slug from `GET /api/v1/config`, cached for a short time in this process. Failures and a missing
+ * slug (before the first registration) are not cached. `null`: the proxy passes the request through. */
+async function primarySlug(): Promise<string | null> {
+  if (primarySlugCache && Date.now() < primarySlugCache.expiresAt) return primarySlugCache.slug;
+  const backend =
+    process.env.NOCT_BACKEND_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  try {
+    const res = await fetch(`${backend}/api/v1/config`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(PRIMARY_SLUG_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    const slug = ((await res.json()) as { primary_blog_slug?: unknown } | null)?.primary_blog_slug;
+    if (typeof slug !== "string" || !slug) return null;
+    primarySlugCache = { slug, expiresAt: Date.now() + PRIMARY_SLUG_TTL_MS };
+    return slug;
+  } catch {
+    return null;
+  }
+}
+
 /** Content-Security-Policy con nonce per-richiesta (CLAUDE.md #6, Traefik
  * come ingress): script-src 'self' senza nonce/unsafe-inline blocca anche
  * gli script inline che Next.js stesso inietta per l'idratazione (payload
@@ -113,7 +140,7 @@ function cspHeaderValue(nonce: string): string {
  * internamente — coerente con l'IngressRoute Traefik dinamico
  * (k8s/ingressroute.yaml) che porta qui *tutto* il traffico su
  * *.notturni.eu. */
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
   const csp = cspHeaderValue(nonce);
 
@@ -128,6 +155,22 @@ export function proxy(request: NextRequest) {
     response.headers.set("Content-Security-Policy", csp);
     return response;
   };
+
+  // Solo mode: the primary blog subpages live at the root (see `lib/solo-routing.ts`). With subdomains active this
+  // applies to the apex host only; without them every host serves the site.
+  const { pathname } = request.nextUrl;
+  if (isSolo() && (!subdomainsEnabled() || hostname === siteHost()) && needsPrimarySlug(pathname)) {
+    const route = soloRoute(pathname, await primarySlug());
+    if (route.type === "none") return withCsp(NextResponse.next({ request: { headers: requestHeaders } }));
+    // Only the path changes: origin and query string stay those of the request.
+    const url = request.nextUrl.clone();
+    url.pathname = route.pathname;
+    return withCsp(
+      route.type === "redirect"
+        ? NextResponse.redirect(url, 308)
+        : NextResponse.rewrite(url, { request: { headers: requestHeaders } }),
+    );
+  }
 
   // Sottodomini disattivati (`NOCT_SUBDOMAINS_ENABLED=false`): nessuna riscrittura, solo routing path-based.
   if (!subdomainsEnabled() || hostname === siteHost() || !hostname.endsWith(`.${siteHost()}`)) {

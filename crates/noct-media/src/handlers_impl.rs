@@ -5,7 +5,9 @@ use crate::{
 };
 use axum::http::header::CONTENT_TYPE;
 use chrono::{DateTime, Utc};
-use noct_core::{ApiError, AppState, BlogRef, RouteCtx, body_map, membership_role, parse_uuid, revalidate};
+use noct_core::{
+    ApiError, AppState, BlogRef, RouteCtx, body_map, membership_role, parse_uuid, permalink::Permalinks, revalidate,
+};
 use noct_posts::rules::validate_categories;
 use serde_json::{Value, json};
 use sqlx::{FromRow, Postgres, QueryBuilder};
@@ -163,6 +165,7 @@ async fn usages(st: &AppState, blog: &BlogRef, urls: &[String]) -> Result<HashMa
     if urls.is_empty() {
         return Ok(HashMap::new());
     }
+    let pl = Permalinks::load(st).await?;
     let rows: Vec<(String, Uuid, String, String)> = sqlx::query_as(
         "SELECT pm.url, p.id, p.slug, p.title FROM post_media pm JOIN posts p ON p.id = pm.post_id
          WHERE p.blog_id = $1 AND pm.url = ANY($2)
@@ -178,7 +181,7 @@ async fn usages(st: &AppState, blog: &BlogRef, urls: &[String]) -> Result<HashMa
     let mut out: HashMap<String, Vec<Value>> = HashMap::new();
     for (url, id, slug, title) in rows {
         out.entry(url).or_default().push(json!({
-            "post_id": id, "post_slug": slug, "post_title": title, "permalink": format!("/{}/{slug}", blog.slug),
+            "post_id": id, "post_slug": slug, "post_title": title, "permalink": pl.of(&blog.slug, &slug),
         }));
     }
     Ok(out)
@@ -449,10 +452,11 @@ pub async fn my_media(ctx: RouteCtx) -> Result<Vec<Value>, ApiError> {
     .bind(&urls)
     .fetch_all(&st.db)
     .await?;
+    let pl = Permalinks::load(st).await?;
     let mut used: HashMap<String, Vec<Value>> = HashMap::new();
     for (url, id, slug, title, blog_slug) in usage {
         used.entry(url).or_default().push(json!({
-            "post_id": id, "post_slug": slug, "post_title": title, "permalink": format!("/{blog_slug}/{slug}"),
+            "post_id": id, "post_slug": slug, "post_title": title, "permalink": pl.of(&blog_slug, &slug),
         }));
     }
     Ok(rows

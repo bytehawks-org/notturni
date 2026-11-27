@@ -27,7 +27,8 @@ import { Button } from "@/components/ui/Button";
 import { SkeletonRows } from "@/components/ui/States";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { blogAddress } from "@/lib/site";
+import { usePrimaryBlogSlug } from "@/lib/primary-blog-client";
+import { blogAddress, isPrimaryBlog, siteHost, spaceHref } from "@/lib/site";
 import { type Blog, type BlogRole } from "@/lib/types";
 
 type Tab = "overview" | "posts" | "outline" | "pages" | "publications" | "notes" | "media" | "newsletter" | "comments" | "appearance" | "git" | "collaborators" | "settings";
@@ -60,6 +61,7 @@ export default function BlogDetailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, accessToken, authFetch } = useAuth();
+  const primarySlug = usePrimaryBlogSlug();
   const t = useTranslations("BlogTabs");
   const { isSolo } = useSiteFlags();
   const ta = useTranslations("BlogAdmin");
@@ -110,7 +112,7 @@ export default function BlogDetailPage() {
           <h1 className="truncate font-serif text-[28px] font-medium leading-tight text-foreground">{blog.title}</h1>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-muted">
             <span className="font-mono">
-              {blogAddress(blog.slug)}
+              {isPrimaryBlog(blog.slug, primarySlug) ? siteHost() : blogAddress(blog.slug)}
             </span>
             <VisibilityLabel visibility={blog.visibility} />
             {blog.deleted_at && <span className="font-semibold text-danger">{ta("deleted")}</span>}
@@ -121,7 +123,7 @@ export default function BlogDetailPage() {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Link href={`/${blog.slug}`}>
+          <Link href={spaceHref(blog.slug, "", primarySlug)}>
             <Button variant="secondary" size="sm">
               {ta("viewBlog")}
             </Button>

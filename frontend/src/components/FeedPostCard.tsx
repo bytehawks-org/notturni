@@ -5,6 +5,8 @@ import { FillImage } from "@/components/FillImage";
 import Link from "next/link";
 
 import { formatDate, readingMinutes } from "@/lib/format";
+import { getPrimaryBlogSlug } from "@/lib/server-api";
+import { spaceHref } from "@/lib/site";
 import { excerpt } from "@/lib/markdown";
 import type { Post } from "@/lib/types";
 
@@ -35,7 +37,7 @@ export async function FeedPostCard({
    * sottodominio da gestire. */
   resolvePermalink?: (permalink: string) => string;
 }) {
-  const [t, locale] = await Promise.all([getTranslations("Feed"), getLocale()]);
+  const [t, locale, primarySlug] = await Promise.all([getTranslations("Feed"), getLocale(), getPrimaryBlogSlug()]);
   const permalink = resolvePermalink(post.permalink);
   const meta = (
     <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted">
@@ -57,7 +59,7 @@ export async function FeedPostCard({
       {showBlog && (
         <span>
           {t("in")}{" "}
-          <Link href={`/${post.blog_slug}`} className="no-underline hover:underline">
+          <Link href={spaceHref(post.blog_slug, "", primarySlug)} className="no-underline hover:underline">
             {blogTitle ?? post.blog_slug}
           </Link>
         </span>

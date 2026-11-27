@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { blogLinks } from "@/lib/blog-path";
-import { blogAddress, isSolo, postHref, siteConfig, subdomainsEnabled } from "@/lib/site";
+import { blogAddress, isSolo, postHref, siteConfig, spaceHref, subdomainsEnabled } from "@/lib/site";
 import { mockHeaders } from "@/test/next-mocks";
 
 beforeEach(() => {
@@ -81,6 +81,76 @@ describe("blogLinks", () => {
     const links = await blogLinks("foo");
     expect(links.basePath).toBe("/foo");
     expect(links.fromPermalink("/foo/post-1")).toBe("/foo/post-1");
+  });
+});
+
+describe("blogLinks with the solo primary blog", () => {
+  beforeEach(() => vi.stubEnv("NOCT_DEPLOYMENT_MODE", "solo"));
+
+  it("primary on the apex host: basePath is empty and homeHref is /", async () => {
+    mockHeaders.set("host", "example.com");
+    const links = await blogLinks("foo", "foo");
+    expect(links.basePath).toBe("");
+    expect(links.homeHref).toBe("/");
+  });
+
+  it("primary on its subdomain: basePath is empty and homeHref is /", async () => {
+    mockHeaders.set("host", "foo.example.com");
+    const links = await blogLinks("foo", "foo");
+    expect(links.basePath).toBe("");
+    expect(links.homeHref).toBe("/");
+  });
+
+  it("primary on the apex: /post/... permalinks are unchanged", async () => {
+    mockHeaders.set("host", "example.com");
+    const links = await blogLinks("foo", "foo");
+    expect(links.fromPermalink("/post/post-1")).toBe("/post/post-1");
+  });
+
+  it("primary on the apex: /{primary}/... permalinks lose the slug prefix", async () => {
+    mockHeaders.set("host", "example.com");
+    const links = await blogLinks("foo", "foo");
+    expect(links.fromPermalink("/foo/post-1")).toBe("/post-1");
+  });
+
+  it("another blog on the apex is unchanged", async () => {
+    mockHeaders.set("host", "example.com");
+    const links = await blogLinks("bar", "foo");
+    expect(links.basePath).toBe("/bar");
+    expect(links.homeHref).toBe("/bar");
+    expect(links.fromPermalink("/bar/post-1")).toBe("/bar/post-1");
+  });
+
+  it("another blog on its subdomain is unchanged", async () => {
+    mockHeaders.set("host", "bar.example.com");
+    const links = await blogLinks("bar", "foo");
+    expect(links.basePath).toBe("");
+    expect(links.homeHref).toBe("/");
+    expect(links.fromPermalink("/bar/post-1")).toBe("/post-1");
+  });
+});
+
+describe("spaceHref", () => {
+  it("solo primary: the suffix is used at the root", () => {
+    vi.stubEnv("NOCT_DEPLOYMENT_MODE", "solo");
+    expect(spaceHref("foo", "", "foo")).toBe("/");
+    expect(spaceHref("foo", "/media", "foo")).toBe("/media");
+  });
+
+  it("solo other blog: keeps the /{blog} prefix", () => {
+    vi.stubEnv("NOCT_DEPLOYMENT_MODE", "solo");
+    expect(spaceHref("bar", "", "foo")).toBe("/bar");
+    expect(spaceHref("bar", "/x", "foo")).toBe("/bar/x");
+  });
+
+  it("solo without primary slug: keeps the /{blog} prefix", () => {
+    vi.stubEnv("NOCT_DEPLOYMENT_MODE", "solo");
+    expect(spaceHref("foo", "/x", null)).toBe("/foo/x");
+  });
+
+  it("platform: the primary slug is ignored", () => {
+    expect(spaceHref("foo", "", "foo")).toBe("/foo");
+    expect(spaceHref("foo", "/x", "foo")).toBe("/foo/x");
   });
 });
 

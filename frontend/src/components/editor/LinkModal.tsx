@@ -6,7 +6,8 @@ import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/Button";
 import { FieldGroup, Input, Label } from "@/components/ui/Field";
 import { api } from "@/lib/api";
-import { siteUrl } from "@/lib/site";
+import { usePrimaryBlogSlug } from "@/lib/primary-blog-client";
+import { postHref, siteUrl, spaceHref } from "@/lib/site";
 
 export interface LinkModalValue {
   url: string;
@@ -53,6 +54,7 @@ export function LinkModal({ initial, editing, onSave, onRemove, onClose }: LinkM
   const [url, setUrl] = useState(initial.url);
   const [text, setText] = useState(initial.text);
   const [query, setQuery] = useState("");
+  const primarySlug = usePrimaryBlogSlug();
   const [hits, setHits] = useState<Hit[] | null>(null);
   const [searching, setSearching] = useState(false);
   const latest = useRef(0);
@@ -69,10 +71,10 @@ export function LinkModal({ initial, editing, onSave, onRemove, onClose }: LinkM
           const out: Hit[] = [];
           if (posts.status === "fulfilled")
             for (const p of posts.value)
-              out.push({ kind: "post", key: `p${p.id}`, title: p.title, meta: p.blog_slug, url: `${siteUrl()}${p.permalink}` });
+              out.push({ kind: "post", key: `p${p.id}`, title: p.title, meta: p.blog_slug, url: `${siteUrl()}${postHref(p.blog_slug, p.slug, primarySlug)}` });
           if (blogs.status === "fulfilled")
             for (const b of blogs.value)
-              out.push({ kind: "blog", key: `b${b.slug}`, title: b.title, meta: b.slug, url: `${siteUrl()}/${b.slug}` });
+              out.push({ kind: "blog", key: `b${b.slug}`, title: b.title, meta: b.slug, url: `${siteUrl()}${spaceHref(b.slug, "", primarySlug)}` });
           if (users.status === "fulfilled")
             for (const u of users.value)
               out.push({
@@ -87,7 +89,7 @@ export function LinkModal({ initial, editing, onSave, onRemove, onClose }: LinkM
         .finally(() => ticket === latest.current && setSearching(false));
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, primarySlug]);
 
   const normalized = normalizeLinkUrl(url);
   const invalid = url.trim() !== "" && normalized === null;

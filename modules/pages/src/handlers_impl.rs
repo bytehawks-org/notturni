@@ -4,7 +4,9 @@
 use crate::{PageCreate, PageTranslation, PageUpdate};
 use chrono::{DateTime, Utc};
 use noct_audit::{Entry, user_actor};
-use noct_core::{ApiError, BlogRef, RouteCtx, can_write_blog, map_db_error, parse_uuid, revalidate};
+use noct_core::{
+    ApiError, BlogRef, RouteCtx, can_write_blog, map_db_error, parse_uuid, permalink::Permalinks, revalidate,
+};
 use serde_json::{Value, json};
 use sqlx::{PgConnection, PgPool, QueryBuilder};
 use uuid::Uuid;
@@ -55,9 +57,9 @@ impl Scope<'_> {
             Scope::Platform => [PLATFORM_SLUG_TAKEN, PLATFORM_TRANSLATION_TAKEN],
         }
     }
-    fn permalink(self, slug: &str) -> String {
+    fn permalink(self, pl: &Permalinks, slug: &str) -> String {
         match self {
-            Scope::Blog(b) => format!("/{}/pagina/{slug}", b.slug),
+            Scope::Blog(b) => pl.space(&b.slug, &format!("/pagina/{slug}")),
             Scope::Platform => format!("/p/{slug}"),
         }
     }
@@ -126,18 +128,26 @@ async fn mentions_enabled(db: &PgPool, scope: Scope<'_>) -> Result<bool, ApiErro
     }
 }
 
-fn render(scope: Scope, mentions: bool, p: &PageRow) -> Value {
+fn render(scope: Scope, mentions: bool, pl: &Permalinks, p: &PageRow) -> Value {
     json!({
         "id": p.id, "blog_id": p.blog_id, "slug": p.slug, "locale": p.locale,
         "translation_group_id": p.translation_group_id, "title": p.title, "content": p.content,
         "is_published": p.is_published, "created_at": p.created_at,
-        "permalink": scope.permalink(&p.slug), "mentions_enabled": mentions,
+        "permalink": scope.permalink(pl, &p.slug), "mentions_enabled": mentions,
     })
+}
+
+/// Loads the permalink context and the mentions flag once per response.
+async fn render_one(ctx: &RouteCtx, scope: Scope<'_>, p: &PageRow) -> Result<Value, ApiError> {
+    let mentions = mentions_enabled(&ctx.state.db, scope).await?;
+    let pl = Permalinks::load(&ctx.state).await?;
+    Ok(render(scope, mentions, &pl, p))
 }
 
 async fn render_all(ctx: &RouteCtx, scope: Scope<'_>, rows: &[PageRow]) -> Result<Vec<Value>, ApiError> {
     let mentions = mentions_enabled(&ctx.state.db, scope).await?;
-    Ok(rows.iter().map(|p| render(scope, mentions, p)).collect())
+    let pl = Permalinks::load(&ctx.state).await?;
+    Ok(rows.iter().map(|p| render(scope, mentions, &pl, p)).collect())
 }
 
 async fn find_by_id(db: &PgPool, scope: Scope<'_>, id: Uuid) -> Result<PageRow, ApiError> {
@@ -221,7 +231,7 @@ async fn get_by_slug(ctx: &RouteCtx, scope: Scope<'_>) -> Result<Value, ApiError
         .fetch_optional(&ctx.state.db)
         .await?
         .ok_or_else(|| ApiError::not_found("Pagina non trovata."))?;
-    Ok(render(scope, mentions_enabled(&ctx.state.db, scope).await?, &page))
+    render_one(ctx, scope, &page).await
 }
 
 async fn create(
@@ -251,7 +261,7 @@ async fn create(
     audit(&mut tx, ctx, scope, "page.created", &page).await?;
     tx.commit().await?;
     scope.invalidate(ctx, &page.slug);
-    Ok(render(scope, mentions_enabled(&ctx.state.db, scope).await?, &page))
+    render_one(ctx, scope, &page).await
 }
 
 async fn translate(ctx: &RouteCtx, scope: Scope<'_>, body: &PageTranslation) -> Result<Value, ApiError> {
@@ -272,7 +282,7 @@ async fn translate(ctx: &RouteCtx, scope: Scope<'_>, body: &PageTranslation) -> 
     let page: PageRow =
         qb.build_query_as().fetch_one(&ctx.state.db).await.map_err(|e| map_db_error(e, &scope.conflicts()))?;
     scope.invalidate(ctx, &page.slug);
-    Ok(render(scope, mentions_enabled(&ctx.state.db, scope).await?, &page))
+    render_one(ctx, scope, &page).await
 }
 
 async fn translations(ctx: &RouteCtx, scope: Scope<'_>) -> Result<Vec<Value>, ApiError> {
@@ -316,7 +326,7 @@ async fn update(ctx: &RouteCtx, scope: Scope<'_>, body: &PageUpdate) -> Result<V
     // se lo slug è cambiato va invalidata anche la vecchia pagina
     scope.invalidate(ctx, &current.slug);
     scope.invalidate(ctx, &page.slug);
-    Ok(render(scope, mentions_enabled(&ctx.state.db, scope).await?, &page))
+    render_one(ctx, scope, &page).await
 }
 
 // ---- pagine dei blog ----------------------------------------------------------------------------------------------------
@@ -329,7 +339,7 @@ pub async fn get_blog_page_by_id(ctx: RouteCtx) -> Result<Value, ApiError> {
     let scope = Scope::Blog(blog_of(&ctx)?);
     let id = parse_uuid(ctx.path.get("page_id").map(String::as_str).unwrap_or_default())?;
     let page = find_by_id(&ctx.state.db, scope, id).await?;
-    Ok(render(scope, mentions_enabled(&ctx.state.db, scope).await?, &page))
+    render_one(&ctx, scope, &page).await
 }
 
 pub async fn get_blog_page(ctx: RouteCtx) -> Result<Value, ApiError> {

@@ -10,9 +10,11 @@ import { Card } from "@/components/ui/Card";
 import { Pill } from "@/components/ui/Pill";
 import { EmptyState, SkeletonRows } from "@/components/ui/States";
 import { useToast } from "@/components/ui/Toast";
+import { usePrimaryBlogSlug } from "@/lib/primary-blog-client";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { formatDate } from "@/lib/format";
+import { postHref } from "@/lib/site";
 import type { BlockedAuthor, Blog, BlogComment, CommentsMode } from "@/lib/types";
 
 import { errorMessage } from "./shared";
@@ -34,6 +36,7 @@ export function CommentsTab({ blog, canModerate, onBlogUpdated }: { blog: Blog; 
   const locale = useLocale();
   const notify = useToast();
   const blogSlug = blog.slug;
+  const primarySlug = usePrimaryBlogSlug();
 
   const [queue, setQueue] = useState<Queue>("pending");
   const [items, setItems] = useState<BlogComment[] | null>(null);
@@ -186,7 +189,7 @@ export function CommentsTab({ blog, canModerate, onBlogUpdated }: { blog: Blog; 
                     <span>· {formatDate(comment.created_at, locale, { day: "numeric", month: "short" })}</span>
                     <span>
                       · {t("on")}{" "}
-                      <Link href={`/${blogSlug}/${comment.post_slug}`} className="text-foreground no-underline hover:underline">
+                      <Link href={postHref(blogSlug, comment.post_slug, primarySlug)} className="text-foreground no-underline hover:underline">
                         {comment.post_title}
                       </Link>
                     </span>

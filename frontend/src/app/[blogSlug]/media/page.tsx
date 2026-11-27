@@ -13,7 +13,8 @@ import { FilterChip } from "@/components/ui/Pill";
 import { SENSITIVITY_CATEGORY_LABELS, isMediaSensitive } from "@/lib/content-media";
 import { currentBlogLinks } from "@/lib/blog-links";
 import { formatDate } from "@/lib/format";
-import { getBlogMediaBibliography, getPublicBlog, getPublicBlogConfig, getPublicPublications } from "@/lib/server-api";
+import { getBlogMediaBibliography, getPrimaryBlogSlug, getPublicBlog, getPublicBlogConfig, getPublicPublications } from "@/lib/server-api";
+import { spaceHref } from "@/lib/site";
 import type { MediaBibliographyEntry } from "@/lib/types";
 
 interface PageParams {
@@ -22,14 +23,15 @@ interface PageParams {
 
 export async function generateMetadata({ params }: { params: Promise<PageParams> }, parent: ResolvingMetadata): Promise<Metadata> {
   const { blogSlug } = await params;
-  const [blog, t] = await Promise.all([getPublicBlog(blogSlug), getTranslations("BlogNav")]);
+  const [blog, t, primary] = await Promise.all([getPublicBlog(blogSlug), getTranslations("BlogNav"), getPrimaryBlogSlug()]);
   if (!blog) return { title: t("media") };
   const title = `${t("media")} — ${blog.title}`;
+  const href = spaceHref(blogSlug, "/media", primary);
   return {
     title,
-    alternates: { canonical: `/${blogSlug}/media` },
+    alternates: { canonical: href },
     robots: blog.search_indexing_enabled ? undefined : { index: false, follow: false },
-    openGraph: await withSiteOpenGraph(parent, { title, type: "website", url: `/${blogSlug}/media` }),
+    openGraph: await withSiteOpenGraph(parent, { title, type: "website", url: href }),
   };
 }
 

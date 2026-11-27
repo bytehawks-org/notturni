@@ -11,6 +11,8 @@ import { Pill } from "@/components/ui/Pill";
 import { EmptyState, SkeletonRows } from "@/components/ui/States";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { usePrimaryBlogSlug } from "@/lib/primary-blog-client";
+import { postHref, spaceHref } from "@/lib/site";
 import { formatDate } from "@/lib/format";
 import { type AdminComment, type CommentStatus } from "@/lib/types";
 
@@ -21,6 +23,7 @@ const FILTERS: Filter[] = ["reported", "pending", "approved", "rejected"];
  * segnalati dai blog (con nota) più le code per stato di tutti i blog. */
 export default function DashboardCommentModerationPage() {
   const { authFetch } = useAuth();
+  const primarySlug = usePrimaryBlogSlug();
   const t = useTranslations("AdminComments");
   const tc = useTranslations("Common");
   const locale = useLocale();
@@ -66,12 +69,12 @@ export default function DashboardCommentModerationPage() {
           {comments.map((c) => (
             <li key={c.id} className="flex flex-col gap-2 border-b border-border px-4 py-4 last:border-0">
               <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted">
-                <Link href={`/${c.blog_slug}`} className="font-mono text-foreground no-underline hover:underline">
+                <Link href={spaceHref(c.blog_slug, "", primarySlug)} className="font-mono text-foreground no-underline hover:underline">
                   {c.blog_slug}
                 </Link>
                 <span>
                   · {t("on")}{" "}
-                  <Link href={`/${c.blog_slug}/${c.post_slug}`} className="text-foreground no-underline hover:underline">
+                  <Link href={postHref(c.blog_slug, c.post_slug, primarySlug)} className="text-foreground no-underline hover:underline">
                     {c.post_title}
                   </Link>
                 </span>

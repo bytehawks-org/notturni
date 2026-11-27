@@ -24,7 +24,7 @@ import { formatDate, readingMinutes } from "@/lib/format";
 import { languageName } from "@/lib/languages";
 import { excerpt, renderPost } from "@/lib/markdown";
 import { getPrimaryBlogSlug, getPublicBacklinks, getPublicBlog, getPublicOutline, getPublicBlogConfig, getPublicPostByPermalink, getPublicPostTranslations, getPublicPublication, getPublicPublications } from "@/lib/server-api";
-import { siteUrl } from "@/lib/site";
+import { siteUrl, spaceHref } from "@/lib/site";
 import { blogLinks } from "@/lib/blog-path";
 import { ancestorsOf, neighbours } from "@/lib/outline-tree";
 import { effectiveDisplayMode } from "@/lib/space-mode";
@@ -123,7 +123,7 @@ export async function PublicPostView({ params }: { params: Promise<PageParams> }
     datePublished: post.published_at ?? undefined,
     inLanguage: post.locale,
     author: { "@type": "Person", name: post.author_display_name },
-    isPartOf: { "@type": "Blog", name: blogTitle, url: `${siteUrl()}/${blogSlug}` },
+    isPartOf: { "@type": "Blog", name: blogTitle, url: `${siteUrl()}${spaceHref(blogSlug, "", primarySlug)}` },
     ...(post.cover_image_url && !post.cover_image_is_sensitive ? { image: post.cover_image_url } : {}),
   };
 

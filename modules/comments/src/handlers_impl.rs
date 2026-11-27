@@ -6,7 +6,8 @@ use crate::{BlockRequest, CommentCreate, ReportRequest};
 use chrono::{DateTime, Utc};
 use noct_audit::{Entry, user_actor};
 use noct_core::{
-    Actor, ApiError, AppState, BlogRef, RouteCtx, can_view_blog, load_blog, membership_role, parse_uuid, revalidate,
+    Actor, ApiError, AppState, BlogRef, RouteCtx, can_view_blog, load_blog, membership_role, parse_uuid,
+    permalink::Permalinks, revalidate,
 };
 use noct_posts::{VISIBLE_SQL, rules::UserNames};
 use serde_json::{Value, json};
@@ -591,10 +592,11 @@ pub async fn list_user_comments(ctx: RouteCtx) -> Result<Vec<Value>, ApiError> {
     .bind(domain)
     .fetch_all(&st.db)
     .await?;
+    let pl = Permalinks::load(&ctx.state).await?;
     Ok(rows
         .into_iter()
         .map(|(id, content, created_at, post_title, post_slug, blog_slug)| {
-            json!({"id": id, "content": content, "created_at": created_at, "post_title": post_title, "permalink": format!("/{blog_slug}/{post_slug}")})
+            json!({"id": id, "content": content, "created_at": created_at, "post_title": post_title, "permalink": pl.of(&blog_slug, &post_slug)})
         })
         .collect())
 }

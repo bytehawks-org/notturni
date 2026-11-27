@@ -10,7 +10,8 @@ import { PublicationIndex } from "@/components/publications/PublicationIndex";
 import { BlogHeader } from "@/components/shell/BlogHeader";
 import { Button } from "@/components/ui/Button";
 import { currentBlogLinks } from "@/lib/blog-links";
-import { getPublicBlog, getPublicBlogConfig, getPublicPublication } from "@/lib/server-api";
+import { getPrimaryBlogSlug, getPublicBlog, getPublicBlogConfig, getPublicPublication } from "@/lib/server-api";
+import { spaceHref } from "@/lib/site";
 
 interface PageParams {
   blogSlug: string;
@@ -19,12 +20,12 @@ interface PageParams {
 
 export async function generateMetadata({ params }: { params: Promise<PageParams> }): Promise<Metadata> {
   const { blogSlug, name } = await params;
-  const [blog, pub] = await Promise.all([getPublicBlog(blogSlug), getPublicPublication(blogSlug, name)]);
+  const [blog, pub, primary] = await Promise.all([getPublicBlog(blogSlug), getPublicPublication(blogSlug, name), getPrimaryBlogSlug()]);
   if (!blog || !pub) return {};
   return {
     title: `${pub.title} — ${blog.title}`,
     description: pub.description ?? undefined,
-    alternates: { canonical: `/${blogSlug}/pub/${name}` },
+    alternates: { canonical: spaceHref(blogSlug, `/pub/${name}`, primary) },
   };
 }
 

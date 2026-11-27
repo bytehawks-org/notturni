@@ -86,6 +86,11 @@ export const isSolo = () => siteConfig().deploymentMode === "solo";
 export const isPrimaryBlog = (blogSlug: string, primarySlug: string | null | undefined) =>
   isSolo() && !!primarySlug && primarySlug === blogSlug;
 
+/** Href pubblico di una pagina del blog (`suffix` vuoto o che inizia con `/`), come `space_path_for` nel backend.
+ * Blog primario in solo: `suffix`, oppure `/` se vuoto; altrimenti `/{blogSlug}{suffix}`. Usabile nei client component. */
+export const spaceHref = (blogSlug: string, suffix: string, primarySlug: string | null | undefined) =>
+  isPrimaryBlog(blogSlug, primarySlug) ? suffix || "/" : `/${blogSlug}${suffix}`;
+
 /** Href pubblico di un post. Blog primario in solo: `/post/{postSlug}`; altrimenti `/{blogSlug}/{postSlug}`. */
 export const postHref = (blogSlug: string, postSlug: string, primarySlug: string | null | undefined) =>
   isPrimaryBlog(blogSlug, primarySlug) ? `/post/${postSlug}` : `/${blogSlug}/${postSlug}`;

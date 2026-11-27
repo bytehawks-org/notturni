@@ -18,10 +18,10 @@ afterEach(() => {
 });
 
 describe("blogLinks with a primary blog", () => {
-  it("solo, primary blog on the apex: sub-pages keep /{slug}, home is / and /post/... permalinks are untouched", async () => {
+  it("solo, primary blog on the apex: sub-pages are at the root, home is / and /post/... permalinks are untouched", async () => {
     mockHeaders.set("host", "example.com");
     const links = await blogLinks("foo", "foo");
-    expect(links.basePath).toBe("/foo");
+    expect(links.basePath).toBe("");
     expect(links.homeHref).toBe("/");
     expect(links.fromPermalink("/post/post-1")).toBe("/post/post-1");
   });

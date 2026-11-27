@@ -13,11 +13,11 @@ import { NewsletterSignup } from "@/components/NewsletterSignup";
 import { SensitiveImage } from "@/components/blog/SensitiveImage";
 import { BlogHeader } from "@/components/shell/BlogHeader";
 import { FilterChip } from "@/components/ui/Pill";
-import { blogAddress } from "@/lib/site";
+import { blogAddress, isPrimaryBlog, siteHost, siteUrl, subdomainsEnabled } from "@/lib/site";
 import { currentBlogLinks } from "@/lib/blog-links";
 import { childrenOf } from "@/lib/outline-tree";
 import { effectiveDisplayMode } from "@/lib/space-mode";
-import { getPublicOutline, getPublicPublications, getPublicBlog, getPublicBlogCategories, getPublicBlogConfig, getPublicBlogPosts } from "@/lib/server-api";
+import { getPrimaryBlogSlug, getPublicOutline, getPublicPublications, getPublicBlog, getPublicBlogCategories, getPublicBlogConfig, getPublicBlogPosts } from "@/lib/server-api";
 
 export interface BlogHomeProps {
   blogSlug: string;
@@ -54,13 +54,14 @@ const hue = (s: string) => `oklch(0.55 0.06 ${[...s].reduce((a, c) => a + c.char
  * descrizione, chip delle categorie e feed dei post, palette custom via
  * BlogPageShell. Autori, pubblicazioni e newsletter arrivano con B1/B9. */
 export async function BlogHome({ blogSlug, category }: BlogHomeProps) {
-  const [blog, posts, categories, config, t, links] = await Promise.all([
+  const [blog, posts, categories, config, t, links, primarySlug] = await Promise.all([
     getPublicBlog(blogSlug),
     getPublicBlogPosts(blogSlug),
     getPublicBlogCategories(blogSlug),
     getPublicBlogConfig(blogSlug),
     getTranslations("BlogPage"),
     currentBlogLinks(blogSlug),
+    getPrimaryBlogSlug(),
   ]);
   const basePath = links.basePath;
   if (!blog) notFound();
@@ -160,7 +161,7 @@ export async function BlogHome({ blogSlug, category }: BlogHomeProps) {
             {blog.subtitle && <p className="text-lg text-muted md:text-xl">{blog.subtitle}</p>}
             {blog.description && <p className="max-w-[680px] text-[15px] leading-relaxed text-foreground/80">{blog.description}</p>}
             <span className="font-mono text-xs text-muted">
-              {blogAddress(blog.slug)}
+              {isPrimaryBlog(blog.slug, primarySlug) ? (subdomainsEnabled() ? siteHost() : siteUrl()) : blogAddress(blog.slug)}
             </span>
           </div>
         </header>

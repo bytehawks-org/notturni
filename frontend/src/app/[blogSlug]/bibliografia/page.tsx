@@ -12,7 +12,8 @@ import { BlogHeader } from "@/components/shell/BlogHeader";
 import { FilterChip } from "@/components/ui/Pill";
 import { renderNoteInline } from "@/lib/markdown";
 import { currentBlogLinks } from "@/lib/blog-links";
-import { getBlogBibliography, getPublicBlog, getPublicBlogConfig, getPublicPublications } from "@/lib/server-api";
+import { getBlogBibliography, getPrimaryBlogSlug, getPublicBlog, getPublicBlogConfig, getPublicPublications } from "@/lib/server-api";
+import { spaceHref } from "@/lib/site";
 
 interface PageParams {
   blogSlug: string;
@@ -20,14 +21,15 @@ interface PageParams {
 
 export async function generateMetadata({ params }: { params: Promise<PageParams> }, parent: ResolvingMetadata): Promise<Metadata> {
   const { blogSlug } = await params;
-  const [blog, t] = await Promise.all([getPublicBlog(blogSlug), getTranslations("BlogNav")]);
+  const [blog, t, primary] = await Promise.all([getPublicBlog(blogSlug), getTranslations("BlogNav"), getPrimaryBlogSlug()]);
   if (!blog) return { title: t("bibliography") };
   const title = `${t("bibliography")} — ${blog.title}`;
+  const href = spaceHref(blogSlug, "/bibliografia", primary);
   return {
     title,
-    alternates: { canonical: `/${blogSlug}/bibliografia` },
+    alternates: { canonical: href },
     robots: blog.search_indexing_enabled ? undefined : { index: false, follow: false },
-    openGraph: await withSiteOpenGraph(parent, { title, type: "website", url: `/${blogSlug}/bibliografia` }),
+    openGraph: await withSiteOpenGraph(parent, { title, type: "website", url: href }),
   };
 }
 

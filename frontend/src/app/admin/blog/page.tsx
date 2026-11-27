@@ -13,6 +13,8 @@ import { EmptyState, SkeletonRows } from "@/components/ui/States";
 import { useToast } from "@/components/ui/Toast";
 import { ApiClientError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { usePrimaryBlogSlug } from "@/lib/primary-blog-client";
+import { postHref, spaceHref } from "@/lib/site";
 import { formatDate } from "@/lib/format";
 import type { AdminBlog, BlogAdminAction, BlogReports } from "@/lib/types";
 
@@ -24,6 +26,7 @@ const ACTIONS: BlogAdminAction[] = ["suspend", "hide_reported_posts", "deactivat
  * nota obbligatoria per il registro. */
 export default function DashboardAllBlogsPage() {
   const { authFetch } = useAuth();
+  const primarySlug = usePrimaryBlogSlug();
   const t = useTranslations("AdminBlogs");
   const tc = useTranslations("Common");
   const tv = useTranslations("Visibility");
@@ -170,7 +173,7 @@ export default function DashboardAllBlogsPage() {
                         <span className="text-muted">@{r.reporter_username} · {formatDate(r.created_at, locale, { day: "numeric", month: "short" })}</span>
                       </div>
                       {r.post_slug && (
-                        <Link href={`/${panel.blog.slug}/${r.post_slug}`} className="mt-1 block truncate text-foreground no-underline hover:underline">
+                        <Link href={postHref(panel.blog.slug, r.post_slug, primarySlug)} className="mt-1 block truncate text-foreground no-underline hover:underline">
                           {r.post_title}
                         </Link>
                       )}
@@ -209,7 +212,7 @@ export default function DashboardAllBlogsPage() {
               <Button size="sm" variant={action === "dismiss" || action === "restore" ? "primary" : "danger"} disabled={panelBusy || note.trim().length < 3} onClick={runAction}>
                 {t(`act.${action}`)}
               </Button>
-              <Link href={`/${panel.blog.slug}`} className="text-[13px] text-muted no-underline hover:text-foreground">
+              <Link href={spaceHref(panel.blog.slug, "", primarySlug)} className="text-[13px] text-muted no-underline hover:text-foreground">
                 {t("openBlog")}
               </Link>
             </div>

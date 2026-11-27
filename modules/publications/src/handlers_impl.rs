@@ -3,7 +3,7 @@
 use crate::{PublicationCreate, PublicationOrder, PublicationUpdate};
 use chrono::{DateTime, Utc};
 use noct_core::{ApiError, BlogRef, RouteCtx, can_write_blog, map_db_error, parse_uuid, revalidate};
-use noct_posts::{VISIBLE_SQL, rules};
+use noct_posts::{VISIBLE_SQL, permalink::Permalinks};
 use serde_json::{Value, json};
 use sqlx::{PgPool, QueryBuilder};
 use uuid::Uuid;
@@ -134,6 +134,7 @@ async fn detail(ctx: &RouteCtx, blog: &BlogRef, pubrow: &PubRow, writer: bool) -
         }
     }
     let counts = counts(&ctx.state.db, &[pubrow.id]).await?;
+    let links = Permalinks::load(&ctx.state).await?;
     let mut value = out(pubrow, &counts);
     let list: Vec<Value> = chapters
         .iter()
@@ -142,7 +143,7 @@ async fn detail(ctx: &RouteCtx, blog: &BlogRef, pubrow: &PubRow, writer: bool) -
             json!({
                 "n": i + 1, "post_id": c.id, "slug": c.slug, "title": c.title, "locale": c.locale,
                 "status": c.status, "published_at": c.published_at,
-                "permalink": rules::permalink(&blog.slug, &c.slug),
+                "permalink": links.of(&blog.slug, &c.slug),
                 "reading_minutes": ((f64::from(c.words) / 200.0).round() as i64).max(1),
                 "is_public": c.is_public,
             })

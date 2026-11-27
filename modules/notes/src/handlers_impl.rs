@@ -8,7 +8,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use noct_core::{ApiError, BlogRef, RouteCtx, membership_role, parse_uuid, revalidate};
-use noct_posts::VISIBLE_SQL;
+use noct_posts::{VISIBLE_SQL, permalink::Permalinks};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -378,14 +378,14 @@ fn safe_url(url: Option<String>) -> Option<String> {
 }
 
 /// Raggruppa le citazioni per testo identico, nell'ordine di arrivo.
-fn group(rows: Vec<CitationRow>, with_blog: bool) -> Vec<Value> {
+fn group(rows: Vec<CitationRow>, links: &Permalinks, with_blog: bool) -> Vec<Value> {
     let mut order: Vec<String> = Vec::new();
     let mut entries: HashMap<String, Value> = HashMap::new();
     for r in rows {
         let key = rules::group_key(&r.content);
         let mut cite = json!({
             "post_title": r.post_title, "post_slug": r.post_slug,
-            "permalink": noct_posts::rules::permalink(&r.blog_slug, &r.post_slug),
+            "permalink": links.of(&r.blog_slug, &r.post_slug),
             "locale": r.locale, "idx": r.idx,
         });
         if with_blog {
@@ -421,7 +421,8 @@ pub async fn get_blog_bibliography(ctx: RouteCtx) -> Result<Vec<Value>, ApiError
     .bind(blog.id)
     .fetch_all(&ctx.state.db)
     .await?;
-    Ok(group(rows, false))
+    let links = Permalinks::load(&ctx.state).await?;
+    Ok(group(rows, &links, false))
 }
 
 /// Vista autore (qualunque stato dei post) sui blog di cui l'utente è proprietario o collaboratore,
@@ -436,5 +437,6 @@ pub async fn get_my_bibliography(ctx: RouteCtx) -> Result<Vec<Value>, ApiError> 
     .bind(user)
     .fetch_all(&ctx.state.db)
     .await?;
-    Ok(group(rows, true))
+    let links = Permalinks::load(&ctx.state).await?;
+    Ok(group(rows, &links, true))
 }

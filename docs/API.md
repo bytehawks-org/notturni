@@ -857,13 +857,41 @@ Posts of every other blog keep `/<blog-slug>/<post-slug>`. The `permalink` field
 |---|---|
 | `/` | Home of the primary blog (same output as its blog home) |
 | `/post/<post-slug>` | Post of the primary blog (404 in `platform`) |
-| `/<primary-slug>` | `308` to `/` (the query string is kept) |
+| `/<primary-slug>` | `308` to `/` (the query string is kept; the page does this, not `proxy.ts`) |
 | `/<primary-slug>/<post-slug>` | `308` to `/post/<post-slug>` |
-| `/<primary-slug>/<sub-page>` | Unchanged: sub-pages (`/pagina/...`, `/pub/...`, `/bibliografia`, `/media`, `/link`, `/search`) stay under `/<primary-slug>/` |
+| `/<primary-slug>/<sub-page>` and `/<primary-slug>/feed.xml`, `/<primary-slug>/atom.xml` | `308` to the same path without `/<primary-slug>` (for example `/<primary-slug>/pagina/x` to `/pagina/x`). The query string is kept. |
+| `/pagina/<slug>`, `/pub/<name>` | Primary blog page or publication, served at the root (the URL does not change) |
+| `/bibliografia`, `/media`, `/link`, `/search` | Primary blog page, served at the root (the URL does not change) |
 | `/feed.xml`, `/atom.xml` | Feed of the primary blog |
+
+The sub-pages listed in the last two rows are root paths. `proxy.ts` rewrites them to the
+primary blog's route, so the address stays the root one. A `308` target is always one of
+these fixed root paths, so a redirect cannot leave the site.
+
+**Scope of the root routing.** With `NOCT_SUBDOMAINS_ENABLED=true` the root routing applies to
+the apex host (`NOCT_INSTANCE_FQDN` / site host) only. A `<slug>.<domain>` host is served as a
+normal Space. With `NOCT_SUBDOMAINS_ENABLED=false` it applies to every host.
+
+**Upgrade note.** Links and bookmarks to the old `/<primary-slug>/...` sub-page addresses still
+work: they answer `308` to the root address. Search engines and feed readers follow the
+redirect. Other modules still build `/<blog>/<post>` links by hand (see the known limit above).
+Route collisions are only warned, never fixed automatically: if an existing Space has a slug
+that is now a site route (see the list below), its address `/<slug>` is shadowed by the site
+route, the backend logs one warning line with the colliding slugs at startup, and the Space is
+neither renamed nor deleted. The owner has to rename it. Creating a new Space with such a slug
+returns `400` (see the slug rules below).
 
 Spaces other than the primary one are reached by path only, `/<slug>/`. In `solo` the
 subdomain addresses are off (`NOCT_SUBDOMAINS_ENABLED=false`).
+
+**Robots and sitemaps.** When the primary blog opts out of search or AI crawling, its
+`Disallow` lines list its root routes one by one: the home (`/$`, `/?`), `/post/`, `/pagina/`,
+`/pub/`, and the exact pages `/pub`, `/bibliografia`, `/link`, `/media`, `/search`, `/feed.xml`,
+`/atom.xml`. The `$` and `?` suffixes keep other Spaces with a similar slug, such as `/media-lab`,
+unblocked. It never emits `Disallow: /`, which would close the whole site. Sitemaps (global and per-Space) list the primary blog's
+`/pagina/...` and `/pub/...` entries at their root paths, for example `/pagina/<slug>`.
+Known limits: the global sitemap still lists `/` when the primary blog disallows search, and
+the `Disallow` rules of other Spaces and of single posts are plain prefixes.
 
 **Known limit.** Other modules (notes, fragments, publications, comments, newsletter, pages,
 `noct-media`) still build `/{blog}/{post}` links by hand. Those links reach the post only
@@ -871,8 +899,10 @@ through the `308` redirect. See the postponed requests in [ROADMAP.md](../ROADMA
 
 **Slug rules for `POST /api/v1/blogs` in `solo`.** The slug must match the usual format
 (lowercase letters, digits and hyphens, at most 63 characters) and must not equal a
-site route: `admin`, `api`, `blogs`, `dashboard`, `forgot-password`, `login`, `newsletter`,
-`p`, `post`, `register`, `search`, `sitemaps`, `tag`, `u`, `users`, `_next`, `storage`.
+site route: `admin`, `api`, `bibliografia`, `blogs`, `dashboard`, `forgot-password`, `link`, `login`,
+`media`, `newsletter`, `p`, `pagina`, `post`, `pub`, `register`, `search`, `sitemaps`, `tag`, `u`, `users`,
+`_next`, `storage`. The primary blog's sub-page names (`bibliografia`, `link`, `media`, `pagina`, `pub`,
+`search`) are in this list, so a Space cannot take them.
 There is no minimum length and no list of reserved names. A failed check returns `400`.
 In `platform`, the rules are the ones described in the Blog section (minimum of 4 characters,
 platform blacklist).

@@ -533,11 +533,12 @@ export async function getSitemapPage(offset: number, limit: number): Promise<Sit
   }
 }
 
-/** Sitemap di uno Spazio; `null` se non esiste o non è indicizzabile. */
+/** Sitemap di uno Spazio; `null` se non esiste o non è indicizzabile. Senza cache: con una cache a tempo Next
+ * continua a servire l'ultimo 200 quando il backend passa a 404 (Spazio non più indicizzabile). */
 export async function getSpaceSitemap(slug: string): Promise<SpaceSitemap | null> {
   try {
     const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${encodeURIComponent(slug)}/sitemap`, {
-      next: { revalidate: REVALIDATE_SECONDS, tags: [revalidateTags.blog(slug), revalidateTags.feed()] },
+      cache: "no-store",
     });
     return res.ok ? ((await res.json()) as SpaceSitemap) : null;
   } catch {

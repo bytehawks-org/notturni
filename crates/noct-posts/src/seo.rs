@@ -35,6 +35,30 @@ pub const AI_CRAWLER_USER_AGENTS: &[&str] = &[
 const LISTABLE_BLOG: &str =
     "b.visibility = 'public' AND NOT b.is_suspended AND NOT b.is_paused AND b.deleted_at IS NULL";
 
+/// Esclusione dell'intero blog primario in modalità `solo`: il suo spazio è la radice del sito, quindi si
+/// elencano una per una le sue rotte (quelle servite da `frontend/src/proxy.ts`, più home, post e feed).
+/// Mai `/`, che chiuderebbe tutto il sito; `$` (fine dell'URL) e `?` evitano di bloccare per prefisso gli
+/// Spazi con uno slug che inizia allo stesso modo (es. `/media-lab`).
+const PRIMARY_ROOT_DISALLOW: &[&str] = &[
+    "/$",
+    "/?",
+    "/post/",
+    "/pagina/",
+    "/pub$",
+    "/pub?",
+    "/pub/",
+    "/bibliografia$",
+    "/bibliografia?",
+    "/link$",
+    "/link?",
+    "/media$",
+    "/media?",
+    "/search$",
+    "/search?",
+    "/feed.xml$",
+    "/atom.xml$",
+];
+
 /// Il blog vieta il tipo di crawling → il post non può riaprirlo; altrimenti decide il post, se ha un
 /// override, e in sua assenza il blog.
 pub fn effective(blog: bool, post: Option<bool>) -> bool {
@@ -69,16 +93,21 @@ pub async fn crawl_directives(ctx: RouteCtx) -> Result<Value, ApiError> {
     ))
     .fetch_all(&ctx.state.db)
     .await?;
+    let links = crate::permalink::Permalinks::load(&ctx.state).await?;
     let (mut search, mut ai) = (Vec::new(), Vec::new());
     for (slug, s, a) in &blogs {
+        let paths: Vec<String> = if links.primary_slug() == Some(slug.as_str()) {
+            PRIMARY_ROOT_DISALLOW.iter().map(|p| p.to_string()).collect()
+        } else {
+            vec![format!("/{slug}")]
+        };
         if !s {
-            search.push(format!("/{slug}"));
+            search.extend(paths.iter().cloned());
         }
         if !a {
-            ai.push(format!("/{slug}"));
+            ai.extend(paths);
         }
     }
-    let links = crate::permalink::Permalinks::load(&ctx.state).await?;
     for p in visible_posts(&ctx).await? {
         // già escluso per intero a livello di blog: nessun percorso in più
         if !p.blog_search && !p.blog_ai {
@@ -292,8 +321,7 @@ pub async fn space_sitemap(ctx: RouteCtx) -> Result<Value, ApiError> {
     .await?;
     let groups: Vec<uuid::Uuid> = posts.iter().filter_map(|r| r.grp).collect();
     let alts = post_alternates(&ctx, &groups, Some(&slug), links.primary_slug()).await?;
-    let mut entries =
-        vec![entry(&if is_primary { "/".to_string() } else { format!("/{slug}") }, Some(updated_at), Vec::new())];
+    let mut entries = vec![entry(&links.space(&slug, ""), Some(updated_at), Vec::new())];
     for r in &posts {
         entries.push(entry(&r.path, r.updated_at, r.grp.and_then(|g| alts.get(&g).cloned()).unwrap_or_default()));
     }
@@ -304,7 +332,9 @@ pub async fn space_sitemap(ctx: RouteCtx) -> Result<Value, ApiError> {
         .bind(blog_id)
         .fetch_all(&ctx.state.db)
         .await?;
-        entries.extend(pages.into_iter().map(|(s, at)| entry(&format!("/{slug}/pagina/{s}"), Some(at), Vec::new())));
+        entries.extend(
+            pages.into_iter().map(|(s, at)| entry(&links.space(&slug, &format!("/pagina/{s}")), Some(at), Vec::new())),
+        );
     }
     if table_exists(&ctx, "publications").await? {
         let pubs: Vec<(String, DateTime<Utc>)> = sqlx::query_as(
@@ -316,7 +346,9 @@ pub async fn space_sitemap(ctx: RouteCtx) -> Result<Value, ApiError> {
         .bind(blog_id)
         .fetch_all(&ctx.state.db)
         .await?;
-        entries.extend(pubs.into_iter().map(|(n, at)| entry(&format!("/{slug}/pub/{n}"), Some(at), Vec::new())));
+        entries.extend(
+            pubs.into_iter().map(|(n, at)| entry(&links.space(&slug, &format!("/pub/{n}")), Some(at), Vec::new())),
+        );
     }
     Ok(json!({"slug": slug, "entries": entries}))
 }
