@@ -171,6 +171,10 @@ jobs:
     name: Licenze e vulnerabilità (cargo-deny, cargo-audit)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # audit-check publishes its report as a check run
+    permissions:
+      contents: read
+      checks: write
     steps:
       - uses: actions/checkout@v5
       - name: cargo-deny (licenze, fonti, ban)

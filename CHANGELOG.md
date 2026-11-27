@@ -11,6 +11,10 @@ For the product roadmap and status of each feature, see [ROADMAP.md](ROADMAP.md)
 
 ## 2026-11-27
 
+### Security
+- Updated `ammonia` (4.2.5, mutation XSS in SVG/MathML), `lettre` (0.11.24, SMTP injection and denial of service), `pulldown-cmark` (0.13.6, quadratic parsing) and `url` (2.5.9, stack overflow).
+- CI: `cargo audit` ignores two advisories on crates that are in `Cargo.lock` but never compiled (`libsqlite3-sys`, `rsa`), see `.cargo/audit.toml`. The supply-chain job has `checks: write`, needed to publish the audit report.
+
 ### Added
 - Live search: a search modal with suggestions while typing (2 to 100 characters, 8 suggestions, 300 ms debounce). Results pages are paginated at 20 per page, up to page 1000. Frontend: `frontend/src/components/SearchModal.tsx`, `frontend/src/lib/search*.ts`.
 - Search API: `q` longer than 200 characters returns `422`; `GET /search/posts` and `GET /blogs/{slug}/search` are rate-limited to 120 requests per minute per IP (`429` with `Retry-After`). See [docs/API.md](docs/API.md#search).

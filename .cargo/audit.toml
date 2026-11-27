@@ -1,0 +1,10 @@
+# cargo-audit reads Cargo.lock, which also lists optional dependencies that are never compiled.
+# The advisories below affect only such crates: sqlx resolves its SQLite and MySQL drivers in the
+# lockfile, but the workspace enables the `postgres` driver only. Check with
+# `cargo tree --workspace --all-features --target all -i <crate>` (it must print nothing).
+# Remove an entry as soon as the crate enters the build graph or sqlx drops it.
+[advisories]
+ignore = [
+    "RUSTSEC-2026-0459", # libsqlite3-sys, via sqlx-sqlite
+    "RUSTSEC-2023-0071", # rsa, via sqlx-mysql
+]
