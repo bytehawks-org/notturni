@@ -192,7 +192,7 @@ export async function PublicPostView({ params }: { params: Promise<PageParams> }
     return (
       <BlogPageShell config={config}>
         <JsonLd data={jsonLd} />
-        <BlogHeader basePath={basePath} homeHref={links.homeHref} name={blogTitle} current="posts" hasPublications={publications.length > 0} actions={<BlogHeaderActions slug={blogSlug} />} />
+        <BlogHeader blogSlug={blogSlug} basePath={basePath} homeHref={links.homeHref} name={blogTitle} current="posts" hasPublications={publications.length > 0} actions={<BlogHeaderActions slug={blogSlug} />} />
         <main className="mx-auto w-full max-w-[1280px] flex-1 px-5 py-8 lg:px-10 lg:py-12">
           <div
             className={`grid gap-8 lg:gap-12 ${
@@ -284,7 +284,7 @@ export async function PublicPostView({ params }: { params: Promise<PageParams> }
   return (
     <BlogPageShell config={config}>
       <JsonLd data={jsonLd} />
-      <BlogHeader basePath={basePath} homeHref={links.homeHref} name={blogTitle} current={chapter ? "publications" : "posts"} hasPublications={publications.length > 0} actions={<BlogHeaderActions slug={blogSlug} />} />
+      <BlogHeader blogSlug={blogSlug} basePath={basePath} homeHref={links.homeHref} name={blogTitle} current={chapter ? "publications" : "posts"} hasPublications={publications.length > 0} actions={<BlogHeaderActions slug={blogSlug} />} />
       {chapter && <ChapterProgress current={chapter.current} total={chapter.total} />}
       <main className="mx-auto w-full max-w-[1184px] flex-1 px-5 py-10 lg:px-12 lg:py-14">
         <div

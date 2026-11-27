@@ -52,6 +52,20 @@ src/
     └── ThemeToggle.tsx
 ```
 
+## Search
+
+- **Modal** (`components/SearchModal.tsx`, opened from the header): suggestions appear while typing. Constants in
+  `src/lib/search.ts`: minimum 2 characters (shorter input sends no request), input limited to 100 characters, 8 suggestions,
+  300 ms debounce. Each new query aborts the previous request. On a blog, suggestions cover that blog's posts; on the portal, all public posts.
+- **Scope in `solo` mode**: the header modal uses the primary blog, and the proxy serves `/search` from `/{primary}/search`. If the
+  primary slug is not available, search covers all public posts. The API route `/search/posts` itself is not filtered by mode.
+- **Results pages**: `/search` (portal) and `/{blogSlug}/search` (one blog). They are plain `?q=` GET forms with no client-side
+  JavaScript. Results are paginated with `?page=`: 20 per page, pages 1 to 1000. The pages fetch on the server, so a `429`
+  from the API shows a dedicated message.
+- **Limits**: the API caps `q` at 200 characters and rate-limits both search routes to 120 requests per minute per IP (see
+  [docs/API.md](../docs/API.md#search)). The server-side fetch forwards `X-Forwarded-For` unchanged, so the rate limit is
+  per visitor only behind a reverse proxy that rewrites that header.
+
 ## Authentication
 
 `AuthProvider` (`src/lib/auth-context.tsx`) keeps the access token **in

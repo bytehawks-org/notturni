@@ -2,9 +2,13 @@ import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { SearchTrigger } from "@/components/SearchTrigger";
+
 import { PlatformMark } from "./PlatformMark";
 
 export interface BlogNavProps {
+  /** Slug del blog: ambito della ricerca aperta dalla voce "ricerca". */
+  blogSlug: string;
   /** Prefisso dei link interni al blog: `/{slug}` se la pagina è raggiunta
    * path-based, stringa vuota se raggiunta dal proprio sottodominio — vedi
    * `src/lib/blog-path.ts::blogBasePath`. Ogni chiamante lo calcola dal
@@ -25,7 +29,7 @@ export interface BlogNavProps {
  * diventa una riga di tab scorrevole. "Pubblicazioni" appare solo se
  * hasPublications (blocco B9, nessun chiamante lo passa oggi).
  */
-export async function BlogHeader({ basePath, homeHref, name, current, hasPublications, actions }: BlogNavProps) {
+export async function BlogHeader({ blogSlug, basePath, homeHref, name, current, hasPublications, actions }: BlogNavProps) {
   const t = await getTranslations("BlogNav");
   const home = homeHref ?? (basePath || "/");
   const items: [BlogNavProps["current"], string, string][] = [
@@ -36,6 +40,12 @@ export async function BlogHeader({ basePath, homeHref, name, current, hasPublica
     ["links", t("links"), `${basePath}/link`],
     ["search", t("search"), `${basePath}/search`],
   ];
+  const search = (key: BlogNavProps["current"], className: string) =>
+    key === "search" ? (
+      <SearchTrigger key={key} blogSlug={blogSlug} basePath={basePath} title={name} className={className}>
+        {t("search")}
+      </SearchTrigger>
+    ) : null;
   return (
     <header className="border-b border-border">
       <div className="mx-auto flex h-[60px] max-w-7xl items-center justify-between gap-6 px-5 lg:px-12">
@@ -46,29 +56,37 @@ export async function BlogHeader({ basePath, homeHref, name, current, hasPublica
             {name}
           </Link>
           <nav className="hidden gap-5 text-sm text-muted md:flex">
-            {items.map(([key, label, href]) => (
-              <Link
-                key={key}
-                href={href}
-                className={`no-underline ${key === current ? "font-medium text-foreground" : "hover:text-foreground"}`}
-              >
-                {label}
-              </Link>
-            ))}
+            {items.map(([key, label, href]) =>
+              key === "search" ? (
+                search(key, `no-underline ${key === current ? "font-medium text-foreground" : "hover:text-foreground"}`)
+              ) : (
+                <Link
+                  key={key}
+                  href={href}
+                  className={`no-underline ${key === current ? "font-medium text-foreground" : "hover:text-foreground"}`}
+                >
+                  {label}
+                </Link>
+              ),
+            )}
           </nav>
         </div>
         <div className="flex items-center gap-4 text-sm">{actions}</div>
       </div>
       <nav className="flex gap-5 overflow-x-auto px-5 text-sm text-muted md:hidden">
-        {items.map(([key, label, href]) => (
-          <Link
-            key={key}
-            href={href}
-            className={`whitespace-nowrap pb-2.5 no-underline ${key === current ? "-mb-px border-b-2 border-primary font-semibold text-foreground" : ""}`}
-          >
-            {label}
-          </Link>
-        ))}
+        {items.map(([key, label, href]) =>
+          key === "search" ? (
+            search(key, `whitespace-nowrap pb-2.5 no-underline ${key === current ? "-mb-px border-b-2 border-primary font-semibold text-foreground" : ""}`)
+          ) : (
+            <Link
+              key={key}
+              href={href}
+              className={`whitespace-nowrap pb-2.5 no-underline ${key === current ? "-mb-px border-b-2 border-primary font-semibold text-foreground" : ""}`}
+            >
+              {label}
+            </Link>
+          ),
+        )}
       </nav>
     </header>
   );

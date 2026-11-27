@@ -3,7 +3,10 @@
 
 mod common;
 
-use axum::http::StatusCode;
+use axum::{
+    body::Body,
+    http::{Method, Request, StatusCode},
+};
 use common::*;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -148,6 +151,44 @@ async fn global_search_treats_wildcards_literally_and_hides_unlisted_blogs() {
     assert_eq!(env.get("/search/posts?q=_", None).await.1, json!([]), "_ non è un jolly");
     assert_eq!(env.get("/search/posts?q=%20%20", None).await.1, json!([]));
     assert_eq!(env.get("/search/posts", None).await.0, StatusCode::UNPROCESSABLE_ENTITY, "q obbligatoria");
+    env.teardown().await;
+}
+
+/// GET da un IP dichiarato via `x-forwarded-for` (un solo proxy fidato di default).
+async fn get_from(env: &Env, path: &str, ip: &str) -> StatusCode {
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("/api/v1{path}"))
+        .header("x-forwarded-for", ip)
+        .body(Body::empty())
+        .unwrap();
+    env.send(req).await.0
+}
+
+#[tokio::test]
+async fn global_search_caps_query_length_and_rate_limits_per_ip() {
+    let (env, _anna) = world().await;
+    // 200 caratteri ammessi, 201 rifiutati; "è" pesa 2 byte: il conteggio è in caratteri
+    assert_eq!(get_from(&env, &format!("/search/posts?q={}", "a".repeat(200)), "198.51.100.1").await, StatusCode::OK);
+    assert_eq!(
+        get_from(&env, &format!("/search/posts?q={}", "a".repeat(201)), "198.51.100.1").await,
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    assert_eq!(
+        get_from(&env, &format!("/search/posts?q={}", "%C3%A8".repeat(200)), "198.51.100.2").await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        get_from(&env, &format!("/search/posts?q={}", "%C3%A8".repeat(201)), "198.51.100.2").await,
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+
+    // 120 richieste al minuto per IP: la 121esima è 429, un altro IP non è toccato
+    for i in 0..120 {
+        assert_eq!(get_from(&env, "/search/posts?q=mare", "198.51.100.9").await, StatusCode::OK, "richiesta {i}");
+    }
+    assert_eq!(get_from(&env, "/search/posts?q=mare", "198.51.100.9").await, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(get_from(&env, "/search/posts?q=mare", "198.51.100.10").await, StatusCode::OK);
     env.teardown().await;
 }
 

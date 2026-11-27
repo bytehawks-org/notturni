@@ -1,5 +1,7 @@
 import "server-only";
 
+import { headers } from "next/headers";
+
 import { REVALIDATE_SECONDS, revalidateTags } from "./revalidate";
 import { isSolo } from "./site";
 import type {
@@ -235,6 +237,28 @@ export async function getPublicInterests(): Promise<Interest[]> {
   return (await res.json()) as Interest[];
 }
 
+/** La API ha risposto 429 a una ricerca: le pagine lo distinguono dagli altri errori. */
+export class SearchRateLimitedError extends Error {
+  constructor() {
+    super("Errore 429 nella ricerca.");
+    this.name = "SearchRateLimitedError";
+  }
+}
+
+/** Fetch di ricerca: inoltra `x-forwarded-for` così com'è, senza aggiungere valori, perché la API
+ * limiti le richieste per visitatore e non per processo del frontend (vedi NOCT_TRUSTED_PROXIES).
+ * L'header è affidabile solo se il reverse proxy davanti al frontend lo riscrive. Contiene un IP
+ * (dato personale): non va loggato. */
+async function fetchSearch(url: string): Promise<Response> {
+  const forwardedFor = (await headers()).get("x-forwarded-for");
+  const res = await fetch(url, {
+    cache: "no-store",
+    headers: forwardedFor ? { "x-forwarded-for": forwardedFor } : {},
+  });
+  if (res.status === 429) throw new SearchRateLimitedError();
+  return res;
+}
+
 /** Ricerca globale (`GET /api/v1/search/posts`): titolo/contenuto tra i post
  * pubblicati di ogni blog pubblico. Nessuna cache: `q` varia ad ogni
  * richiesta, cacheare per query non avrebbe beneficio (`cache: "no-store"`,
@@ -246,9 +270,7 @@ export async function searchPosts(
   const params = new URLSearchParams({ q });
   if (options.limit) params.set("limit", String(options.limit));
   if (options.offset) params.set("offset", String(options.offset));
-  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/search/posts?${params.toString()}`, {
-    cache: "no-store",
-  });
+  const res = await fetchSearch(`${BACKEND_INTERNAL_URL}/api/v1/search/posts?${params.toString()}`);
   if (!res.ok) throw new Error(`Errore ${res.status} nella ricerca.`);
   return (await res.json()) as Post[];
 }
@@ -263,9 +285,7 @@ export async function searchBlogPosts(
   const params = new URLSearchParams({ q });
   if (options.limit) params.set("limit", String(options.limit));
   if (options.offset) params.set("offset", String(options.offset));
-  const res = await fetch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}/search?${params.toString()}`, {
-    cache: "no-store",
-  });
+  const res = await fetchSearch(`${BACKEND_INTERNAL_URL}/api/v1/blogs/${slug}/search?${params.toString()}`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Errore ${res.status} nella ricerca.`);
   return (await res.json()) as Post[];

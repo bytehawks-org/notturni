@@ -159,7 +159,10 @@ podman compose down -v                         # stop and DELETE the data
    `NEXT_PUBLIC_*` build arguments, which are meant for `localhost`.
 2. **Close the unneeded ports**: remove (or bind to `127.0.0.1:`) the `ports:` entries of `postgres` and, if you run them, `redis`, `nats`,
    `garage`, `mailhog`, `smtp-relay` and `moderation`; only the reverse proxy should be reachable from outside.
-   The host firewall must block everything else.
+   The host firewall must block everything else. Also bind the `backend` (`8000`) and `frontend` (`3000`) ports to `127.0.0.1:`:
+   with `NOCT_TRUSTED_PROXIES=1` (the default) the API takes the client IP from the last value of `X-Forwarded-For`. A client that
+   reaches port 8000 or 3000 directly sends its own `X-Forwarded-For`, so it can choose the IP used for the rate limit (for example
+   on search, 120 requests per minute per IP) and bypass it. The frontend server-side search forwards that header unchanged.
 3. **Real SMTP**: in `.env` and in the `environment` block of the `backend` service, replace MailHog
    (`NOCT_SMTP_HOST`, `_PORT`, `_USE_TLS`, credentials), or use the `smtp-relay` service.
 4. **Set** `NOCT_SESSION_COOKIE_SECURE=true`, `NOCT_CORS_ORIGINS`, `NOCT_OAUTH_REDIRECT_BASE_URL`,

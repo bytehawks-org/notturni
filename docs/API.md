@@ -2427,13 +2427,28 @@ text search today, same pragmatic approach already used by
 (required; empty string or spaces only → `[]` without error) searches title/content among the published posts of **`public`** blogs only, with the same
 visibility constraints as `GET /feed/posts`, newest first. Optional query params: `limit` (default 20, maximum 50), `offset` (pagination, default
 0). To search blogs themselves by name see `GET /blogs?q=` (Blogs section).
+`q` longer than 200 characters (after trimming, counted in Unicode characters) → `422`.
+Rate limit per IP: 120 requests per minute; above it → `429` with `Retry-After`.
 
 **`GET /blogs/{slug}/search`** — public. As above but limited to the posts
 of blog `{slug}` (`404` if the blog is not visible to the caller, same
 behavior as `GET /blogs/{slug}/posts`); always only actually published posts, even for
 users with write access to the blog (unlike
 `GET /blogs/{slug}/posts`, which also shows drafts/under review to them: search is a public box, not an editing tool). Same
-`limit`/`offset` as above.
+`limit`/`offset` as above, the same 200-character cap on `q` (`422`) and the same per-IP rate limit (120 per minute, `429`).
+
+Notes for both routes:
+
+- `limit` and `offset` are clamped, not rejected: out-of-range values become the nearest bound (`/search/posts`: `limit` 1–50;
+  `/blogs/{slug}/search`: `limit` 1–50, `offset` ≥ 0). A non-numeric value → `422`.
+- The per-IP key is the client IP derived from `X-Forwarded-For` according to `NOCT_TRUSTED_PROXIES` (default `1`, i.e. one
+  trusted proxy in front of the API). With `0`, or without `X-Forwarded-For`, the TCP peer IP is used. Clients behind the same
+  NAT share the same bucket.
+- Browser access: the calls come from the frontend, which runs on the same origin as the API behind the reverse proxy. A
+  browser on a per-blog subdomain calling the API directly needs that origin in `NOCT_CORS_ORIGINS` or `NOCT_CORS_ORIGIN_REGEX`
+  (see [CONFIGURATION.md](CONFIGURATION.md#browser-cors-and-frontend)). Search needs no cookie or `Authorization` header.
+- Pagination in the frontend pages (not an API limit): 20 results per page, `?page=` from 1 to 1000. The last reachable page
+  therefore covers offset 19980.
 
 ## Newsletter (ROADMAP.md §3)
 

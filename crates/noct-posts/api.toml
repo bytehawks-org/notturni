@@ -129,7 +129,8 @@ kind = "custom"
 handler = "search_posts"
 scope = { blog = "slug" }
 response = "PostOut[]"
-summary = "Ricerca nei post pubblicati del blog (`?q=&limit=&offset=`)"
+rate_limit = { key = "ip", max = 120, window = "1m" }
+summary = "Ricerca nei post pubblicati del blog (`?q=` max 200 caratteri, `limit`, `offset`)"
 
 [[route]]
 id = "get_post_by_permalink"

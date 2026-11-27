@@ -11,6 +11,10 @@ For the product roadmap and status of each feature, see [ROADMAP.md](ROADMAP.md)
 
 ## 2026-11-27
 
+### Added
+- Live search: a search modal with suggestions while typing (2 to 100 characters, 8 suggestions, 300 ms debounce). Results pages are paginated at 20 per page, up to page 1000. Frontend: `frontend/src/components/SearchModal.tsx`, `frontend/src/lib/search*.ts`.
+- Search API: `q` longer than 200 characters returns `422`; `GET /search/posts` and `GET /blogs/{slug}/search` are rate-limited to 120 requests per minute per IP (`429` with `Retry-After`). See [docs/API.md](docs/API.md#search).
+
 ### Changed
 - Solo mode: the primary blog's sub-pages are served at the domain root: `/pagina/...`, `/pub/...`, `/bibliografia`, `/media`, `/link`, `/search`. The old `/<primary-slug>/...` addresses of those pages and of the feed files answer `308` to the root path. With `NOCT_SUBDOMAINS_ENABLED=true` the root routing applies to the apex host only; with `false` it applies to every host. Routing: `frontend/src/proxy.ts` and `frontend/src/lib/solo-routing.ts`.
 - Solo mode: the root sitemap and the per-Space sitemap list the primary blog's `/pagina/` and `/pub/` entries at their root paths.

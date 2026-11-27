@@ -144,7 +144,7 @@ Posts: drafts, review, publishing and scheduling, translations, tags, cited medi
 |---|---|---|---|---|
 | POST | `/blogs/{slug}/posts` | write on the Space | Creates a post (draft) | 201 |
 | GET | `/blogs/{slug}/posts` | public | Blog posts: published ones for everyone, drafts and scheduled ones for users who can write (`?locale=`) |  |
-| GET | `/blogs/{slug}/search` | public | Searches the blog's published posts (`?q=&limit=&offset=`) |  |
+| GET | `/blogs/{slug}/search` | public | Searches the blog's published posts (`?q=` max 200 characters → 422, `limit`, `offset`) | rate limit 120/1 min per ip |
 | GET | `/blogs/{slug}/posts/{post_slug}` | public | Resolves the public permalink /{blog}/{post} |  |
 | GET | `/blogs/{slug}/media-bibliography` | public | Images cited in published posts, grouped by URL |  |
 | GET | `/blogs/{slug}/links-bibliography` | public | Links cited in published posts, grouped by URL |  |
@@ -260,7 +260,7 @@ Discovery: portal feed, trends, global search, Space directory, following blogs 
 | GET | `/feed/posts` | public | Portal feed, newest first; by default only articles from `blog` Spaces (`kind` = blog\|wiki\|docs, `locale`, `tag`, `category`, `following=true`, `limit` max 50, `offset`) |  |
 | GET | `/feed/locales` | public | The top 5 languages by number of posts in the feed |  |
 | GET | `/feed/trending` | public | Most used tags in the last `days` days (max 90) |  |
-| GET | `/search/posts` | public | Global search in title and content (`q`, `limit` max 50, `offset`) |  |
+| GET | `/search/posts` | public | Global search in title and content (`q` max 200 characters → 422, `limit` max 50, `offset`) | rate limit 120/1 min per ip |
 | GET | `/blogs` | public | Public Space directory (`kind` = blog\|wiki\|docs, `q`, `locale`, `sort` = active\|new\|followers, `limit` max 100, `offset`) |  |
 | POST | `/blogs/{slug}/follow` | user | Follows a blog (idempotent) | 204 |
 | DELETE | `/blogs/{slug}/follow` | user | Stops following a blog, even if it is no longer visible | 204 |

@@ -43,7 +43,7 @@ export default async function PublicationPage({ params }: { params: Promise<Page
   if (blogIsOffline(blog)) {
     return (
       <BlogPageShell config={config}>
-        <BlogHeader basePath={links.basePath} homeHref={links.homeHref} name={blog.title} current="publications" hasPublications />
+        <BlogHeader blogSlug={blogSlug} basePath={links.basePath} homeHref={links.homeHref} name={blog.title} current="publications" hasPublications />
         <BlogStateNotice blog={blog} />
       </BlogPageShell>
     );
@@ -53,7 +53,7 @@ export default async function PublicationPage({ params }: { params: Promise<Page
   const first = pub.chapters[0];
   return (
     <BlogPageShell config={config}>
-      <BlogHeader basePath={links.basePath} homeHref={links.homeHref} name={blog.title} current="publications" hasPublications actions={<BlogHeaderActions slug={blogSlug} />} />
+      <BlogHeader blogSlug={blogSlug} basePath={links.basePath} homeHref={links.homeHref} name={blog.title} current="publications" hasPublications actions={<BlogHeaderActions slug={blogSlug} />} />
       <main className="mx-auto w-full max-w-[860px] flex-1 px-5 py-10 lg:px-12 lg:py-14">
         <span className="font-mono text-[11px] uppercase tracking-[.08em] text-muted">{t("label")}</span>
         <h1 className="mt-2 font-serif text-[34px] font-medium leading-[1.12] tracking-tight md:text-[44px]">{pub.title}</h1>

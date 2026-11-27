@@ -102,7 +102,8 @@ auth = "public"
 kind = "custom"
 handler = "search_posts"
 response = "FeedPost[]"
-summary = "Ricerca globale in titolo e contenuto (`q`, `limit` max 50, `offset`)"
+rate_limit = { key = "ip", max = 120, window = "1m" }
+summary = "Ricerca globale in titolo e contenuto (`q` max 200 caratteri, `limit` max 50, `offset`)"
 
 # ---- directory e follow ----
 

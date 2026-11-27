@@ -14,6 +14,8 @@ const LISTABLE: &str = "b.visibility = 'public' AND NOT b.is_suspended AND NOT b
 
 const MAX_FEED_LIMIT: i64 = 50;
 const DEFAULT_FEED_LIMIT: i64 = 20;
+/// Lunghezza massima di `q` nella ricerca, in caratteri Unicode (non in byte).
+const MAX_SEARCH_QUERY_CHARS: usize = 200;
 const MAX_LOCALES: i64 = 5;
 const MAX_TRENDING_DAYS: i64 = 90;
 const MAX_TRENDING_LIMIT: i64 = 30;
@@ -146,6 +148,9 @@ pub async fn search_posts(ctx: RouteCtx) -> Result<Vec<Value>, ApiError> {
         .ok_or_else(|| ApiError::unprocessable("Il parametro `q` è obbligatorio."))?;
     if q.is_empty() {
         return Ok(Vec::new());
+    }
+    if q.chars().count() > MAX_SEARCH_QUERY_CHARS {
+        return Err(ApiError::unprocessable("Il parametro `q` supera i 200 caratteri."));
     }
     let limit = int_param(&ctx, "limit", DEFAULT_FEED_LIMIT, 1, MAX_FEED_LIMIT)?;
     let offset = int_param(&ctx, "offset", 0, 0, i64::MAX)?;

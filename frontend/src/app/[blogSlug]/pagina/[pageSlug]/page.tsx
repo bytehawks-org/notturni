@@ -69,7 +69,7 @@ export default async function PublicBlogPagePage({
 
   return (
     <BlogPageShell config={config}>
-      <BlogHeader basePath={links.basePath} homeHref={links.homeHref} name={blog?.title ?? blogSlug} current="posts" hasPublications={publications.length > 0} />
+      <BlogHeader blogSlug={blogSlug} basePath={links.basePath} homeHref={links.homeHref} name={blog?.title ?? blogSlug} current="posts" hasPublications={publications.length > 0} />
       <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-12">
         <h1 className="font-serif text-5xl font-semibold leading-tight text-foreground">{page.title}</h1>
 

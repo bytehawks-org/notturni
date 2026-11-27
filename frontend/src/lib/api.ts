@@ -108,6 +108,8 @@ interface RequestOptions {
   /** Solo per refresh/logout: cookie di sessione, mai per le altre richieste
    * (autenticate via header Authorization con l'access token in memoria). */
   withCredentials?: boolean;
+  /** Annulla la richiesta (es. al cambio della query nel suggeritore di ricerca). */
+  signal?: AbortSignal;
 }
 
 const CSRF_COOKIE_NAME = "noct_csrf_token";
@@ -142,6 +144,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     headers,
     body,
     credentials: options.withCredentials ? "include" : "same-origin",
+    signal: options.signal,
   });
 
   if (res.status === 204) {
@@ -221,7 +224,14 @@ export const api = {
 
   /** Ricerca pubblica nella piattaforma (post, Spazi, utenti): serve al modal del link dell'editor. */
   search: {
-    posts: (q: string, limit = 5) => request<Post[]>(withQuery("/api/v1/search/posts", { q, limit: String(limit) })),
+    posts: (q: string, limit = 5, signal?: AbortSignal) =>
+      request<Post[]>(withQuery("/api/v1/search/posts", { q, limit: String(limit) }), { signal }),
+    /** Ricerca tra i post pubblicati di un singolo blog (Space). */
+    blogPosts: (slug: string, q: string, limit = 8, signal?: AbortSignal) =>
+      request<Post[]>(
+        withQuery(`/api/v1/blogs/${encodeURIComponent(slug)}/search`, { q, limit: String(limit) }),
+        { signal }
+      ),
     blogs: (q: string, limit = 5) => request<PublicBlog[]>(withQuery("/api/v1/blogs", { q, limit: String(limit) })),
     users: (q: string, limit = 5) => request<PublicUser[]>(withQuery("/api/v1/users", { q, limit: String(limit) })),
   },

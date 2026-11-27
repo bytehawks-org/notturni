@@ -1709,13 +1709,26 @@
     "deleteTitle": "Delete “{title}”?",
     "deleteBody": "Posts stay, just without a publication. Type the URL name to confirm."
   },
+  "SearchModal": {
+    "suggestions": "Suggestions",
+    "suggestionsCount": "{count, plural, one {# suggestion} other {# suggestions}}",
+    "typeMore": "Type at least {min} characters.",
+    "error": "Search is not available. Try again.",
+    "rateLimited": "Too many requests. Wait a moment and try again."
+  },
   "SearchPage": {
     "title": "Search",
     "placeholder": "Search posts on Notturni…",
     "searchButton": "Search",
     "resultsCount": "{count} results for \"{query}\"",
     "noQuery": "Type something to search.",
-    "noResults": "No results for \"{query}\"."
+    "noResults": "No results for \"{query}\".",
+    "rateLimited": "Too many requests. Wait a moment and try again.",
+    "previous": "← Previous",
+    "next": "Next →",
+    "pageNav": "Pagination",
+    "resultsRange": "Results {from}–{to} for \"{query}\"",
+    "page": "Page {page}"
   },
   "BlogSearchPage": {
     "title": "Search {blog}",
@@ -1723,7 +1736,13 @@
     "searchButton": "Search",
     "resultsCount": "{count} results for \"{query}\"",
     "noQuery": "Type something to search.",
-    "noResults": "No results for \"{query}\"."
+    "noResults": "No results for \"{query}\".",
+    "rateLimited": "Too many requests. Wait a moment and try again.",
+    "previous": "← Previous",
+    "next": "Next →",
+    "pageNav": "Pagination",
+    "resultsRange": "Results {from}–{to} for \"{query}\"",
+    "page": "Page {page}"
   },
   "UsersPage": {
     "title": "People on Notturni",

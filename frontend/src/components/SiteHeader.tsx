@@ -5,13 +5,25 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
-import { useSiteName } from "@/components/SiteConfigProvider";
+import { useSiteFlags, useSiteName } from "@/components/SiteConfigProvider";
 import { SearchModal } from "@/components/SearchModal";
 import { PlatformMark } from "@/components/shell/PlatformMark";
 import { UiLanguagePicker } from "@/components/shell/UiLanguagePicker";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/lib/auth-context";
+import { usePrimaryBlogSlug } from "@/lib/primary-blog-client";
+import type { SearchScope } from "@/lib/search";
+
+const PORTAL_SCOPE: SearchScope = { kind: "portal" };
+
+/** Ricerca in solo: l'ambito è il blog primario (`basePath` vuoto). Montato solo quando il modal è aperto,
+ * così lo slug è letto (o richiesto, se manca nel provider) solo all'apertura. Senza slug: ambito piattaforma. */
+function SoloSearch({ onClose }: { onClose: () => void }) {
+  const slug = usePrimaryBlogSlug();
+  const scope: SearchScope = slug ? { kind: "blog", slug, basePath: "" } : PORTAL_SCOPE;
+  return <SearchModal open onClose={onClose} scope={scope} />;
+}
 
 /** Header della piattaforma (mockup 4a/1c). "Pubblicazioni" arriverà con il blocco B9. */
 export function SiteHeader() {
@@ -19,6 +31,7 @@ export function SiteHeader() {
   const path = usePathname();
   const t = useTranslations("Site");
   const siteName = useSiteName();
+  const { isSolo } = useSiteFlags();
   const [searchOpen, setSearchOpen] = useState(false);
   const items: [string, string][] = [
     ["/", t("latest")],
@@ -82,7 +95,12 @@ export function SiteHeader() {
             ))}
         </div>
       </div>
-      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+      {searchOpen &&
+        (isSolo ? (
+          <SoloSearch onClose={() => setSearchOpen(false)} />
+        ) : (
+          <SearchModal open onClose={() => setSearchOpen(false)} scope={PORTAL_SCOPE} />
+        ))}
     </header>
   );
 }

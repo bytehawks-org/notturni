@@ -69,7 +69,7 @@ export async function BlogHome({ blogSlug, category }: BlogHomeProps) {
   if (blogIsOffline(blog)) {
     return (
       <BlogPageShell config={config}>
-        <BlogHeader basePath={basePath} homeHref={links.homeHref} name={blog.title} hasPublications={hasPublications} current="posts" />
+        <BlogHeader blogSlug={blogSlug} basePath={basePath} homeHref={links.homeHref} name={blog.title} hasPublications={hasPublications} current="posts" />
         <BlogStateNotice blog={blog} />
       </BlogPageShell>
     );
@@ -81,7 +81,7 @@ export async function BlogHome({ blogSlug, category }: BlogHomeProps) {
     const roots = childrenOf(outline, null);
     return (
       <BlogPageShell config={config}>
-        <BlogHeader basePath={basePath} homeHref={links.homeHref} name={blog.title} hasPublications={hasPublications} current="posts" actions={<BlogHeaderActions slug={blogSlug} />} />
+        <BlogHeader blogSlug={blogSlug} basePath={basePath} homeHref={links.homeHref} name={blog.title} hasPublications={hasPublications} current="posts" actions={<BlogHeaderActions slug={blogSlug} />} />
         <main className="mx-auto w-full max-w-[1000px] flex-1 px-5 py-10 lg:px-12 lg:py-14">
           <header className="flex flex-col gap-2">
             <h1 className="font-serif text-[34px] font-medium leading-[1.12] tracking-tight text-foreground md:text-[44px]">{blog.title}</h1>
@@ -122,7 +122,7 @@ export async function BlogHome({ blogSlug, category }: BlogHomeProps) {
 
   return (
     <BlogPageShell config={config}>
-      <BlogHeader basePath={basePath} homeHref={links.homeHref} name={blog.title} hasPublications={hasPublications} current="posts" actions={<BlogHeaderActions slug={blogSlug} />} />
+      <BlogHeader blogSlug={blogSlug} basePath={basePath} homeHref={links.homeHref} name={blog.title} hasPublications={hasPublications} current="posts" actions={<BlogHeaderActions slug={blogSlug} />} />
       <main className="mx-auto w-full max-w-[1184px] flex-1 px-5 py-10 lg:px-12 lg:py-14">
         {blog.cover_image_url && (
           <SensitiveImage

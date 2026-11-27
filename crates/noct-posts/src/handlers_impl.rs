@@ -14,6 +14,8 @@ use sqlx::{PgConnection, Postgres, QueryBuilder};
 use std::collections::HashMap;
 use uuid::Uuid;
 
+/// Lunghezza massima di `q` nella ricerca, in caratteri Unicode (non in byte).
+const MAX_SEARCH_QUERY_CHARS: usize = 200;
 const MSG_WRITE: &str = "Serve essere proprietario del blog o avere ruolo autore/co-autore.";
 const MSG_SLUG_TAKEN: &str = "Slug già in uso su questo blog per questa lingua.";
 const SLUG_CONFLICT: [(&str, u16, &str); 1] = [("uq_post_blog_slug_locale", 409, MSG_SLUG_TAKEN)];
@@ -406,6 +408,9 @@ pub async fn search_posts(ctx: RouteCtx) -> Result<Vec<Value>, ApiError> {
     let q = ctx.query.get("q").map(|q| q.trim()).unwrap_or_default();
     if q.is_empty() {
         return Ok(Vec::new());
+    }
+    if q.chars().count() > MAX_SEARCH_QUERY_CHARS {
+        return Err(ApiError::unprocessable("Il parametro `q` supera i 200 caratteri."));
     }
     let (limit, offset) = limit_offset(&ctx)?;
     // `%`, `_` e `\` nel testo cercato sono letterali

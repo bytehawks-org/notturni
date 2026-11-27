@@ -1709,13 +1709,26 @@
     "deleteTitle": "Eliminare “{title}”?",
     "deleteBody": "I post restano, solo senza pubblicazione. Digita il nome nell'URL per confermare."
   },
+  "SearchModal": {
+    "suggestions": "Suggerimenti",
+    "suggestionsCount": "{count, plural, one {# suggerimento} other {# suggerimenti}}",
+    "typeMore": "Scrivi almeno {min} caratteri.",
+    "error": "Ricerca non disponibile. Riprova.",
+    "rateLimited": "Troppe richieste. Attendi un momento e riprova."
+  },
   "SearchPage": {
     "title": "Ricerca",
     "placeholder": "Cerca articoli su Notturni…",
     "searchButton": "Cerca",
     "resultsCount": "{count} risultati per «{query}»",
     "noQuery": "Scrivi qualcosa da cercare.",
-    "noResults": "Nessun risultato per «{query}»."
+    "noResults": "Nessun risultato per «{query}».",
+    "rateLimited": "Troppe richieste. Attendi un momento e riprova.",
+    "previous": "← Precedenti",
+    "next": "Successivi →",
+    "pageNav": "Paginazione",
+    "resultsRange": "Risultati {from}–{to} per «{query}»",
+    "page": "Pagina {page}"
   },
   "BlogSearchPage": {
     "title": "Cerca in {blog}",
@@ -1723,7 +1736,13 @@
     "searchButton": "Cerca",
     "resultsCount": "{count} risultati per «{query}»",
     "noQuery": "Scrivi qualcosa da cercare.",
-    "noResults": "Nessun risultato per «{query}»."
+    "noResults": "Nessun risultato per «{query}».",
+    "rateLimited": "Troppe richieste. Attendi un momento e riprova.",
+    "previous": "← Precedenti",
+    "next": "Successivi →",
+    "pageNav": "Paginazione",
+    "resultsRange": "Risultati {from}–{to} per «{query}»",
+    "page": "Pagina {page}"
   },
   "UsersPage": {
     "title": "Persone su Notturni",

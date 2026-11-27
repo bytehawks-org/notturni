@@ -518,6 +518,39 @@ async fn search_matches_title_and_content_of_published_posts_only() {
 }
 
 #[tokio::test]
+async fn blog_search_caps_query_length_and_rate_limits_per_ip() {
+    let w = world().await;
+    let env = &w.env;
+    let from = |path: String, ip: &'static str| async move {
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri(format!("/api/v1{path}"))
+            .header("x-forwarded-for", ip)
+            .body(Body::empty())
+            .unwrap();
+        env.send(req).await.0
+    };
+    assert_eq!(from(format!("/blogs/diario/search?q={}", "a".repeat(200)), "198.51.100.21").await, StatusCode::OK);
+    assert_eq!(
+        from(format!("/blogs/diario/search?q={}", "a".repeat(201)), "198.51.100.21").await,
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    assert_eq!(
+        from(format!("/blogs/diario/search?q={}", "%C3%A8".repeat(201)), "198.51.100.22").await,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "201 caratteri da 2 byte"
+    );
+
+    // 120 richieste al minuto per IP: la 121esima è 429, un altro IP non è toccato
+    for i in 0..120 {
+        assert_eq!(from("/blogs/diario/search?q=gatti".into(), "198.51.100.23").await, StatusCode::OK, "richiesta {i}");
+    }
+    assert_eq!(from("/blogs/diario/search?q=gatti".into(), "198.51.100.23").await, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(from("/blogs/diario/search?q=gatti".into(), "198.51.100.24").await, StatusCode::OK);
+    w.env.teardown().await;
+}
+
+#[tokio::test]
 async fn bibliographies_group_published_media_and_links() {
     let w = world().await;
     let env = &w.env;

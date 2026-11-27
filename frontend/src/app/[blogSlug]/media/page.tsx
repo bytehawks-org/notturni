@@ -123,7 +123,7 @@ export default async function BlogMediaBibliographyPage({
   if (blogIsOffline(blog)) {
     return (
       <BlogPageShell config={config}>
-        <BlogHeader basePath={links.basePath} homeHref={links.homeHref} name={blog.title} hasPublications={hasPublications} current="media" />
+        <BlogHeader blogSlug={blogSlug} basePath={links.basePath} homeHref={links.homeHref} name={blog.title} hasPublications={hasPublications} current="media" />
         <BlogStateNotice blog={blog} />
       </BlogPageShell>
     );
@@ -141,7 +141,7 @@ export default async function BlogMediaBibliographyPage({
 
   return (
     <BlogPageShell config={config}>
-      <BlogHeader basePath={links.basePath} homeHref={links.homeHref} name={blog.title} hasPublications={hasPublications} current="media" actions={<BlogHeaderActions slug={blogSlug} />} />
+      <BlogHeader blogSlug={blogSlug} basePath={links.basePath} homeHref={links.homeHref} name={blog.title} hasPublications={hasPublications} current="media" actions={<BlogHeaderActions slug={blogSlug} />} />
       <main className="mx-auto w-full max-w-[1184px] flex-1 px-5 py-10 lg:px-12 lg:py-14">
         <div className="flex flex-col gap-1.5">
           <h1 className="font-serif text-[34px] font-medium leading-[1.12] tracking-tight md:text-[40px]">{t("title")}</h1>
